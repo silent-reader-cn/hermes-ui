@@ -71,6 +71,37 @@ class ChatMessage {
   String get id =>
       messageId ?? '$role-${timestamp ?? 0}-${content ?? ''}';
 
+  /// 浅拷贝（流式追加 / 回合收尾时「原地替换」消息用，其余字段透传）。
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    double? timestamp,
+    String? messageId,
+    String? name,
+    String? toolCallId,
+    String? toolUseId,
+    List<JsonValue>? toolCalls,
+    List<JsonValue>? contentParts,
+    String? reasoning,
+    List<MessageAttachment>? attachments,
+    double? turnTps,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      messageId: messageId ?? this.messageId,
+      name: name ?? this.name,
+      toolCallId: toolCallId ?? this.toolCallId,
+      toolUseId: toolUseId ?? this.toolUseId,
+      toolCalls: toolCalls ?? this.toolCalls,
+      contentParts: contentParts ?? this.contentParts,
+      reasoning: reasoning ?? this.reasoning,
+      attachments: attachments ?? this.attachments,
+      turnTps: turnTps ?? this.turnTps,
+    );
+  }
+
   Map<String, Object?> toJson() {
     return {
       if (role != null) 'role': role,

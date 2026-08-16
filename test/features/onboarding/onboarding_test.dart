@@ -8,8 +8,10 @@ import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
+import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../helpers/fake_session_list_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
 
 void main() {
@@ -32,6 +34,10 @@ void main() {
           ),
           onboardingApiFactoryProvider.overrideWithValue(
             (baseUrl, headers) => api,
+          ),
+          // 会话列表页注入 fake（空列表），避免测试环境发起真实网络请求。
+          sessionListApiFactoryProvider.overrideWithValue(
+            (_) => FakeSessionListApi(),
           ),
         ],
         child: const HermexApp(),

@@ -5,8 +5,10 @@ import 'package:hermex_flutter/app/app.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/fake_session_list_api.dart';
 import 'helpers/in_memory_secure_storage.dart';
 
 /// App 壳冒烟测试（替换模板 Counter 测试）。
@@ -54,6 +56,10 @@ void main() {
       ProviderScope(
         overrides: [
           connectionStoreProvider.overrideWithValue(store),
+          // 会话列表页注入 fake（空列表），避免测试环境发起真实网络请求。
+          sessionListApiFactoryProvider.overrideWithValue(
+            (_) => FakeSessionListApi(),
+          ),
         ],
         child: const HermexApp(),
       ),

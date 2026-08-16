@@ -1,0 +1,1797 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_exception.dart';
+import '../../core/api/sse_client.dart';
+import '../../core/models/chat_message.dart';
+import '../../core/models/context_window_snapshot.dart';
+import '../../core/models/json_value.dart';
+import '../../core/models/session.dart';
+import '../../core/models/tool_call.dart';
+import '../../core/utils/uuid.dart';
+import 'chat_models.dart';
+import 'chat_providers.dart';
+import 'chat_server_api.dart';
+import 'chat_state.dart';
+
+/// 聊天主控制器（chat_spec.md §1/§2：九态状态机 + 消息组装 + 断线恢复）。
+///
+/// 唯一写 `List<ChatMessage>` 的类；SSE 事件经 [_handleSseEvent] 同步串行
+/// 处理；token 走「缓冲(16ms 合并) → 词级 reveal(48ms)」三段式；done 双重
+/// 收尾；transportError 走「挂起 → status 检查 → 重连/replay/finalize」。
+class ChatController extends FamilyNotifier<ChatState, String> {
+  // -------------------------------------------------------------------------
+  // 私有非状态（对齐 Swift @ObservationIgnored：Timer/游标不进 state）
+  // -------------------------------------------------------------------------
+
+  /// token 合并延迟（16ms）。
+  static const mergeDelay = Duration(milliseconds: 16);
+
+  /// 词级 reveal 间隔（48ms）。
+  static const revealInterval = Duration(milliseconds: 48);
+
+  /// 每 tick 最多 reveal 的词单元数。
+  static const maxWordUnitsPerTick = 5;
+
+  /// reveal 最大滞后（积压超过该时长一次性排空）。
+  static const maxRevealLag = Duration(seconds: 1);
+
+  ChatServerApi? _api;
+  Timer? _mergeTimer;
+  Timer? _revealTimer;
+  Timer? _watchdogTimer;
+  Timer? _transcriptRefreshTimer;
+
+  /// 词级 reveal 队列（合并缓冲产出、逐 tick 消费）。
+  final List<String> _revealQueue = [];
+
+  /// reveal 队列开始积压的时刻（最大滞后判定）。
+  DateTime? _revealQueueStart;
+
+  /// 最近一次内容新增（看门狗 5s 阈值）。
+  DateTime? _lastProgress;
+
+  /// 最近一次传输活动（看门狗 12s/18s/25s 阈值）。
+  DateTime? _lastTransportActivity;
+
+  /// status 轮询冷却截止。
+  DateTime? _statusCheckCooldownUntil;
+
+  /// 异步操作代数守卫（防双 finalize / 覆盖新流）。
+  int _generation = 0;
+
+  bool _disposed = false;
+
+  /// SSE 连接当前是否存活（409 恢复路径判断是否需要重连）。
+  bool _streamConnected = false;
+
+  DateTime _now() => ref.read(chatClockProvider)();
+
+  ChatWatchdogConfig get _watchdogConfig =>
+      ref.read(chatWatchdogConfigProvider);
+
+  double _nowSeconds() => _now().millisecondsSinceEpoch / 1000;
+
+  @override
+  ChatState build(String sessionId) {
+    _api = ref.read(chatApiProvider);
+    _disposed = false;
+    _streamConnected = false;
+    _generation++;
+    _lastProgress = null;
+    _lastTransportActivity = null;
+    _statusCheckCooldownUntil = null;
+    _revealQueue.clear();
+    _revealQueueStart = null;
+    _startWatchdog();
+    ref.onDispose(_dispose);
+    if (sessionId.isNotEmpty) {
+      // build 期间 state 未初始化，推迟到微任务再加载（读 state 安全）。
+      scheduleMicrotask(() {
+        if (_disposed) return;
+        unawaited(loadMessages());
+      });
+    }
+    return ChatState.initial(sessionId: sessionId);
+  }
+
+  void _dispose() {
+    _disposed = true;
+    _generation++;
+    _mergeTimer?.cancel();
+    _revealTimer?.cancel();
+    _watchdogTimer?.cancel();
+    _transcriptRefreshTimer?.cancel();
+    _api?.stopStream();
+  }
+
+  // -------------------------------------------------------------------------
+  // 用户动作
+  // -------------------------------------------------------------------------
+
+  /// 发送新消息；流式期间按 [behavior] 处理（默认 steer）。
+  Future<bool> send(
+    String text, {
+    StreamingSendBehavior behavior = StreamingSendBehavior.steer,
+  }) async {
+    final current = state;
+    if (current.isViewingCachedData) {
+      _setSendError('Reconnect to the server to send a message.');
+      return false;
+    }
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    if (current.stream.activeStreamId != null) {
+      return _submitStreamingMessage(trimmed, behavior);
+    }
+    return _sendMessage(trimmed);
+  }
+
+  /// 停止当前响应（保留已流出文本，不删除）。
+  Future<bool> stop() async {
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return false;
+    state = state.copyWith(
+      stream: state.stream.copyWith(isCancelling: true),
+    );
+    final gen = _generation;
+    try {
+      final raw = await _api!.cancelChat(streamId);
+      if (_disposed || gen != _generation) return false;
+      final map = _asStringMap(raw);
+      if (map['ok'] == true) {
+        _finishStream(endPhase: ChatPhase.cancelled);
+        return true;
+      }
+      state = state.copyWith(
+        stream: state.stream.copyWith(isCancelling: false),
+        sendErrorMessage: '服务器未能停止当前响应。',
+      );
+      return false;
+    } on ApiException catch (error) {
+      if (_disposed || gen != _generation) return false;
+      state = state.copyWith(
+        stream: state.stream.copyWith(isCancelling: false),
+        sendErrorMessage: error.message,
+      );
+      return false;
+    }
+  }
+
+  /// 显式选择模型（发送时带 explicit_model_pick）。
+  void selectModel(String? model, {String? modelProvider}) {
+    state = state.copyWith(
+      model: model,
+      modelProvider: modelProvider,
+      explicitModelPick: model != null,
+    );
+  }
+
+  /// 清除当前展示的错误。
+  void dismissError() {
+    state = state.copyWith(
+      clearSendErrorMessage: true,
+      clearErrorMessage: true,
+    );
+  }
+
+  /// 加载更早的消息（分页）。
+  Future<void> loadOlderMessages() async {
+    final offset = state.messagesOffset;
+    if (offset <= 0) return;
+    await loadMessages(messageBefore: offset);
+  }
+
+  /// 加载会话 transcript（冷启动 / 重载 / 分页）。
+  Future<void> loadMessages({int? messageBefore}) async {
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    final api = _api;
+    if (api == null) return;
+    final gen = _generation;
+    try {
+      final raw = await api.session(
+        sessionId: sessionId,
+        includeMessages: true,
+        messageLimit: 50,
+        messageBefore: messageBefore,
+        expandRenderable: messageBefore == null,
+      );
+      if (_disposed || gen != _generation) return;
+      final envelope = _asStringMap(raw);
+      final rawSession = envelope['session'];
+      if (rawSession is! Map) return;
+      final detail = SessionDetail.fromJson(Map<String, Object?>.from(rawSession));
+      final loaded = detail.messages ?? const <ChatMessage>[];
+      if (messageBefore != null) {
+        final existingIds =
+            state.messages.map((m) => m.messageId).whereType<String>().toSet();
+        final fresh = loaded
+            .where((m) => m.messageId == null || !existingIds.contains(m.messageId))
+            .toList();
+        final fallbackOffset = state.messagesOffset - loaded.length;
+        state = state.copyWith(
+          messages: [...fresh, ...state.messages],
+          messagesOffset:
+              detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset),
+          hasOlderMessages: detail.messageCount != null &&
+              detail.messageCount! > state.messages.length + fresh.length,
+        );
+      } else {
+        state = state.copyWith(
+          messages: loaded,
+          messagesOffset: detail.messagesOffset ?? 0,
+          hasOlderMessages:
+              detail.messageCount != null && detail.messageCount! > loaded.length,
+          displayTitle: _resolveTitle(detail),
+          workspace: detail.workspace ?? state.workspace,
+          model: detail.model ?? state.model,
+          modelProvider: detail.modelProvider ?? state.modelProvider,
+          profile: detail.profile ?? state.profile,
+          responseCompletionNeedsTranscriptRefresh: false,
+        );
+        // 跨页面/杀进程恢复：会话已有活跃流 → 接管并重连。
+        final activeStreamId = detail.activeStreamId;
+        if (activeStreamId != null && activeStreamId.isNotEmpty) {
+          state = state.copyWith(
+            phase: ChatPhase.streaming,
+            stream: state.stream.copyWith(activeStreamId: activeStreamId),
+          );
+          unawaited(_reconnectIfNeeded());
+        }
+      }
+    } on ApiException {
+      // 加载失败：保留当前状态（新会话无消息时不打扰）。
+    }
+  }
+
+  /// done 后补拉 transcript：status → active==false → loadMessages。
+  Future<void> refreshTranscriptIfCompleted(String streamId) async {
+    // 已开启新流则跳过；无流（已完成）或仍是旧流则继续。
+    if (state.stream.activeStreamId != null &&
+        state.stream.activeStreamId != streamId) {
+      return;
+    }
+    final gen = _generation;
+    try {
+      final raw = await _api!.chatStreamStatus(streamId);
+      if (_disposed || gen != _generation) return;
+      final map = _asStringMap(raw);
+      if (map['active'] == true) return; // 仍在流中，稍后再试
+      await loadMessages();
+      if (_disposed || gen != _generation) return;
+      state = state.copyWith(responseCompletionNeedsTranscriptRefresh: false);
+    } on ApiException {
+      // 状态检查失败：静默（下次会话加载会补上）。
+    }
+  }
+
+  /// 审批卡片作答。
+  Future<bool> respondToApproval(String choice) async {
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return false;
+    final gen = _generation;
+    try {
+      await _api!.respondApproval(sessionId: sessionId, choice: choice);
+      if (_disposed || gen != _generation) return false;
+      _clearApprovalCard();
+      return true;
+    } on ApiException {
+      if (_disposed || gen != _generation) return false;
+      return false;
+    }
+  }
+
+  /// 澄清卡片作答。
+  Future<bool> respondToClarification(String response) async {
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return false;
+    final gen = _generation;
+    try {
+      await _api!.respondClarification(sessionId: sessionId, response: response);
+      if (_disposed || gen != _generation) return false;
+      _clearClarificationCard();
+      return true;
+    } on ApiException {
+      if (_disposed || gen != _generation) return false;
+      return false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 发送内部实现
+  // -------------------------------------------------------------------------
+
+  Future<bool> _sendMessage(String text) async {
+    final api = _api;
+    if (api == null) return false;
+    _archiveLiveReasoningIfNeeded();
+    _archiveLiveToolCallsIfNeeded();
+    final messageId = 'local-${uuidV4()}';
+    final optimistic = ChatMessage(
+      role: 'user',
+      content: text,
+      messageId: messageId,
+      timestamp: _nowSeconds(),
+    );
+    state = state.copyWith(
+      phase: ChatPhase.sending,
+      messages: [...state.messages, optimistic],
+      clearSendErrorMessage: true,
+      clearErrorMessage: true,
+    );
+    final gen = ++_generation;
+    try {
+      final raw = await api.startChat(
+        sessionId: state.sessionId,
+        message: text,
+        workspace: state.workspace,
+        model: state.model,
+        modelProvider: state.modelProvider,
+        profile: state.profile,
+        explicitModelPick: state.explicitModelPick,
+      );
+      if (_disposed || gen != _generation) return false;
+      final map = _asStringMap(raw);
+      final streamId = map['stream_id'];
+      final sessionId = map['session_id'];
+      if (streamId == null || (streamId as String).isEmpty) {
+        _rollbackOptimisticMessage(messageId);
+        state = state.copyWith(
+          phase: ChatPhase.idle,
+          sendErrorMessage: '服务器未返回流 ID，发送失败。',
+        );
+        return false;
+      }
+      if (sessionId is String && sessionId.isNotEmpty && state.sessionId.isEmpty) {
+        state = state.copyWith(sessionId: sessionId);
+      }
+      _beginStream(streamId);
+      return true;
+    } on ApiException catch (error) {
+      if (_disposed || gen != _generation) return false;
+      if (error is HttpException && error.indicatesActiveStream) {
+        // 409 已有活动流：服务端未接受本条消息 → 回滚 → 接管已有流。
+        _rollbackOptimisticMessage(messageId);
+        await _recoverExistingStream(error.activeStreamId!);
+        return false;
+      }
+      _rollbackOptimisticMessage(messageId);
+      state = state.copyWith(
+        phase: ChatPhase.idle,
+        sendErrorMessage: error.message,
+      );
+      return false;
+    }
+  }
+
+  /// 流式期间发送：steer / interrupt / queue 三行为（chat_spec.md §4.2）。
+  Future<bool> _submitStreamingMessage(
+    String text,
+    StreamingSendBehavior behavior,
+  ) async {
+    switch (behavior) {
+      case StreamingSendBehavior.steer:
+        return _steer(text);
+      case StreamingSendBehavior.interrupt:
+        state = state.copyWith(
+          queuedSlashMessages: [text, ...state.queuedSlashMessages],
+        );
+        final stopped = await stop();
+        if (!stopped && state.stream.activeStreamId != null) {
+          _pinNotice(
+            'Could not stop the current response — your message is queued for the next turn.',
+          );
+        }
+        return false;
+      case StreamingSendBehavior.queue:
+        state = state.copyWith(
+          queuedSlashMessages: [...state.queuedSlashMessages, text],
+        );
+        _pinNotice('Queued for next turn (#${state.queuedSlashMessages.length})');
+        return false;
+    }
+  }
+
+  Future<bool> _steer(String text) async {
+    final gen = _generation;
+    try {
+      final raw = await _api!.steerChat(sessionId: state.sessionId, text: text);
+      if (_disposed || gen != _generation) return false;
+      final map = _asStringMap(raw);
+      if (map['accepted'] == true) {
+        _markProgress();
+        state = state.copyWith(phase: ChatPhase.steered);
+        return true;
+      }
+      _queueSteerFailure(text);
+      unawaited(cancelActiveStream());
+      return false;
+    } on ApiException {
+      if (_disposed || gen != _generation) return false;
+      _queueSteerFailure(text);
+      unawaited(cancelActiveStream());
+      return false;
+    }
+  }
+
+  void _queueSteerFailure(String text) {
+    state = state.copyWith(
+      queuedSlashMessages: [...state.queuedSlashMessages, text],
+      pinnedLocalNotices: [
+        ...state.pinnedLocalNotices,
+        'Steer was unavailable — your message has been queued for the next turn.',
+      ],
+    );
+  }
+
+  /// 停止当前流（steer 失败路径；finishStream 会顺次发送队列）。
+  Future<void> cancelActiveStream() async {
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return;
+    await _api?.cancelChat(streamId);
+    if (_disposed) return;
+    _finishStream(endPhase: ChatPhase.cancelled);
+  }
+
+  /// 流结束后顺次发送队列首条（发送失败回队首并停止连锁，防死循环）。
+  Future<void> _drainQueuedSlashMessage() async {
+    final queued = state.queuedSlashMessages;
+    if (queued.isEmpty) return;
+    if (state.stream.activeStreamId != null) return;
+    final next = queued.first;
+    state = state.copyWith(queuedSlashMessages: queued.sublist(1));
+    final sent = await _sendMessage(next);
+    if (!sent) {
+      state = state.copyWith(
+        queuedSlashMessages: [next, ...state.queuedSlashMessages],
+      );
+    }
+  }
+
+  void _beginStream(String streamId) {
+    state = state.copyWith(
+      phase: ChatPhase.streaming,
+      clearSendErrorMessage: true,
+      clearErrorMessage: true,
+      stream: state.stream.copyWith(
+        activeStreamId: streamId,
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+        hasCompletedResponse: false,
+        isCancelling: false,
+        clearLastEventId: true,
+        isReplayConnection: false,
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+      ),
+      pendingAction: const ChatPendingActionState(),
+      responseCompletionNeedsTranscriptRefresh: false,
+    );
+    // 空流式气泡立即锚定（思考中指示器依赖它）。
+    _ensureStreamingAssistantMessage();
+    _connectStream(streamId);
+    _markProgress();
+    _recordTransportActivity();
+  }
+
+  /// 建立 SSE 连接。replayAfterSeq → `?replay=1&after_seq=N`（保留 lastEventID）；
+  /// [fullReconnect] → 不带 replay 参数但从 0 重放（靠 §6.4 去重）。
+  void _connectStream(
+    String streamId, {
+    int? replayAfterSeq,
+    bool fullReconnect = false,
+  }) {
+    final api = _api;
+    if (api == null) return;
+    final useReplay = replayAfterSeq != null || fullReconnect;
+    final freshStart = replayAfterSeq == null && !fullReconnect;
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isReplayConnection: useReplay,
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+        lastEventId: freshStart ? null : state.stream.lastEventId,
+        clearLastEventId: freshStart,
+      ),
+    );
+    _streamConnected = true;
+    unawaited(
+      api.startStream(
+        streamId,
+        replayAfterSeq: replayAfterSeq,
+        onEvent: _handleSseEvent,
+        onEventId: (id) {
+          if (_disposed) return;
+          state = state.copyWith(
+            stream: state.stream.copyWith(lastEventId: id),
+          );
+          _recordTransportActivity();
+        },
+        onTransportError: (message) {
+          if (_disposed) return;
+          _streamConnected = false;
+          _handleTransportError(message);
+        },
+        onClosed: () {
+          _streamConnected = false;
+          _recordTransportActivity();
+        },
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // SSE 事件分发（同步串行；先记录传输活动，有新增再 markProgress）
+  // -------------------------------------------------------------------------
+
+  void _handleSseEvent(SseEvent event) {
+    if (_disposed) return;
+    _recordTransportActivity();
+    switch (event) {
+      case TokenSseEvent(:final text):
+        if (_appendAssistantToken(text)) _markProgress();
+      case InterimAssistantSseEvent(:final text, :final alreadyStreamed):
+        _handleInterimAssistant(text, alreadyStreamed);
+      case ReasoningSseEvent(:final text):
+        if (_appendReasoning(text)) _markProgress();
+      case ToolStartedSseEvent(:final event):
+        _appendToolCall(event);
+      case ToolCompletedSseEvent(:final event):
+        _completeToolCall(event);
+      case TitleSseEvent(:final sessionId, :final title):
+        _handleTitle(sessionId, title);
+      case MeteringSseEvent(:final tps, :final tpsAvailable, :final estimated, :final sessionId):
+        _handleMetering(
+          tps: tps,
+          tpsAvailable: tpsAvailable,
+          estimated: estimated,
+          sessionId: sessionId,
+        );
+      case DoneSseEvent(:final event):
+        _applyDone(event);
+      case ApprovalPendingSseEvent(:final payload):
+        _applyApprovalUpdate(payload);
+      case ClarificationPendingSseEvent(:final payload):
+        _applyClarificationUpdate(payload);
+      case PendingSteerLeftoverSseEvent(:final text):
+        _handlePendingSteerLeftover(text);
+      case StreamEndSseEvent():
+        _handleStreamEnd();
+      case CancelledSseEvent():
+        _handleCancelled();
+      case ErrorSseEvent(:final message):
+        _handleErrorEvent(message);
+      case TransportErrorSseEvent(:final message):
+        _handleTransportError(message);
+      case HeartbeatSseEvent():
+        _handleHeartbeat();
+      case IgnoredSseEvent():
+        break;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // token 三段式缓冲（合并 → 词级 reveal）
+  // -------------------------------------------------------------------------
+
+  /// 去重（replay 连接）→ 入 pendingAssistantTokenChunks → 调度 16ms 合并。
+  /// 返回是否有真实新增（看门狗进度信号）。
+  bool _appendAssistantToken(String text) {
+    if (text.isEmpty) return false;
+    var remainder = text;
+    final stream = state.stream;
+    if (stream.isReplayConnection) {
+      final deduped = deduplicatedReplayToken(
+        token: text,
+        existingContent: _currentStreamingContent(),
+        matchedPrefixLength: stream.matchedPrefixLength,
+      );
+      remainder = deduped.remainder;
+      state = state.copyWith(
+        stream: state.stream.copyWith(
+          matchedPrefixLength: deduped.newCursor,
+          isReplayConnection: deduped.stillReplay,
+        ),
+      );
+      if (remainder.isEmpty) return false;
+    }
+    state = state.copyWith(
+      pendingAssistantTokenChunks: [
+        ...state.pendingAssistantTokenChunks,
+        remainder,
+      ],
+    );
+    _scheduleMerge();
+    return true;
+  }
+
+  void _scheduleMerge() {
+    _mergeTimer ??= Timer(mergeDelay, () {
+      _mergeTimer = null;
+      _mergePendingTokens();
+    });
+  }
+
+  void _mergePendingTokens() {
+    final chunks = state.pendingAssistantTokenChunks;
+    if (chunks.isNotEmpty) {
+      final text = chunks.join();
+      state = state.copyWith(pendingAssistantTokenChunks: const []);
+      if (_revealQueue.isEmpty) _revealQueueStart = _now();
+      _revealQueue.addAll(splitIntoWordUnits(text));
+      _startRevealTimerIfNeeded();
+    }
+    // 同一 tick 内 token 先、reasoning 后。
+    _flushReasoningChunks();
+  }
+
+  void _startRevealTimerIfNeeded() {
+    if (_revealTimer != null) return;
+    _revealTimer = Timer.periodic(revealInterval, (_) => _drainReveal());
+  }
+
+  void _drainReveal() {
+    if (_revealQueue.isEmpty) {
+      _revealTimer?.cancel();
+      _revealTimer = null;
+      _revealQueueStart = null;
+      return;
+    }
+    final count =
+        _revealQueue.length < maxWordUnitsPerTick ? _revealQueue.length : maxWordUnitsPerTick;
+    final units = _revealQueue.sublist(0, count);
+    _revealQueue.removeRange(0, count);
+    _appendToStreamingMessage(units.join());
+    _markProgress();
+    // 最大滞后 1s：积压超过时限一次性排空。
+    final start = _revealQueueStart;
+    if (_revealQueue.isNotEmpty &&
+        start != null &&
+        _now().difference(start) >= maxRevealLag) {
+      final rest = _revealQueue.join();
+      _revealQueue.clear();
+      _revealQueueStart = null;
+      _appendToStreamingMessage(rest);
+      _markProgress();
+    }
+  }
+
+  /// 完成路径全量 flush：取消待定 tick，把缓冲全部写入消息。
+  void flushPendingStreamingContent() {
+    _mergeTimer?.cancel();
+    _mergeTimer = null;
+    _revealTimer?.cancel();
+    _revealTimer = null;
+    final text = state.pendingAssistantTokenChunks.join() + _revealQueue.join();
+    _revealQueue.clear();
+    _revealQueueStart = null;
+    if (text.isNotEmpty) {
+      state = state.copyWith(pendingAssistantTokenChunks: const []);
+      _appendToStreamingMessage(text);
+    }
+    _flushReasoningChunks();
+  }
+
+  void _flushReasoningChunks() {
+    final chunks = state.pendingReasoningChunks;
+    if (chunks.isEmpty) return;
+    final text = chunks.join();
+    state = state.copyWith(
+      pendingReasoningChunks: const [],
+      liveReasoningText: state.liveReasoningText + text,
+    );
+  }
+
+  /// reasoning：去重 → 入 pendingReasoningChunks → 合并 tick 整块 flush。
+  bool _appendReasoning(String text) {
+    if (text.isEmpty) return false;
+    var remainder = text;
+    final stream = state.stream;
+    if (stream.isReplayConnection) {
+      final deduped = deduplicatedReplayText(
+        text: text,
+        existingContent: state.liveReasoningText,
+        matchedLength: stream.matchedReasoningLength,
+      );
+      remainder = deduped.remainder;
+      state = state.copyWith(
+        stream: state.stream.copyWith(
+          matchedReasoningLength: deduped.newCursor,
+          isReplayConnection: deduped.stillReplay,
+        ),
+      );
+      if (remainder.isEmpty) return false;
+    }
+    state = state.copyWith(
+      pendingReasoningChunks: [...state.pendingReasoningChunks, remainder],
+    );
+    _scheduleMerge();
+    return true;
+  }
+
+  // -------------------------------------------------------------------------
+  // 消息组装
+  // -------------------------------------------------------------------------
+
+  /// 流式 assistant 消息锚定：不存在则创建并记住 ID。
+  void _ensureStreamingAssistantMessage() {
+    if (state.stream.streamingAssistantMessageId != null) return;
+    final message = ChatMessage(
+      role: 'assistant',
+      content: '',
+      messageId: 'stream-${uuidV4()}',
+      timestamp: _nowSeconds(),
+    );
+    state = state.copyWith(
+      messages: [...state.messages, message],
+      stream: state.stream.copyWith(streamingAssistantMessageId: message.messageId),
+    );
+  }
+
+  /// 以 messageId == streamingAssistantMessageId 定位，原地替换（content 追加）。
+  void _appendToStreamingMessage(String text) {
+    if (text.isEmpty) return;
+    _ensureStreamingAssistantMessage();
+    final id = state.stream.streamingAssistantMessageId!;
+    final index = state.messages.indexWhere((m) => m.messageId == id);
+    if (index == -1) return;
+    final current = state.messages[index];
+    final next = List<ChatMessage>.of(state.messages);
+    next[index] = current.copyWith(
+      content: '${current.content ?? ''}$text',
+    );
+    state = state.copyWith(
+      messages: next,
+      streamingScrollTrigger: state.streamingScrollTrigger + 1,
+    );
+  }
+
+  String _currentStreamingContent() {
+    final id = state.stream.streamingAssistantMessageId;
+    if (id == null) return '';
+    for (final message in state.messages) {
+      if (message.messageId == id) return message.content ?? '';
+    }
+    return '';
+  }
+
+  /// interim_assistant：already_streamed 过滤 + 先 flush 再追加 + 分隔符规则。
+  bool _handleInterimAssistant(String text, bool alreadyStreamed) {
+    if (alreadyStreamed) return false;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    flushPendingStreamingContent();
+    final stream = state.stream;
+    if (stream.streamingAssistantMessageId == null) {
+      return _appendAssistantToken(text);
+    }
+    final currentContent = _currentStreamingContent();
+    String append;
+    if (stream.isReplayConnection) {
+      final deduped = deduplicatedReplayText(
+        text: text,
+        existingContent: currentContent,
+        matchedLength: 0,
+      );
+      append = deduped.remainder;
+      if (append.isEmpty) return false;
+      // replay 直连：直接拼接不加分隔符。
+    } else {
+      append = currentContent.isEmpty ? text : '\n\n$text';
+    }
+    _appendToStreamingMessage(append);
+    _markProgress();
+    return true;
+  }
+
+  // -------------------------------------------------------------------------
+  // 工具调用
+  // -------------------------------------------------------------------------
+
+  void _appendToolCall(ToolStreamEvent evt) {
+    final stream = state.stream;
+    if (stream.isReplayConnection) {
+      final stableId = evt.stableId;
+      if (stableId != null) {
+        if (state.liveToolCalls.any((t) => t.id == stableId)) return;
+      } else {
+        var idx = stream.replayToolMatchIndex;
+        while (idx < state.liveToolCalls.length) {
+          if (_sameToolSignature(state.liveToolCalls[idx], evt)) {
+            state = state.copyWith(
+              stream: state.stream.copyWith(replayToolMatchIndex: idx + 1),
+            );
+            return;
+          }
+          idx++;
+        }
+      }
+    }
+    _ensureStreamingAssistantMessage();
+    final tool = ToolCall(
+      id: evt.stableId,
+      name: evt.name,
+      preview: evt.preview,
+      args: _argsToJsonValue(evt.args),
+      isCompleted: false,
+    );
+    final anchor = state.stream.toolCallAnchorMessageId ??
+        state.stream.streamingAssistantMessageId;
+    state = state.copyWith(
+      liveToolCalls: [...state.liveToolCalls, tool],
+      stream: state.stream.copyWith(toolCallAnchorMessageId: anchor),
+    );
+    _markProgress();
+  }
+
+  void _completeToolCall(ToolStreamEvent evt) {
+    final stableId = evt.stableId;
+    final calls = state.liveToolCalls;
+    var index = -1;
+    if (stableId != null) {
+      index = calls.indexWhere((t) => t.id == stableId);
+    }
+    if (index == -1 && evt.name != null) {
+      // 匹配 name 相同的最后一个未完成项。
+      for (var i = calls.length - 1; i >= 0; i--) {
+        if (calls[i].name == evt.name && !calls[i].isCompleted) {
+          index = i;
+          break;
+        }
+      }
+    }
+    if (index != -1) {
+      final existing = calls[index];
+      if (state.stream.isReplayConnection && existing.isCompleted) return;
+      final next = List<ToolCall>.of(calls);
+      next[index] = ToolCall(
+        id: existing.id,
+        name: evt.name ?? existing.name,
+        preview: evt.preview ?? existing.preview,
+        args: evt.args != null ? _argsToJsonValue(evt.args) : existing.args,
+        duration: evt.duration,
+        isError: evt.isError,
+        isCompleted: true,
+        startedAt: existing.startedAt,
+      );
+      state = state.copyWith(liveToolCalls: next);
+    } else {
+      // 匹配不到 → append 已完成项（服务器只发了完成事件）。
+      state = state.copyWith(
+        liveToolCalls: [
+          ...calls,
+          ToolCall(
+            id: evt.stableId,
+            name: evt.name,
+            preview: evt.preview,
+            args: _argsToJsonValue(evt.args),
+            duration: evt.duration,
+            isError: evt.isError,
+            isCompleted: true,
+          ),
+        ],
+      );
+    }
+    _markProgress();
+  }
+
+  Map<String, JsonValue>? _argsToJsonValue(Map<String, Object?>? args) {
+    if (args == null || args.isEmpty) return null;
+    return args.map((k, v) => MapEntry(k, JsonValue.fromJson(v)));
+  }
+
+  bool _sameToolSignature(ToolCall call, ToolStreamEvent evt) {
+    if (call.name != evt.name) return false;
+    if (call.preview != evt.preview) return false;
+    final argsA = call.args == null
+        ? '{}'
+        : jsonEncode(call.args!.map((k, v) => MapEntry(k, v.toJson())));
+    final argsB = evt.args == null ? '{}' : jsonEncode(evt.args);
+    return argsA == argsB;
+  }
+
+  // -------------------------------------------------------------------------
+  // title / metering / approval / clarify / steer leftover
+  // -------------------------------------------------------------------------
+
+  void _handleTitle(String? sessionId, String? title) {
+    if (sessionId == null || sessionId.isEmpty || title == null) return;
+    if (state.sessionId.isNotEmpty && sessionId != state.sessionId) return;
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    state = state.copyWith(displayTitle: trimmed);
+  }
+
+  void _handleMetering({
+    double? tps,
+    required bool tpsAvailable,
+    required bool estimated,
+    String? sessionId,
+  }) {
+    if (sessionId != null &&
+        sessionId.isNotEmpty &&
+        state.sessionId.isNotEmpty &&
+        sessionId != state.sessionId) {
+      return;
+    }
+    if (tpsAvailable && !estimated && tps != null && tps.isFinite && tps > 0) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(liveTokensPerSecond: tps),
+      );
+    }
+  }
+
+  void _applyApprovalUpdate(Map<String, Object?> payload) {
+    final pending = payload['pending'];
+    if (pending is Map) {
+      state = state.copyWith(
+        phase: ChatPhase.approvalPending,
+        pendingAction: state.pendingAction.copyWith(
+          approvalPrompt: Map<String, Object?>.from(pending),
+        ),
+      );
+    } else {
+      _clearApprovalCard();
+    }
+    _markProgress();
+  }
+
+  void _applyClarificationUpdate(Map<String, Object?> payload) {
+    final pending = payload['pending'];
+    if (pending is Map) {
+      state = state.copyWith(
+        phase: ChatPhase.clarifyPending,
+        pendingAction: state.pendingAction.copyWith(
+          clarificationPrompt: Map<String, Object?>.from(pending),
+        ),
+      );
+    } else {
+      _clearClarificationCard();
+    }
+    _markProgress();
+  }
+
+  void _clearApprovalCard() {
+    state = state.copyWith(
+      phase: state.stream.hasActiveStream ? ChatPhase.streaming : ChatPhase.idle,
+      pendingAction: state.pendingAction.copyWith(clearApproval: true),
+    );
+  }
+
+  void _clearClarificationCard() {
+    state = state.copyWith(
+      phase: state.stream.hasActiveStream ? ChatPhase.streaming : ChatPhase.idle,
+      pendingAction: state.pendingAction.copyWith(clearClarification: true),
+    );
+  }
+
+  void _handlePendingSteerLeftover(String text) {
+    if (text.trim().isEmpty) return;
+    state = state.copyWith(
+      queuedSlashMessages: [...state.queuedSlashMessages, text],
+      pinnedLocalNotices: [
+        ...state.pinnedLocalNotices,
+        'Steering hint was not consumed — it has been queued for the next message.',
+      ],
+    );
+    _markProgress();
+  }
+
+  // -------------------------------------------------------------------------
+  // done / stream_end / cancel / error 收尾
+  // -------------------------------------------------------------------------
+
+  void _applyDone(DoneStreamEvent event) {
+    flushPendingStreamingContent();
+    final completedStreamId = state.stream.activeStreamId;
+    final currentStreamingId = state.stream.streamingAssistantMessageId;
+    final rawSession = event.session;
+    final hasCompletedTranscript = rawSession != null &&
+        rawSession['messages'] is List &&
+        (rawSession['messages'] as List).isNotEmpty;
+    if (hasCompletedTranscript) {
+      _applyCompletedStreamSession(rawSession, currentStreamingId);
+    }
+    final rawUsage = event.usage;
+    if (rawUsage != null) {
+      final snapshot = ContextWindowSnapshot.fromJson(rawUsage);
+      state = state.copyWith(contextWindowSnapshot: snapshot);
+      final tps = snapshot.tokensPerSecond;
+      if (tps != null && tps.isFinite && tps > 0) {
+        _applyTurnTps(currentStreamingId, tps);
+      }
+    }
+    _completeCurrentResponse(
+      needsTranscriptRefresh: !hasCompletedTranscript,
+      completedStreamId: completedStreamId,
+    );
+  }
+
+  void _applyCompletedStreamSession(
+    Map<String, Object?> rawSession,
+    String? currentStreamingId,
+  ) {
+    final detail = SessionDetail.fromJson(rawSession);
+    final loaded = detail.messages ?? const <ChatMessage>[];
+    final merged =
+        _mergingLoadedMessages(loaded, state.messages, currentStreamingId);
+    final persisted = detail.toolCalls ?? const <PersistedToolCall>[];
+    final persistedGroups = ToolCallGroup.groups(
+      persistedToolCalls: persisted,
+      messages: merged,
+      messageOffset: state.messagesOffset,
+    );
+    final liveGroups = _archiveLiveToolCallsToGroups();
+    final groups = ToolCallGroup.merging(
+      primaryGroups: persistedGroups,
+      fallbackGroups: liveGroups,
+    );
+    final reasoningGroups = _archiveLiveReasoningToGroups();
+    final title = detail.title?.trim();
+    state = state.copyWith(
+      messages: merged,
+      messagesOffset: detail.messagesOffset ?? state.messagesOffset,
+      hasOlderMessages: detail.messageCount != null &&
+          detail.messageCount! > merged.length,
+      displayTitle: (title == null || title.isEmpty)
+          ? state.displayTitle
+          : title,
+      workspace: detail.workspace ?? state.workspace,
+      model: detail.model ?? state.model,
+      modelProvider: detail.modelProvider ?? state.modelProvider,
+      profile: detail.profile ?? state.profile,
+      completedToolCallGroups: groups,
+      completedReasoningGroups: reasoningGroups,
+      liveToolCalls: const [],
+      liveReasoningText: '',
+      stream: state.stream.copyWith(
+        clearStreamingAssistantMessageId: true,
+        clearToolCallAnchorMessageId: true,
+        clearReasoningAnchorMessageId: true,
+      ),
+    );
+  }
+
+  /// 服务端 transcript 与本地合并：local- 乐观消息保留插回；本地流式内容
+  /// 与服务端取「更长/更新的」，前缀包含去重（chat_spec.md §5.5 最低档）。
+  List<ChatMessage> _mergingLoadedMessages(
+    List<ChatMessage> loaded,
+    List<ChatMessage> current,
+    String? streamingMessageId,
+  ) {
+    if (loaded.isEmpty) return List<ChatMessage>.from(current);
+    if (current.isEmpty) return loaded;
+    final result = List<ChatMessage>.from(loaded);
+    if (streamingMessageId != null) {
+      ChatMessage? localStreaming;
+      for (final message in current) {
+        if (message.messageId == streamingMessageId) {
+          localStreaming = message;
+          break;
+        }
+      }
+      if (localStreaming != null) {
+        final localContent = localStreaming.content ?? '';
+        var lastAssistantIndex = -1;
+        for (var i = result.length - 1; i >= 0; i--) {
+          if (result[i].role == 'assistant') {
+            lastAssistantIndex = i;
+            break;
+          }
+        }
+        if (lastAssistantIndex != -1) {
+          final serverContent = result[lastAssistantIndex].content ?? '';
+          if (localContent.isNotEmpty &&
+              serverContent.startsWith(localContent)) {
+            // 服务端已含本地全部内容 → 丢弃本地流式消息。
+          } else if (localContent.isNotEmpty &&
+              (serverContent.isEmpty || localContent.startsWith(serverContent))) {
+            result[lastAssistantIndex] =
+                result[lastAssistantIndex].copyWith(content: localContent);
+          }
+        } else if (localContent.isNotEmpty) {
+          result.add(localStreaming);
+        }
+      }
+    }
+    final loadedIds = result.map((m) => m.messageId).whereType<String>().toSet();
+    final localToInsert = current
+        .where((m) =>
+            (m.messageId ?? '').startsWith('local-') &&
+            !loadedIds.contains(m.messageId) &&
+            !_duplicatesLoadedUserMessage(m, result))
+        .toList();
+    if (localToInsert.isNotEmpty) {
+      var insertAt = result.length;
+      for (var i = result.length - 1; i >= 0; i--) {
+        if (result[i].role == 'user' &&
+            TranscriptTurnClassifier.isUserTurnBoundary(result[i])) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+      result.insertAll(insertAt, localToInsert);
+    }
+    return result;
+  }
+
+  /// local- 乐观 user 消息与加载 transcript 的最后一条 user 消息内容相同
+  /// （服务端已确认该消息）→ 视为重复，不再保留。
+  bool _duplicatesLoadedUserMessage(
+    ChatMessage local,
+    List<ChatMessage> loaded,
+  ) {
+    if (local.role != 'user') return false;
+    final localContent = local.content?.trim();
+    if (localContent == null || localContent.isEmpty) return false;
+    for (var i = loaded.length - 1; i >= 0; i--) {
+      final message = loaded[i];
+      if (message.role == 'user' && (message.content ?? '').trim() == localContent) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _applyTurnTps(String? currentStreamingId, double tps) {
+    var index = -1;
+    if (currentStreamingId != null) {
+      index = state.messages.indexWhere((m) => m.messageId == currentStreamingId);
+    }
+    if (index == -1) {
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role == 'assistant') {
+          index = i;
+          break;
+        }
+      }
+    }
+    if (index == -1) return;
+    final next = List<ChatMessage>.of(state.messages);
+    next[index] = next[index].copyWith(turnTps: tps);
+    state = state.copyWith(messages: next);
+  }
+
+  /// completeCurrentResponse：结束流（activeStreamId=null、hasCompletedResponse=true）。
+  void _completeCurrentResponse({
+    required bool needsTranscriptRefresh,
+    String? completedStreamId,
+  }) {
+    _api?.stopStream();
+    state = state.copyWith(
+      phase: ChatPhase.idle,
+      stream: state.stream.copyWith(
+        clearActiveStreamId: true,
+        clearLastEventId: true,
+        clearStreamingAssistantMessageId: true,
+        clearToolCallAnchorMessageId: true,
+        clearReasoningAnchorMessageId: true,
+        clearLiveTokensPerSecond: true,
+        hasCompletedResponse: true,
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+        isReplayConnection: false,
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+      ),
+      pendingAction: const ChatPendingActionState(),
+      responseCompletionNeedsTranscriptRefresh: needsTranscriptRefresh,
+    );
+    if (needsTranscriptRefresh && completedStreamId != null) {
+      _scheduleTranscriptRefresh(completedStreamId);
+    }
+    _markProgress();
+  }
+
+  void _scheduleTranscriptRefresh(String streamId) {
+    _transcriptRefreshTimer?.cancel();
+    _transcriptRefreshTimer = Timer(
+      const Duration(milliseconds: 500),
+      () {
+        _transcriptRefreshTimer = null;
+        unawaited(refreshTranscriptIfCompleted(streamId));
+      },
+    );
+  }
+
+  void _handleStreamEnd() {
+    if (!state.stream.hasCompletedResponse) {
+      _completeCurrentResponse(
+        needsTranscriptRefresh: false,
+        completedStreamId: state.stream.activeStreamId,
+      );
+    }
+    _finishStream();
+  }
+
+  void _handleCancelled() {
+    if (!state.stream.hasCompletedResponse) {
+      _completeCurrentResponse(
+        needsTranscriptRefresh: false,
+        completedStreamId: state.stream.activeStreamId,
+      );
+    }
+    _finishStream(endPhase: ChatPhase.cancelled);
+  }
+
+  void _handleErrorEvent(String message) {
+    if (!state.stream.hasCompletedResponse) {
+      state = state.copyWith(sendErrorMessage: message);
+      _completeCurrentResponse(
+        needsTranscriptRefresh: false,
+        completedStreamId: state.stream.activeStreamId,
+      );
+      _finishStream(endPhase: ChatPhase.error);
+    } else {
+      // done 已收尾：不显示错误，仅清理残留。
+      _finishStream();
+    }
+  }
+
+  /// finishStream：清残留（flush、卡片、pinned notices、队列顺次发送），
+  /// 相位经瞬态 endPhase 后立即回 idle。
+  void _finishStream({ChatPhase endPhase = ChatPhase.idle}) {
+    flushPendingStreamingContent();
+    var messages = state.messages;
+    if (state.pinnedLocalNotices.isNotEmpty) {
+      final notices = state.pinnedLocalNotices
+          .map((text) => ChatMessage(
+                role: 'local_notice',
+                content: text,
+                messageId: 'local-notice-${uuidV4()}',
+                timestamp: _nowSeconds(),
+              ))
+          .toList();
+      messages = [...messages, ...notices];
+    }
+    state = state.copyWith(
+      phase: endPhase,
+      messages: messages,
+      pinnedLocalNotices: const [],
+      pendingAction: const ChatPendingActionState(),
+      stream: state.stream.copyWith(
+        clearActiveStreamId: true,
+        clearLastEventId: true,
+        clearStreamingAssistantMessageId: true,
+        clearToolCallAnchorMessageId: true,
+        clearReasoningAnchorMessageId: true,
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+        isCancelling: false,
+        isReplayConnection: false,
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+      ),
+    );
+    _api?.stopStream();
+    _cancelStreamTimers();
+    _markProgress();
+    // 瞬态相位：收尾完成后立即回 idle。
+    if (endPhase != ChatPhase.idle) {
+      state = state.copyWith(phase: ChatPhase.idle);
+    }
+    // done 后未收到 title → 补拉一次标题。
+    if (state.stream.hasCompletedResponse &&
+        state.displayTitle == 'Untitled Session') {
+      unawaited(_refreshCompletedResponseTitleIfNeeded());
+    }
+    // 队列顺次发送。
+    if (state.queuedSlashMessages.isNotEmpty) {
+      unawaited(_drainQueuedSlashMessage());
+    }
+  }
+
+  void _cancelStreamTimers() {
+    _mergeTimer?.cancel();
+    _mergeTimer = null;
+    _revealTimer?.cancel();
+    _revealTimer = null;
+    _revealQueue.clear();
+    _revealQueueStart = null;
+  }
+
+  Future<void> _refreshCompletedResponseTitleIfNeeded() async {
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    final gen = _generation;
+    try {
+      final raw = await _api!.session(
+        sessionId: sessionId,
+        includeMessages: false,
+      );
+      if (_disposed || gen != _generation) return;
+      final envelope = _asStringMap(raw);
+      final rawSession = envelope['session'];
+      if (rawSession is! Map) return;
+      final detail = SessionDetail.fromJson(Map<String, Object?>.from(rawSession));
+      final title = detail.title?.trim();
+      if (title != null && title.isNotEmpty) {
+        state = state.copyWith(displayTitle: title);
+      }
+    } on ApiException {
+      // 标题补拉失败静默。
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // transportError 断线恢复（chat_spec.md §5.3）
+  // -------------------------------------------------------------------------
+
+  void _handleTransportError(String message) {
+    final stream = state.stream;
+    if (stream.activeStreamId == null || stream.hasCompletedResponse) {
+      // 无连接可恢复：显示错误 + finishStream。
+      state = state.copyWith(sendErrorMessage: message);
+      _finishStream(endPhase: ChatPhase.error);
+      return;
+    }
+    // 挂起：lastEventID 已由 onEventId 记录；快照即当前 state。
+    state = state.copyWith(
+      phase: ChatPhase.recovering,
+      stream: stream.copyWith(
+        isSuspended: true,
+        recovery: ActiveStreamRecoveryState.checking,
+      ),
+    );
+    _api?.stopStream();
+    unawaited(_reconnectIfNeeded());
+  }
+
+  Future<void> _reconnectIfNeeded() async {
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return;
+    final gen = _generation;
+    try {
+      final raw = await _api!.chatStreamStatus(streamId);
+      if (_disposed || gen != _generation) return;
+      final map = _asStringMap(raw);
+      if (map['active'] == true) {
+        // 全量重连：loadMessages 后恢复（带 replay 若快照有 lastEventID）。
+        await _loadMessagesAndResume(streamId);
+        return;
+      }
+      if (map['replay_available'] == true) {
+        final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            isSuspended: false,
+            recovery: ActiveStreamRecoveryState.reconnecting,
+          ),
+        );
+        _connectStream(streamId, replayAfterSeq: afterSeq == 0 ? null : afterSeq);
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            isSuspended: false,
+            recovery: ActiveStreamRecoveryState.idle,
+          ),
+          phase: ChatPhase.streaming,
+        );
+        _markProgress();
+        return;
+      }
+      // 非 active 且无 replay：loadMessages → 有 assistant 响应按 transcript
+      // complete，否则 finalize 为失败。
+      await _finalizeAfterRecovery(streamId);
+    } on ApiException {
+      if (_disposed || gen != _generation) return;
+      // status 失败 → 强制尝试 replay。
+      _forceReconnect(streamId);
+    }
+  }
+
+  Future<void> _loadMessagesAndResume(String streamId) async {
+    await loadMessages();
+    if (_disposed) return;
+    if (state.stream.activeStreamId != streamId) return;
+    // 重锚定：加载的 transcript 里当前回合最后一条 assistant 消息。
+    final currentAnchor = state.stream.streamingAssistantMessageId;
+    if (currentAnchor == null ||
+        !state.messages.any((m) => m.messageId == currentAnchor)) {
+      String? anchorId;
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        final message = state.messages[i];
+        if (message.role == 'assistant' && message.messageId != null) {
+          anchorId = message.messageId;
+          break;
+        }
+      }
+      if (anchorId != null) {
+        state = state.copyWith(
+          stream: state.stream.copyWith(streamingAssistantMessageId: anchorId),
+        );
+      }
+    }
+    final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+    if (afterSeq > 0) {
+      _connectStream(streamId, replayAfterSeq: afterSeq);
+    } else {
+      _connectStream(streamId, fullReconnect: true);
+    }
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+      ),
+      phase: ChatPhase.streaming,
+    );
+    _markProgress();
+  }
+
+  Future<void> _finalizeAfterRecovery(String streamId) async {
+    await loadMessages();
+    if (_disposed) return;
+    if (state.stream.activeStreamId != streamId) return;
+    final hasAssistantResponse = state.messages.any((m) => m.role == 'assistant');
+    if (hasAssistantResponse) {
+      _completeCurrentResponse(
+        needsTranscriptRefresh: false,
+        completedStreamId: streamId,
+      );
+      _finishStream();
+    } else {
+      state = state.copyWith(sendErrorMessage: '连接已断开，未能恢复流。');
+      _finishStream(endPhase: ChatPhase.error);
+    }
+  }
+
+  /// 强制重连（status 失败 / 看门狗超时；带 replay 若可用）。
+  void _forceReconnect(String streamId) {
+    final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isSuspended: true,
+        recovery: ActiveStreamRecoveryState.reconnecting,
+      ),
+    );
+    _api?.stopStream();
+    if (afterSeq > 0) {
+      _connectStream(streamId, replayAfterSeq: afterSeq);
+    } else {
+      _connectStream(streamId, fullReconnect: true);
+    }
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+      ),
+      phase: ChatPhase.streaming,
+    );
+    _markProgress();
+  }
+
+  /// lastEventID 冒号后序号解析（§5.4）；解析失败 → 0。
+  int _replayAfterSeq(String? lastEventId) {
+    if (lastEventId == null) return 0;
+    final idx = lastEventId.lastIndexOf(':');
+    final part = idx == -1 ? lastEventId : lastEventId.substring(idx + 1);
+    return int.tryParse(part.trim()) ?? 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // 看门狗（前台 1s 心跳；5s/12s/18s/25s 阈值；冷却 ≥4s）
+  // -------------------------------------------------------------------------
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(_watchdogConfig.watchdogInterval, (_) {
+      _recoverStaleStreamIfNeeded();
+    });
+  }
+
+  void _recoverStaleStreamIfNeeded() {
+    if (_disposed) return;
+    if (state.stream.activeStreamId == null) return;
+    if (state.stream.hasCompletedResponse) return;
+    if (state.pendingAction.hasPendingPrompt) return; // 卡片期间暂停
+    final now = _now();
+    final config = _watchdogConfig;
+    final lastProgress = _lastProgress;
+    final lastTransport = _lastTransportActivity;
+    if (lastProgress != null &&
+        now.difference(lastProgress) >= config.progressStaleThreshold &&
+        lastTransport != null &&
+        now.difference(lastTransport) >= config.transportStaleThreshold) {
+      final cooldown = _statusCheckCooldownUntil;
+      if (cooldown == null || now.isAfter(cooldown)) {
+        _statusCheckCooldownUntil = now.add(config.statusPollCooldown);
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            recovery: ActiveStreamRecoveryState.checking,
+          ),
+        );
+        unawaited(_checkStatusAndReconnect());
+      }
+    }
+    final forceThreshold = _hasRunningTools
+        ? config.forceReconnectWithRunningToolsThreshold
+        : config.forceReconnectThreshold;
+    if (lastTransport != null &&
+        now.difference(lastTransport) >= forceThreshold) {
+      _forceReconnect(state.stream.activeStreamId!);
+    }
+  }
+
+  bool get _hasRunningTools => state.liveToolCalls.any((t) => !t.isCompleted);
+
+  Future<void> _checkStatusAndReconnect() async {
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return;
+    final gen = _generation;
+    try {
+      final raw = await _api!.chatStreamStatus(streamId);
+      if (_disposed || gen != _generation) return;
+      final map = _asStringMap(raw);
+      if (map['active'] == true) {
+        await _loadMessagesAndResume(streamId);
+      } else if (map['replay_available'] == true) {
+        final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            recovery: ActiveStreamRecoveryState.reconnecting,
+          ),
+        );
+        _connectStream(streamId, replayAfterSeq: afterSeq == 0 ? null : afterSeq);
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            recovery: ActiveStreamRecoveryState.idle,
+          ),
+          phase: ChatPhase.streaming,
+        );
+        _markProgress();
+      } else {
+        await _finalizeAfterRecovery(streamId);
+      }
+    } on ApiException {
+      if (_disposed || gen != _generation) return;
+      _forceReconnect(streamId);
+    }
+  }
+
+  void _handleHeartbeat() {
+    // 心跳证明传输存活：checking → idle；绝不 demote reconnecting。
+    if (state.stream.recovery == ActiveStreamRecoveryState.checking) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(recovery: ActiveStreamRecoveryState.idle),
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 归档 / 辅助
+  // -------------------------------------------------------------------------
+
+  void _archiveLiveReasoningIfNeeded() {
+    final text = state.liveReasoningText;
+    if (text.isEmpty) return;
+    final anchor = state.stream.reasoningAnchorMessageId ??
+        state.stream.streamingAssistantMessageId;
+    state = state.copyWith(
+      liveReasoningText: '',
+      completedReasoningGroups: [
+        ...state.completedReasoningGroups,
+        ReasoningGroup(anchorMessageId: anchor, text: text),
+      ],
+    );
+  }
+
+  List<ReasoningGroup> _archiveLiveReasoningToGroups() {
+    final text = state.liveReasoningText;
+    if (text.isEmpty) return state.completedReasoningGroups;
+    final anchor = state.stream.reasoningAnchorMessageId ??
+        state.stream.streamingAssistantMessageId;
+    return [
+      ...state.completedReasoningGroups,
+      ReasoningGroup(anchorMessageId: anchor, text: text),
+    ];
+  }
+
+  void _archiveLiveToolCallsIfNeeded() {
+    if (state.liveToolCalls.isEmpty) return;
+    final groups = _archiveLiveToolCallsToGroups();
+    state = state.copyWith(
+      liveToolCalls: const [],
+      completedToolCallGroups: groups,
+    );
+  }
+
+  List<ToolCallGroup> _archiveLiveToolCallsToGroups() {
+    if (state.liveToolCalls.isEmpty) return state.completedToolCallGroups;
+    final anchor = state.stream.toolCallAnchorMessageId ??
+        state.stream.streamingAssistantMessageId;
+    final group = ToolCallGroup.live(
+      anchorMessageID: anchor,
+      toolCalls: List<ToolCall>.of(state.liveToolCalls),
+    );
+    return ToolCallGroup.merging(
+      primaryGroups: state.completedToolCallGroups,
+      fallbackGroups: [group],
+    );
+  }
+
+  void _rollbackOptimisticMessage(String messageId) {
+    state = state.copyWith(
+      messages: state.messages.where((m) => m.messageId != messageId).toList(),
+    );
+  }
+
+  void _pinNotice(String text) {
+    state = state.copyWith(
+      pinnedLocalNotices: [...state.pinnedLocalNotices, text],
+    );
+  }
+
+  void _setSendError(String message) {
+    state = state.copyWith(sendErrorMessage: message);
+  }
+
+  void _markProgress() {
+    _lastProgress = _now();
+    // steered 是子相位：收到任意 progress 事件回到 streaming。
+    if (state.phase == ChatPhase.steered) {
+      state = state.copyWith(phase: ChatPhase.streaming);
+    }
+    if (state.stream.recovery == ActiveStreamRecoveryState.checking) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(recovery: ActiveStreamRecoveryState.idle),
+      );
+    }
+  }
+
+  void _recordTransportActivity() {
+    _lastTransportActivity = _now();
+  }
+
+  Future<void> _recoverExistingStream(String activeStreamId) async {
+    await loadMessages();
+    if (_disposed) return;
+    if (state.stream.activeStreamId == null) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(activeStreamId: activeStreamId),
+      );
+    }
+    if (state.stream.activeStreamId == activeStreamId && !_streamConnected) {
+      _connectStream(activeStreamId, fullReconnect: true);
+    }
+    state = state.copyWith(
+      phase: ChatPhase.streaming,
+      stream: state.stream.copyWith(
+        hasCompletedResponse: false,
+        isSuspended: false,
+      ),
+    );
+    _markProgress();
+  }
+
+  String _resolveTitle(SessionDetail detail) {
+    final title = detail.title?.trim();
+    if (title == null || title.isEmpty) return 'Untitled Session';
+    return title;
+  }
+
+  static Map<String, Object?> _asStringMap(Object? raw) {
+    if (raw is Map<String, Object?>) return raw;
+    if (raw is Map) return Map<String, Object?>.from(raw);
+    return const <String, Object?>{};
+  }
+
+  // -------------------------------------------------------------------------
+  // replay 去重（chat_spec.md §5.6；token 粒度 + reasoning 同构）
+  // -------------------------------------------------------------------------
+
+  /// token 粒度去重。返回剩余文本 + 新游标 + 是否仍处于 replay 匹配。
+  @visibleForTesting
+  static ({String remainder, int newCursor, bool stillReplay})
+      deduplicatedReplayToken({
+    required String token,
+    required String existingContent,
+    required int matchedPrefixLength,
+  }) {
+    if (existingContent.isEmpty) {
+      return (remainder: token, newCursor: 0, stillReplay: false);
+    }
+    var cursor = matchedPrefixLength;
+    if (cursor < 0) cursor = 0;
+    if (cursor > existingContent.length) cursor = existingContent.length;
+    final expectedRemainder = existingContent.substring(cursor);
+
+    if (expectedRemainder.isNotEmpty && expectedRemainder.startsWith(token)) {
+      // 纯重复：游标前进。
+      final newCursor = cursor + token.length;
+      return (
+        remainder: '',
+        newCursor: newCursor >= existingContent.length ? 0 : newCursor,
+        stillReplay: true,
+      );
+    }
+    if (expectedRemainder.isNotEmpty && token.startsWith(expectedRemainder)) {
+      // 残余拼接。
+      return (
+        remainder: token.substring(expectedRemainder.length),
+        newCursor: 0,
+        stillReplay: true,
+      );
+    }
+    if (existingContent.endsWith(token) || existingContent.startsWith(token)) {
+      // 完全重复。
+      return (remainder: '', newCursor: 0, stillReplay: true);
+    }
+    if (token.startsWith(existingContent)) {
+      return (
+        remainder: token.substring(existingContent.length),
+        newCursor: 0,
+        stillReplay: true,
+      );
+    }
+    // 最大重叠扫描（existingContent 后缀 ∩ token 前缀，从大到小）。
+    final maxLen =
+        existingContent.length < token.length ? existingContent.length : token.length;
+    var overlap = 0;
+    for (var len = maxLen; len > 0; len--) {
+      if (existingContent.endsWith(token.substring(0, len))) {
+        overlap = len;
+        break;
+      }
+    }
+    if (overlap > 0) {
+      return (
+        remainder: token.substring(overlap),
+        newCursor: 0,
+        stillReplay: true,
+      );
+    }
+    // 皆不匹配 → 原样返回，关闭 replay。
+    return (remainder: token, newCursor: 0, stillReplay: false);
+  }
+
+  /// reasoning 粒度去重（同构，游标基于已 flush 的 liveReasoningText）。
+  @visibleForTesting
+  static ({String remainder, int newCursor, bool stillReplay})
+      deduplicatedReplayText({
+    required String text,
+    required String existingContent,
+    required int matchedLength,
+  }) {
+    return deduplicatedReplayToken(
+      token: text,
+      existingContent: existingContent,
+      matchedPrefixLength: matchedLength,
+    );
+  }
+
+  /// 词单元切分：空白携带在单元尾部；无空白的 CJK 长串每 8 字符切一刀。
+  /// 拼接（join）与原始文本完全一致。
+  @visibleForTesting
+  static List<String> splitIntoWordUnits(String text) {
+    if (text.isEmpty) return const [];
+    final units = <String>[];
+    final buffer = StringBuffer();
+    for (final rune in text.runes) {
+      final ch = String.fromCharCode(rune);
+      buffer.write(ch);
+      final isWhitespace = RegExp(r'\s').hasMatch(ch);
+      if (isWhitespace || (isCjkRune(rune) && buffer.length >= 8)) {
+        units.add(buffer.toString());
+        buffer.clear();
+      }
+    }
+    if (buffer.isNotEmpty) units.add(buffer.toString());
+    return units;
+  }
+
+  /// CJK 统一表意文字 / 假名 / 谚文范围判定。
+  static bool isCjkRune(int rune) {
+    return (rune >= 0x4E00 && rune <= 0x9FFF) ||
+        (rune >= 0x3400 && rune <= 0x4DBF) ||
+        (rune >= 0xF900 && rune <= 0xFAFF) ||
+        (rune >= 0x3040 && rune <= 0x30FF) ||
+        (rune >= 0xAC00 && rune <= 0xD7AF);
+  }
+}
