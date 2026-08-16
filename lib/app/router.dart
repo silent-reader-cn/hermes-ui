@@ -4,9 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../core/connections/connection_providers.dart';
 import '../features/chat/chat_page.dart';
+import '../features/memory/memory_page.dart';
 import '../features/onboarding/onboarding_page.dart';
 import '../features/session_list/session_list_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/skills/skills_page.dart';
+import '../features/tasks/tasks_page.dart';
 
 /// 全局路由表（app_shell_spec.md §3）。
 ///
@@ -16,6 +19,9 @@ import '../features/settings/settings_page.dart';
 /// | `/` | SessionListPage |
 /// | `/chat` / `/chat/:sessionId` | ChatPage（无 sessionId = 新会话） |
 /// | `/settings` | SettingsPage |
+/// | `/tasks` | TasksPage（Cron 任务管理） |
+/// | `/skills` | SkillsPage |
+/// | `/memory` | MemoryPage |
 ///
 /// 路由守卫（§2.1 初始化顺序 + §3 守卫）：未配置服务器 → 一律重定向
 /// `/onboarding`；已有激活连接 → `/onboarding` 重定向 `/`（配置完成后自动
@@ -60,6 +66,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/tasks',
+        builder: (context, state) => const TasksPage(),
+      ),
+      GoRoute(
+        path: '/skills',
+        builder: (context, state) => const SkillsPage(),
+      ),
+      GoRoute(
+        path: '/memory',
+        builder: (context, state) => const MemoryPage(),
       ),
     ],
   );
