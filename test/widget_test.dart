@@ -1,30 +1,90 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/app/app.dart';
+import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:hermex_flutter/main.dart';
+import 'helpers/in_memory_secure_storage.dart';
 
+/// App 壳冒烟测试（替换模板 Counter 测试）。
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  ServerConnection buildConn(String id) {
+    return ServerConnection(
+      id: id,
+      name: 'Home',
+      baseUrl: 'http://hermes.local:30002',
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+  }
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('无连接 → 路由守卫进入 onboarding 向导', (tester) async {
+    final storage = InMemorySecureStorage();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(
+            ConnectionStore(storage: storage),
+          ),
+        ],
+        child: const HermexApp(),
+      ),
+    );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
+    expect(find.text('暂无会话'), findsNothing);
+  });
+
+  testWidgets('有激活连接 → 异步加载后进入 SessionList 空态', (tester) async {
+    final storage = InMemorySecureStorage();
+    final store = ConnectionStore(storage: storage);
+    final conn = buildConn('c1');
+    await store.save(conn);
+    await store.setActive(conn.id);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(store),
+        ],
+        child: const HermexApp(),
+      ),
+    );
+    // 连接/active 异步加载完成 → refreshListenable 触发守卫重定向 →
+    // 两次页面过渡动画（onboarding 400ms + SessionList 400ms）
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    expect(find.text('暂无会话'), findsOneWidget);
+    expect(find.text('连接你的 Hermex 服务器'), findsNothing);
+  });
+
+  testWidgets('默认主题浅色（跟随系统，测试环境为 light）', (tester) async {
+    final storage = InMemorySecureStorage();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(
+            ConnectionStore(storage: storage),
+          ),
+        ],
+        child: const HermexApp(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final app = tester.widget<CupertinoApp>(find.byType(CupertinoApp));
+    expect(app.theme?.brightness, Brightness.light);
+    expect(app.theme?.primaryColor, const Color(0xFF007AFF));
   });
 }
