@@ -1,0 +1,26 @@
+# hermex-flutter 项目分析配置（规范见 docs/CODING_STYLE.md）
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+    - .reference/**
+
+linter:
+  rules:
+    # 强制规范项（对照 docs/CODING_STYLE.md 第 4 节）
+    avoid_print: true
+    prefer_single_quotes: true
+    prefer_final_locals: true
+    prefer_const_constructors: true
+    always_declare_return_types: true
+    unawaited_futures: true
+    discarded_futures: true
+    # 容错解码是刻意设计，不强制 strict 模式
+    avoid_dynamic_calls: false

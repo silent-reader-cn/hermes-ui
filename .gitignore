@@ -1,1 +1,42 @@
+# 本地参考源码（Hermex 蓝本，不进仓库）
 .reference/
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.metadata
+
+# Android
+android/local.properties
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.keystore
+*.jks
+
+# iOS/macOS
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Pods/
+macos/Flutter/Generated.xcconfig
+macos/Flutter/ephemeral/
+macos/Pods/
+**/Pods/
+
+# Windows
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+
+# Web
+web/favicon.png
+
+# 系统
+.DS_Store
+Thumbs.db
