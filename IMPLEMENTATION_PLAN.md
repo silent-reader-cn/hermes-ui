@@ -334,6 +334,15 @@ gantt
 1. **优先级**：Android + Windows 先行，macOS / Linux / Web 后置
 2. **仓库**：GitHub **公开** → https://github.com/silent-reader-cn/hermex-flutter
 3. **项目名**：`hermex-flutter`
-4. **工具链**：Flutter SDK → `D:\flutter`；JDK 17 + Android SDK → `D:\Android`
+4. **工具链**：Flutter SDK → `C:\Users\Admin\flutter`（D 盘满迁 C 盘）；JDK 17 → `D:\Java`；Android SDK 36 → C 盘标准位置；VS Build Tools 2022（已有）
 5. **领头人**：柚子（Hermes Agent）——负责架构设计、任务划分、代码风格统一、子代理成果验收
-6. **推进方式**：并行子代理分工（git worktree / 文件级分区），领头人逐批验收合并
+6. **推进方式**：并行子代理分工（文件级分区，领头人逐批验收合并，子代理不 commit）
+7. **fluter 命令环境**：MSYS bash 下必须用 `C:\tmp\f.bat` 封装（HOME/PATH 污染问题）
+
+## 15. 进度日志
+
+| 日期 | 里程碑 |
+|---|---|
+| 2026-08-16 | 工具链全就绪（Flutter 3.47.0 / JDK17 / SDK36 / licenses）；脚手架 + 依赖 + lint 入仓（a371dbf） |
+| 2026-08-16 | 预研规格 3 份验收通过：models_spec(145 模型) / api_spec(123 端点) / chat_spec(9 态状态机) |
+| 2026-08-16 | Phase 1 编码进行中：core/models + core/api 双线程（deleg_011b30ed） |
