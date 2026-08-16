@@ -60,6 +60,20 @@ final chatControllerProvider =
   ChatController.new,
 );
 
+/// 回合完成回调（done / stream_end 成功收尾时由 [ChatController] 调用）。
+///
+/// 默认 no-op（测试不受影响）；生产由 main.dart 用
+/// notifications 的 [turnNotificationHookProvider] override 注入，
+/// 实现「后台发通知、前台不发」。
+typedef ChatTurnCompletedCallback =
+    void Function(String sessionId, String title, String preview);
+
+/// 回合完成回调 Provider（notifications feature 注入点）。
+final chatTurnCompletedCallbackProvider =
+    Provider<ChatTurnCompletedCallback>(
+  (ref) => (sessionId, title, preview) {},
+);
+
 /// 当前相位（UI 主分支只 switch 它）。
 final chatPhaseProvider = Provider.family<ChatPhase, String>((ref, sessionId) {
   return ref.watch(chatControllerProvider(sessionId)).phase;

@@ -1011,6 +1011,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       needsTranscriptRefresh: !hasCompletedTranscript,
       completedStreamId: completedStreamId,
     );
+    // 回合完成（done）：通知 hook（仅后台发通知，见 notifications feature）。
+    _notifyTurnCompleted();
   }
 
   void _applyCompletedStreamSession(
@@ -1201,12 +1203,41 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  /// 回合完成 → 通知 hook（仅 done / stream_end 成功收尾触发；
+  /// cancel / error / transportError 路径不调用）。
+  ///
+  /// sessionId 为空（新会话尚未确定）时跳过：通知点击需要可跳转的会话。
+  void _notifyTurnCompleted() {
+    if (_disposed) return;
+    final current = state;
+    final sessionId = current.sessionId;
+    if (sessionId.isEmpty) return;
+    final title = current.displayTitle;
+    final preview = _lastAssistantContent(current);
+    ref.read(chatTurnCompletedCallbackProvider)(sessionId, title, preview);
+  }
+
+  /// 最近一条非空 assistant 消息内容（通知预览用）；无则空串。
+  String _lastAssistantContent(ChatState state) {
+    for (final message in state.messages.reversed) {
+      final content = message.content ?? '';
+      if (message.role == 'assistant' && content.trim().isNotEmpty) {
+        return content;
+      }
+    }
+    return '';
+  }
+
   void _handleStreamEnd() {
-    if (!state.stream.hasCompletedResponse) {
+    final wasCompleted = state.stream.hasCompletedResponse;
+    if (!wasCompleted) {
       _completeCurrentResponse(
         needsTranscriptRefresh: false,
         completedStreamId: state.stream.activeStreamId,
       );
+      // 回合完成（stream_end，done 未先到）：通知 hook。
+      // done 已收尾时 wasCompleted 为 true，不会重复通知。
+      _notifyTurnCompleted();
     }
     _finishStream();
   }

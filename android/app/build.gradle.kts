@@ -6,12 +6,15 @@ plugins {
 
 android {
     namespace = "com.silentreader.hermex_flutter"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 等插件要求 compileSdk 37（Platform 37 已安装）
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications 必需：Java 8+ API 脱糖（v10+ 要求）
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -46,4 +49,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // flutter_local_notifications 必需（v10+ 要求 Java 8+ API 脱糖）
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

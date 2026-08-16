@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/notifications/notification_lifecycle_observer.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
 import 'theme/theme_provider.dart';
@@ -25,17 +26,19 @@ class HermexApp extends ConsumerWidget {
       AppThemeMode.dark => Brightness.dark,
       AppThemeMode.system => MediaQuery.platformBrightnessOf(context),
     };
-    return CupertinoApp.router(
-      title: 'Hermex',
-      theme: buildCupertinoTheme(brightness),
-      routerConfig: router,
-      localizationsDelegates: const [
-        DefaultCupertinoLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('en'), Locale('zh')],
+    return NotificationLifecycleObserver(
+      child: CupertinoApp.router(
+        title: 'Hermex',
+        theme: buildCupertinoTheme(brightness),
+        routerConfig: router,
+        localizationsDelegates: const [
+          DefaultCupertinoLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en'), Locale('zh')],
+      ),
     );
   }
 }
