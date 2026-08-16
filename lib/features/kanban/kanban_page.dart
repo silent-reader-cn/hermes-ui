@@ -1,0 +1,1035 @@
+import 'dart:async';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_exception.dart';
+import '../../core/models/kanban.dart';
+import 'kanban_providers.dart';
+
+/// Kanban 状态展示标题（对齐 Hermex KanbanStatusPresentation.title）。
+String kanbanStatusTitle(String? rawValue) {
+  switch (rawValue) {
+    case 'triage':
+      return '待分类';
+    case 'todo':
+      return '待办';
+    case 'ready':
+      return '就绪';
+    case 'running':
+      return '运行中';
+    case 'blocked':
+      return '受阻';
+    case 'done':
+      return '完成';
+    case 'archived':
+      return '已归档';
+    case null:
+    case '':
+      return '未知状态';
+    default:
+      return '不支持: $rawValue';
+  }
+}
+
+/// Kanban 状态标识颜色（对齐 Hermex KanbanStatusPresentation.color）。
+Color kanbanStatusColor(String? rawValue) {
+  switch (rawValue) {
+    case 'triage':
+      return CupertinoColors.systemGrey;
+    case 'todo':
+      return CupertinoColors.systemBlue;
+    case 'ready':
+      return CupertinoColors.systemTeal;
+    case 'running':
+      return CupertinoColors.systemOrange;
+    case 'blocked':
+      return CupertinoColors.systemRed;
+    case 'done':
+      return CupertinoColors.systemGreen;
+    case 'archived':
+      return CupertinoColors.secondaryLabel;
+    default:
+      return CupertinoColors.systemPurple;
+  }
+}
+
+/// 看板页（`/kanban`）。
+///
+/// Cupertino 风格：大标题 + 新建卡片 + 看板切换条（横向 chips）+ 按状态分列
+/// 的看板视图（每列：状态名 + 计数 + 卡片列表）+ 下拉刷新 + 加载 / 错误 /
+/// 空态。卡片点击进入 [KanbanCardDetailPage]。
+class KanbanPage extends ConsumerStatefulWidget {
+  const KanbanPage({super.key});
+
+  @override
+  ConsumerState<KanbanPage> createState() => _KanbanPageState();
+}
+
+class _KanbanPageState extends ConsumerState<KanbanPage> {
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(kanbanControllerProvider);
+    final state = async.valueOrNull;
+
+    ref.listen<AsyncValue<KanbanState>>(
+      kanbanControllerProvider,
+      (previous, next) {
+        final error = next.valueOrNull?.actionError;
+        if (error != null && error != previous?.valueOrNull?.actionError) {
+          unawaited(_showActionError(context, error));
+        }
+      },
+    );
+
+    return CupertinoPageScaffold(
+      child: CustomScrollView(
+        key: const ValueKey('kanban-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          CupertinoSliverNavigationBar(
+            largeTitle: const Text('看板'),
+            trailing: CupertinoButton(
+              key: const ValueKey('kanban-create'),
+              padding: EdgeInsets.zero,
+              onPressed:
+                  state == null || state.readOnly ? null : () => _openCreate(context),
+              child: const Icon(CupertinoIcons.add),
+            ),
+          ),
+          // 刷新指示器必须排在所有 SliverToBoxAdapter 之前（对齐会话列表页）。
+          CupertinoSliverRefreshControl(onRefresh: _onRefresh),
+          ..._buildContentSlivers(async, state),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 内容 slivers：加载 / 错误 / 空态 / 看板视图
+  // -------------------------------------------------------------------------
+
+  List<Widget> _buildContentSlivers(
+    AsyncValue<KanbanState> async,
+    KanbanState? state,
+  ) {
+    if (state == null) {
+      if (async.isLoading) {
+        return const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CupertinoActivityIndicator(radius: 14)),
+          ),
+        ];
+      }
+      return [_buildErrorSliver(async.error)];
+    }
+
+    if (state.boards.isEmpty) {
+      return [_buildEmptySliver()];
+    }
+
+    // 看板切换条 + 看板视图（快照加载中显示指示器）。
+    return [
+      SliverToBoxAdapter(child: _buildBoardSwitcher(state)),
+      if (state.snapshot == null)
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CupertinoActivityIndicator(radius: 14)),
+        )
+      else
+        SliverToBoxAdapter(child: _buildBoardView(state)),
+    ];
+  }
+
+  Widget _buildBoardSwitcher(KanbanState state) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        itemCount: state.boards.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final board = state.boards[index];
+          final slug = board.slug ?? '';
+          final selected = slug == state.currentBoardSlug;
+          return CupertinoButton(
+            key: ValueKey('kanban-board-$slug'),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            borderRadius: BorderRadius.circular(14),
+            color: selected
+                ? CupertinoColors.activeBlue
+                : CupertinoColors.secondarySystemFill,
+            onPressed:
+                selected ? null : () => unawaited(_selectBoard(slug)),
+            child: Text(
+              board.name ?? board.slug ?? '未命名看板',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected
+                    ? CupertinoColors.white
+                    : CupertinoColors.label,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBoardView(KanbanState state) {
+    final columns = state.columns;
+    if (columns.isEmpty) {
+      return _buildEmptyBoard();
+    }
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height - 200,
+      child: ListView.separated(
+        key: const ValueKey('kanban-columns'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        itemCount: columns.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) =>
+            _KanbanColumnView(column: columns[index]),
+      ),
+    );
+  }
+
+  Widget _buildEmptyBoard() {
+    return const SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              CupertinoIcons.rectangle_stack,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            SizedBox(height: 12),
+            Text('看板暂无内容', style: TextStyle(fontSize: 17)),
+            SizedBox(height: 6),
+            Text(
+              '点击右上角 + 创建第一张卡片',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptySliver() {
+    return const SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              CupertinoIcons.square_stack_3d_up,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            SizedBox(height: 12),
+            Text('暂无看板', style: TextStyle(fontSize: 17)),
+            SizedBox(height: 6),
+            Text(
+              '在服务器端创建看板后下拉刷新',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorSliver(Object? error) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '加载失败',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _errorMessage(error),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            const SizedBox(height: 20),
+            CupertinoButton.filled(
+              key: const ValueKey('kanban-retry'),
+              onPressed: () => unawaited(_onRefresh()),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 交互：刷新 / 切换看板 / 新建卡片 / 错误弹窗
+  // -------------------------------------------------------------------------
+
+  Future<void> _onRefresh() =>
+      ref.read(kanbanControllerProvider.notifier).refresh();
+
+  Future<void> _selectBoard(String slug) async {
+    await ref.read(kanbanControllerProvider.notifier).selectBoard(slug);
+  }
+
+  void _openCreate(BuildContext context) {
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(builder: (_) => const KanbanCreateCardPage()),
+    );
+  }
+
+  Future<void> _showActionError(BuildContext context, String message) async {
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('操作失败'),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('好'),
+          ),
+        ],
+      ),
+    );
+    await ref.read(kanbanControllerProvider.notifier).clearActionError();
+  }
+
+  String _errorMessage(Object? error) {
+    if (error is ApiException) return error.message;
+    return error?.toString() ?? '未知错误';
+  }
+}
+
+/// 看板列：状态名 + 计数 + 卡片列表。
+class _KanbanColumnView extends StatelessWidget {
+  const _KanbanColumnView({required this.column});
+
+  final KanbanColumn column;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = column.cards ?? const <KanbanCard>[];
+    final name = column.name ?? '';
+    return SizedBox(
+      width: 280,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: kanbanStatusColor(name),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    kanbanStatusTitle(name),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${cards.length}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: cards.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无卡片',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    key: ValueKey('kanban-column-${name.isEmpty ? '?' : name}'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    itemCount: cards.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) =>
+                        _KanbanCardTile(card: cards[index]),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 卡片块：标题 + 负责人 + 依赖标记。
+class _KanbanCardTile extends StatelessWidget {
+  const _KanbanCardTile({required this.card});
+
+  final KanbanCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = card.cardID ?? '';
+    final dependencyBadge = _dependencyBadge(card.linkCounts);
+    return CupertinoButton(
+      key: ValueKey('kanban-card-$id'),
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(10),
+      onPressed: () => _openDetail(context, id),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemBackground,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: CupertinoColors.systemGrey.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              card.title ?? '未命名卡片',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.person,
+                  size: 13,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    card.assignee ?? '未指派',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                ),
+                if (dependencyBadge != null) ...[
+                  const SizedBox(width: 8),
+                  dependencyBadge,
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget? _dependencyBadge(KanbanLinkCounts? linkCounts) {
+    if (linkCounts == null) return null;
+    final parents = linkCounts.parents ?? 0;
+    final children = linkCounts.children ?? 0;
+    if (parents <= 0 && children <= 0) return null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemYellow.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            CupertinoIcons.link,
+            size: 11,
+            color: CupertinoColors.systemOrange,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            parents > 0 ? '前驱 $parents' : '后继 $children',
+            style: const TextStyle(
+              fontSize: 11,
+              color: CupertinoColors.systemOrange,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openDetail(BuildContext context, String cardId) {
+    if (cardId.isEmpty) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => KanbanCardDetailPage(cardId: cardId),
+      ),
+    );
+  }
+}
+
+/// 卡片详情页（描述 / 元信息 / 状态变更按钮 / 评论列表 / 添加评论）。
+class KanbanCardDetailPage extends ConsumerStatefulWidget {
+  const KanbanCardDetailPage({super.key, required this.cardId});
+
+  final String cardId;
+
+  @override
+  ConsumerState<KanbanCardDetailPage> createState() =>
+      _KanbanCardDetailPageState();
+}
+
+class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
+  final TextEditingController _commentController = TextEditingController();
+  String? _busyStatus;
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(kanbanDetailControllerProvider(widget.cardId));
+    final state = async.valueOrNull;
+    final boardAsync = ref.watch(kanbanControllerProvider);
+    final readOnly = boardAsync.valueOrNull?.readOnly ?? false;
+
+    ref.listen<AsyncValue<KanbanDetailState>>(
+      kanbanDetailControllerProvider(widget.cardId),
+      (previous, next) {
+        final error = next.valueOrNull?.actionError;
+        if (error != null && error != previous?.valueOrNull?.actionError) {
+          unawaited(_showActionError(context, error));
+        }
+      },
+    );
+
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          state?.card?.title ?? '卡片详情',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      child: _buildContent(async, state, readOnly),
+    );
+  }
+
+  Widget _buildContent(
+    AsyncValue<KanbanDetailState> async,
+    KanbanDetailState? state,
+    bool readOnly,
+  ) {
+    if (state == null) {
+      if (async.isLoading) {
+        return const Center(child: CupertinoActivityIndicator(radius: 14));
+      }
+      return _buildError(async.error);
+    }
+    final envelope = state.envelope;
+    final card = envelope?.card;
+    if (envelope == null || card == null) {
+      return const Center(child: Text('卡片不存在'));
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildDescription(card),
+        const SizedBox(height: 16),
+        _buildMetadata(card),
+        if (!readOnly && (card.status?.rawValue ?? '') != 'archived') ...[
+          const SizedBox(height: 16),
+          _buildStatusActions(card),
+        ],
+        const SizedBox(height: 16),
+        _buildCommentsSection(state),
+      ],
+    );
+  }
+
+  Widget _buildDescription(KanbanCard card) {
+    return CupertinoListSection.insetGrouped(
+      header: const Text('描述'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            (card.body ?? '').trim().isEmpty ? '暂无描述' : card.body!,
+            style: TextStyle(
+              fontSize: 15,
+              color: (card.body ?? '').trim().isEmpty
+                  ? CupertinoColors.secondaryLabel
+                  : CupertinoColors.label,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetadata(KanbanCard card) {
+    final rows = <Widget>[
+      _metadataRow('状态', Text(kanbanStatusTitle(card.status?.rawValue))),
+      _metadataRow(
+        '负责人',
+        Text(card.assignee ?? '未指派'),
+      ),
+      if (card.priority != null)
+        _metadataRow('优先级', Text('P${card.priority}')),
+      if (card.createdAt != null && card.createdAt!.isNotEmpty)
+        _metadataRow('创建时间', Text(card.createdAt!)),
+      if (card.updatedAt != null && card.updatedAt!.isNotEmpty)
+        _metadataRow('更新时间', Text(card.updatedAt!)),
+    ];
+    return CupertinoListSection.insetGrouped(
+      header: const Text('信息'),
+      children: rows,
+    );
+  }
+
+  Widget _metadataRow(String label, Widget value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ),
+          Expanded(child: value),
+        ],
+      ),
+    );
+  }
+
+  /// 状态变更按钮：workflow 状态（triage/todo/ready/done/blocked）去掉当前
+  /// 状态（running 只能由 dispatcher 设置，不提供按钮）。
+  Widget _buildStatusActions(KanbanCard card) {
+    const destinations = ['triage', 'todo', 'ready', 'done', 'blocked'];
+    final current = card.status?.rawValue ?? '';
+    final buttons = <Widget>[
+      for (final status in destinations)
+        if (status != current)
+          CupertinoButton(
+            key: ValueKey('kanban-status-$status'),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            borderRadius: BorderRadius.circular(10),
+            color: CupertinoColors.secondarySystemFill,
+            onPressed: _busyStatus != null
+                ? null
+                : () => unawaited(_changeStatus(card, status)),
+            child: _busyStatus == status
+                ? const CupertinoActivityIndicator(radius: 8)
+                : Text(
+                    kanbanStatusTitle(status),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+          ),
+    ];
+    return CupertinoListSection.insetGrouped(
+      header: const Text('变更状态'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: buttons,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommentsSection(KanbanDetailState state) {
+    final comments = state.comments;
+    return CupertinoListSection.insetGrouped(
+      header: Text('评论（${comments.length}）'),
+      children: [
+        if (comments.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              '暂无评论',
+              style: TextStyle(
+                fontSize: 14,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          )
+        else
+          for (final comment in comments)
+            Padding(
+              key: ValueKey('kanban-comment-${comment.presentationID}'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    comment.body ?? '',
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _commentMeta(comment),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: CupertinoTextField(
+                  key: const ValueKey('kanban-comment-input'),
+                  controller: _commentController,
+                  placeholder: '添加评论…',
+                  minLines: 1,
+                  maxLines: 4,
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                key: const ValueKey('kanban-comment-send'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(36, 36),
+                onPressed:
+                    state.isSubmittingComment || _commentController.text.trim().isEmpty
+                        ? null
+                        : () => unawaited(_submitComment()),
+                child: state.isSubmittingComment
+                    ? const CupertinoActivityIndicator(radius: 9)
+                    : const Icon(CupertinoIcons.arrow_up_circle_fill, size: 28),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _commentMeta(KanbanComment comment) {
+    final parts = <String>[
+      if (comment.author != null && comment.author!.isNotEmpty) comment.author!,
+      if (comment.createdAt != null && comment.createdAt!.isNotEmpty)
+        comment.createdAt!,
+    ];
+    return parts.join(' · ');
+  }
+
+  // -------------------------------------------------------------------------
+  // 交互：状态变更 / 提交评论 / 错误弹窗
+  // -------------------------------------------------------------------------
+
+  Future<void> _changeStatus(KanbanCard card, String status) async {
+    setState(() => _busyStatus = status);
+    try {
+      final error = await ref
+          .read(kanbanControllerProvider.notifier)
+          .setStatus(cardId: card.cardID ?? '', status: status);
+      if (!mounted) return;
+      if (error != null) {
+        await _showActionError(context, error);
+      } else {
+        await ref
+            .read(kanbanDetailControllerProvider(widget.cardId).notifier)
+            .refresh();
+      }
+    } finally {
+      if (mounted) setState(() => _busyStatus = null);
+    }
+  }
+
+  Future<void> _submitComment() async {
+    final text = _commentController.text;
+    final ok = await ref
+        .read(kanbanDetailControllerProvider(widget.cardId).notifier)
+        .submitComment(text);
+    if (!mounted) return;
+    if (ok) _commentController.clear();
+  }
+
+  Future<void> _showActionError(BuildContext context, String message) async {
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('操作失败'),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('好'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    await ref
+        .read(kanbanDetailControllerProvider(widget.cardId).notifier)
+        .clearActionError();
+  }
+
+  Widget _buildError(Object? error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '加载失败',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              error is ApiException ? error.message : (error?.toString() ?? '未知错误'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            const SizedBox(height: 20),
+            CupertinoButton.filled(
+              key: const ValueKey('kanban-detail-retry'),
+              onPressed: () => unawaited(
+                ref.read(kanbanDetailControllerProvider(widget.cardId).notifier).refresh(),
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 创建卡片表单页（标题 / 描述 / 负责人 / 状态）。
+///
+/// 标题为空时创建按钮禁用（对齐 Hermex 编辑草稿校验）。状态可选
+/// triage/todo/ready（对齐 Hermex createStatuses）。
+class KanbanCreateCardPage extends ConsumerStatefulWidget {
+  const KanbanCreateCardPage({super.key});
+
+  @override
+  ConsumerState<KanbanCreateCardPage> createState() =>
+      _KanbanCreateCardPageState();
+}
+
+class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _bodyController = TextEditingController();
+  final TextEditingController _assigneeController = TextEditingController();
+  String _status = 'triage';
+  bool _saving = false;
+
+  bool get _canSave =>
+      !_saving && _titleController.text.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    _assigneeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final boardAsync = ref.watch(kanbanControllerProvider);
+    final currentBoard = boardAsync.valueOrNull?.currentBoard;
+
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('新建卡片'),
+        trailing: CupertinoButton(
+          key: const ValueKey('kanban-form-save'),
+          padding: EdgeInsets.zero,
+          onPressed: _canSave ? () => unawaited(_save(context)) : null,
+          child: const Text('创建'),
+        ),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (currentBoard != null) ...[
+            Text(
+              '看板：${currentBoard.name ?? currentBoard.slug}',
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          _buildField(
+            label: '标题',
+            fieldKey: const ValueKey('kanban-form-title'),
+            controller: _titleController,
+            placeholder: '卡片标题',
+          ),
+          const SizedBox(height: 16),
+          _buildField(
+            label: '描述',
+            fieldKey: const ValueKey('kanban-form-body'),
+            controller: _bodyController,
+            placeholder: '卡片描述（可选）',
+            maxLines: 5,
+          ),
+          const SizedBox(height: 16),
+          _buildField(
+            label: '负责人',
+            fieldKey: const ValueKey('kanban-form-assignee'),
+            controller: _assigneeController,
+            placeholder: '指派 profile（可选）',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '初始状态',
+            style: TextStyle(
+              fontSize: 13,
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+          const SizedBox(height: 8),
+          CupertinoSlidingSegmentedControl<String>(
+            groupValue: _status,
+            onValueChanged: (value) =>
+                setState(() => _status = value ?? 'triage'),
+            children: {
+              for (final status in KanbanController.createStatuses)
+                status: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(kanbanStatusTitle(status)),
+                ),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required Key fieldKey,
+    required TextEditingController controller,
+    required String placeholder,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: CupertinoColors.secondaryLabel,
+          ),
+        ),
+        const SizedBox(height: 6),
+        CupertinoTextField(
+          key: fieldKey,
+          controller: controller,
+          placeholder: placeholder,
+          maxLines: maxLines,
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save(BuildContext context) async {
+    setState(() => _saving = true);
+    final controller = ref.read(kanbanControllerProvider.notifier);
+    final ok = await controller.createCard(
+      title: _titleController.text,
+      body: _bodyController.text.trim().isEmpty
+          ? null
+          : _bodyController.text,
+      status: _status,
+      assignee: _assigneeController.text.trim().isEmpty
+          ? null
+          : _assigneeController.text,
+    );
+    if (!context.mounted) return;
+    setState(() => _saving = false);
+    if (ok) {
+      Navigator.maybePop(context);
+    }
+  }
+}

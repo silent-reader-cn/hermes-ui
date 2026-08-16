@@ -382,19 +382,21 @@ void main() {
     }
 
     testWidgets('列表渲染：分区标题 + 会话行 + 置顶图标 + 悬浮按钮', (tester) async {
+      // 用当天中午作基准，避免凌晨运行时「now - 2h」跨天落到昨天导致分区断言失败
       final now = DateTime.now();
+      final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
         sessions: [
-          buildSession('p1', '置顶会话', pinned: true, at: now),
+          buildSession('p1', '置顶会话', pinned: true, at: noon),
           buildSession(
             't1',
             '今天会话',
-            at: now.subtract(const Duration(hours: 2)),
+            at: noon.subtract(const Duration(hours: 2)),
           ),
           buildSession(
             'e1',
             '更早会话',
-            at: now.subtract(const Duration(days: 5)),
+            at: noon.subtract(const Duration(days: 5)),
           ),
         ],
       );

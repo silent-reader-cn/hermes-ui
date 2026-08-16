@@ -1,0 +1,864 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_exception.dart';
+import '../../core/models/workspace.dart';
+import 'workspace_providers.dart';
+
+/// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
+class WorkspacePickedFile {
+  const WorkspacePickedFile({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+}
+
+/// 文件选择回调；返回 null 表示用户取消。
+typedef WorkspaceFilePicker = Future<WorkspacePickedFile?> Function();
+
+/// 格式化文件大小（`123 B` / `1.5 KB` / `2.3 MB` / `1.2 GB`）。
+String formatWorkspaceFileSize(int? bytes) {
+  if (bytes == null || bytes < 0) return '—';
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
+}
+
+/// 格式化修改时间（Unix 秒 → 本地 `yyyy-MM-dd HH:mm`）。
+String formatWorkspaceModifiedTime(double? epochSeconds) {
+  if (epochSeconds == null || epochSeconds <= 0) return '—';
+  final dt = DateTime.fromMillisecondsSinceEpoch((epochSeconds * 1000).round());
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+}
+
+/// 条目副标题：目录 → 路径（与名称相同则省略）；文件 → 「大小 · 修改时间」
+/// （缺失项跳过；均缺失时回退路径，与名称相同则省略）。
+String workspaceEntryDetail(WorkspaceEntry entry) {
+  final fallback =
+      (entry.path != null && entry.path!.isNotEmpty && entry.path != entry.name)
+      ? entry.path!
+      : '';
+  if (entry.isBrowsableDirectory) {
+    return fallback;
+  }
+  final parts = <String>[
+    if (entry.size != null) formatWorkspaceFileSize(entry.size),
+    if (entry.modified != null) formatWorkspaceModifiedTime(entry.modified),
+  ];
+  if (parts.isNotEmpty) return parts.join(' · ');
+  return fallback;
+}
+
+/// 文件浏览页（对齐 Hermex FileBrowserView）。
+///
+/// Cupertino 风格：路径头（面包屑 + 根目录/上一级）+ 下拉刷新 + 文件列表
+/// （目录行点击进入、文件行点击弹出操作菜单：下载/重命名/删除）+ 上传入口
+/// （[filePicker] 未注入时提示平台通道后置）+ 加载/错误/空态。
+class WorkspacePage extends ConsumerStatefulWidget {
+  const WorkspacePage({super.key, required this.sessionId, this.filePicker});
+
+  /// 会话 ID（`/api/list` 以它定位工作区）。
+  final String sessionId;
+
+  /// 文件选择回调；生产暂为 null（平台通道后置），测试注入 fake picker。
+  final WorkspaceFilePicker? filePicker;
+
+  @override
+  ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
+}
+
+class _WorkspacePageState extends ConsumerState<WorkspacePage> {
+  /// 待重命名的条目（非空 = 重命名弹窗打开中）。
+  WorkspaceEntry? _renameEntry;
+
+  /// 重命名弹窗输入。
+  final TextEditingController _renameController = TextEditingController();
+
+  /// 待删除确认的条目（非空 = 删除确认弹窗打开中）。
+  WorkspaceEntry? _pendingDelete;
+
+  @override
+  void dispose() {
+    _renameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = workspaceControllerProvider(widget.sessionId);
+    final async = ref.watch(provider);
+    final state = async.valueOrNull;
+    final crumbs = ref.watch(workspaceBreadcrumbsProvider(widget.sessionId));
+
+    ref.listen<AsyncValue<WorkspaceState>>(provider, (previous, next) {
+      final error = next.valueOrNull?.actionError;
+      if (error != null && error != previous?.valueOrNull?.actionError) {
+        unawaited(_showActionError(context, error));
+      }
+      final notice = next.valueOrNull?.notice;
+      if (notice != null && notice != previous?.valueOrNull?.notice) {
+        unawaited(_showNotice(context, notice));
+      }
+    });
+
+    return CupertinoPageScaffold(
+      child: CustomScrollView(
+        key: const ValueKey('workspace-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          CupertinoSliverNavigationBar(
+            middle: const Text('文件'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoButton(
+                  key: const ValueKey('workspace-refresh'),
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      unawaited(ref.read(provider.notifier).refresh()),
+                  child: const Icon(CupertinoIcons.arrow_clockwise),
+                ),
+                const SizedBox(width: 14),
+                _UploadButton(
+                  uploading: state?.isUploading == true,
+                  onPressed: () => unawaited(_onUploadPressed()),
+                ),
+              ],
+            ),
+          ),
+          CupertinoSliverRefreshControl(
+            onRefresh: () => ref.read(provider.notifier).refresh(),
+          ),
+          _PathHeader(
+            crumbs: crumbs,
+            displayPath: state?.displayPath ?? '根目录',
+            isRefreshing: state?.isRefreshing == true,
+            errorMessage:
+                state != null &&
+                    state.actionError != null &&
+                    state.entries.isNotEmpty
+                ? state.actionError
+                : null,
+            onRoot: () =>
+                unawaited(ref.read(provider.notifier).navigateToRoot()),
+            onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
+            onRetry: () =>
+                unawaited(ref.read(provider.notifier).retryLastLoad()),
+            onCrumbTap: (crumb) =>
+                unawaited(ref.read(provider.notifier).navigateTo(crumb.path)),
+          ),
+          ..._buildContentSlivers(async, state),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 内容 slivers：加载 / 错误 / 空态 / 列表
+  // -------------------------------------------------------------------------
+
+  List<Widget> _buildContentSlivers(
+    AsyncValue<WorkspaceState> async,
+    WorkspaceState? state,
+  ) {
+    if (state == null) {
+      if (async.isLoading) {
+        return const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CupertinoActivityIndicator(radius: 14)),
+          ),
+        ];
+      }
+      return [_buildErrorSliver(async.error)];
+    }
+
+    if (state.entries.isEmpty && !state.isRefreshing) {
+      return [_buildEmptySliver(state)];
+    }
+
+    return [
+      SliverToBoxAdapter(
+        child: CupertinoListSection.insetGrouped(
+          children: [
+            for (final entry in state.entries)
+              _WorkspaceEntryRow(
+                key: ValueKey('workspace-row-${entry.name ?? entry.path}'),
+                entry: entry,
+                busy: state.isBusy(entry.path ?? ''),
+                onTap: () => _onEntryTap(entry),
+                onActions: () => unawaited(_showRowActions(entry)),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildErrorSliver(Object? error) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '加载失败',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _errorMessage(error),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            const SizedBox(height: 20),
+            CupertinoButton.filled(
+              key: const ValueKey('workspace-retry'),
+              onPressed: () => unawaited(
+                ref
+                    .read(
+                      workspaceControllerProvider(widget.sessionId).notifier,
+                    )
+                    .refresh(),
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptySliver(WorkspaceState state) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.folder_open,
+              size: 48,
+              color: CupertinoColors.systemGrey,
+            ),
+            const SizedBox(height: 12),
+            const Text('暂无文件', style: TextStyle(fontSize: 17)),
+            const SizedBox(height: 6),
+            Text(
+              state.displayPath,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 交互：目录进入 / 行操作菜单 / 上传 / 重命名 / 删除
+  // -------------------------------------------------------------------------
+
+  void _onEntryTap(WorkspaceEntry entry) {
+    final controller = ref.read(
+      workspaceControllerProvider(widget.sessionId).notifier,
+    );
+    if (entry.isBrowsableDirectory) {
+      unawaited(controller.navigateTo(entry.path ?? entry.name ?? '.'));
+    } else {
+      unawaited(_showRowActions(entry));
+    }
+  }
+
+  Future<void> _showRowActions(WorkspaceEntry entry) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(entry.name ?? entry.path ?? ''),
+        actions: [
+          CupertinoActionSheetAction(
+            key: const ValueKey('workspace-action-download'),
+            onPressed: () {
+              Navigator.of(context).pop();
+              unawaited(_onDownload(entry));
+            },
+            child: const Text('下载'),
+          ),
+          CupertinoActionSheetAction(
+            key: const ValueKey('workspace-action-rename'),
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showRenameDialog(entry);
+            },
+            child: const Text('重命名'),
+          ),
+          CupertinoActionSheetAction(
+            key: const ValueKey('workspace-action-delete'),
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showDeleteDialog(entry);
+            },
+            child: const Text('删除'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          key: const ValueKey('workspace-action-cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onDownload(WorkspaceEntry entry) async {
+    await ref
+        .read(workspaceControllerProvider(widget.sessionId).notifier)
+        .download(entry);
+  }
+
+  void _showDeleteDialog(WorkspaceEntry entry) {
+    setState(() => _pendingDelete = entry);
+    unawaited(
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('删除文件'),
+          content: Text('确定要删除「${entry.name ?? entry.path}」吗？此操作不可撤销。'),
+          actions: [
+            CupertinoDialogAction(
+              key: const ValueKey('workspace-delete-cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() => _pendingDelete = null);
+              },
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('workspace-delete-confirm'),
+              isDestructiveAction: true,
+              onPressed: () {
+                final target = _pendingDelete;
+                Navigator.of(context).pop();
+                setState(() => _pendingDelete = null);
+                if (target != null) {
+                  unawaited(
+                    ref
+                        .read(
+                          workspaceControllerProvider(widget.sessionId)
+                              .notifier,
+                        )
+                        .delete(target),
+                  );
+                }
+              },
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRenameDialog(WorkspaceEntry entry) {
+    _renameController.text = entry.name ?? entry.path ?? '';
+    setState(() => _renameEntry = entry);
+    unawaited(
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('重命名'),
+          content: CupertinoTextField(
+            key: const ValueKey('workspace-rename-field'),
+            controller: _renameController,
+            autofocus: true,
+          ),
+          actions: [
+            CupertinoDialogAction(
+              key: const ValueKey('workspace-rename-cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() => _renameEntry = null);
+              },
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('workspace-rename-save'),
+              onPressed: () {
+                final target = _renameEntry;
+                final newName = _renameController.text;
+                Navigator.of(context).pop();
+                setState(() => _renameEntry = null);
+                if (target != null && newName.trim().isNotEmpty) {
+                  unawaited(
+                    ref
+                        .read(
+                          workspaceControllerProvider(widget.sessionId)
+                              .notifier,
+                        )
+                        .rename(target, newName),
+                  );
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onUploadPressed() async {
+    final picker = widget.filePicker;
+    if (picker == null) {
+      await _showInfoDialog(
+        '文件选择功能待接入',
+        '选择本地文件需要平台通道支持（file picker），将在后续版本提供。',
+      );
+      return;
+    }
+    final picked = await picker();
+    if (picked == null) return; // 用户取消
+    await ref
+        .read(workspaceControllerProvider(widget.sessionId).notifier)
+        .uploadFile(filename: picked.name, data: picked.bytes);
+  }
+
+  // -------------------------------------------------------------------------
+  // 弹窗
+  // -------------------------------------------------------------------------
+
+  Future<void> _showActionError(BuildContext context, String message) async {
+    await _showInfoDialog('操作失败', message);
+    await ref
+        .read(workspaceControllerProvider(widget.sessionId).notifier)
+        .clearActionError();
+  }
+
+  Future<void> _showNotice(BuildContext context, String message) async {
+    await _showInfoDialog('提示', message);
+    await ref
+        .read(workspaceControllerProvider(widget.sessionId).notifier)
+        .clearNotice();
+  }
+
+  Future<void> _showInfoDialog(String title, String message) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            key: const ValueKey('workspace-dialog-ok'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('好'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _errorMessage(Object? error) {
+    if (error is ApiException) return error.message;
+    return error?.toString() ?? '未知错误';
+  }
+}
+
+/// 导航栏上传按钮（上传中显示 ActivityIndicator）。
+class _UploadButton extends StatelessWidget {
+  const _UploadButton({required this.uploading, required this.onPressed});
+
+  final bool uploading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (uploading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8),
+        child: CupertinoActivityIndicator(radius: 10),
+      );
+    }
+    return CupertinoButton(
+      key: const ValueKey('workspace-upload'),
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      child: const Icon(CupertinoIcons.arrow_up_doc),
+    );
+  }
+}
+
+/// 路径头：展示路径 + 根目录/上一级按钮 + 面包屑 + 加载/错误横幅。
+class _PathHeader extends StatelessWidget {
+  const _PathHeader({
+    required this.crumbs,
+    required this.displayPath,
+    required this.isRefreshing,
+    required this.errorMessage,
+    required this.onRoot,
+    required this.onUp,
+    required this.onRetry,
+    required this.onCrumbTap,
+  });
+
+  final List<WorkspaceBreadcrumb> crumbs;
+  final String displayPath;
+  final bool isRefreshing;
+  final String? errorMessage;
+  final VoidCallback onRoot;
+  final VoidCallback onUp;
+  final VoidCallback onRetry;
+
+  /// 点击面包屑 → 跳转到该路径。
+  final ValueChanged<WorkspaceBreadcrumb> onCrumbTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAtRoot = crumbs.length == 1;
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                const Text(
+                  '位置',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    displayPath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                CupertinoButton(
+                  key: const ValueKey('workspace-root'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  disabledColor: CupertinoColors.quaternaryLabel,
+                  onPressed: isAtRoot ? null : onRoot,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.house, size: 14),
+                      SizedBox(width: 4),
+                      Text('根目录', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                CupertinoButton(
+                  key: const ValueKey('workspace-up'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  disabledColor: CupertinoColors.quaternaryLabel,
+                  onPressed: isAtRoot ? null : onUp,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.arrow_up, size: 14),
+                      SizedBox(width: 4),
+                      Text('上一级', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < crumbs.length; i++) ...[
+                          if (i > 0)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(
+                                CupertinoIcons.chevron_right,
+                                size: 10,
+                                color: CupertinoColors.tertiaryLabel,
+                              ),
+                            ),
+                          CupertinoButton(
+                            key: ValueKey('workspace-crumb-${crumbs[i].path}'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 4,
+                            ),
+                            onPressed: crumbs[i].path == crumbs.last.path
+                                ? null
+                                : () => onCrumbTap(crumbs[i]),
+                            child: Text(
+                              crumbs[i].title,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isRefreshing)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CupertinoActivityIndicator(radius: 9),
+                  SizedBox(width: 8),
+                  Text(
+                    '加载中…',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    CupertinoIcons.exclamationmark_triangle,
+                    size: 14,
+                    color: CupertinoColors.systemRed,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                  ),
+                  CupertinoButton(
+                    key: const ValueKey('workspace-banner-retry'),
+                    padding: EdgeInsets.zero,
+                    onPressed: onRetry,
+                    child: const Text('重试', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/// 单行文件/目录（自绘行，对齐 Hermex FileBrowserRow：图标 + 名称 + 副标题）。
+class _WorkspaceEntryRow extends StatelessWidget {
+  const _WorkspaceEntryRow({
+    super.key,
+    required this.entry,
+    required this.busy,
+    required this.onTap,
+    required this.onActions,
+  });
+
+  final WorkspaceEntry entry;
+  final bool busy;
+  final VoidCallback onTap;
+  final VoidCallback onActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDirectory = entry.isBrowsableDirectory;
+    final detail = workspaceEntryDetail(entry);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            _EntryIcon(entry: entry),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.name ?? '未命名',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (detail.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (busy)
+              const CupertinoActivityIndicator(radius: 10)
+            else if (isDirectory)
+              const Icon(
+                CupertinoIcons.chevron_right,
+                size: 14,
+                color: CupertinoColors.tertiaryLabel,
+              )
+            else
+              CupertinoButton(
+                key: ValueKey('workspace-actions-${entry.name ?? entry.path}'),
+                padding: EdgeInsets.zero,
+                onPressed: onActions,
+                child: const Icon(
+                  CupertinoIcons.ellipsis,
+                  size: 20,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 条目类型图标（目录 / 按 type 与扩展名区分的文件图标）。
+class _EntryIcon extends StatelessWidget {
+  const _EntryIcon({required this.entry});
+
+  final WorkspaceEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = _iconFor(entry);
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        color: entry.isBrowsableDirectory
+            ? CupertinoColors.tertiarySystemFill
+            : CupertinoColors.secondarySystemFill,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Icon(icon, size: 16, color: color),
+    );
+  }
+
+  static (IconData, Color) _iconFor(WorkspaceEntry entry) {
+    if (entry.isBrowsableDirectory) {
+      return (CupertinoIcons.folder, CupertinoColors.label);
+    }
+    final type = (entry.type ?? '').toLowerCase();
+    final name = (entry.name ?? '').toLowerCase();
+    switch (type) {
+      case 'image':
+        return (CupertinoIcons.photo, CupertinoColors.systemBlue);
+      case 'video':
+        return (CupertinoIcons.film, CupertinoColors.systemPurple);
+      case 'audio':
+        return (CupertinoIcons.music_note, CupertinoColors.systemPink);
+      case 'code':
+        return (
+          CupertinoIcons.chevron_left_slash_chevron_right,
+          CupertinoColors.systemGreen,
+        );
+      case 'markdown':
+      case 'text':
+        return (CupertinoIcons.doc_text, CupertinoColors.systemTeal);
+      default:
+        break;
+    }
+    if (name.endsWith('.md') || name.endsWith('.txt')) {
+      return (CupertinoIcons.doc_text, CupertinoColors.systemTeal);
+    }
+    if (name.endsWith('.dart') ||
+        name.endsWith('.py') ||
+        name.endsWith('.js') ||
+        name.endsWith('.ts') ||
+        name.endsWith('.json') ||
+        name.endsWith('.yaml')) {
+      return (
+        CupertinoIcons.chevron_left_slash_chevron_right,
+        CupertinoColors.systemGreen,
+      );
+    }
+    if (name.endsWith('.png') ||
+        name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        name.endsWith('.gif') ||
+        name.endsWith('.webp')) {
+      return (CupertinoIcons.photo, CupertinoColors.systemBlue);
+    }
+    if (name.endsWith('.mp4') ||
+        name.endsWith('.mov') ||
+        name.endsWith('.webm')) {
+      return (CupertinoIcons.film, CupertinoColors.systemPurple);
+    }
+    if (name.endsWith('.mp3') || name.endsWith('.wav')) {
+      return (CupertinoIcons.music_note, CupertinoColors.systemPink);
+    }
+    return (CupertinoIcons.doc, CupertinoColors.secondaryLabel);
+  }
+}
