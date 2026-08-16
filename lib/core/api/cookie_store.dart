@@ -86,9 +86,15 @@ class Cookie {
 ///
 /// - 登录成功后从响应 `Set-Cookie` 落库，之后每个同域请求自动携带。
 /// - 按 host 作用域隔离：换服务器不串 cookie。
+/// - [shared] 为进程级共享实例：onboarding 临时 client 登录种下的 cookie，
+///   后续 apiClientProvider 新建的 client 也能携带（修复「登录后 401」）。
+/// - 测试可用 `CookieStore()` 构造独立实例隔离状态。
 /// - TODO(merge)：需要持久化时接入 dio_cookie_jar / flutter_secure_storage
 ///   （CookieStore 接口保持不变，上层可整体替换）。
 class CookieStore {
+  /// 进程级共享 cookie 存储（按 domain 隔离，多服务器不串）。
+  static final CookieStore shared = CookieStore();
+
   final List<Cookie> _cookies = [];
 
   /// 从响应头解析并存入（同名同域同路径覆盖）。

@@ -76,6 +76,7 @@ class ServerConnection {
   }
 
   ServerConnection copyWith({
+    String? id,
     String? name,
     String? baseUrl,
     String? username,
@@ -84,7 +85,7 @@ class ServerConnection {
     DateTime? createdAt,
   }) {
     return ServerConnection(
-      id: id,
+      id: id ?? this.id,
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
       username: username ?? this.username,

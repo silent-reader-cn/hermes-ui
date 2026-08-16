@@ -82,23 +82,14 @@ class _ServerSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final connections = ref.watch(connectionsProvider);
     final active = ref.watch(activeConnectionProvider);
-    final activeName = active == null || active.name.isEmpty
-        ? '未连接'
-        : active.name;
     return CupertinoListSection(
-      header: const Text('服务器'),
+      header: Text(active == null ? '服务器（未连接）' : '服务器'),
       children: [
-        CupertinoListTile(
-          key: const ValueKey('server-active'),
-          title: Text(activeName),
-          subtitle: Text(active?.baseUrl ?? '尚未配置服务器'),
-          trailing: active == null
-              ? null
-              : const Icon(
-                  CupertinoIcons.checkmark_circle_fill,
-                  color: CupertinoColors.systemBlue,
-                ),
-        ),
+        if (connections.isEmpty)
+          const CupertinoListTile(
+            title: Text('尚未配置服务器'),
+            subtitle: Text('点击下方「添加服务器」或从引导页配置'),
+          ),
         for (final connection in connections)
           _buildServerRow(context, ref, connection, connection.id == active?.id),
         CupertinoListTile(

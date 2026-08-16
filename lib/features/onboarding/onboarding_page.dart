@@ -253,8 +253,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       createdAt: DateTime.now().toUtc(),
     );
 
-    await ref.read(connectionsProvider.notifier).upsert(connection);
-    await ref.read(activeConnectionProvider.notifier).setActive(connection.id);
+    final saved = await ref.read(connectionsProvider.notifier).upsert(connection);
+    await ref.read(activeConnectionProvider.notifier).setActive(saved.id);
     if (!mounted) return;
     context.go('/');
   }

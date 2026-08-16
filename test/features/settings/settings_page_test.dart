@@ -126,23 +126,17 @@ void main() {
       expect(find.text('模型'), findsOneWidget);
       expect(find.text('关于'), findsOneWidget);
 
-      // 当前服务器信息（active 行内 name + url）
-      final activeTile = find.byKey(const ValueKey('server-active'));
+      // 列表行渲染 name + url（激活标识在行内勾选图标）
+      final rowC1 = find.byKey(const ValueKey('server-row-c1'));
       expect(
-        find.descendant(of: activeTile, matching: find.text('Home')),
+        find.descendant(of: rowC1, matching: find.text('Home')),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: activeTile,
+          of: rowC1,
           matching: find.text('http://hermes.local:30002'),
         ),
-        findsOneWidget,
-      );
-      // 列表行同样渲染 name + url
-      final rowC1 = find.byKey(const ValueKey('server-row-c1'));
-      expect(
-        find.descendant(of: rowC1, matching: find.text('Home')),
         findsOneWidget,
       );
 
@@ -166,8 +160,13 @@ void main() {
       );
       await pumpPage(tester, container);
 
-      expect(find.text('未连接'), findsOneWidget);
-      expect(find.text('尚未配置服务器'), findsOneWidget);
+      // header 提示未连接；列表行无勾选图标
+      expect(find.text('服务器（未连接）'), findsOneWidget);
+      final activeIcon = find.descendant(
+        of: find.byKey(const ValueKey('server-row-c1')),
+        matching: find.byIcon(CupertinoIcons.checkmark_circle_fill),
+      );
+      expect(activeIcon, findsNothing);
     });
 
     testWidgets('模型加载失败 → 错误态 + 重试成功', (tester) async {
@@ -244,8 +243,8 @@ void main() {
       await pumpPage(tester, container);
 
       expect(find.text('Office'), findsOneWidget);
-      // c1 激活：active 信息行显示 c1，且行内勾选图标
-      expect(find.text('Home'), findsNWidgets(2)); // active 行 + 列表行
+      // c1 激活：仅列表行显示 c1（无独立 active 行），行内勾选图标
+      expect(find.text('Home'), findsOneWidget);
       final activeIcon = find.descendant(
         of: find.byKey(const ValueKey('server-row-c1')),
         matching: find.byIcon(CupertinoIcons.checkmark_circle_fill),

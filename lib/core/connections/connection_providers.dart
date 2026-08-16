@@ -32,17 +32,39 @@ class ConnectionsController extends Notifier<List<ServerConnection>> {
   }
 
   /// 新增或更新连接（按 id upsert）并落盘。
-  Future<void> upsert(ServerConnection connection) async {
+  ///
+  /// 去重规则：同 id 直接替换；无 id 匹配但已有同 `baseUrl` 的连接时，
+  /// **沿用旧连接的 id**（避免重复走 onboarding / 添加服务器产生多条
+  /// 相同服务器记录），并保留旧 createdAt。
+  ///
+  /// 返回最终保存的 [ServerConnection]（调用方用返回值的 id 做 setActive
+  /// 等后续操作，避免去重后 id 漂移）。
+  Future<ServerConnection> upsert(ServerConnection connection) async {
     final store = ref.read(connectionStoreProvider);
-    await store.save(connection);
+    var target = connection;
     final index = state.indexWhere((c) => c.id == connection.id);
+    if (index < 0) {
+      final dup = state.indexWhere(
+        (c) => c.baseUrl.trim().toLowerCase() ==
+            connection.baseUrl.trim().toLowerCase(),
+      );
+      if (dup >= 0) {
+        target = connection.copyWith(
+          id: state[dup].id,
+          createdAt: state[dup].createdAt,
+        );
+      }
+    }
+    await store.save(target);
+    final idx = state.indexWhere((c) => c.id == target.id);
     final next = List<ServerConnection>.of(state);
-    if (index >= 0) {
-      next[index] = connection;
+    if (idx >= 0) {
+      next[idx] = target;
     } else {
-      next.add(connection);
+      next.add(target);
     }
     state = next;
+    return target;
   }
 
   /// 删除连接；若删的是激活连接，store.delete 已连带清 active 指向，

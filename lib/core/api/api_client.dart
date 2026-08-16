@@ -24,6 +24,7 @@ class ApiClient {
     Dio? dio,
     Dio? publicMediaDio,
     List<CustomHeader> initialHeaders = const [],
+    CookieStore? cookieStore,
     this.defaultTimeout = const Duration(seconds: 60),
     this.maxRedirects = 5,
   }) : _baseUrl = _normalizeBaseUrl(baseUrl) {
@@ -33,7 +34,9 @@ class ApiClient {
       throw InvalidServerUrlException('服务器地址无效：$baseUrl');
     }
     _headerStore = CustomHeaderStore(initialHeaders);
-    _cookieStore = CookieStore();
+    // 默认共享进程级 cookie 存储：登录态跨 client 实例保留；
+    // 测试可注入独立 CookieStore 隔离。
+    _cookieStore = cookieStore ?? CookieStore.shared;
     _dio = dio ?? _createDio();
     _publicMediaDio = publicMediaDio ?? _createDio();
     _installInterceptors();
