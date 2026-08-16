@@ -114,7 +114,7 @@ flowchart LR
 
 ### 5.2 仓库目录结构（Flutter 端）
 ```
-hermex-flutter-port/
+hermex-flutter/
 ├── lib/
 │   ├── main.dart                  # 入口（平台分支：移动/桌面/Web）
 │   ├── app/
@@ -329,9 +329,11 @@ gantt
 
 ---
 
-## 14. 待主人决策
+## 14. 项目决策记录（2026-08-16 已定）
 
-1. **优先级**：Android + Windows 先行（推荐）还是六平台齐头并进？
-2. **仓库**：本地 git 仓库先建（推荐），是否推到 GitHub（silent-reader-cn）？
-3. **命名**：当前用 `hermex-flutter-port`，是否改称（如 `hermes-mobile-app`）？
-4. **启动时机**：Phase 0 随时可开（需先装 Flutter SDK ~1GB）
+1. **优先级**：Android + Windows 先行，macOS / Linux / Web 后置
+2. **仓库**：GitHub **公开** → https://github.com/silent-reader-cn/hermex-flutter
+3. **项目名**：`hermex-flutter`
+4. **工具链**：Flutter SDK → `D:\flutter`；JDK 17 + Android SDK → `D:\Android`
+5. **领头人**：柚子（Hermes Agent）——负责架构设计、任务划分、代码风格统一、子代理成果验收
+6. **推进方式**：并行子代理分工（git worktree / 文件级分区），领头人逐批验收合并
