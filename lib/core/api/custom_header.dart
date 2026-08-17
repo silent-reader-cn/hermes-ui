@@ -1,27 +1,30 @@
-/// 用户为反向代理（Authentik 等）配置的单个自定义请求头。
-///
-/// 名字/值可含秘密（如 `Authorization: Bearer …`），因此持久化走
-/// flutter_secure_storage（TODO(merge)：由上层接入），禁止硬编码、禁止进日志。
+import 'dart:convert';
+
+import '../connections/connection_store.dart' show SecureStorage;
+
+/// 用户为反向代理配置的单个自定义请求头。秘密值只进入安全存储。
 class CustomHeader {
   const CustomHeader({required this.name, required this.value});
 
   final String name;
   final String value;
-
-  /// 首尾空白/换行去掉；内部空格（如 `Bearer <token>`）保留。
   String get sanitizedName => name.trim();
   String get sanitizedValue => value.trim();
 
-  /// RFC 7230 token 字符（`!#$%&'*+-.^_`|~` + 字母数字），且值不含换行
-  /// （防止 HTTP 头注入）。空行/半输入行直接跳过（CustomHeader.swift）。
   bool get isApplicable {
-    final name = sanitizedName;
-    if (name.isEmpty) return false;
-    if (!_tokenRegExp.hasMatch(name)) return false;
+    final n = sanitizedName;
+    if (n.isEmpty || !_tokenRegExp.hasMatch(n)) return false;
     return !value.contains('\n') && !value.contains('\r');
   }
 
   static final RegExp _tokenRegExp = RegExp(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$");
+
+  Map<String, String> toJson() => {'name': sanitizedName, 'value': sanitizedValue};
+
+  factory CustomHeader.fromJson(Map<String, Object?> json) => CustomHeader(
+        name: json['name'] is String ? json['name'] as String : '',
+        value: json['value'] is String ? json['value'] as String : '',
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -31,17 +34,42 @@ class CustomHeader {
   int get hashCode => Object.hash(name, value);
 }
 
-/// 进程级自定义头内存快照。
-///
-/// 每次构建请求时读取（请求时点生效，改 header 不用重建 client，对齐
-/// CustomHeaderStore.swift）。持久化由上层（AuthManager 等价物）负责。
+/// 进程级自定义头快照，支持 flutter_secure_storage 持久化。
 class CustomHeaderStore {
   CustomHeaderStore([List<CustomHeader> headers = const []])
-    : _headers = List.of(headers);
+      : _headers = List.of(headers);
 
+  static const storageKey = 'custom_headers_v1';
   List<CustomHeader> _headers;
 
   List<CustomHeader> snapshot() => List.unmodifiable(_headers);
 
   void replace(List<CustomHeader> headers) => _headers = List.of(headers);
+
+  Future<void> persist(SecureStorage storage) async {
+    final valid = _headers.where((header) => header.isApplicable);
+    await storage.write(storageKey, jsonEncode(valid.map((h) => h.toJson()).toList()));
+  }
+
+  Future<void> restore(SecureStorage storage) async {
+    try {
+      final raw = await storage.read(storageKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      replace([
+        for (final item in decoded)
+          if (item is Map)
+            CustomHeader.fromJson(Map<String, Object?>.from(item)),
+      ]);
+    } on FormatException {
+      // 损坏的秘密数据静默忽略。
+    }
+  }
 }
+
+/// 用于 API 层请求头注入的安全 Map。
+Map<String, String> applicableHeaders(Iterable<CustomHeader> headers) => {
+      for (final header in headers)
+        if (header.isApplicable) header.sanitizedName: header.sanitizedValue,
+    };

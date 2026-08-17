@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+
+import '../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/notifications/notification_lifecycle_observer.dart';
@@ -32,6 +34,7 @@ class HermexApp extends ConsumerWidget {
         theme: buildCupertinoTheme(brightness),
         routerConfig: router,
         localizationsDelegates: const [
+        AppLocalizationsDelegate(),
           DefaultCupertinoLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
