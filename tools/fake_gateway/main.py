@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from typing import Any
@@ -206,4 +207,9 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=30003, log_level="info")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("FAKE_GATEWAY_PORT", "30003")),
+        log_level="info",
+    )

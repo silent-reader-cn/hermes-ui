@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 
 import httpx
 
-BASE = "http://127.0.0.1:30003"
+PORT = os.environ.get("FAKE_GATEWAY_PORT", "30003")
+BASE = f"http://127.0.0.1:{PORT}"
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
@@ -29,6 +31,7 @@ def main(no_start: bool = False) -> None:
     if not no_start:
         proc = subprocess.Popen(
             [sys.executable, "main.py"],
+            env={**os.environ, "FAKE_GATEWAY_PORT": PORT},
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
