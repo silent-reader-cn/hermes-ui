@@ -367,8 +367,8 @@ void main() {
   goldenPair(
     'workspace',
     page: () => const WorkspacePage(sessionId: 's1'),
-    // 横屏：该页导航栏无 largeTitle，竖屏触发框架 debug 断言（见 golden_helpers）。
-    size: goldenLandscapeSize,
+    // 常规竖屏：该页曾缺 largeTitle 触发框架 debug 断言，已修复改用竖屏。
+    size: goldenSurfaceSize,
     overrides: () async => apiOverrides(
       workspaceApiFactoryProvider.overrideWithValue(
         (_) => FakeWorkspaceApi(

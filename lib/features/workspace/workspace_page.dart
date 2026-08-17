@@ -116,6 +116,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
+            largeTitle: const Text('文件'),
             middle: const Text('文件'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

@@ -13,11 +13,6 @@ const Size goldenSurfaceSize = Size(780, 1688);
 /// 截图物理像素比（2x 保证放大查对比度/溢出时文字清晰）。
 const double goldenDevicePixelRatio = 2.0;
 
-/// 横屏截图尺寸（workspace 页专用：其导航栏无 largeTitle，竖屏会命中
-/// CupertinoSliverNavigationBar 的 debug 断言 —— 现有 widget 测试同样在
-/// 横屏测试面渲染，见 test/features/workspace/workspace_page_test.dart）。
-const Size goldenLandscapeSize = Size(1688, 780);
-
 /// 注册真实字体：flutter_test 默认全部走 Ahem 方块字，截图无法人工核对。
 ///
 /// - [loadAppFonts]：应用 FontManifest（MaterialIcons + CupertinoIcons）；
