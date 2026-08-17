@@ -5,6 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../../core/api/api_client_upload.dart';
+import '../../../core/api/api_exception.dart';
+import '../../../core/connections/connection_providers.dart';
+import '../../../core/providers/file_picker_provider.dart';
+import '../../../core/utils/file_picker.dart';
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
 ///
@@ -24,6 +29,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final TextEditingController _textController = TextEditingController();
   bool _hasText = false;
 
+  bool _uploading = false;
+
   @override
   void dispose() {
     _textController.dispose();
@@ -39,6 +46,80 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     await ref
         .read(chatControllerProvider(widget.sessionId).notifier)
         .send(text);
+  }
+
+  Future<void> _handleAttachment() async {
+    if (_uploading) return;
+    final picker = ref.read(filePickerServiceProvider);
+    final FilePickerResult? picked;
+    try {
+      picked = await picker.pickFile();
+    } catch (error) {
+      await _showError('选择文件失败', _errorMessage(error));
+      return;
+    }
+    if (picked == null) return; // 用户取消
+
+    setState(() => _uploading = true);
+    try {
+      final client = ref.read(apiClientProvider);
+      await client.uploadFile(
+        sessionId: widget.sessionId,
+        data: picked.bytes,
+        filename: picked.name,
+      );
+      if (!mounted) return;
+      // 上传成功后把附件作为本地消息追加进聊天流
+      await ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .send('📎 ${picked.name}');
+      await _showNotice('上传成功', '附件「${picked.name}」已上传。');
+    } catch (error) {
+      if (!mounted) return;
+      await _showError('上传失败', _errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _showNotice(String title, String message) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('好'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showError(String title, String message) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(
+          message,
+          style: const TextStyle(color: CupertinoColors.systemRed),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('好'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _errorMessage(Object? error) {
+    if (error is ApiException) return error.message;
+    return error?.toString() ?? '未知错误';
   }
 
   Future<void> _stop() async {
@@ -82,22 +163,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     ));
   }
 
-  void _showAttachmentNotice() {
-    unawaited(showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('附件功能'),
-        content: const Text('附件上传将在后续版本提供。'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('好'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final phase = ref.watch(chatPhaseProvider(widget.sessionId));
@@ -125,12 +190,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           children: [
             CupertinoButton(
               key: const ValueKey('chat-attach-button'),
-              onPressed: isSending ? null : _showAttachmentNotice,
+              onPressed: (isSending || _uploading) ? null : _handleAttachment,
               padding: EdgeInsets.zero,
-              child: const Icon(
-                CupertinoIcons.plus_circle,
-                color: CupertinoColors.systemGrey,
-              ),
+              child: _uploading
+                  ? const CupertinoActivityIndicator()
+                  : const Icon(
+                      CupertinoIcons.plus_circle,
+                      color: CupertinoColors.systemGrey,
+                    ),
             ),
             Expanded(
               child: CupertinoTextField(

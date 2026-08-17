@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/connections/connection_providers.dart';
+import '../core/providers/file_picker_provider.dart';
 import '../features/chat/chat_page.dart';
 import '../features/git/git_page.dart';
 import '../features/insights/insights_page.dart';
@@ -91,6 +92,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/workspace/:sessionId',
         builder: (context, state) => WorkspacePage(
           sessionId: state.pathParameters['sessionId'] ?? '',
+          filePicker: () async {
+            final service = ref.read(filePickerServiceProvider);
+            final picked = await service.pickFile();
+            if (picked == null) return null;
+            return WorkspacePickedFile(
+              name: picked.name,
+              bytes: picked.bytes,
+            );
+          },
         ),
       ),
       GoRoute(
