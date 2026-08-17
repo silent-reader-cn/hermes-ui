@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../app/theme/status_colors.dart';
 import 'session_list_providers.dart';
@@ -351,6 +355,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               child: const Text('分支'),
             ),
             CupertinoActionSheetAction(
+              key: const ValueKey('session-action-export'),
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                unawaited(_showExportFormat(context, session));
+              },
+              child: const Text('导出'),
+            ),
+            CupertinoActionSheetAction(
               key: const ValueKey('session-action-delete'),
               isDestructiveAction: true,
               onPressed: () {
@@ -368,6 +380,88 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showExportFormat(
+    BuildContext context,
+    SessionSummary session,
+  ) async {
+    final format = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('导出会话'),
+        actions: [
+          CupertinoActionSheetAction(
+            key: const ValueKey('session-export-markdown'),
+            onPressed: () => Navigator.pop(sheetContext, 'markdown'),
+            child: const Text('Markdown'),
+          ),
+          CupertinoActionSheetAction(
+            key: const ValueKey('session-export-json'),
+            onPressed: () => Navigator.pop(sheetContext, 'json'),
+            child: const Text('JSON'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+    if (format == null || !context.mounted) return;
+
+    final sessionId = session.sessionId ?? session.id;
+    try {
+      final response = await ref.read(apiClientProvider).exportSession(
+        sessionId: sessionId,
+        format: format == 'markdown' ? 'md' : 'json',
+      );
+      if (!context.mounted) return;
+      final content = utf8.decode(response.data, allowMalformed: true);
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text('$format 导出成功'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 260),
+            child: SingleChildScrollView(
+              child: Text(content.isEmpty ? '导出内容为空' : content),
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: content));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('复制内容'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('导出失败'),
+          content: Text(
+            error is ApiException ? error.message : '$error',
+            style: TextStyle(color: statusRedText.resolveFrom(context)),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('好'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _onBranch(

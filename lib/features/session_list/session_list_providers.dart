@@ -6,6 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
+import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../onboarding/onboarding_providers.dart';
@@ -245,6 +246,11 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     try {
       final response = await api.fetchSessions();
       final sessions = response.sessions ?? const <SessionSummary>[];
+      try {
+        await ref.read(cacheServiceProvider).writeSessions(sessions);
+      } on Exception {
+        // 缓存不可用（例如测试环境没有 path_provider）不阻塞在线列表。
+      }
       return SessionListState(
         sessions: sessions,
         visibleCount: min(pageSize, sessions.length),
@@ -256,6 +262,23 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         return _loadFirstPage(api, allowAutoReauth: false);
       }
       rethrow;
+    } on ApiException catch (error, stackTrace) {
+      if (ApiException.shouldUseCache(error)) {
+        List<SessionSummary> cached = const [];
+        try {
+          cached = await ref.read(cacheServiceProvider).readSessions();
+        } on Exception {
+          // 缓存不可用时继续抛出原网络错误。
+        }
+        if (cached.isNotEmpty) {
+          return SessionListState(
+            sessions: cached,
+            visibleCount: min(pageSize, cached.length),
+            actionError: '离线缓存：当前显示最近缓存的会话',
+          );
+        }
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
