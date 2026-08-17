@@ -197,10 +197,25 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: columns.length,
         separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) =>
-            _KanbanColumnView(column: columns[index]),
+        itemBuilder: (context, index) => _KanbanColumnView(
+          column: columns[index],
+          onCardDropped: (card) => _moveCardLocally(
+            state,
+            card,
+            columns[index].name ?? '',
+          ),
+        ),
       ),
     );
+  }
+
+  void _moveCardLocally(KanbanState state, KanbanCard card, String targetStatus) {
+    if (card.status?.rawValue == targetStatus || targetStatus.isEmpty) return;
+    // 服务端当前只有 status PATCH；跨列拖拽对应状态变更，复用既有守卫与错误处理。
+    unawaited(ref.read(kanbanControllerProvider.notifier).setStatus(
+      cardId: card.cardID ?? '',
+      status: targetStatus,
+    ));
   }
 
   Widget _buildEmptyBoard() {
@@ -342,9 +357,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
 
 /// 看板列：状态名 + 计数 + 卡片列表。
 class _KanbanColumnView extends StatelessWidget {
-  const _KanbanColumnView({required this.column});
+  const _KanbanColumnView({required this.column, required this.onCardDropped});
 
   final KanbanColumn column;
+  final ValueChanged<KanbanCard> onCardDropped;
 
   @override
   Widget build(BuildContext context) {
@@ -390,8 +406,11 @@ class _KanbanColumnView extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: cards.isEmpty
-                ? Center(
+            child: DragTarget<KanbanCard>(
+              onWillAcceptWithDetails: (_) => true,
+              onAcceptWithDetails: (details) => onCardDropped(details.data),
+              builder: (context, candidate, _) => cards.isEmpty
+                  ? Center(
                     child: Text(
                       '暂无卡片',
                       style: TextStyle(
@@ -407,9 +426,23 @@ class _KanbanColumnView extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     itemCount: cards.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) =>
-                        _KanbanCardTile(card: cards[index]),
+                    itemBuilder: (context, index) => LongPressDraggable<KanbanCard>(
+                                            data: cards[index],
+                                            feedback: Opacity(
+                                              opacity: 0.8,
+                                              child: SizedBox(
+                                                width: 260,
+                                                child: _KanbanCardTile(card: cards[index]),
+                                              ),
+                                            ),
+                                            childWhenDragging: Opacity(
+                                              opacity: 0.35,
+                                              child: _KanbanCardTile(card: cards[index]),
+                                            ),
+                                            child: _KanbanCardTile(card: cards[index]),
+                                          ),
                   ),
+              ),
           ),
         ],
       ),
