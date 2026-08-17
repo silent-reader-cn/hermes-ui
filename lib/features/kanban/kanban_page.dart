@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
+import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 
 /// Kanban 状态展示标题（对齐 Hermex KanbanStatusPresentation.title）。
@@ -92,6 +93,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         slivers: [
           CupertinoSliverNavigationBar(
             largeTitle: const Text('看板'),
+            leading: const AppBackButton(),
             trailing: CupertinoButton(
               key: const ValueKey('kanban-create'),
               padding: EdgeInsets.zero,

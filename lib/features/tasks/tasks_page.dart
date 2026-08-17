@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
+import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
 
 /// 任务状态文案（运行中 / 已暂停 / 已停用 / 出错 / 需关注 / 正常）。
@@ -83,6 +84,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         slivers: [
           CupertinoSliverNavigationBar(
             largeTitle: const Text('定时任务'),
+            leading: const AppBackButton(),
             trailing: CupertinoButton(
               key: const ValueKey('tasks-create'),
               padding: EdgeInsets.zero,

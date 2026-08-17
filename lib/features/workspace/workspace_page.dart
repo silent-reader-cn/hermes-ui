@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../app/theme/status_colors.dart';
+import '../shared/app_back_button.dart';
 import 'workspace_providers.dart';
 
 /// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
@@ -119,6 +120,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('文件'),
             middle: const Text('文件'),
+            leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

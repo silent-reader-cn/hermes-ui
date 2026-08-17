@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../shared/app_back_button.dart';
 import 'chat_providers.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_message_list.dart';
@@ -21,6 +22,7 @@ class ChatPage extends ConsumerWidget {
     final queued = ref.watch(queuedCountProvider(sessionId));
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        leading: const AppBackButton(),
         middle: Text(
           state.displayTitle,
           overflow: TextOverflow.ellipsis,

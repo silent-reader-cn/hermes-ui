@@ -11,6 +11,7 @@ import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
 import '../../app/theme/status_colors.dart';
 import '../onboarding/onboarding_providers.dart';
+import '../shared/app_back_button.dart';
 import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
@@ -24,8 +25,9 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
-        middle: Text('设置'),
-      ),
+              leading: AppBackButton(),
+              middle: Text('设置'),
+            ),
       child: ListView(
         children: const [
           _AppearanceSection(),

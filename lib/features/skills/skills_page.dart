@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../app/theme/status_colors.dart';
+import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
 
 /// 技能浏览页（对齐 Hermex SkillsView）。
@@ -46,6 +47,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         slivers: [
           CupertinoSliverNavigationBar(
             largeTitle: const Text('技能'),
+            leading: const AppBackButton(),
             trailing: CupertinoButton(
               key: const ValueKey('skills-refresh'),
               padding: EdgeInsets.zero,
