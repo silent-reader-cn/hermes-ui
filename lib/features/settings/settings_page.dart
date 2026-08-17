@@ -525,7 +525,7 @@ class _AboutSection extends StatelessWidget {
           title: Text('版本'),
           trailing: Text(
             appVersion,
-            style: TextStyle(color: CupertinoColors.systemGrey),
+            style: TextStyle(color: CupertinoColors.secondaryLabel),
           ),
         ),
       ],

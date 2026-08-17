@@ -335,7 +335,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         const Text(
           '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:30002',
-          style: TextStyle(fontSize: 15, color: CupertinoColors.systemGrey),
+          style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -437,7 +437,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         else
           const Text(
             '该服务器需要密码认证，请登录',
-            style: TextStyle(fontSize: 15, color: CupertinoColors.systemGrey),
+            style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
           ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -486,7 +486,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         const Text(
           '反向代理场景可添加自定义请求头，如 Authorization: Bearer xxx',
-          style: TextStyle(fontSize: 15, color: CupertinoColors.systemGrey),
+          style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
         ),
         const SizedBox(height: 16),
         for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),

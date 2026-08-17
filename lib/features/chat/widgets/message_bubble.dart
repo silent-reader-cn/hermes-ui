@@ -147,7 +147,7 @@ class _AssistantContent extends StatelessWidget {
               '${message.turnTps!.toStringAsFixed(1)} tok/s',
               style: const TextStyle(
                 fontSize: 11,
-                color: CupertinoColors.systemGrey,
+                color: CupertinoColors.secondaryLabel,
               ),
             ),
           ),
@@ -220,7 +220,7 @@ class _NoticeCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.label,
                 ),
               ),
             ),
@@ -275,7 +275,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.systemGrey,
+                      color: CupertinoColors.secondaryLabel,
                     ),
                   ),
                 ],
@@ -288,7 +288,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                     style: const TextStyle(
                       fontSize: 12,
                       height: 1.4,
-                      color: CupertinoColors.systemGrey,
+                      color: CupertinoColors.label,
                     ),
                   ),
                 ),

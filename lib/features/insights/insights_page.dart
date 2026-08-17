@@ -477,7 +477,7 @@ class _DailyTokensBarChart extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         _shortDate(date),
-        style: const TextStyle(fontSize: 10, color: CupertinoColors.systemGrey),
+        style: const TextStyle(fontSize: 10, color: CupertinoColors.secondaryLabel),
       ),
     );
   }

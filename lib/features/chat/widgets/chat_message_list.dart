@@ -173,7 +173,7 @@ class _StreamingBubble extends StatelessWidget {
                   '思考中…',
                   style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ],
@@ -205,7 +205,7 @@ class _SendingIndicator extends StatelessWidget {
                   '发送中…',
                   style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ],

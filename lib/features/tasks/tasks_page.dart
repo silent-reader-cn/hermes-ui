@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
 import 'tasks_providers.dart';
@@ -28,15 +29,18 @@ String taskStatusLabel(CronJob job) {
 }
 
 /// 任务状态标识颜色（与 [taskStatusLabel] 一一对应）。
+///
+/// 返回 [CupertinoDynamicColor]：圆点与文字共用，浅色/深色均满足 WCAG AA
+/// （浅色用深变体、深色用亮变体，见 theme/status_colors.dart）。
 Color taskStatusColor(CronJob job) {
-  if (job.state == 'running') return CupertinoColors.systemGreen;
+  if (job.state == 'running') return statusGreenText;
   switch (job.status) {
     case CronJobStatus.active:
-      return CupertinoColors.systemBlue;
+      return statusBlueText;
     case CronJobStatus.paused:
-      return CupertinoColors.systemOrange;
+      return statusOrangeText;
     case CronJobStatus.off:
-      return CupertinoColors.systemGrey;
+      return statusGreyText;
     case CronJobStatus.error:
       return CupertinoColors.systemRed;
     case CronJobStatus.needsAttention:

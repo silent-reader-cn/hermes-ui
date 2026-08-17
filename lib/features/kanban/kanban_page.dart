@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import 'kanban_providers.dart';
@@ -33,20 +34,22 @@ String kanbanStatusTitle(String? rawValue) {
 }
 
 /// Kanban 状态标识颜色（对齐 Hermex KanbanStatusPresentation.color）。
+///
+/// 返回 [CupertinoDynamicColor]：圆点与文字共用，浅色/深色均满足 WCAG AA。
 Color kanbanStatusColor(String? rawValue) {
   switch (rawValue) {
     case 'triage':
-      return CupertinoColors.systemGrey;
+      return statusGreyText;
     case 'todo':
-      return CupertinoColors.systemBlue;
+      return statusBlueText;
     case 'ready':
-      return CupertinoColors.systemTeal;
+      return statusTealText;
     case 'running':
-      return CupertinoColors.systemOrange;
+      return statusOrangeText;
     case 'blocked':
       return CupertinoColors.systemRed;
     case 'done':
-      return CupertinoColors.systemGreen;
+      return statusGreenText;
     case 'archived':
       return CupertinoColors.secondaryLabel;
     default:
@@ -504,7 +507,7 @@ class _KanbanCardTile extends StatelessWidget {
             parents > 0 ? '前驱 $parents' : '后继 $children',
             style: const TextStyle(
               fontSize: 11,
-              color: CupertinoColors.systemOrange,
+              color: statusOrangeText,
             ),
           ),
         ],

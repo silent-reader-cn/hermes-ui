@@ -55,7 +55,7 @@ class ToolCallCard extends StatelessWidget {
                   '${call.duration!.toStringAsFixed(1)}s',
                   style: const TextStyle(
                     fontSize: 11,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
             ],
@@ -85,7 +85,7 @@ class ToolCallCard extends StatelessWidget {
                   '运行中…',
                   style: TextStyle(
                     fontSize: 11,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ],
@@ -142,7 +142,7 @@ class ToolCallGroupCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.label,
             ),
           ),
           const SizedBox(height: 6),
