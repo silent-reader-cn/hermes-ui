@@ -12,15 +12,22 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
     scaffoldBackgroundColor: isDark
         ? const Color(0xFF000000)
         : CupertinoColors.systemGroupedBackground,
+    // CupertinoApp 的默认 TextStyle 在自定义 textTheme 下不会自动补齐
+    // 前景色。显式绑定语义 label，避免浅色模式继承到白色文字。
     textTheme: const CupertinoTextThemeData(
       // 正文 17pt（iOS 默认）
-      textStyle: TextStyle(fontSize: 17),
+      textStyle: TextStyle(fontSize: 17, color: CupertinoColors.label),
       // 导航栏标题 17pt 半粗
-      navTitleTextStyle: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+      navTitleTextStyle: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: CupertinoColors.label,
+      ),
       // 大标题 34pt Bold
       navLargeTitleTextStyle: TextStyle(
         fontSize: 34,
         fontWeight: FontWeight.bold,
+        color: CupertinoColors.label,
       ),
     ),
   );
