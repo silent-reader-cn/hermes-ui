@@ -8,6 +8,7 @@ import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/server_catalog.dart';
+import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +65,28 @@ FakeSettingsApi buildApi() {
   return api;
 }
 
+/// 登录 fake：记录调用，可配置成功/失败（供「保存时先登录」用例注入）。
+class FakeOnboardingLoginApi implements OnboardingServerApi {
+  int loginCalls = 0;
+  String? lastPassword;
+  ApiException? loginError;
+
+  @override
+  Future<Object?> health() async => {'status': 'ok'};
+
+  @override
+  Future<Object?> authStatus() async => {'auth_enabled': true};
+
+  @override
+  Future<Object?> login(String password) async {
+    loginCalls++;
+    lastPassword = password;
+    final error = loginError;
+    if (error != null) throw error;
+    return {'ok': true};
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -74,6 +97,7 @@ void main() {
     required FakeSettingsApi api,
     List<ServerConnection> connections = const [],
     String? activeId,
+    FakeOnboardingLoginApi? loginApi,
   }) async {
     final storage = InMemorySecureStorage();
     final store = ConnectionStore(storage: storage);
@@ -90,6 +114,9 @@ void main() {
           ApiClient(baseUrl: 'http://test.local:30002'),
         ),
         settingsApiFactoryProvider.overrideWithValue((_) => api),
+        onboardingApiFactoryProvider.overrideWithValue(
+          (baseUrl, headers) => loginApi ?? FakeOnboardingLoginApi(),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -339,6 +366,77 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('添加服务器带密码：先登录成功再保存入列表', (tester) async {
+      final loginApi = FakeOnboardingLoginApi();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        loginApi: loginApi,
+      );
+      await pumpPage(tester, container);
+
+      await tester.tap(find.byKey(const ValueKey('server-add')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('server-editor-name')),
+        'Main',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('server-editor-url')),
+        'http://main.example.com:30002',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('server-editor-password')),
+        'secret',
+      );
+      await tester.tap(find.byKey(const ValueKey('server-editor-save')));
+      await tester.pumpAndSettle();
+
+      // 保存前先登录（种 cookie），成功后才落库
+      expect(loginApi.loginCalls, 1);
+      expect(loginApi.lastPassword, 'secret');
+      final connections = container.read(connectionsProvider);
+      expect(connections, hasLength(2));
+      expect(connections.last.password, 'secret');
+      expect(find.byKey(const ValueKey('server-editor-url')), findsNothing);
+    });
+
+    testWidgets('密码错误：登录失败 → 报错且不保存', (tester) async {
+      final loginApi = FakeOnboardingLoginApi()
+        ..loginError = const UnauthorizedException();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        loginApi: loginApi,
+      );
+      await pumpPage(tester, container);
+
+      await tester.tap(find.byKey(const ValueKey('server-add')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('server-editor-url')),
+        'http://main.example.com:30002',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('server-editor-password')),
+        'wrong',
+      );
+      await tester.tap(find.byKey(const ValueKey('server-editor-save')));
+      await tester.pumpAndSettle();
+
+      // 错误提示 + 表单停留 + 未落库
+      expect(
+        find.text('登录失败：密码被拒绝。请检查服务器密码后重试。'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('server-editor-url')), findsOneWidget);
+      expect(container.read(connectionsProvider), hasLength(1));
     });
 
     testWidgets('删除服务器：确认弹窗 → 移除且激活不受影响', (tester) async {

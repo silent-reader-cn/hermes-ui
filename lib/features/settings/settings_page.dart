@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/theme_provider.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
 import '../../app/theme/status_colors.dart';
+import '../onboarding/onboarding_providers.dart';
 import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
@@ -259,6 +261,22 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final url = _urlController.text.trim();
     final host = Uri.tryParse(url)?.host;
     final existing = widget.connection;
+    // 编辑时密码留空 = 保留原密码；新增时留空 = 无密码。
+    final password =
+        _passwordController.text.isEmpty ? existing?.password : _passwordController.text;
+    // 有密码 → 先登录种会话 cookie（否则保存后会话列表必 401「密码被拒绝」）；
+    // 登录失败 → 报错并停留，不保存无效配置。
+    if (password != null && password.isNotEmpty) {
+      final loginError = await _tryLogin(url, password, existing);
+      if (loginError != null) {
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _error = loginError;
+        });
+        return;
+      }
+    }
     final connection = ServerConnection(
       id: existing?.id ?? uuidV4(),
       name: _nameController.text.trim().isEmpty
@@ -266,16 +284,34 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
           : _nameController.text.trim(),
       baseUrl: url,
       username: existing?.username,
-      // 编辑时密码留空 = 保留原密码；新增时留空 = 无密码。
-      password: _passwordController.text.isEmpty
-          ? existing?.password
-          : _passwordController.text,
+      password: password,
       customHeaders: existing?.customHeaders ?? const {},
       createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
     );
     await ref.read(connectionsProvider.notifier).upsert(connection);
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  /// 用 [url] + [password] 调登录接口种 cookie；返回错误文案，null = 成功。
+  Future<String?> _tryLogin(
+    String url,
+    String password,
+    ServerConnection? existing,
+  ) async {
+    final factory = ref.read(onboardingApiFactoryProvider);
+    final api = factory(url, [
+      for (final entry in (existing?.customHeaders ?? const <String, String>{}).entries)
+        CustomHeader(name: entry.key, value: entry.value),
+    ]);
+    try {
+      await api.login(password);
+      return null;
+    } on ApiException catch (error) {
+      return '登录失败：${error.message}';
+    } on Exception {
+      return '无法连接到服务器，请稍后重试';
+    }
   }
 
   @override
