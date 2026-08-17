@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -28,10 +29,17 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 def main(no_start: bool = False) -> None:
     proc = None
+    port = PORT
     if not no_start:
+        # 自动选择可用端口，避免本机已有 30003 服务污染结果。
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = str(sock.getsockname()[1])
+        global BASE
+        BASE = f"http://127.0.0.1:{port}"
         proc = subprocess.Popen(
             [sys.executable, "main.py"],
-            env={**os.environ, "FAKE_GATEWAY_PORT": PORT},
+            env={**os.environ, "FAKE_GATEWAY_PORT": port},
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
