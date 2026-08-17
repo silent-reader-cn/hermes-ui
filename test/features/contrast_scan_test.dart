@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart' show RenderDecoratedBox;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -55,21 +56,27 @@ import '../helpers/fake_workspace_api.dart';
 import '../helpers/in_memory_secure_storage.dart';
 
 /// ---------------------------------------------------------------------------
-/// 文字对比度扫描框架（WCAG AA）。
+/// 文字对比度 + 背景主题一致性扫描（WCAG AA 双主题）。
 ///
-/// 原理：每个关键页面在浅色 + 深色两种主题下 pump，遍历 Element 树中所有
-/// [RichText]（Text 内部即 RichText，Text.rich / markdown 直接渲染的富文本
-/// 也覆盖），对其 TextSpan 树中**显式指定 color** 的文字段计算 WCAG 对比度：
+/// 每个关键页面在浅色 + 深色两种主题下 pump，遍历 Element 树：
+///
+/// **对比度（[scanTextContrast]）**：对所有 RichText（Text / Text.rich /
+/// markdown 富文本 / SelectableText 都可选中正文）的 TextSpan 树中
+/// **显式指定 color** 的文字段计算 WCAG 对比度：
+/// - 背景参考追踪最近的有色容器（气泡/卡片）实际渲染色，找不到才用页面底色；
 /// - ratio < 3.0            → ❌ error（正文与小字一律不达标）
 /// - 3.0 ≤ ratio < 4.5      → ⚠️ warning（大字/装饰可接受，正文需修复）
 /// - ratio ≥ 4.5            → ✅ 通过（不记录）
 ///
-/// 背景参考色按项目主题定义：浅 #F2F2F7 / 深 #000000（见 cupertino_theme.dart）。
-/// 无显式 color 的文字继承系统 label 色，不在本扫描范围（系统保证）。
+/// **背景主题一致性（[scanBackgroundThemes]）**：遍历所有有色背景容器
+/// （Container/DecoratedBox/ColoredBox），解析动态色后检查与主题是否匹配：
+/// - 暗主题下背景视觉亮度 > 0.5  → ❌ 亮块混入暗主题
+///   （典型触发：动态色直塞 BoxDecoration 未 resolve，暗黑模式画成浅色底）
+/// - 浅主题下背景视觉亮度 < 0.05 → ❌ 暗块混入浅主题
 ///
-/// 已知限制（文档化）：气泡/卡片上的文字以页面底色为参考，不追踪局部背景
-/// （如用户气泡白字实际衬在 activeBlue 上，此处按页面底色算必报红——属模型
-/// 定义的误报，见请允许名单类别说明）。
+/// 背景参考色按项目主题定义：浅 #F2F2F7 / 深 #000000（见 cupertino_theme.dart）；
+/// 输入框子树（占位提示/已输入内容）整段跳过（占位符属 WCAG 豁免），
+/// SelectableText（markdown 可选中文本）必须参与扫描，不能跳过。
 ///
 /// 失败策略：仅「不在已知基线里的新发现」使测试失败；基线条目在报告中标红/
 /// 标黄输出但不算失败（对应并行代理正在修复的已知 systemGrey 文字色）。
@@ -123,12 +130,15 @@ String brightnessName(Brightness brightness) =>
 /// 每个 Text widget 内部都构建 RichText；直接以 RichText 为采集点可同时
 /// 覆盖 Text、Text.rich 与 markdown 渲染出的富文本。颜色先经
 /// [resolveTextColor] 按当前主题亮度解析（CupertinoColors 语义色是动态色）。
+/// 背景参考用 [localBackgroundFor] 追踪最近的有色容器（气泡/卡片），
+/// 不再是固定页面底色——避免「白气泡黑字」这类主题错配按页面底色算
+/// 反而‘达标’的情况漏检。SelectableText（markdown selectable）内部的
+/// EditableText 也会被采集（它不是输入框）。
 List<ContrastFinding> scanTextContrast(
   WidgetTester tester, {
   required String page,
   required Brightness brightness,
 }) {
-  final background = backgroundFor(brightness);
   final findings = <ContrastFinding>[];
   final seen = <String>{};
 
@@ -139,7 +149,10 @@ List<ContrastFinding> scanTextContrast(
     if (color != null && text != null && text.isNotEmpty) {
       final wasDynamic = color is CupertinoDynamicColor;
       final resolved = resolveTextColor(color, context);
-      final ratio = contrastRatio(resolved, background);
+      final ratio = contrastRatio(
+        resolved,
+        localBackgroundFor(context, brightness),
+      );
       final finding = ContrastFinding(
         page: page,
         brightness: brightness,
@@ -160,17 +173,24 @@ List<ContrastFinding> scanTextContrast(
 
   for (final element in tester.allElements) {
     if (element.widget case final RichText richText) {
-      // Icon 内部即 RichText（字形），非文字，跳过；
-      // 输入框 EditableText 子树（占位提示/已输入内容）颜色来自组件默认，
-      // 且占位符属 WCAG 豁免的失效提示，跳过。
+      // Icon 内部即 RichText（字形），非文字，跳过。
       if (element.findAncestorWidgetOfExactType<Icon>() != null) continue;
-      if (element.findAncestorWidgetOfExactType<EditableText>() != null) {
-        continue;
-      }
+      // 输入框子树（占位提示/已输入内容）颜色来自组件默认，且占位符属
+      // WCAG 豁免——整段跳过。注意这里的过滤只针对真正输入框；
+      // SelectableText.rich（markdown 可选中文本）内部同样是 EditableText，
+      // 但不能跳过（markdown 正文必须参与对比度扫描）。
+      if (_isRealInputField(element)) continue;
       collectSpan(richText.text, element);
     }
   }
   return findings;
+}
+
+/// 判断 [element] 是否处于真实输入框（CupertinoTextField 系）子树内。
+bool _isRealInputField(Element element) {
+  return element.findAncestorWidgetOfExactType<CupertinoTextField>() != null ||
+      element.findAncestorWidgetOfExactType<CupertinoSearchTextField>() != null ||
+      element.findAncestorWidgetOfExactType<CupertinoTextFormFieldRow>() != null;
 }
 
 /// 输出单页扫描报告（页面 + 主题 + 文字 + 颜色 + 对比度数值）。
@@ -187,6 +207,102 @@ void _printReport(String page, Brightness brightness, List<ContrastFinding> find
       '"${textPrefix(f.text)}" ${formatColor(f.color)} '
       '${f.ratio.toStringAsFixed(2)}:1'
       '(需≥4.5$marker)',
+    );
+  }
+}
+
+/// 背景主题一致性阈值：背景色解析后（半透明先合成到页面底色）的视觉亮度。
+///
+/// - 暗主题允许的最大亮度：超过视为「亮块混入暗主题」——典型触发是
+///   动态色直塞 BoxDecoration 未 resolve，暗黑模式下画成浅色底。
+/// - 浅主题允许的最小亮度：低于视为「暗块混入浅主题」。
+const double kDarkBackgroundMaxLuminance = 0.5;
+const double kLightBackgroundMinLuminance = 0.05;
+
+/// 单条背景主题发现（亮块/暗块与所在主题不匹配）。
+class BackgroundFinding {
+  const BackgroundFinding({
+    required this.page,
+    required this.brightness,
+    required this.color,
+    required this.luminance,
+  });
+
+  final String page;
+  final Brightness brightness;
+
+  /// 解析并合成到页面底色后的背景色（即用户真实看到的底色）。
+  final Color color;
+
+  /// 该背景色的 WCAG 相对亮度（0=黑 ~ 1=白）。
+  final double luminance;
+
+  /// 允许名单 key：`bg|页面|主题|#RRGGBB`。
+  String get key => 'bg|$page|${brightness.name}|${formatColor(color)}';
+}
+
+/// 背景主题一致性扫描：遍历所有有色背景容器（RenderDecoratedBox：
+/// Container/DecoratedBox/ColoredBox 渲染层统一是它），解析动态色后
+/// 检查是否与当前主题匹配。
+///
+/// - 暗主题下背景视觉亮度 > [kDarkBackgroundMaxLuminance] → ❌ 亮块混入；
+/// - 浅主题下背景视觉亮度 < [kLightBackgroundMinLuminance] → ❌ 暗块混入。
+///
+/// 这是对文字对比度的补充维度：白气泡+黑字按 WCAG 反而‘达标’，但
+/// 「暗主题里整块亮底」本身就是主题错配，必须单独拦截。
+List<BackgroundFinding> scanBackgroundThemes(
+  WidgetTester tester, {
+  required String page,
+  required Brightness brightness,
+}) {
+  final pageBackground = backgroundFor(brightness);
+  final findings = <BackgroundFinding>[];
+  final seen = <String>{};
+  for (final element in tester.allElements) {
+    final render = element.renderObject;
+    if (render is! RenderDecoratedBox) continue;
+    final decoration = render.decoration;
+    if (decoration is! BoxDecoration) continue;
+    final raw = decoration.color;
+    if (raw == null) continue;
+    // 取 paint 真实渲染色（renderedDecorationColor 语义：未 resolve 的
+    // 动态色 = light 值，已 resolve 的 = 解析值，与真实渲染一致）。
+    final rendered = renderedDecorationColor(raw);
+    if (rendered.a < 0.05) continue; // 全透明底色无视觉意义
+    // 半透明装饰底（如 10% 红色横幅）合成到页面底色后再判断视觉亮度。
+    final composite = compositeOver(rendered, pageBackground);
+    final luminance = relativeLuminance(composite);
+    final mismatched = brightness == Brightness.dark
+        ? luminance > kDarkBackgroundMaxLuminance
+        : luminance < kLightBackgroundMinLuminance;
+    if (!mismatched) continue;
+    final key = 'bg|$page|${brightness.name}|${formatColor(composite)}';
+    if (seen.add(key)) {
+      findings.add(
+        BackgroundFinding(
+          page: page,
+          brightness: brightness,
+          color: composite,
+          luminance: luminance,
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
+/// 输出背景主题扫描报告。
+void _printBackgroundReport(
+  String page,
+  Brightness brightness,
+  List<BackgroundFinding> findings,
+) {
+  for (final f in findings) {
+    final marker = allKnownIssues.contains(f.key) ? ' [已知基线]' : '';
+    debugPrint(
+      '[背景主题] $page·${brightnessName(brightness)} ❌ '
+      '${formatColor(f.color)} 亮度 ${f.luminance.toStringAsFixed(2)} '
+      '(${brightness == Brightness.dark ? '亮块混入暗主题' : '暗块混入浅主题'}$marker)',
     );
   }
 }
@@ -259,7 +375,7 @@ Future<void> _settle(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 50));
 }
 
-/// 扫一个页面在两种主题下的对比度（pump → 收集 → 报告 → 断言）。
+/// 扫一个页面在两种主题下的对比度与背景主题一致性（pump → 收集 → 报告 → 断言）。
 Future<void> _scanPage(
   WidgetTester tester, {
   required String page,
@@ -274,7 +390,13 @@ Future<void> _scanPage(
       page: page,
       brightness: brightness,
     );
+    final backgroundFindings = scanBackgroundThemes(
+      tester,
+      page: page,
+      brightness: brightness,
+    );
     _printReport(page, brightness, findings);
+    _printBackgroundReport(page, brightness, backgroundFindings);
 
     // 只对 ❌（ratio<3.0，明确不达标）判失败；⚠️(3.0–4.5) 为 iOS 次要文字/
     // 装饰文字/链接主色（secondaryLabel ~3.3:1、tint ~3.6:1，Apple 设计规范
@@ -292,6 +414,20 @@ Future<void> _scanPage(
           )
           .join('\n  - ');
       fail('发现未登记的低对比度文字（新增项需人工确认后加入允许名单）：\n  - $detail');
+    }
+    // 背景主题错配（亮块混入暗主题 / 暗块混入浅主题）同样判失败——
+    // 这是对文字对比度模型的补充维度，拦截「气泡/卡片用错主题底色」类问题。
+    final unexpectedBackground = backgroundFindings
+        .where((f) => !allKnownIssues.contains(f.key))
+        .toList();
+    if (unexpectedBackground.isNotEmpty) {
+      final detail = unexpectedBackground
+          .map(
+            (f) => '${f.page}·${brightnessName(f.brightness)} '
+                '${formatColor(f.color)} 亮度 ${f.luminance.toStringAsFixed(2)}',
+          )
+          .join('\n  - ');
+      fail('发现未登记的主题背景错配（新增项需人工确认后加入允许名单）：\n  - $detail');
     }
   }
 }
@@ -406,6 +542,13 @@ void main() {
             'role': 'assistant',
             'content': '**好的！** 我来看看哪些文字颜色不达标。',
             'message_id': 'a1',
+          },
+          {
+            'role': 'assistant',
+            'content':
+                '## 渲染分支全覆盖\n\n正文段落 **加粗** 与 `行内代码`。\n\n'
+                '> 引用块\n\n```dart\nfinal x = 1;\n```\n',
+            'message_id': 'a2',
           },
           {
             'role': 'user',

@@ -70,7 +70,7 @@ class ToolCallCard extends StatelessWidget {
               child: SizedBox(
                 height: 1,
                 width: double.infinity,
-                child: ColoredBox(color: CupertinoColors.systemGrey4),
+                child: _DividerLine(),
               ),
             ),
             _MonospaceText(content.result, monospaced: content.monospaced),
@@ -93,6 +93,18 @@ class ToolCallCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// 主题自适应的 1px 分隔线（ColoredBox 不 resolve 动态色，自行解析）。
+class _DividerLine extends StatelessWidget {
+  const _DividerLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: CupertinoColors.systemGrey4.resolveFrom(context),
     );
   }
 }
@@ -130,9 +142,12 @@ class ToolCallGroupCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6,
+        // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色亮块。
+        color: CupertinoColors.systemGrey6.resolveFrom(context),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: CupertinoColors.systemGrey4),
+        border: Border.all(
+          color: CupertinoColors.systemGrey4.resolveFrom(context),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

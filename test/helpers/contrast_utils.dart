@@ -13,6 +13,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart' show RenderDecoratedBox;
 
 /// sRGB 通道线性化（WCAG 公式 2 段分段函数）。
 double _linearizeChannel(double channel) {
@@ -66,6 +67,51 @@ bool passesAA(Color foreground, Color background, {double threshold = 4.5}) {
 /// 非动态色原样返回。
 Color resolveTextColor(Color color, BuildContext context) {
   return CupertinoDynamicColor.maybeResolve(color, context) ?? color;
+}
+
+/// 模拟 Decoration paint 的真实渲染色。
+///
+/// paint 路径用的是 `color.toARGB32()`：动态色（CupertinoDynamicColor）
+/// 的 toARGB32 返回 `_effectiveColor`——**从未被 resolve 过的系统常量
+/// 返回 light 值**（直塞 BoxDecoration 的 bug 正是这样画出浅色底）；
+/// 已被组件/业务层 resolveFrom 过的动态色返回解析后值（如 TextField
+/// 内部 dark 黑底）。这一个函数同时建模两种情况，与真实渲染一致。
+///
+/// 注意：不能反过来把动态色强转成 `.color`（永远 light，会误伤
+/// 框架组件内部已 resolve 的深色底）；也不能 maybeResolve（会把业务层
+/// 直塞的常量错判成 dark，漏掉「暗黑模式画成浅色底」的 bug）。
+Color renderedDecorationColor(Color raw) => Color(raw.toARGB32());
+
+/// 向上查找最近的有色背景 RenderDecoratedBox（Container/DecoratedBox/
+/// ColoredBox 渲染层统一是它），取 paint 真实渲染色（动态色按 light 值）
+/// 作为文字的 **局部背景参考**；找不到（文字直接在页面底色上）返回主题
+/// 页面底色。
+///
+/// 为什么必须局部背景：对比度要以真实渲染背景为参考。若气泡/卡片上的
+/// 文字一律按页面底色算，会系统性漏掉「亮块混入暗主题」这类主题错配——
+/// 白色气泡 + 黑色文字按 WCAG 是 13:1「达标」，但暗黑模式下整块刺眼白，
+/// 正是本次接入的漏检根因。
+Color localBackgroundFor(BuildContext context, Brightness brightness) {
+  final fallback = brightness == Brightness.dark
+      ? const Color(0xFF000000)
+      : const Color(0xFFF2F2F7);
+  Color? found;
+  context.visitAncestorElements((element) {
+    final render = element.renderObject;
+    if (render is RenderDecoratedBox) {
+      final decoration = render.decoration;
+      if (decoration is BoxDecoration && decoration.color != null) {
+        found = renderedDecorationColor(decoration.color!);
+        return false;
+      }
+    }
+    return true;
+  });
+  final background = found ?? fallback;
+  // 半透明背景（如 20% 黄徽章）必须合成到页面底色——对比度按用户真实
+  // 看到的合成色算，否则半透明底上文字会误判（白字对半透明黄是 1.5:1，
+  // 合成到黑底后是 14:1）。
+  return background.a >= 0.999 ? background : compositeOver(background, fallback);
 }
 
 /// 格式化颜色为 `#RRGGBB`（报告定位用）。

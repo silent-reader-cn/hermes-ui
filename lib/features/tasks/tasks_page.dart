@@ -474,9 +474,10 @@ class _TaskOutputSheet extends StatelessWidget {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.6,
         ),
-        decoration: const BoxDecoration(
-          color: CupertinoColors.secondarySystemBackground,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        decoration: BoxDecoration(
+          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成白色面板。
+          color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

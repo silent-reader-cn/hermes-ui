@@ -402,9 +402,10 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
+        // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色底。
         color: highlighted
-            ? CupertinoColors.secondarySystemFill
-            : CupertinoColors.tertiarySystemFill,
+            ? CupertinoColors.secondarySystemFill.resolveFrom(context)
+            : CupertinoColors.tertiarySystemFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -412,7 +413,9 @@ class _Badge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: CupertinoColors.secondaryLabel,
+          // 徽章小字用全强度 label：secondaryLabel 60% 透明度在浅灰底上
+          // 只有 ~1.7:1（局部背景追踪暴露的真问题），label 深浅色都 ≥15:1。
+          color: CupertinoColors.label,
         ),
       ),
     );

@@ -109,9 +109,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final isSending = phase == ChatPhase.sending;
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: CupertinoColors.systemGrey4, width: 0.5),
+          top: BorderSide(
+            color: CupertinoColors.systemGrey4.resolveFrom(context),
+            width: 0.5,
+          ),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

@@ -40,9 +40,11 @@ class ChatMessageBubble extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
+        // 动态色必须显式 resolve：BoxDecoration paint 不做主题解析，
+        // 直塞 CupertinoColors.* 在暗黑模式下会画成 light 值（白/亮块）。
         color: isUser
-            ? CupertinoColors.activeBlue
-            : CupertinoColors.systemGrey6,
+            ? CupertinoColors.activeBlue.resolveFrom(context)
+            : CupertinoColors.systemGrey6.resolveFrom(context),
         borderRadius: BorderRadius.circular(16),
       ),
       child: isUser
@@ -120,24 +122,7 @@ class _AssistantContent extends StatelessWidget {
           MarkdownBody(
             data: content,
             selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              p: const TextStyle(fontSize: 15, height: 1.4),
-              listBullet: const TextStyle(fontSize: 15),
-              code: const TextStyle(
-                fontSize: 13,
-                fontFamily: 'monospace',
-                backgroundColor: CupertinoColors.systemGrey5,
-              ),
-              codeblockDecoration: BoxDecoration(
-                color: CupertinoColors.systemGrey5,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              blockquoteDecoration: BoxDecoration(
-                color: CupertinoColors.systemGrey5,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              blockquotePadding: const EdgeInsets.all(8),
-            ),
+            styleSheet: _buildMarkdownStyleSheet(context),
           ),
         for (final group in toolGroups) ToolCallGroupCard(group: group),
         if (message.turnTps != null)
@@ -152,6 +137,38 @@ class _AssistantContent extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  /// Markdown 样式：以 Cupertino 主题为基底（标题/链接/表格等自动随深浅色），
+  /// 再叠加项目尺寸定制。正文/代码块显式用解析后的语义色：
+  /// - 文字色 `label` 保证深浅色下都是高对比正文色（fallback 样式在纯
+  ///   CupertinoApp 下会回退到浅色 Material 主题的黑色，暗黑模式翻车）；
+  /// - 背景块 `systemGrey5` 必须 resolve —— BoxDecoration/paint 不自动解析
+  ///   动态色，直塞会在暗黑模式下画成浅灰亮块。
+  static MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
+    final label = CupertinoColors.label.resolveFrom(context);
+    final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
+    return MarkdownStyleSheet.fromCupertinoTheme(
+      CupertinoTheme.of(context),
+    ).copyWith(
+      p: TextStyle(fontSize: 15, height: 1.4, color: label),
+      listBullet: TextStyle(fontSize: 15, color: label),
+      code: TextStyle(
+        fontSize: 13,
+        fontFamily: 'monospace',
+        color: label,
+        backgroundColor: grey5,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: grey5,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: grey5,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      blockquotePadding: const EdgeInsets.all(8),
     );
   }
 }
@@ -212,7 +229,7 @@ class _NoticeCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey6,
+                color: CupertinoColors.systemGrey6.resolveFrom(context),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -254,7 +271,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5,
+            color: CupertinoColors.systemGrey5.resolveFrom(context),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(

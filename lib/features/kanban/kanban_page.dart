@@ -433,7 +433,8 @@ class _KanbanCardTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemBackground,
+          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色亮卡。
+          color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: CupertinoColors.systemGrey.withValues(alpha: 0.25),
@@ -507,7 +508,9 @@ class _KanbanCardTile extends StatelessWidget {
             parents > 0 ? '前驱 $parents' : '后继 $children',
             style: const TextStyle(
               fontSize: 11,
-              color: statusOrangeText,
+              // 徽章文字用全强度 label：statusOrangeText 在 20% 黄底上
+              // dark 只有 ~1.45:1（背景追踪暴露的真问题），label 深浅色都达标。
+              color: CupertinoColors.label,
             ),
           ),
         ],
