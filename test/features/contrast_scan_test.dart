@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
+import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/api/sse_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
@@ -212,6 +213,7 @@ final Set<String> allKnownIssues = <String>{
   'git|light|pull', // 主按钮白字
   'git|light|push', // 主按钮白字
   'kanban|light|主看板', // 主按钮白字
+  'session_list_error|light|重试', // 错误态「重试」CupertinoButton.filled 白字（真背景是主题蓝）
 
   // ---- 模型误报：iOS 次要文字（label 浅色 #3C3C43 衬浅灰分组背景，设计规范既定）----
   'onboarding|light|https://hermes.examp', // 服务地址输入框 URL 文字
@@ -349,6 +351,32 @@ void main() {
     await _scanPage(
       tester,
       page: 'session_list',
+      pump: (tester, brightness) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(_dummyClient()),
+              sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            ],
+            child: _routerApp(
+              brightness,
+              const SessionListPage(),
+            ),
+          ),
+        );
+      },
+    );
+  });
+
+  testWidgets('session_list 加载失败态对比度扫描（浅/深，含「密码被拒绝」错误详情）',
+      (tester) async {
+    // 401 场景：fetchSessions 抛 UnauthorizedException → 页面渲染错误详情
+    // 「密码被拒绝。请检查服务器密码后重试。」（statusRedText，两种主题均须 ≥4.5:1）。
+    final api = FakeSessionListApi()
+      ..fetchError = const UnauthorizedException();
+    await _scanPage(
+      tester,
+      page: 'session_list_error',
       pump: (tester, brightness) async {
         await tester.pumpWidget(
           ProviderScope(

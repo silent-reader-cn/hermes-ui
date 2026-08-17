@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
+import '../../app/theme/status_colors.dart';
 import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
@@ -325,7 +326,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   _error,
-                  style: const TextStyle(color: CupertinoColors.systemRed),
+                  style: const TextStyle(color: statusRedText),
                 ),
               ),
           ],

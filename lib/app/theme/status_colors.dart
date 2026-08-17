@@ -54,3 +54,15 @@ const CupertinoDynamicColor statusTealText =
   highContrastColor: Color(0xFF0A6169),
   darkHighContrastColor: Color(0xFF40C4D6),
 );
+
+/// 错误/失败详情文字色：浅 #B3001B（白底 ~7.0:1）/ 深 #FF453A（黑底 ~6.3:1）。
+///
+/// 系统 systemRed（浅 #FF3B30 白底 ~3.4:1 / 深 #FF453A 黑底 ~6.3:1）在浅色
+/// 模式对比度不足，不能直接用作文字色；错误详情、失败提示等一律用本色。
+const CupertinoDynamicColor statusRedText =
+    CupertinoDynamicColor.withBrightnessAndContrast(
+  color: Color(0xFFB3001B),
+  darkColor: Color(0xFFFF453A),
+  highContrastColor: Color(0xFF8F0018),
+  darkHighContrastColor: Color(0xFFFF6961),
+);

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/session.dart';
+import '../../app/theme/status_colors.dart';
 import 'session_list_providers.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
@@ -214,7 +215,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

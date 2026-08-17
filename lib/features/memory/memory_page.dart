@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/memory.dart';
+import '../../app/theme/status_colors.dart';
 import 'memory_providers.dart';
 
 /// 记忆查看页（对齐 Hermex MemoryView 的只读浏览形态）。
@@ -134,7 +135,7 @@ class MemoryPage extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

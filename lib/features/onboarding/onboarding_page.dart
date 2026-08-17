@@ -9,6 +9,7 @@ import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
+import '../../app/theme/status_colors.dart';
 import 'onboarding_providers.dart';
 
 /// 健康检查状态。
@@ -392,7 +393,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case _HealthState.failed:
         return Text(
           '❌ $_healthMessage',
-          style: const TextStyle(color: CupertinoColors.systemRed),
+          style: const TextStyle(color: statusRedText),
         );
     }
   }
@@ -495,7 +496,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               _headerError,
-              style: const TextStyle(color: CupertinoColors.systemRed),
+              style: const TextStyle(color: statusRedText),
             ),
           ),
         const SizedBox(height: 8),

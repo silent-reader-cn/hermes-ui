@@ -164,7 +164,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

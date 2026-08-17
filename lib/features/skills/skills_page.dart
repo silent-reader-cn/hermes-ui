@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
+import '../../app/theme/status_colors.dart';
 import 'skills_providers.dart';
 
 /// 技能浏览页（对齐 Hermex SkillsView）。
@@ -147,7 +148,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

@@ -283,7 +283,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),
@@ -864,7 +864,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

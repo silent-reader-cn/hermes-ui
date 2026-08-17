@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/git_workspace.dart';
+import '../../app/theme/status_colors.dart';
 import 'git_providers.dart';
 
 /// 会话工作区 Git 面板（对齐 Hermex GitWorkspaceView 的展示形态）。
@@ -341,7 +342,7 @@ class _GitPageState extends ConsumerState<GitPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

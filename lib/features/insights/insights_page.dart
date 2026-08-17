@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
+import '../../app/theme/status_colors.dart';
 import 'insights_providers.dart';
 
 /// 用量统计页（对齐 Hermex InsightsView 的展示形态）。
@@ -242,7 +243,7 @@ class InsightsPage extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: statusRedText,
               ),
             ),
             const SizedBox(height: 20),

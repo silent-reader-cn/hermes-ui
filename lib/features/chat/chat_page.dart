@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
 import 'chat_providers.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_message_list.dart';
@@ -168,7 +169,7 @@ class _ErrorBanner extends StatelessWidget {
               message,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.systemRed,
+                color: statusRedText,
               ),
             ),
           ),
