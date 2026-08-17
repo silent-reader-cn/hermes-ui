@@ -7,8 +7,8 @@
 - 蓝本：https://github.com/uzairansaruzi/hermex (MIT)
 - 服务端：`D:\hermes-webui`（fork of nesquena/hermes-webui，:30002）
 
-> **当前状态**：v0.1.0 功能里程碑完成（Phase 1-6 全功能 + Android 后台通知）。
-> 722 个测试全绿、`flutter analyze` 零告警、Android debug APK 可构建。
+> **当前状态**：核心功能里程碑完成（附件上传、离线缓存、Profile、导出、Kanban 拖拽、Android 后台通知）。
+> 789 个测试全绿、`flutter analyze` 零告警、Android debug APK 可构建。
 > 正式发布前的收尾事项（release 签名、LICENSE、截图等）见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ---
@@ -42,13 +42,14 @@
 | **设置** | 外观（主题三态：跟随系统/浅色/深色）、服务器（多服务器增删改切换，凭据存 flutter_secure_storage）、模型（默认模型 + 推理强度）、关于 |
 | **文件（Workspace）** | 会话工作区文件树浏览、下载、上传入口、文件行操作菜单（下载/重命名/删除）① |
 | **Git** | 会话工作区 Git 面板：分支切换、status（已暂存/未暂存分区）、文件 diff 展开、提交表单、fetch / pull / push |
-| **看板（Kanban）** | 看板/卡片浏览与操作（WebSocket 事件流 API 就绪）② |
+| **看板（Kanban）** | 看板/卡片浏览与操作、跨列长按拖拽（复用 status PATCH）② |
 | **统计（Insights）** | 时间范围切换（今天/近 7 天/近 30 天/全部）、指标卡片（会话/消息/令牌/费用）、模型拆分列表、近 14 天令牌柱状图（fl_chart）、峰值活动 |
 | **通知（Android）** | 回合完成后台系统通知：前台不发/后台发、点击回跳对应会话、回前台自动清除、预览单行化截断（详见 [docs/RELEASE.md](docs/RELEASE.md) 真机验证清单） |
+| **质量基础设施** | fake gateway 契约冒烟、GitHub Actions analyze/test/Android debug 构建、基础 i18n facade、统一无障碍按钮/触觉组件 |
 | **连接管理** | 三步向导（Onboarding）配置服务器、多服务器保存/切换、自定义 Header、用户名/密码、API Key 安全存储 |
 
-> ① 文件**上传**选择器（file picker 平台通道）与**删除/重命名**（服务端暂缺端点，返回 501）为占位实现，详见 [docs/QA.md](docs/QA.md)。
-> ② 看板拖拽排序后置（API 层 `reorderWorkspaces` 已就绪，UI 未接入）。
+> ① 文件删除/重命名仍受 hermes-webui 服务端端点限制（当前返回 501），详见 [docs/QA.md](docs/QA.md)。
+> ② Kanban 拖拽跨列会调用既有状态 PATCH；服务端目前没有卡片顺序端点，因此未伪造 `reorderWorkspaces` 契约。
 
 ## 截图
 
