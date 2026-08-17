@@ -8,10 +8,13 @@ import 'package:go_router/go_router.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/session.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 
+import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
@@ -31,19 +34,54 @@ SessionSummary buildSession(
   );
 }
 
+/// 构造测试用服务器连接（自动重登用例注入 active 连接）。
+ServerConnection _buildConn({String? password}) {
+  return ServerConnection(
+    id: 'conn-test',
+    name: 'Test',
+    baseUrl: 'http://test.local:30002',
+    password: password,
+    createdAt: DateTime.utc(2026, 1, 1),
+  );
+}
+
 /// 组装 ProviderContainer：注入 fake API（apiClientProvider 用占位客户端，
 /// 工厂 override 忽略它，不发任何网络请求）。
-ProviderContainer makeContainer(FakeSessionListApi api) {
+///
+/// [active] 非空时注入激活连接（自动重登用例携带已保存密码）；
+/// [loginApi] 非空时注入登录 fake（记录自动重登调用）。
+ProviderContainer makeContainer(
+  FakeSessionListApi api, {
+  ServerConnection? active,
+  FakeOnboardingLoginApi? loginApi,
+}) {
   final container = ProviderContainer(
     overrides: [
       apiClientProvider.overrideWithValue(
         ApiClient(baseUrl: 'http://test.local:30002'),
       ),
       sessionListApiFactoryProvider.overrideWithValue((_) => api),
+      if (active != null)
+        activeConnectionProvider.overrideWith(
+          () => _StubActiveConnection(active),
+        ),
+      onboardingApiFactoryProvider.overrideWithValue(
+        (baseUrl, headers) => loginApi ?? FakeOnboardingLoginApi(),
+      ),
     ],
   );
   addTearDown(container.dispose);
   return container;
+}
+
+/// 固定返回注入连接的 active 控制器 stub（跳过异步加载，测试可控）。
+class _StubActiveConnection extends ActiveConnectionController {
+  _StubActiveConnection(this._connection);
+
+  final ServerConnection _connection;
+
+  @override
+  ServerConnection? build() => _connection;
 }
 
 void main() {
@@ -118,6 +156,82 @@ void main() {
       final state = container.read(sessionListControllerProvider).valueOrNull!;
       expect(state.sessions, hasLength(1));
       expect(state.visibleCount, 1);
+    });
+
+    test('初始 401 + 保存密码 → 自动重登成功 → 列表正常（fetch 2 / login 1）', () async {
+      final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
+      api.fetchError = const UnauthorizedException();
+      api.fetchErrorCap = 1; // 首次抛 401，重登后恢复
+      final loginApi = FakeOnboardingLoginApi();
+      final container = makeContainer(
+        api,
+        active: _buildConn(password: 'secret'),
+        loginApi: loginApi,
+      );
+
+      await container.read(sessionListControllerProvider.future);
+      final state = container.read(sessionListControllerProvider).valueOrNull!;
+      expect(state.sessions, hasLength(1));
+      expect(api.fetchCount, 2);
+      expect(loginApi.loginCalls, 1);
+      expect(loginApi.lastPassword, 'secret');
+    });
+
+    test('初始 401 + 无密码 → 直接报错，不自动重登', () async {
+      final api = FakeSessionListApi();
+      api.fetchError = const UnauthorizedException();
+      final loginApi = FakeOnboardingLoginApi();
+      final container = makeContainer(
+        api,
+        active: _buildConn(),
+        loginApi: loginApi,
+      );
+
+      await expectLater(
+        container.read(sessionListControllerProvider.future),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(loginApi.loginCalls, 0);
+      expect(api.fetchCount, 1);
+    });
+
+    test('初始 401 + 重登失败（密码错）→ 报错，login 1 次不再重试', () async {
+      final api = FakeSessionListApi();
+      api.fetchError = const UnauthorizedException();
+      final loginApi = FakeOnboardingLoginApi()
+        ..loginError = const UnauthorizedException();
+      final container = makeContainer(
+        api,
+        active: _buildConn(password: 'wrong'),
+        loginApi: loginApi,
+      );
+
+      await expectLater(
+        container.read(sessionListControllerProvider.future),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(loginApi.loginCalls, 1);
+      expect(api.fetchCount, 1);
+    });
+
+    test('401 → 重登成功但重试仍 401 → 报错不递归（fetch 2 / login 1）', () async {
+      final api = FakeSessionListApi();
+      api.fetchError = const UnauthorizedException();
+      api.fetchErrorCap = 2; // 首轮 + 重登后重试各抛一次
+      final loginApi = FakeOnboardingLoginApi();
+      final container = makeContainer(
+        api,
+        active: _buildConn(password: 'secret'),
+        loginApi: loginApi,
+      );
+
+      await expectLater(
+        container.read(sessionListControllerProvider.future),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      // 防递归核心断言：登录只发生一次，不再无限循环
+      expect(loginApi.loginCalls, 1);
+      expect(api.fetchCount, 2);
     });
 
     test('分页：loadMore 每页 +50 展开窗口，耗尽后幂等', () async {

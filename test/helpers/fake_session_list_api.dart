@@ -17,6 +17,14 @@ class FakeSessionListApi implements SessionListApi {
   /// `fetchSessions` 抛出的异常（非 null 时优先于 [sessions]）。
   Object? fetchError;
 
+  /// 控制 [fetchError] 抛出的次数上限（-1 = 无限，默认保持经典行为）。
+  ///
+  /// 用于自动重登用例：先抛 1 次 401 触发重登，重登后恢复正常——
+  /// 例如 `fetchErrorCap = 1` 时首次 fetch 抛错、第二次起成功。
+  int fetchErrorCap = -1;
+
+  int _fetchErrorsThrown = 0;
+
   /// 非 null 时 `fetchSessions` 挂起等待该 gate（测试加载态用）。
   Completer<void>? fetchGate;
 
@@ -63,7 +71,10 @@ class FakeSessionListApi implements SessionListApi {
   }) async {
     fetchCount++;
     final error = fetchError;
-    if (error != null) throw error;
+    if (error != null && (fetchErrorCap < 0 || _fetchErrorsThrown < fetchErrorCap)) {
+      _fetchErrorsThrown++;
+      throw error;
+    }
     final gate = fetchGate;
     if (gate != null) await gate.future;
     return SessionsResponse(sessions: sessions);

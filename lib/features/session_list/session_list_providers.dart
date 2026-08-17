@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
+import '../onboarding/onboarding_providers.dart';
 
 /// 会话列表所需的最小服务器 API 面（sessions 域 18 个端点中的 8 个）。
 ///
@@ -219,6 +221,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 页大小（客户端分块）。
   static const int pageSize = SessionListState.pageSize;
 
+  /// 自动重登进行中标记（防并发重复登录）。
+  bool _reauthInFlight = false;
+
   SessionListApi get _api =>
       ref.read(sessionListApiFactoryProvider)(ref.read(apiClientProvider));
 
@@ -231,13 +236,55 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     return _loadFirstPage(api);
   }
 
-  Future<SessionListState> _loadFirstPage(SessionListApi api) async {
-    final response = await api.fetchSessions();
-    final sessions = response.sessions ?? const <SessionSummary>[];
-    return SessionListState(
-      sessions: sessions,
-      visibleCount: min(pageSize, sessions.length),
-    );
+  /// 加载第一页；401 时自动用保存的密码重登一次再重试
+  /// （防递归：`[allowAutoReauth]` 只放行一轮）。
+  Future<SessionListState> _loadFirstPage(
+    SessionListApi api, {
+    bool allowAutoReauth = true,
+  }) async {
+    try {
+      final response = await api.fetchSessions();
+      final sessions = response.sessions ?? const <SessionSummary>[];
+      return SessionListState(
+        sessions: sessions,
+        visibleCount: min(pageSize, sessions.length),
+      );
+    } on UnauthorizedException {
+      // 会话过期/未登录：有保存密码时自动重登一次，成功后重试。
+      // 重登失败或重试仍 401 → 直接抛错（不递归），UI 展示错误 + 重试。
+      if (allowAutoReauth && await _tryAutoReauth()) {
+        return _loadFirstPage(api, allowAutoReauth: false);
+      }
+      rethrow;
+    }
+  }
+
+  /// 用当前激活连接的已保存密码重新登录（种新 cookie）。
+  ///
+  /// 无密码 / 登录失败 / 已有重登在进行 → 返回 false（不做自动重登）。
+  Future<bool> _tryAutoReauth() async {
+    if (_reauthInFlight) return false;
+    final connection = ref.read(activeConnectionProvider);
+    if (connection == null) return false;
+    final password = connection.password;
+    if (password == null || password.isEmpty) return false;
+    _reauthInFlight = true;
+    try {
+      final factory = ref.read(onboardingApiFactoryProvider);
+      final api = factory(
+        connection.baseUrl,
+        [
+          for (final entry in connection.customHeaders.entries)
+            CustomHeader(name: entry.key, value: entry.value),
+        ],
+      );
+      await api.login(password);
+      return true;
+    } on Exception {
+      return false;
+    } finally {
+      _reauthInFlight = false;
+    }
   }
 
   /// 下拉刷新 / 错误态重试：重新加载第一页并重置分页窗口。

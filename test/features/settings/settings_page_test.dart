@@ -13,6 +13,7 @@ import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_settings_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
 
@@ -63,28 +64,6 @@ FakeSettingsApi buildApi() {
     supportsReasoningEffort: true,
   );
   return api;
-}
-
-/// 登录 fake：记录调用，可配置成功/失败（供「保存时先登录」用例注入）。
-class FakeOnboardingLoginApi implements OnboardingServerApi {
-  int loginCalls = 0;
-  String? lastPassword;
-  ApiException? loginError;
-
-  @override
-  Future<Object?> health() async => {'status': 'ok'};
-
-  @override
-  Future<Object?> authStatus() async => {'auth_enabled': true};
-
-  @override
-  Future<Object?> login(String password) async {
-    loginCalls++;
-    lastPassword = password;
-    final error = loginError;
-    if (error != null) throw error;
-    return {'ok': true};
-  }
 }
 
 void main() {
