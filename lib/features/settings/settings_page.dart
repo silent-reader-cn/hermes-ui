@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/theme_provider.dart';
 import '../../core/api/api_exception.dart';
+
 import '../../core/api/custom_header.dart';
+
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
@@ -13,6 +15,7 @@ import '../../app/theme/status_colors.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../shared/app_back_button.dart';
 import 'settings_providers.dart';
+import 'profile_section.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
@@ -32,6 +35,7 @@ class SettingsPage extends ConsumerWidget {
         children: const [
           _AppearanceSection(),
           _ServerSection(),
+          ProfileSection(),
           _ModelSection(),
           _AboutSection(),
         ],
