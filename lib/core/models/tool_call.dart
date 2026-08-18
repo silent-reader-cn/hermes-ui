@@ -161,10 +161,22 @@ class ToolCallGroup {
   final String? anchorMessageID;
   final List<ToolCall> toolCalls;
 
-  /// `Activity: N tools`。
-  String get activityTitle => 'Activity: ${toolCalls.length} tools';
+  /// Hermex 风格的活动摘要：显示少量工具名，其余折叠为 +N。
+  String get activityTitle {
+    if (toolCalls.isEmpty) return 'No tools';
+    final uniqueNames = <String>[];
+    for (final call in toolCalls) {
+      final name = call.displayName;
+      if (!uniqueNames.contains(name)) uniqueNames.add(name);
+    }
+    if (uniqueNames.length == 1) return 'Activity: 1 tool';
+    final visible = uniqueNames.take(3).join(', ');
+    final remaining = uniqueNames.length - uniqueNames.length.clamp(0, 3);
+    if (remaining > 0) return '$visible, +$remaining';
+    return visible;
+  }
 
-  /// 全部工具已完成。
+  /// 全部工具已完成.
   bool get isComplete => toolCalls.every((t) => t.isCompleted);
 
   /// 任一工具报错。

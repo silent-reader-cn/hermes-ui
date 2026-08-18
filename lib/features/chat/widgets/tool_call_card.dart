@@ -16,15 +16,15 @@ class ToolCallCard extends StatelessWidget {
     final content = ToolCallDisplayContent.of(call);
     final failed = call.isError == true;
     final color = failed
-        ? CupertinoColors.systemRed
-        : CupertinoColors.systemTeal;
+        ? CupertinoColors.systemRed.resolveFrom(context)
+        : CupertinoColors.systemTeal.resolveFrom(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: failed
-            ? CupertinoColors.systemRed.withValues(alpha: 0.08)
-            : CupertinoColors.systemTeal.withValues(alpha: 0.08),
+        ? CupertinoColors.systemRed.resolveFrom(context).withValues(alpha: 0.08)
+        : CupertinoColors.systemTeal.resolveFrom(context).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -122,7 +122,7 @@ class _MonospaceText extends StatelessWidget {
       style: TextStyle(
         fontSize: 12,
         fontFamily: monospaced ? 'monospace' : null,
-        color: CupertinoColors.label,
+        color: CupertinoColors.label.resolveFrom(context),
         height: 1.35,
       ),
     );
@@ -130,13 +130,30 @@ class _MonospaceText extends StatelessWidget {
 }
 
 /// 工具调用分组卡（chat_spec.md §3.5："Activity: N tools"）。
-class ToolCallGroupCard extends StatelessWidget {
+class ToolCallGroupCard extends StatefulWidget {
   const ToolCallGroupCard({super.key, required this.group});
 
   final ToolCallGroup group;
 
   @override
+  State<ToolCallGroupCard> createState() => _ToolCallGroupCardState();
+}
+
+class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Live activity stays visible while running; completed history is compact.
+    _expanded = !widget.group.isComplete;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final group = widget.group;
+    final failed = group.hasFailedTool;
+    final running = !group.isComplete;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 6),
@@ -152,18 +169,54 @@ class ToolCallGroupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            group.activityTitle,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: CupertinoColors.label,
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Icon(
+                  failed
+                      ? CupertinoIcons.exclamationmark_triangle_fill
+                      : running
+                          ? CupertinoIcons.wrench
+                          : CupertinoIcons.checkmark_circle_fill,
+                  size: 14,
+                  color: failed
+                      ? CupertinoColors.systemRed
+                      : CupertinoColors.secondaryLabel,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    group.activityTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                ),
+                if (failed)
+                  Text('失败', style: TextStyle(fontSize: 11, color: CupertinoColors.systemRed.resolveFrom(context)))
+                else if (running)
+                  Text('运行中', style: TextStyle(fontSize: 11, color: CupertinoColors.secondaryLabel.resolveFrom(context))),
+                const SizedBox(width: 6),
+                Icon(
+                  _expanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                  size: 12,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          for (final call in group.toolCalls) ...[
-            ToolCallCard(call: call),
-            if (call != group.toolCalls.last) const SizedBox(height: 6),
+          if (_expanded) ...[
+            const SizedBox(height: 8),
+            for (final call in group.toolCalls) ...[
+              ToolCallCard(call: call),
+              if (call != group.toolCalls.last) const SizedBox(height: 6),
+            ],
           ],
         ],
       ),

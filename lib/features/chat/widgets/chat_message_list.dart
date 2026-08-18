@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,6 +26,13 @@ class ChatMessageList extends ConsumerStatefulWidget {
 class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   final ScrollController _controller = ScrollController();
   bool _nearBottom = true;
+  bool _loadingOlder = false;
+  bool _olderLoadQueued = false;
+  bool _initialPositioned = false;
+  bool _restoringOlderPosition = false;
+  bool _userHasScrolled = false;
+  int _layoutGeneration = 0;
+  bool _initialPositionScheduled = false;
 
   @override
   void initState() {
@@ -41,9 +50,95 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!_controller.hasClients) return;
     final position = _controller.position;
     final nearBottom = position.maxScrollExtent - position.pixels < 120;
-    if (nearBottom != _nearBottom) {
-      setState(() => _nearBottom = nearBottom);
+    if (!_restoringOlderPosition) {
+      if (!nearBottom) _userHasScrolled = true;
+      if (nearBottom != _nearBottom) {
+        setState(() => _nearBottom = nearBottom);
+      }
     }
+    if (position.pixels <= 80 && _initialPositioned && !_restoringOlderPosition) {
+      unawaited(_loadOlderMessages());
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_loadingOlder || _olderLoadQueued || !mounted) return;
+    final state = ref.read(chatControllerProvider(widget.sessionId));
+    if (!state.hasOlderMessages || state.messagesOffset <= 0) return;
+    _olderLoadQueued = true;
+    _loadingOlder = true;
+    final beforePixels = _controller.hasClients ? _controller.position.pixels : 0.0;
+    final beforeExtent =
+        _controller.hasClients ? _controller.position.maxScrollExtent : 0.0;
+    _restoringOlderPosition = true;
+    try {
+      await ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .loadOlderMessages();
+      if (!mounted) return;
+      _restoreOlderScrollPosition(
+        beforePixels: beforePixels,
+        beforeExtent: beforeExtent,
+        frame: 0,
+      );
+    } finally {
+      _olderLoadQueued = false;
+      _loadingOlder = false;
+      // The post-frame callback owns the final reset. This fallback covers
+      // request failures and unmounted controllers.
+      if (!mounted) _restoringOlderPosition = false;
+    }
+  }
+
+  void _restoreOlderScrollPosition({
+    required double beforePixels,
+    required double beforeExtent,
+    required int frame,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) {
+        _restoringOlderPosition = false;
+        return;
+      }
+      if (frame < 2) {
+        _restoreOlderScrollPosition(
+          beforePixels: beforePixels,
+          beforeExtent: beforeExtent,
+          frame: frame + 1,
+        );
+        return;
+      }
+      final delta = _controller.position.maxScrollExtent - beforeExtent;
+      final target = (beforePixels + delta).clamp(
+        0.0,
+        _controller.position.maxScrollExtent,
+      );
+      _controller.jumpTo(target);
+      _restoringOlderPosition = false;
+      _nearBottom = _controller.position.maxScrollExtent -
+              _controller.position.pixels <
+          120;
+    });
+  }
+
+  void _positionInitialView({required bool hasContent}) {
+    if (!mounted || !hasContent || _userHasScrolled || _initialPositionScheduled) return;
+    _initialPositionScheduled = true;
+    final generation = ++_layoutGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialPositionScheduled = false;
+      if (!mounted || !_controller.hasClients || _userHasScrolled) return;
+      if (generation != _layoutGeneration) return;
+      final target = _controller.position.maxScrollExtent;
+      if (target <= 0 && _controller.position.viewportDimension <= 0) {
+        _initialPositionScheduled = false;
+        _positionInitialView(hasContent: true);
+        return;
+      }
+      _initialPositioned = true;
+      _controller.jumpTo(target);
+      _nearBottom = true;
+    });
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -69,6 +164,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
+    _positionInitialView(hasContent: transcript.isNotEmpty || streaming != null);
 
     // 滚动跟随：每次 flush 出内容（16ms 合并节流）后，若用户在底部则跟随。
     ref.listen<int>(

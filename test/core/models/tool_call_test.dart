@@ -75,7 +75,7 @@ void main() {
           ToolCall(name: 't2'),
         ],
       );
-      expect(group.activityTitle, 'Activity: 2 tools');
+      expect(group.activityTitle, 't1, t2');
       expect(group.isComplete, false);
       expect(group.hasFailedTool, false);
 

@@ -94,12 +94,32 @@ final transcriptMessagesProvider =
   final messages = state.messages;
   final offset = state.messagesOffset;
   final streamingId = state.stream.streamingAssistantMessageId;
+  final completedToolGroups = state.completedToolCallGroups;
+  final completedReasoningGroups = state.completedReasoningGroups;
   final result = <TranscriptMessage>[];
   for (var i = 0; i < messages.length; i++) {
     final message = messages[i];
     if (message.role == 'tool') continue;
     if (TranscriptTurnClassifier.isToolResultOnlyMessage(message)) continue;
     if (message.messageId != null && message.messageId == streamingId) continue;
+
+    // Hermex parity: do not create a visible row for empty internal messages.
+    // Attachment-only user messages remain visible; reasoning/tool groups are
+    // rendered on their anchored assistant row even when its text is empty.
+    final hasVisibleContent = message.content?.trim().isNotEmpty == true;
+    final hasAttachments = message.attachments?.isNotEmpty == true;
+    final hasToolGroups = completedToolGroups.any(
+      (group) => group.anchorMessageID == message.messageId,
+    );
+    final hasReasoningGroups = completedReasoningGroups.any(
+      (group) => group.anchorMessageId == message.messageId,
+    );
+    if (!hasVisibleContent &&
+        !hasAttachments &&
+        !hasToolGroups &&
+        !hasReasoningGroups) {
+      continue;
+    }
     result.add(TranscriptMessage(
       loadedIndex: i,
       renderId: 'transcript:${offset + i}',

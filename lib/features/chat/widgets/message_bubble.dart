@@ -263,6 +263,10 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
 
   @override
   Widget build(BuildContext context) {
+    final text = widget.group.text.trim();
+    if (text.isEmpty) return const SizedBox.shrink();
+    final summary = text.replaceAll(RegExp(r'\\s+'), ' ');
+    final preview = summary.length > 80 ? '${summary.substring(0, 80)}…' : summary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: GestureDetector(
@@ -288,11 +292,23 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                   ),
                   const SizedBox(width: 4),
                   const Text(
-                    '推理过程',
+                    'Thinking',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
                     ),
                   ),
                 ],
@@ -301,7 +317,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    widget.group.text,
+                    text,
                     style: const TextStyle(
                       fontSize: 12,
                       height: 1.4,
