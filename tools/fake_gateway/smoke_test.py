@@ -102,6 +102,18 @@ def main(no_start: bool = False) -> None:
                 r.status_code == 200 and up.get("filename") == "test.txt" and up.get("size") == len(b"hello world"),
             )
 
+            # 8b. 文件操作（delete / rename）
+            r = client.post("/api/file/delete", json={"session_id": sid, "path": "a.txt", "recursive": True})
+            check(
+                "POST /api/file/delete",
+                r.status_code == 200 and r.json().get("ok") is True and r.json().get("path") == "a.txt",
+            )
+            r = client.post("/api/file/rename", json={"session_id": sid, "path": "a.txt", "new_name": "b.txt"})
+            check(
+                "POST /api/file/rename",
+                r.status_code == 200 and r.json().get("old_path") == "a.txt" and r.json().get("new_path") == "b.txt",
+            )
+
             # 9. insights / profile switch
             r = client.get("/api/insights")
             check("GET /api/insights", r.status_code == 200 and "total_sessions" in r.json().get("data", {}))

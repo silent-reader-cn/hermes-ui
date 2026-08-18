@@ -183,6 +183,22 @@ async def upload(request: Request):
     )
 
 
+@app.post(f"{API}/file/delete")
+async def file_delete(request: Request):
+    body = await request.json()
+    if not body.get("session_id") or not body.get("path"):
+        return {"ok": False, "error": "session_id and path required"}
+    return {"ok": True, "path": body["path"]}
+
+
+@app.post(f"{API}/file/rename")
+async def file_rename(request: Request):
+    body = await request.json()
+    if not body.get("session_id") or not body.get("path") or not body.get("new_name"):
+        return {"ok": False, "error": "session_id, path and new_name required"}
+    return {"ok": True, "old_path": body["path"], "new_path": body["new_name"]}
+
+
 @app.get(f"{API}/insights")
 async def insights():
     return _json(SAMPLE_INSIGHTS)
