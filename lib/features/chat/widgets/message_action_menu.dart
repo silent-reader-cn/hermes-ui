@@ -8,11 +8,13 @@ import '../../../core/models/chat_message.dart';
 /// - `copy`：复制纯文本；
 /// - `copy_md`：复制 Markdown 原文；
 /// - `edit`：用户消息回填输入框；
+/// - `branch`：从此处创建分支；
 /// - `truncate`：从此处截断（确认对话框已通过）。
 abstract final class MessageAction {
   static const String copy = 'copy';
   static const String copyMd = 'copy_md';
   static const String edit = 'edit';
+  static const String branch = 'branch';
   static const String truncate = 'truncate';
 }
 
@@ -51,6 +53,11 @@ Future<String?> showMessageActionMenu(
             child: const Text('编辑并重新发送'),
           ),
         CupertinoActionSheetAction(
+          key: const ValueKey('msg-action-branch'),
+          onPressed: () => Navigator.pop(sheetContext, MessageAction.branch),
+          child: const Text('从此处创建分支'),
+        ),
+        CupertinoActionSheetAction(
           key: const ValueKey('msg-action-truncate'),
           isDestructiveAction: true,
           onPressed: () async {
@@ -58,9 +65,7 @@ Future<String?> showMessageActionMenu(
               context: sheetContext,
               builder: (dialogContext) => CupertinoAlertDialog(
                 title: const Text('从此处截断'),
-                content: const Text(
-                  '删除此消息之后的所有消息？此操作不可撤销。',
-                ),
+                content: const Text('删除此消息之后的所有消息？此操作不可撤销。'),
                 actions: [
                   CupertinoDialogAction(
                     key: const ValueKey('msg-truncate-cancel'),

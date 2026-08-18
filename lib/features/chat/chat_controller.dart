@@ -137,9 +137,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> stop() async {
     final streamId = state.stream.activeStreamId;
     if (streamId == null) return false;
-    state = state.copyWith(
-      stream: state.stream.copyWith(isCancelling: true),
-    );
+    state = state.copyWith(stream: state.stream.copyWith(isCancelling: true));
     final gen = _generation;
     try {
       final raw = await _api!.cancelChat(streamId);
@@ -189,9 +187,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     try {
       final raw = await _api!.renameSession(
-            sessionId: state.sessionId,
-            title: trimmed,
-          );
+        sessionId: state.sessionId,
+        title: trimmed,
+      );
       final response = SessionMutationResponse.fromJson(_asStringMap(raw));
       if (response.ok == false) {
         _setSendError(response.error ?? '重命名会话失败。');
@@ -207,21 +205,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 更新当前会话的置顶状态。
   Future<bool> setPinned(bool pinned) => _mutateSession(
-        () => _api!.pinSession(
-              sessionId: state.sessionId,
-              pinned: pinned,
-            ),
-        failure: '置顶状态更新失败。',
-      );
+    () => _api!.pinSession(sessionId: state.sessionId, pinned: pinned),
+    failure: '置顶状态更新失败。',
+  );
 
   /// 更新当前会话的归档状态。
   Future<bool> setArchived(bool archived) => _mutateSession(
-        () => _api!.archiveSession(
-              sessionId: state.sessionId,
-              archived: archived,
-            ),
-        failure: '归档状态更新失败。',
-      );
+    () => _api!.archiveSession(sessionId: state.sessionId, archived: archived),
+    failure: '归档状态更新失败。',
+  );
 
   Future<bool> _mutateSession(
     Future<Object?> Function() request, {
@@ -262,10 +254,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   /// 从当前会话创建分支，返回新会话 ID。
-  Future<String?> branchSession() async {
+  ///
+  /// [keepCount] 非空时仅复制前 N 条消息（消息级分支）。
+  Future<String?> branchSession({int? keepCount}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return null;
     try {
-      final raw = await _api!.branchSession(state.sessionId);
+      final raw = await _api!.branchSession(
+        state.sessionId,
+        keepCount: keepCount,
+      );
       final response = SessionBranchResponse.fromJson(_asStringMap(raw));
       if (response.sessionId == null) {
         _setSendError(response.error ?? '创建会话分支失败。');
@@ -275,6 +272,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _setSendError(error.message);
       return null;
     }
+  }
+
+  /// 从此处创建分支：保留 [messageIndex] 之前（含）的消息分支出新会话。
+  Future<String?> branchAt(int messageIndex) async {
+    final messages = state.messages;
+    if (messageIndex < 0 || messageIndex >= messages.length) return null;
+    return branchSession(keepCount: messageIndex + 1);
   }
 
   /// 压缩当前会话（可带聚焦主题）；成功后刷新消息列表并轻提示。
@@ -379,21 +383,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ///
   /// 模型列表由 [chatAvailableModelsProvider] 注入、无服务端状态可刷新，
   /// 这里仅同步 state.model/modelProvider 供后续发送使用。
-  Future<bool> updateSessionSettings({
-    String? workspace,
-    String? model,
-  }) async {
+  Future<bool> updateSessionSettings({String? workspace, String? model}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     final trimmedWorkspace = workspace?.trim();
     final trimmedModel = model?.trim();
     try {
       final raw = await _api!.updateSession(
         sessionId: state.sessionId,
-        workspace:
-            (trimmedWorkspace == null || trimmedWorkspace.isEmpty)
+        workspace: (trimmedWorkspace == null || trimmedWorkspace.isEmpty)
             ? null
             : trimmedWorkspace,
-        model: (trimmedModel == null || trimmedModel.isEmpty) ? null : trimmedModel,
+        model: (trimmedModel == null || trimmedModel.isEmpty)
+            ? null
+            : trimmedModel,
       );
       final response = SessionMutationResponse.fromJson(_asStringMap(raw));
       if (response.ok == false) {
@@ -428,7 +430,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         return false;
       }
       final yoloEnabled = map['yolo_enabled'] ?? map['yoloEnabled'];
-      state = state.copyWith(yoloEnabled: yoloEnabled is bool ? yoloEnabled : enabled);
+      state = state.copyWith(
+        yoloEnabled: yoloEnabled is bool ? yoloEnabled : enabled,
+      );
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -445,7 +449,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final raw = await _api!.getYolo(state.sessionId);
       if (_disposed || gen != _generation) return;
       final map = _asStringMap(raw);
-      final enabled = map['yolo_enabled'] ?? map['yoloEnabled'] ?? map['enabled'];
+      final enabled =
+          map['yolo_enabled'] ?? map['yoloEnabled'] ?? map['enabled'];
       if (enabled is bool) {
         state = state.copyWith(yoloEnabled: enabled);
       }
@@ -480,20 +485,28 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final envelope = _asStringMap(raw);
       final rawSession = envelope['session'];
       if (rawSession is! Map) return;
-      final detail = SessionDetail.fromJson(Map<String, Object?>.from(rawSession));
+      final detail = SessionDetail.fromJson(
+        Map<String, Object?>.from(rawSession),
+      );
       final loaded = detail.messages ?? const <ChatMessage>[];
       if (messageBefore != null) {
-        final existingIds =
-            state.messages.map((m) => m.messageId).whereType<String>().toSet();
+        final existingIds = state.messages
+            .map((m) => m.messageId)
+            .whereType<String>()
+            .toSet();
         final fresh = loaded
-            .where((m) => m.messageId == null || !existingIds.contains(m.messageId))
+            .where(
+              (m) => m.messageId == null || !existingIds.contains(m.messageId),
+            )
             .toList();
         final fallbackOffset = state.messagesOffset - loaded.length;
         state = state.copyWith(
           messages: [...fresh, ...state.messages],
           messagesOffset:
-              detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset),
-          hasOlderMessages: detail.messageCount != null &&
+              detail.messagesOffset ??
+              (fallbackOffset < 0 ? 0 : fallbackOffset),
+          hasOlderMessages:
+              detail.messageCount != null &&
               detail.messageCount! > state.messages.length + fresh.length,
         );
       } else {
@@ -501,7 +514,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           messages: loaded,
           messagesOffset: detail.messagesOffset ?? 0,
           hasOlderMessages:
-              detail.messageCount != null && detail.messageCount! > loaded.length,
+              detail.messageCount != null &&
+              detail.messageCount! > loaded.length,
           displayTitle: _resolveTitle(detail),
           workspace: detail.workspace ?? state.workspace,
           model: detail.model ?? state.model,
@@ -510,7 +524,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           isReadOnly: detail.readOnly == true || detail.isReadOnly == true,
           hasPendingUserMessage:
               detail.pendingUserMessage?.trim().isNotEmpty == true ||
-                  detail.pendingAttachments?.isNotEmpty == true,
+              detail.pendingAttachments?.isNotEmpty == true,
           parentSessionId: detail.parentSessionId,
           responseCompletionNeedsTranscriptRefresh: false,
         );
@@ -572,7 +586,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (sessionId.isEmpty) return false;
     final gen = _generation;
     try {
-      await _api!.respondClarification(sessionId: sessionId, response: response);
+      await _api!.respondClarification(
+        sessionId: sessionId,
+        response: response,
+      );
       if (_disposed || gen != _generation) return false;
       _clearClarificationCard();
       return true;
@@ -627,7 +644,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         );
         return false;
       }
-      if (sessionId is String && sessionId.isNotEmpty && state.sessionId.isEmpty) {
+      if (sessionId is String &&
+          sessionId.isNotEmpty &&
+          state.sessionId.isEmpty) {
         state = state.copyWith(sessionId: sessionId);
       }
       _beginStream(streamId);
@@ -672,7 +691,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         state = state.copyWith(
           queuedSlashMessages: [...state.queuedSlashMessages, text],
         );
-        _pinNotice('Queued for next turn (#${state.queuedSlashMessages.length})');
+        _pinNotice(
+          'Queued for next turn (#${state.queuedSlashMessages.length})',
+        );
         return false;
     }
   }
@@ -827,7 +848,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _completeToolCall(event);
       case TitleSseEvent(:final sessionId, :final title):
         _handleTitle(sessionId, title);
-      case MeteringSseEvent(:final tps, :final tpsAvailable, :final estimated, :final sessionId):
+      case MeteringSseEvent(
+        :final tps,
+        :final tpsAvailable,
+        :final estimated,
+        :final sessionId,
+      ):
         _handleMetering(
           tps: tps,
           tpsAvailable: tpsAvailable,
@@ -924,8 +950,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _revealQueueStart = null;
       return;
     }
-    final count =
-        _revealQueue.length < maxWordUnitsPerTick ? _revealQueue.length : maxWordUnitsPerTick;
+    final count = _revealQueue.length < maxWordUnitsPerTick
+        ? _revealQueue.length
+        : maxWordUnitsPerTick;
     final units = _revealQueue.sublist(0, count);
     _revealQueue.removeRange(0, count);
     _appendToStreamingMessage(units.join());
@@ -1011,7 +1038,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     state = state.copyWith(
       messages: [...state.messages, message],
-      stream: state.stream.copyWith(streamingAssistantMessageId: message.messageId),
+      stream: state.stream.copyWith(
+        streamingAssistantMessageId: message.messageId,
+      ),
     );
   }
 
@@ -1024,9 +1053,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (index == -1) return;
     final current = state.messages[index];
     final next = List<ChatMessage>.of(state.messages);
-    next[index] = current.copyWith(
-      content: '${current.content ?? ''}$text',
-    );
+    next[index] = current.copyWith(content: '${current.content ?? ''}$text');
     state = state.copyWith(
       messages: next,
       streamingScrollTrigger: state.streamingScrollTrigger + 1,
@@ -1102,7 +1129,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       args: _argsToJsonValue(evt.args),
       isCompleted: false,
     );
-    final anchor = state.stream.toolCallAnchorMessageId ??
+    final anchor =
+        state.stream.toolCallAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
     state = state.copyWith(
       liveToolCalls: [...state.liveToolCalls, tool],
@@ -1240,14 +1268,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _clearApprovalCard() {
     state = state.copyWith(
-      phase: state.stream.hasActiveStream ? ChatPhase.streaming : ChatPhase.idle,
+      phase: state.stream.hasActiveStream
+          ? ChatPhase.streaming
+          : ChatPhase.idle,
       pendingAction: state.pendingAction.copyWith(clearApproval: true),
     );
   }
 
   void _clearClarificationCard() {
     state = state.copyWith(
-      phase: state.stream.hasActiveStream ? ChatPhase.streaming : ChatPhase.idle,
+      phase: state.stream.hasActiveStream
+          ? ChatPhase.streaming
+          : ChatPhase.idle,
       pendingAction: state.pendingAction.copyWith(clearClarification: true),
     );
   }
@@ -1273,7 +1305,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final completedStreamId = state.stream.activeStreamId;
     final currentStreamingId = state.stream.streamingAssistantMessageId;
     final rawSession = event.session;
-    final hasCompletedTranscript = rawSession != null &&
+    final hasCompletedTranscript =
+        rawSession != null &&
         rawSession['messages'] is List &&
         (rawSession['messages'] as List).isNotEmpty;
     if (hasCompletedTranscript) {
@@ -1302,8 +1335,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ) {
     final detail = SessionDetail.fromJson(rawSession);
     final loaded = detail.messages ?? const <ChatMessage>[];
-    final merged =
-        _mergingLoadedMessages(loaded, state.messages, currentStreamingId);
+    final merged = _mergingLoadedMessages(
+      loaded,
+      state.messages,
+      currentStreamingId,
+    );
     final persisted = detail.toolCalls ?? const <PersistedToolCall>[];
     final persistedGroups = ToolCallGroup.groups(
       persistedToolCalls: persisted,
@@ -1320,8 +1356,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(
       messages: merged,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
-      hasOlderMessages: detail.messageCount != null &&
-          detail.messageCount! > merged.length,
+      hasOlderMessages:
+          detail.messageCount != null && detail.messageCount! > merged.length,
       displayTitle: (title == null || title.isEmpty)
           ? state.displayTitle
           : title,
@@ -1374,21 +1410,28 @@ class ChatController extends FamilyNotifier<ChatState, String> {
               serverContent.startsWith(localContent)) {
             // 服务端已含本地全部内容 → 丢弃本地流式消息。
           } else if (localContent.isNotEmpty &&
-              (serverContent.isEmpty || localContent.startsWith(serverContent))) {
-            result[lastAssistantIndex] =
-                result[lastAssistantIndex].copyWith(content: localContent);
+              (serverContent.isEmpty ||
+                  localContent.startsWith(serverContent))) {
+            result[lastAssistantIndex] = result[lastAssistantIndex].copyWith(
+              content: localContent,
+            );
           }
         } else if (localContent.isNotEmpty) {
           result.add(localStreaming);
         }
       }
     }
-    final loadedIds = result.map((m) => m.messageId).whereType<String>().toSet();
+    final loadedIds = result
+        .map((m) => m.messageId)
+        .whereType<String>()
+        .toSet();
     final localToInsert = current
-        .where((m) =>
-            (m.messageId ?? '').startsWith('local-') &&
-            !loadedIds.contains(m.messageId) &&
-            !_duplicatesLoadedUserMessage(m, result))
+        .where(
+          (m) =>
+              (m.messageId ?? '').startsWith('local-') &&
+              !loadedIds.contains(m.messageId) &&
+              !_duplicatesLoadedUserMessage(m, result),
+        )
         .toList();
     if (localToInsert.isNotEmpty) {
       var insertAt = result.length;
@@ -1415,7 +1458,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (localContent == null || localContent.isEmpty) return false;
     for (var i = loaded.length - 1; i >= 0; i--) {
       final message = loaded[i];
-      if (message.role == 'user' && (message.content ?? '').trim() == localContent) {
+      if (message.role == 'user' &&
+          (message.content ?? '').trim() == localContent) {
         return true;
       }
     }
@@ -1425,7 +1469,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyTurnTps(String? currentStreamingId, double tps) {
     var index = -1;
     if (currentStreamingId != null) {
-      index = state.messages.indexWhere((m) => m.messageId == currentStreamingId);
+      index = state.messages.indexWhere(
+        (m) => m.messageId == currentStreamingId,
+      );
     }
     if (index == -1) {
       for (var i = state.messages.length - 1; i >= 0; i--) {
@@ -1475,13 +1521,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _scheduleTranscriptRefresh(String streamId) {
     _transcriptRefreshTimer?.cancel();
-    _transcriptRefreshTimer = Timer(
-      const Duration(milliseconds: 500),
-      () {
-        _transcriptRefreshTimer = null;
-        unawaited(refreshTranscriptIfCompleted(streamId));
-      },
-    );
+    _transcriptRefreshTimer = Timer(const Duration(milliseconds: 500), () {
+      _transcriptRefreshTimer = null;
+      unawaited(refreshTranscriptIfCompleted(streamId));
+    });
   }
 
   /// 回合完成 → 通知 hook（仅 done / stream_end 成功收尾触发；
@@ -1554,12 +1597,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
       final notices = state.pinnedLocalNotices
-          .map((text) => ChatMessage(
-                role: 'local_notice',
-                content: text,
-                messageId: 'local-notice-${uuidV4()}',
-                timestamp: _nowSeconds(),
-              ))
+          .map(
+            (text) => ChatMessage(
+              role: 'local_notice',
+              content: text,
+              messageId: 'local-notice-${uuidV4()}',
+              timestamp: _nowSeconds(),
+            ),
+          )
           .toList();
       messages = [...messages, ...notices];
     }
@@ -1623,7 +1668,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final envelope = _asStringMap(raw);
       final rawSession = envelope['session'];
       if (rawSession is! Map) return;
-      final detail = SessionDetail.fromJson(Map<String, Object?>.from(rawSession));
+      final detail = SessionDetail.fromJson(
+        Map<String, Object?>.from(rawSession),
+      );
       final title = detail.title?.trim();
       if (title != null && title.isNotEmpty) {
         state = state.copyWith(displayTitle: title);
@@ -1678,7 +1725,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             recovery: ActiveStreamRecoveryState.reconnecting,
           ),
         );
-        _connectStream(streamId, replayAfterSeq: afterSeq == 0 ? null : afterSeq);
+        _connectStream(
+          streamId,
+          replayAfterSeq: afterSeq == 0 ? null : afterSeq,
+        );
         state = state.copyWith(
           stream: state.stream.copyWith(
             isSuspended: false,
@@ -1741,7 +1791,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     await loadMessages();
     if (_disposed) return;
     if (state.stream.activeStreamId != streamId) return;
-    final hasAssistantResponse = state.messages.any((m) => m.role == 'assistant');
+    final hasAssistantResponse = state.messages.any(
+      (m) => m.role == 'assistant',
+    );
     if (hasAssistantResponse) {
       _completeCurrentResponse(
         needsTranscriptRefresh: false,
@@ -1850,7 +1902,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             recovery: ActiveStreamRecoveryState.reconnecting,
           ),
         );
-        _connectStream(streamId, replayAfterSeq: afterSeq == 0 ? null : afterSeq);
+        _connectStream(
+          streamId,
+          replayAfterSeq: afterSeq == 0 ? null : afterSeq,
+        );
         state = state.copyWith(
           stream: state.stream.copyWith(
             recovery: ActiveStreamRecoveryState.idle,
@@ -1883,7 +1938,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _archiveLiveReasoningIfNeeded() {
     final text = state.liveReasoningText;
     if (text.isEmpty) return;
-    final anchor = state.stream.reasoningAnchorMessageId ??
+    final anchor =
+        state.stream.reasoningAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
     state = state.copyWith(
       liveReasoningText: '',
@@ -1897,7 +1953,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   List<ReasoningGroup> _archiveLiveReasoningToGroups() {
     final text = state.liveReasoningText;
     if (text.isEmpty) return state.completedReasoningGroups;
-    final anchor = state.stream.reasoningAnchorMessageId ??
+    final anchor =
+        state.stream.reasoningAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
     return [
       ...state.completedReasoningGroups,
@@ -1916,7 +1973,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   List<ToolCallGroup> _archiveLiveToolCallsToGroups() {
     if (state.liveToolCalls.isEmpty) return state.completedToolCallGroups;
-    final anchor = state.stream.toolCallAnchorMessageId ??
+    final anchor =
+        state.stream.toolCallAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
     final group = ToolCallGroup.live(
       anchorMessageID: anchor,
@@ -2016,7 +2074,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// token 粒度去重。返回剩余文本 + 新游标 + 是否仍处于 replay 匹配。
   @visibleForTesting
   static ({String remainder, int newCursor, bool stillReplay})
-      deduplicatedReplayToken({
+  deduplicatedReplayToken({
     required String token,
     required String existingContent,
     required int matchedPrefixLength,
@@ -2058,8 +2116,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
     }
     // 最大重叠扫描（existingContent 后缀 ∩ token 前缀，从大到小）。
-    final maxLen =
-        existingContent.length < token.length ? existingContent.length : token.length;
+    final maxLen = existingContent.length < token.length
+        ? existingContent.length
+        : token.length;
     var overlap = 0;
     for (var len = maxLen; len > 0; len--) {
       if (existingContent.endsWith(token.substring(0, len))) {
@@ -2081,7 +2140,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// reasoning 粒度去重（同构，游标基于已 flush 的 liveReasoningText）。
   @visibleForTesting
   static ({String remainder, int newCursor, bool stillReplay})
-      deduplicatedReplayText({
+  deduplicatedReplayText({
     required String text,
     required String existingContent,
     required int matchedLength,

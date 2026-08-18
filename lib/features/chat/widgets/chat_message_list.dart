@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
 import '../../chat/chat_models.dart';
@@ -69,7 +71,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         setState(() => _nearBottom = nearBottom);
       }
     }
-    if (position.pixels <= 80 && _initialPositioned && !_restoringOlderPosition) {
+    if (position.pixels <= 80 &&
+        _initialPositioned &&
+        !_restoringOlderPosition) {
       unawaited(_loadOlderMessages());
     }
   }
@@ -80,9 +84,12 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!state.hasOlderMessages || state.messagesOffset <= 0) return;
     _olderLoadQueued = true;
     _loadingOlder = true;
-    final beforePixels = _controller.hasClients ? _controller.position.pixels : 0.0;
-    final beforeExtent =
-        _controller.hasClients ? _controller.position.maxScrollExtent : 0.0;
+    final beforePixels = _controller.hasClients
+        ? _controller.position.pixels
+        : 0.0;
+    final beforeExtent = _controller.hasClients
+        ? _controller.position.maxScrollExtent
+        : 0.0;
     _restoringOlderPosition = true;
     try {
       await ref
@@ -128,14 +135,19 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       );
       _controller.jumpTo(target);
       _restoringOlderPosition = false;
-      _nearBottom = _controller.position.maxScrollExtent -
-              _controller.position.pixels <
+      _nearBottom =
+          _controller.position.maxScrollExtent - _controller.position.pixels <
           120;
     });
   }
 
   void _positionInitialView({required bool hasContent}) {
-    if (!mounted || !hasContent || _userHasScrolled || _initialPositionScheduled) return;
+    if (!mounted ||
+        !hasContent ||
+        _userHasScrolled ||
+        _initialPositionScheduled) {
+      return;
+    }
     _initialPositionScheduled = true;
     final generation = ++_layoutGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -237,8 +249,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   Future<void> _showMessageActions(ChatMessage message) async {
     final action = await showMessageActionMenu(context, message: message);
     if (action == null || !mounted) return;
-    final controller =
-        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final controller = ref.read(
+      chatControllerProvider(widget.sessionId).notifier,
+    );
     switch (action) {
       case MessageAction.copy:
       case MessageAction.copyMd:
@@ -249,6 +262,17 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         final text = message.content;
         if (text != null && text.isNotEmpty) {
           controller.prefillComposer(text);
+        }
+      case MessageAction.branch:
+        final branchIndex = ref
+            .read(chatControllerProvider(widget.sessionId))
+            .messages
+            .indexWhere((m) => m.id == message.id);
+        if (branchIndex >= 0) {
+          final newId = await controller.branchAt(branchIndex);
+          if (newId != null && mounted) {
+            context.go('/chat/$newId');
+          }
         }
       case MessageAction.truncate:
         final index = ref
@@ -267,7 +291,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
-    _positionInitialView(hasContent: transcript.isNotEmpty || streaming != null);
+    _positionInitialView(
+      hasContent: transcript.isNotEmpty || streaming != null,
+    );
 
     // 搜索定位：解析目标（幂等）→ 首次到位时触发滚动一次。
     if (_resolveHighlightTarget() && !_highlightPositioned) {
@@ -277,8 +303,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
 
     // 滚动跟随：每次 flush 出内容（16ms 合并节流）后，若用户在底部则跟随。
     ref.listen<int>(
-      chatControllerProvider(sessionId)
-          .select((s) => s.streamingScrollTrigger),
+      chatControllerProvider(sessionId).select((s) => s.streamingScrollTrigger),
       (_, _) {
         if (_nearBottom) _scrollToBottom();
       },
@@ -293,13 +318,13 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final streamingTools = streaming == null
         ? const <ToolCallGroup>[]
         : toolGroups
-            .where((g) => g.anchorMessageID == streaming.messageId)
-            .toList();
+              .where((g) => g.anchorMessageID == streaming.messageId)
+              .toList();
     final streamingReasoning = streaming == null
         ? const <ReasoningGroup>[]
         : reasoningGroups
-            .where((g) => g.anchorMessageId == streaming.messageId)
-            .toList();
+              .where((g) => g.anchorMessageId == streaming.messageId)
+              .toList();
 
     var itemCount = transcript.length;
     if (streaming != null) itemCount++;
@@ -313,7 +338,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         if (phase == ChatPhase.sending && index == itemCount - 1) {
           return const _SendingIndicator();
         }
-        if (streaming != null && index == itemCount - (phase == ChatPhase.sending ? 2 : 1)) {
+        if (streaming != null &&
+            index == itemCount - (phase == ChatPhase.sending ? 2 : 1)) {
           return _StreamingBubble(
             message: streaming,
             toolGroups: streamingTools,
@@ -332,12 +358,14 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           onLongPress: () => _showMessageActions(entry.message),
           onSecondaryTapDown: (_) => _showMessageActions(entry.message),
           child: KeyedSubtree(
-            key: _highlightTargetId != null &&
+            key:
+                _highlightTargetId != null &&
                     entry.message.id == _highlightTargetId
                 ? _highlightKey
                 : null,
             child: SearchMessageHighlight(
-              highlight: _highlightTargetId != null &&
+              highlight:
+                  _highlightTargetId != null &&
                   entry.message.id == _highlightTargetId,
               child: ChatMessageBubble(
                 key: ValueKey(entry.renderId),
@@ -368,9 +396,8 @@ class _StreamingBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasContent = (message.content ?? '').isNotEmpty;
-    final isEmpty = !hasContent &&
-        toolGroups.isEmpty &&
-        reasoningGroups.isEmpty;
+    final isEmpty =
+        !hasContent && toolGroups.isEmpty && reasoningGroups.isEmpty;
     if (!isEmpty) {
       return ChatMessageBubble(
         message: message,

@@ -322,7 +322,7 @@ class _FakeChatApi implements ChatServerApi {
   }
 
   @override
-  Future<Object?> branchSession(String sessionId) async {
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async {
     return {'ok': true, 'session_id': 'branch-$sessionId'};
   }
 

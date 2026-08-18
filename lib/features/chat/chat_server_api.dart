@@ -64,8 +64,10 @@ abstract interface class ChatServerApi {
   /// POST /api/session/delete {session_id} → SessionMutationResponse。
   Future<Object?> deleteSession(String sessionId);
 
-  /// POST /api/session/branch {session_id} → SessionBranchResponse。
-  Future<Object?> branchSession(String sessionId);
+  /// POST /api/session/branch {session_id, keep_count?} → SessionBranchResponse。
+    ///
+    /// [keepCount] 为复制前 N 条消息（0 = 空分支；缺省 = 全量历史）。
+    Future<Object?> branchSession(String sessionId, {int? keepCount});
 
   /// POST /api/session/truncate {session_id, keep_count} → `{ok, session:{messages}}`。
   ///
@@ -244,8 +246,8 @@ class ChatApiClient implements ChatServerApi {
       _client.deleteSession(sessionId);
 
   @override
-  Future<Object?> branchSession(String sessionId) =>
-      _client.branchSession(sessionId: sessionId);
+    Future<Object?> branchSession(String sessionId, {int? keepCount}) =>
+        _client.branchSession(sessionId: sessionId, keepCount: keepCount);
 
   @override
   Future<Object?> truncateSession({

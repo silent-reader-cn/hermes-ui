@@ -478,7 +478,7 @@ class _FakeChatApi implements ChatServerApi {
   Future<Object?> deleteSession(String sessionId) async => {'ok': true};
 
   @override
-  Future<Object?> branchSession(String sessionId) async => {
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async => {
         'session_id': 'branch-$sessionId',
         'parent_session_id': sessionId,
       };

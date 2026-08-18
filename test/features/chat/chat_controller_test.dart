@@ -14,20 +14,17 @@ void main() {
   group('ChatPhase 九态（chat_spec.md §2.1）', () {
     test('恰好 9 个状态', () {
       expect(ChatPhase.values, hasLength(9));
-      expect(
-        ChatPhase.values.toSet(),
-        {
-          ChatPhase.idle,
-          ChatPhase.sending,
-          ChatPhase.streaming,
-          ChatPhase.steered,
-          ChatPhase.approvalPending,
-          ChatPhase.clarifyPending,
-          ChatPhase.recovering,
-          ChatPhase.cancelled,
-          ChatPhase.error,
-        },
-      );
+      expect(ChatPhase.values.toSet(), {
+        ChatPhase.idle,
+        ChatPhase.sending,
+        ChatPhase.streaming,
+        ChatPhase.steered,
+        ChatPhase.approvalPending,
+        ChatPhase.clarifyPending,
+        ChatPhase.recovering,
+        ChatPhase.cancelled,
+        ChatPhase.error,
+      });
     });
   });
 
@@ -73,7 +70,9 @@ void main() {
     test('startChat 失败 → 回滚乐观消息 + sendErrorMessage + idle', () {
       fakeAsync((async) {
         final api = _FakeChatApi();
-        api.startChatError = NetworkException(NetworkExceptionKind.cannotConnect);
+        api.startChatError = NetworkException(
+          NetworkExceptionKind.cannotConnect,
+        );
         final container = _buildContainer(api, _FakeClock());
         final controller = container.read(chatControllerProvider('').notifier);
 
@@ -108,7 +107,9 @@ void main() {
           },
         };
         final container = _buildContainer(api, _FakeClock());
-        final controller = container.read(chatControllerProvider('s1').notifier);
+        final controller = container.read(
+          chatControllerProvider('s1').notifier,
+        );
 
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
@@ -139,7 +140,9 @@ void main() {
         // 流开始即锚定空流式气泡（思考中指示器）；内容在 flush 前为空
         expect(state.stream.streamingAssistantMessageId, isNotNull);
         final emptyStreaming = state.messages
-            .where((m) => m.messageId == state.stream.streamingAssistantMessageId)
+            .where(
+              (m) => m.messageId == state.stream.streamingAssistantMessageId,
+            )
             .firstOrNull;
         expect(emptyStreaming!.content, '');
 
@@ -148,7 +151,9 @@ void main() {
         state = container.read(chatControllerProvider(''));
         expect(state.pendingAssistantTokenChunks, isEmpty);
         final stillEmpty = state.messages
-            .where((m) => m.messageId == state.stream.streamingAssistantMessageId)
+            .where(
+              (m) => m.messageId == state.stream.streamingAssistantMessageId,
+            )
             .firstOrNull;
         expect(stillEmpty!.content, '');
 
@@ -156,7 +161,9 @@ void main() {
         async.elapse(const Duration(milliseconds: 48));
         state = container.read(chatControllerProvider(''));
         final streaming = state.messages
-            .where((m) => m.messageId == state.stream.streamingAssistantMessageId)
+            .where(
+              (m) => m.messageId == state.stream.streamingAssistantMessageId,
+            )
             .firstOrNull;
         expect(streaming, isNotNull);
         expect(streaming!.content, 'Hello world');
@@ -205,14 +212,12 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const InterimAssistantSseEvent(
-          text: 'dup',
-          alreadyStreamed: true,
-        ));
-        api.emit(const InterimAssistantSseEvent(
-          text: '   ',
-          alreadyStreamed: false,
-        ));
+        api.emit(
+          const InterimAssistantSseEvent(text: 'dup', alreadyStreamed: true),
+        );
+        api.emit(
+          const InterimAssistantSseEvent(text: '   ', alreadyStreamed: false),
+        );
         expect(
           container.read(chatControllerProvider('')).messages,
           hasLength(2),
@@ -229,13 +234,17 @@ void main() {
         async.flushMicrotasks();
 
         api.emit(const TokenSseEvent('partial '));
-        api.emit(const InterimAssistantSseEvent(
-          text: 'full paragraph',
-          alreadyStreamed: false,
-        ));
+        api.emit(
+          const InterimAssistantSseEvent(
+            text: 'full paragraph',
+            alreadyStreamed: false,
+          ),
+        );
         final state = container.read(chatControllerProvider(''));
         final streaming = state.messages
-            .where((m) => m.messageId == state.stream.streamingAssistantMessageId)
+            .where(
+              (m) => m.messageId == state.stream.streamingAssistantMessageId,
+            )
             .firstOrNull;
         expect(streaming!.content, 'partial \n\nfull paragraph');
       });
@@ -251,23 +260,27 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const ToolStartedSseEvent(ToolStreamEvent(
-          stableId: 't1',
-          name: 'bash',
-          args: {'cmd': 'ls'},
-        )));
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(stableId: 't1', name: 'bash', args: {'cmd': 'ls'}),
+          ),
+        );
         var state = container.read(chatControllerProvider(''));
         expect(state.liveToolCalls, hasLength(1));
         expect(state.liveToolCalls.first.isCompleted, isFalse);
         expect(state.liveToolCalls.first.name, 'bash');
         expect(state.stream.toolCallAnchorMessageId, isNotNull);
 
-        api.emit(const ToolCompletedSseEvent(ToolStreamEvent(
-          stableId: 't1',
-          name: 'bash',
-          duration: 1.5,
-          isError: false,
-        )));
+        api.emit(
+          const ToolCompletedSseEvent(
+            ToolStreamEvent(
+              stableId: 't1',
+              name: 'bash',
+              duration: 1.5,
+              isError: false,
+            ),
+          ),
+        );
         state = container.read(chatControllerProvider(''));
         expect(state.liveToolCalls.first.isCompleted, isTrue);
         expect(state.liveToolCalls.first.duration, 1.5);
@@ -282,11 +295,11 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const ToolCompletedSseEvent(ToolStreamEvent(
-          name: 'shell',
-          preview: 'done',
-          isError: false,
-        )));
+        api.emit(
+          const ToolCompletedSseEvent(
+            ToolStreamEvent(name: 'shell', preview: 'done', isError: false),
+          ),
+        );
         final state = container.read(chatControllerProvider(''));
         expect(state.liveToolCalls, hasLength(1));
         expect(state.liveToolCalls.first.isCompleted, isTrue);
@@ -302,38 +315,45 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const ToolStartedSseEvent(ToolStreamEvent(
-          stableId: 't1',
-          name: 'bash',
-        )));
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {
-            'session_id': 's1',
-            'messages': [
-              {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
-              {
-                'role': 'assistant',
-                'content': 'answer',
-                'message_id': 'a1',
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(stableId: 't1', name: 'bash'),
+          ),
+        );
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
+                  {
+                    'role': 'assistant',
+                    'content': 'answer',
+                    'message_id': 'a1',
+                  },
+                ],
+                'tool_calls': [
+                  {
+                    'name': 'bash',
+                    'snippet': 'out',
+                    'tid': 't1',
+                    'assistant_msg_idx': 1,
+                  },
+                ],
               },
-            ],
-            'tool_calls': [
-              {
-                'name': 'bash',
-                'snippet': 'out',
-                'tid': 't1',
-                'assistant_msg_idx': 1,
-              },
-            ],
-          },
-        )));
+            ),
+          ),
+        );
         final state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.idle);
         expect(state.liveToolCalls, isEmpty);
         expect(state.completedToolCallGroups, isNotEmpty);
         expect(state.completedToolCallGroups.first.toolCalls, hasLength(1));
-        expect(state.completedToolCallGroups.first.toolCalls.first.isCompleted,
-            isTrue);
+        expect(
+          state.completedToolCallGroups.first.toolCalls.first.isCompleted,
+          isTrue,
+        );
       });
     });
   });
@@ -349,20 +369,24 @@ void main() {
         api.emit(const TokenSseEvent('local '));
         async.elapse(const Duration(milliseconds: 64));
 
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {
-            'session_id': 's1',
-            'messages': [
-              {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
-              {
-                'role': 'assistant',
-                'content': 'server answer',
-                'message_id': 'a1',
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
+                  {
+                    'role': 'assistant',
+                    'content': 'server answer',
+                    'message_id': 'a1',
+                  },
+                ],
               },
-            ],
-          },
-          usage: {'input_tokens': 10, 'output_tokens': 20, 'tps': 8.5},
-        )));
+              usage: {'input_tokens': 10, 'output_tokens': 20, 'tps': 8.5},
+            ),
+          ),
+        );
         var state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.idle);
         expect(state.stream.activeStreamId, isNull);
@@ -388,9 +412,9 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {'session_id': 's1'},
-        )));
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+        );
         var state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.idle);
         expect(state.responseCompletionNeedsTranscriptRefresh, isTrue);
@@ -421,9 +445,9 @@ void main() {
         // 第二轮：done 收尾后 error 不显示
         unawaited(controller.send('again'));
         async.flushMicrotasks();
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {'session_id': 's1'},
-        )));
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+        );
         api.emit(const ErrorSseEvent('晚了'));
         state = container.read(chatControllerProvider(''));
         expect(state.sendErrorMessage, isNot('晚了'));
@@ -527,17 +551,18 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        unawaited(controller.send('排队消息',
-            behavior: StreamingSendBehavior.queue));
+        unawaited(
+          controller.send('排队消息', behavior: StreamingSendBehavior.queue),
+        );
         async.flushMicrotasks();
         var state = container.read(chatControllerProvider(''));
         expect(state.queuedSlashMessages, ['排队消息']);
         expect(state.pinnedLocalNotices, isNotEmpty);
         expect(api.startChatCalls, 1);
 
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {'session_id': 's1'},
-        )));
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+        );
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();
         expect(api.startChatCalls, 2);
@@ -659,9 +684,9 @@ void main() {
         async.flushMicrotasks();
 
         // 流已结束（done + stream_end 后 activeStreamId 已清空）
-        api.emit(const DoneSseEvent(DoneStreamEvent(
-          session: {'session_id': 's1'},
-        )));
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+        );
         api.emit(const StreamEndSseEvent());
         // 迟到的 transportError → 无连接可恢复 → 错误收尾
         api.fail('迟到的断开');
@@ -699,7 +724,9 @@ void main() {
       fakeAsync((async) {
         final api = _FakeChatApi();
         final container = _buildContainer(api, _FakeClock());
-        final controller = container.read(chatControllerProvider('s1').notifier);
+        final controller = container.read(
+          chatControllerProvider('s1').notifier,
+        );
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
@@ -714,12 +741,14 @@ void main() {
           '真标题',
         );
 
-        api.emit(const MeteringSseEvent(
-          tps: 12.5,
-          tpsAvailable: true,
-          estimated: false,
-          sessionId: 's1',
-        ));
+        api.emit(
+          const MeteringSseEvent(
+            tps: 12.5,
+            tpsAvailable: true,
+            estimated: false,
+            sessionId: 's1',
+          ),
+        );
         expect(
           container
               .read(chatControllerProvider('s1'))
@@ -728,12 +757,14 @@ void main() {
           12.5,
         );
         // tps<=0 不更新
-        api.emit(const MeteringSseEvent(
-          tps: -1,
-          tpsAvailable: true,
-          estimated: false,
-          sessionId: 's1',
-        ));
+        api.emit(
+          const MeteringSseEvent(
+            tps: -1,
+            tpsAvailable: true,
+            estimated: false,
+            sessionId: 's1',
+          ),
+        );
         expect(
           container
               .read(chatControllerProvider('s1'))
@@ -754,9 +785,14 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const ApprovalPendingSseEvent({
-          'pending': {'question': '允许执行?', 'choices': ['允许', '拒绝']},
-        }));
+        api.emit(
+          const ApprovalPendingSseEvent({
+            'pending': {
+              'question': '允许执行?',
+              'choices': ['允许', '拒绝'],
+            },
+          }),
+        );
         var state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.approvalPending);
         expect(state.pendingAction.hasPendingPrompt, isTrue);
@@ -777,12 +813,14 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        api.emit(const ClarificationPendingSseEvent({
-          'pending': {
-            'question': '哪个方案?',
-            'choices_offered': ['A', 'B'],
-          },
-        }));
+        api.emit(
+          const ClarificationPendingSseEvent({
+            'pending': {
+              'question': '哪个方案?',
+              'choices_offered': ['A', 'B'],
+            },
+          }),
+        );
         final state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.clarifyPending);
         expect(state.pendingAction.clarificationPrompt, isNotNull);
@@ -894,7 +932,9 @@ void main() {
 
         final state = container.read(chatControllerProvider(''));
         final streaming = state.messages
-            .where((m) => m.messageId == state.stream.streamingAssistantMessageId)
+            .where(
+              (m) => m.messageId == state.stream.streamingAssistantMessageId,
+            )
             .firstOrNull;
         expect(streaming!.content, 'Hello world!');
       });
@@ -903,10 +943,10 @@ void main() {
 
   group('词单元切分', () {
     test('英文按空白切分且拼接无损', () {
-      expect(
-        ChatController.splitIntoWordUnits('Hello world!'),
-        ['Hello ', 'world!'],
-      );
+      expect(ChatController.splitIntoWordUnits('Hello world!'), [
+        'Hello ',
+        'world!',
+      ]);
       expect(
         ChatController.splitIntoWordUnits('Hello world!').join(),
         'Hello world!',
@@ -952,7 +992,10 @@ void main() {
 
       final ok = await controller.renameSession('新标题');
       expect(ok, isFalse);
-      expect(container.read(chatControllerProvider('s1')).sendErrorMessage, '标题已存在');
+      expect(
+        container.read(chatControllerProvider('s1')).sendErrorMessage,
+        '标题已存在',
+      );
     });
 
     test('重命名网络异常 → 返回 false 且设置错误', () async {
@@ -1009,6 +1052,36 @@ void main() {
 
       final newId = await controller.branchSession();
       expect(newId, 'branch-s1');
+      expect(api.branchCalls, 1);
+    });
+
+    test('消息级 branchAt：keep_count=index+1，越界拒绝', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': 'm0', 'message_id': 'u0'},
+            {'role': 'assistant', 'content': 'm1', 'message_id': 'a0'},
+            {'role': 'user', 'content': 'm2', 'message_id': 'u1'},
+          ],
+        },
+      };
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      // 先加载 3 条消息
+      await controller.loadMessages();
+      expect(container.read(chatControllerProvider('s1')).messages.length, 3);
+
+      // 从第 2 条（index=1）分支 → keep_count=2
+      final newId = await controller.branchAt(1);
+      expect(newId, 'branch-s1');
+      expect(api.branchCalls, 1);
+      expect(api.lastBranchKeepCount, 2);
+
+      // 越界 → 拒绝
+      expect(await controller.branchAt(3), isNull);
       expect(api.branchCalls, 1);
     });
 
@@ -1070,8 +1143,10 @@ void main() {
 
       final ok = await controller.truncateAt(0);
       expect(ok, isFalse);
-      expect(container.read(chatControllerProvider('s1')).sendErrorMessage,
-          '截断被拒绝');
+      expect(
+        container.read(chatControllerProvider('s1')).sendErrorMessage,
+        '截断被拒绝',
+      );
       expect(api.truncateKeepCounts, [1]);
     });
 
@@ -1161,6 +1236,9 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+
+  /// 最近一次分支请求携带的 keep_count（消息级分支断言用）。
+  int? lastBranchKeepCount;
   int truncateCalls = 0;
   final List<int> truncateKeepCounts = [];
   int compressCalls = 0;
@@ -1316,8 +1394,9 @@ class _FakeChatApi implements ChatServerApi {
   }
 
   @override
-  Future<Object?> branchSession(String sessionId) async {
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async {
     branchCalls++;
+    lastBranchKeepCount = keepCount;
     if (mutationThrows != null) throw mutationThrows!;
     return {
       'session_id': mutationOk ? 'branch-$sessionId' : null,

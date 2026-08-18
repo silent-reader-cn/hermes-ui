@@ -18,7 +18,11 @@ void main() {
         'title': '测试会话',
         'messages': [
           {'role': 'user', 'content': '你好', 'message_id': 'u1'},
-          {'role': 'assistant', 'content': '**你好！** 有什么可以帮你？', 'message_id': 'a1'},
+          {
+            'role': 'assistant',
+            'content': '**你好！** 有什么可以帮你？',
+            'message_id': 'a1',
+          },
         ],
       },
     };
@@ -26,16 +30,15 @@ void main() {
 
     expect(find.text('你好'), findsOneWidget);
     // Markdown 渲染（粗体文本出现两次：源码 + 渲染后的富文本片段）
-    expect(
-      find.textContaining('有什么可以帮你', findRichText: true),
-      findsWidgets,
-    );
+    expect(find.textContaining('有什么可以帮你', findRichText: true), findsWidgets);
     expect(find.text('测试会话'), findsOneWidget); // 导航栏标题
 
     await _unmount(tester);
   });
 
-  testWidgets('输入并发送 → 乐观 user 气泡 + 调用 startChat → streaming 停止按钮出现', (tester) async {
+  testWidgets('输入并发送 → 乐观 user 气泡 + 调用 startChat → streaming 停止按钮出现', (
+    tester,
+  ) async {
     final api = _FakeChatApi();
     api.sessionResult = {
       'session': {'session_id': 's1', 'messages': const []},
@@ -91,30 +94,28 @@ void main() {
     api.emit(const TokenSseEvent('流式'));
     api.emit(const TokenSseEvent('内容'));
     await tester.pump(const Duration(milliseconds: 80));
-    expect(
-      find.textContaining('流式内容', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('流式内容', findRichText: true), findsOneWidget);
     expect(find.text('思考中…'), findsNothing);
 
     // done 收尾 → 停止按钮消失、发送按钮回归
-    api.emit(const DoneSseEvent(DoneStreamEvent(
-      session: {
-        'session_id': 's1',
-        'messages': [
-          {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
-          {'role': 'assistant', 'content': '流式内容', 'message_id': 'a1'},
-        ],
-      },
-    )));
+    api.emit(
+      const DoneSseEvent(
+        DoneStreamEvent(
+          session: {
+            'session_id': 's1',
+            'messages': [
+              {'role': 'user', 'content': 'hi', 'message_id': 'u1'},
+              {'role': 'assistant', 'content': '流式内容', 'message_id': 'a1'},
+            ],
+          },
+        ),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const ValueKey('chat-stop-button')), findsNothing);
     expect(find.byKey(const ValueKey('chat-send-button')), findsOneWidget);
-    expect(
-      find.textContaining('流式内容', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('流式内容', findRichText: true), findsOneWidget);
 
     await _unmount(tester);
   });
@@ -135,22 +136,26 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    api.emit(const ToolStartedSseEvent(ToolStreamEvent(
-      stableId: 't1',
-      name: 'bash',
-      args: {'cmd': 'ls -la'},
-    )));
+    api.emit(
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'bash', args: {'cmd': 'ls -la'}),
+      ),
+    );
     await tester.pump();
     expect(find.text('bash'), findsOneWidget);
     expect(find.textContaining('cmd: ls -la'), findsOneWidget);
     expect(find.text('运行中…'), findsOneWidget);
 
-    api.emit(const ToolCompletedSseEvent(ToolStreamEvent(
-      stableId: 't1',
-      name: 'bash',
-      preview: 'total 8',
-      isError: false,
-    )));
+    api.emit(
+      const ToolCompletedSseEvent(
+        ToolStreamEvent(
+          stableId: 't1',
+          name: 'bash',
+          preview: 'total 8',
+          isError: false,
+        ),
+      ),
+    );
     await tester.pump();
     expect(find.text('运行中…'), findsNothing);
     expect(find.text('total 8'), findsOneWidget);
@@ -167,7 +172,10 @@ void main() {
       ProviderScope(
         overrides: [
           chatApiProvider.overrideWithValue(api),
-          chatAvailableModelsProvider.overrideWithValue(const ['gpt-5', 'claude']),
+          chatAvailableModelsProvider.overrideWithValue(const [
+            'gpt-5',
+            'claude',
+          ]),
         ],
         child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
       ),
@@ -350,10 +358,7 @@ void main() {
 
       expect(api.branchCalls, 1);
       // 已跳转到新分支会话路由
-      expect(
-        router.routeInformationProvider.value.uri.path,
-        '/chat/branch-s1',
-      );
+      expect(router.routeInformationProvider.value.uri.path, '/chat/branch-s1');
 
       await _unmount(tester);
     });
@@ -403,7 +408,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // 确认对话框
-      expect(find.byKey(const ValueKey('msg-truncate-confirm')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('msg-truncate-confirm')),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('msg-truncate-confirm')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -436,6 +444,33 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(api.truncateCalls, 0);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('从此处分支：长按 → 分支 → keepCount=index+1 并跳转新会话', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': '第一条用户消息', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': '回复内容', 'message_id': 'm2'},
+          ],
+        },
+      };
+      final router = await _pumpRouted(tester, api);
+
+      await _longPressBubble(tester, '回复内容');
+      expect(find.byKey(const ValueKey('msg-action-branch')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('msg-action-branch')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // 第二条消息（index=1）→ keep_count=2 → 跳转 /chat/branch-s1
+      expect(api.branchCalls, 1);
+      expect(api.lastBranchKeepCount, 2);
+      expect(router.state.uri.path, '/chat/branch-s1');
 
       await _unmount(tester);
     });
@@ -496,9 +531,7 @@ void main() {
 Future<void> _pumpPage(WidgetTester tester, _FakeChatApi api) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        chatApiProvider.overrideWithValue(api),
-      ],
+      overrides: [chatApiProvider.overrideWithValue(api)],
       child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
     ),
   );
@@ -520,9 +553,8 @@ Future<GoRouter> _pumpRouted(WidgetTester tester, _FakeChatApi api) async {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const CupertinoPageScaffold(
-          child: Center(child: Text('列表页')),
-        ),
+        builder: (context, state) =>
+            const CupertinoPageScaffold(child: Center(child: Text('列表页'))),
       ),
       GoRoute(
         path: '/chat/:id',
@@ -533,9 +565,7 @@ Future<GoRouter> _pumpRouted(WidgetTester tester, _FakeChatApi api) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        chatApiProvider.overrideWithValue(api),
-      ],
+      overrides: [chatApiProvider.overrideWithValue(api)],
       child: CupertinoApp.router(routerConfig: router),
     ),
   );
@@ -564,6 +594,9 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+
+  /// 最近一次分支请求携带的 keep_count（消息级分支断言用）。
+  int? lastBranchKeepCount;
   int truncateCalls = 0;
   final List<int> truncateKeepCounts = [];
   int compressCalls = 0;
@@ -614,8 +647,10 @@ class _FakeChatApi implements ChatServerApi {
   Future<Object?> cancelChat(String streamId) async => {'ok': true};
 
   @override
-  Future<Object?> chatStreamStatus(String streamId) async =>
-      {'active': false, 'replay_available': false};
+  Future<Object?> chatStreamStatus(String streamId) async => {
+    'active': false,
+    'replay_available': false,
+  };
 
   @override
   Future<Object?> session({
@@ -656,7 +691,10 @@ class _FakeChatApi implements ChatServerApi {
   }) async {
     renameCalls++;
     lastRenameTitle = title;
-    return {'ok': true, 'session': {'session_id': sessionId, 'title': title}};
+    return {
+      'ok': true,
+      'session': {'session_id': sessionId, 'title': title},
+    };
   }
 
   @override
@@ -685,12 +723,10 @@ class _FakeChatApi implements ChatServerApi {
   }
 
   @override
-  Future<Object?> branchSession(String sessionId) async {
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async {
     branchCalls++;
-    return {
-      'session_id': 'branch-$sessionId',
-      'parent_session_id': sessionId,
-    };
+    lastBranchKeepCount = keepCount;
+    return {'session_id': 'branch-$sessionId', 'parent_session_id': sessionId};
   }
 
   @override
