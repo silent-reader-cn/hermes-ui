@@ -3,7 +3,8 @@ import 'dart:typed_data';
 import 'api_client.dart';
 import 'endpoints.dart';
 
-/// workspace 域方法（10 个端点）+ 外部媒体下载（remoteTranscriptMediaData）。
+/// workspace 域方法（10 个端点）+ 文件操作（delete/rename）+ 外部媒体下载
+/// （remoteTranscriptMediaData）。
 ///
 /// 返回类型暂为 `Object?`（解码后的 JSON）；TODO(merge)：模型就绪后改为对应
 /// 类型并 `return XxxResponse.fromJson(json)`。
@@ -60,6 +61,32 @@ extension ApiClientWorkspace on ApiClient {
     required String sessionId,
     required String path,
   }) => sendData(Endpoint.rawFile(sessionId: sessionId, path: path));
+
+  /// POST /api/file/delete {session_id, path, recursive?} → {ok, path}。
+  Future<Object?> deleteFile({
+    required String sessionId,
+    required String path,
+    bool recursive = false,
+  }) => sendJson(
+    Endpoint.fileDelete,
+    method: 'POST',
+    body: {
+      'session_id': sessionId,
+      'path': path,
+      'recursive': recursive,
+    },
+  );
+
+  /// POST /api/file/rename {session_id, path, new_name} → {ok, old_path, new_path}。
+  Future<Object?> renameFile({
+    required String sessionId,
+    required String path,
+    required String newName,
+  }) => sendJson(
+    Endpoint.fileRename,
+    method: 'POST',
+    body: {'session_id': sessionId, 'path': path, 'new_name': newName},
+  );
 
   /// GET /api/media?session_id=&path= — 原始字节（图片/媒体）。
   Future<Uint8List> mediaData({

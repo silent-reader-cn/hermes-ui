@@ -321,7 +321,11 @@ class WorkspaceController extends FamilyAsyncNotifier<WorkspaceState, String> {
       current.copyWith(busyPaths: {...current.busyPaths, path}),
     );
     try {
-      await _api.deleteFile(sessionId: sessionId, path: path);
+      await _api.deleteFile(
+        sessionId: sessionId,
+        path: path,
+        recursive: entry.isDirectory ?? false,
+      );
       final after = state.valueOrNull;
       if (after != null) {
         state = AsyncData(

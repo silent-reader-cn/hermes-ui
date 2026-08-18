@@ -106,6 +106,7 @@ class FakeWorkspaceApi implements WorkspaceApi {
   Future<void> deleteFile({
     required String sessionId,
     required String path,
+    bool recursive = false,
   }) async {
     deleteCalls.add('$sessionId|$path');
     final error = deleteError;

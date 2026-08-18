@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
+import 'package:hermex_flutter/core/api/api_client_workspace.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/api/custom_header.dart';
 import 'package:hermex_flutter/core/api/endpoints.dart';
@@ -509,6 +511,63 @@ void main() {
       expect(headers.containsKey('X-Api-Key'), isFalse);
       expect(headers.containsKey('Cookie'), isFalse);
       expect(headers['Accept'], '*/*');
+    });
+  });
+
+  group('workspace 文件操作（POST 路径与 body）', () {
+    Map<String, Object?> bodyOf(RequestOptions req) {
+      final raw = req.data;
+      final text = raw is String ? raw : utf8.decode(raw as List<int>);
+      return jsonDecode(text) as Map<String, Object?>;
+    }
+
+    test('deleteFile → POST /api/file/delete，body 带 recursive=true', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) =>
+            ResponseBody.fromString('{"ok":true,"path":"a.txt"}', 200),
+      );
+      final client = buildClient(adapter);
+      await client.deleteFile(sessionId: 's1', path: 'a.txt', recursive: true);
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.toString(), '$base/api/file/delete');
+      final body = bodyOf(req);
+      expect(body['session_id'], 's1');
+      expect(body['path'], 'a.txt');
+      expect(body['recursive'], true);
+    });
+
+    test('deleteFile 目录默认 recursive=false（文件删除不递归）', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) =>
+            ResponseBody.fromString('{"ok":true,"path":"a.txt"}', 200),
+      );
+      final client = buildClient(adapter);
+      await client.deleteFile(sessionId: 's1', path: 'a.txt');
+      expect(bodyOf(adapter.requests.single)['recursive'], false);
+    });
+
+    test('renameFile → POST /api/file/rename，body 带 new_name', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString(
+          '{"ok":true,"old_path":"a.txt","new_path":"b.txt"}',
+          200,
+        ),
+      );
+      final client = buildClient(adapter);
+      final json = await client.renameFile(
+        sessionId: 's1',
+        path: 'a.txt',
+        newName: 'b.txt',
+      );
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.toString(), '$base/api/file/rename');
+      final body = bodyOf(req);
+      expect(body['session_id'], 's1');
+      expect(body['path'], 'a.txt');
+      expect(body['new_name'], 'b.txt');
+      expect((json as Map<String, Object?>)['new_path'], 'b.txt');
     });
   });
 }

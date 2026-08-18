@@ -8,7 +8,7 @@ class QueryParam {
   final String value;
 }
 
-/// Hermes WebUI 端点（对齐 `.reference/hermex-src/Networking/Endpoints.swift`，共 123 个）。
+/// Hermes WebUI 端点（对齐 `.reference/hermex-src/Networking/Endpoints.swift`，共 125 个）。
 ///
 /// - [path] 为相对路径模板；kanban 的 `{slug}` / `{cardId}` 占位符经 [pathParams]
 ///   替换，且按「RFC 3986 unreserved 减掉 `.`」的规则编码（点号也编码，防止
@@ -295,7 +295,7 @@ class Endpoint {
   static const clarifyRespond = Endpoint('/api/clarify/respond');
 
   // ---------------------------------------------------------------------------
-  // 1.7 workspace — 10 个
+  // 1.7 workspace — 12 个
   // ---------------------------------------------------------------------------
 
   static const workspaces = Endpoint('/api/workspaces');
@@ -311,6 +311,12 @@ class Endpoint {
   static const workspaceRemove = Endpoint('/api/workspaces/remove');
   static const workspaceRename = Endpoint('/api/workspaces/rename');
   static const workspaceReorder = Endpoint('/api/workspaces/reorder');
+
+  /// POST /api/file/delete {session_id, path, recursive?} → {ok, path}。
+  static const fileDelete = Endpoint('/api/file/delete');
+
+  /// POST /api/file/rename {session_id, path, new_name} → {ok, old_path, new_path}。
+  static const fileRename = Endpoint('/api/file/rename');
 
   static Endpoint directoryList({required String sessionId, String? path}) {
     return Endpoint(

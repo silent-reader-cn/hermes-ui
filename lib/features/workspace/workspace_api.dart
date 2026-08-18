@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_upload.dart';
 import '../../core/api/api_client_workspace.dart';
-import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/lossy_json.dart';
 
@@ -58,10 +57,6 @@ class WorkspaceUploadResult {
       'WorkspaceUploadResult(filename: $filename, size: $size)';
 }
 
-/// 服务端暂不支持的文件变更操作：api_spec §1.7 workspace 域 10 个端点中没有
-/// 文件删除/重命名端点，生产实现以 HTTP 501（Not Implemented）明确拒绝，
-/// 待平台通道或服务端端点接入后实现。
-
 /// workspace 文件浏览所需的最小服务器 API 面。
 ///
 /// 生产实现 [WorkspaceApiClient] 包 [ApiClient]（模型在客户端解码）；
@@ -87,12 +82,14 @@ abstract interface class WorkspaceApi {
     required String path,
   });
 
-  /// 删除文件/目录。服务端尚无端点，生产实现抛 501 [HttpException]；
-  /// fake 注入后状态机可完整测试。
-  Future<void> deleteFile({required String sessionId, required String path});
+  /// 删除文件/目录（目录需 `recursive=true`）。成功返回后调用方应刷新列表。
+  Future<void> deleteFile({
+    required String sessionId,
+    required String path,
+    bool recursive = false,
+  });
 
-  /// 重命名文件/目录。服务端尚无端点，生产实现抛 501 [HttpException]；
-  /// fake 注入后状态机可完整测试。
+  /// 重命名文件/目录（`newName` 仅限直接文件名，不能含路径分隔符）。
   Future<void> renameFile({
     required String sessionId,
     required String path,
@@ -139,8 +136,13 @@ class WorkspaceApiClient implements WorkspaceApi {
   Future<void> deleteFile({
     required String sessionId,
     required String path,
+    bool recursive = false,
   }) async {
-    throw HttpException(501, null, message: '服务器暂不支持文件删除（等待平台通道/服务端端点接入）。');
+    await _client.deleteFile(
+      sessionId: sessionId,
+      path: path,
+      recursive: recursive,
+    );
   }
 
   @override
@@ -149,7 +151,11 @@ class WorkspaceApiClient implements WorkspaceApi {
     required String path,
     required String newName,
   }) async {
-    throw HttpException(501, null, message: '服务器暂不支持文件重命名（等待平台通道/服务端端点接入）。');
+    await _client.renameFile(
+      sessionId: sessionId,
+      path: path,
+      newName: newName,
+    );
   }
 
   static Map<String, Object?> _asMap(Object? json) =>

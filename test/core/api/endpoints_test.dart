@@ -4,7 +4,7 @@ import 'package:hermex_flutter/core/api/endpoints.dart';
 void main() {
   const base = 'http://hermes.local:8787';
 
-  group('端点表完整性（api_spec.md 第 1 节，123 个）', () {
+  group('端点表完整性（api_spec.md 第 1 节，125 个）', () {
     test('全部端点按域分组无遗漏', () {
       // 1.1 server — 4
       final server = <Endpoint>[
@@ -65,7 +65,7 @@ void main() {
         Endpoint.clarifyStream('s1'),
         Endpoint.clarifyRespond,
       ];
-      // 1.7 workspace — 10
+      // 1.7 workspace — 12
       final workspace = <Endpoint>[
         Endpoint.workspaces,
         Endpoint.workspaceSuggestions('pre'),
@@ -73,6 +73,8 @@ void main() {
         Endpoint.workspaceRemove,
         Endpoint.workspaceRename,
         Endpoint.workspaceReorder,
+        Endpoint.fileDelete,
+        Endpoint.fileRename,
         Endpoint.directoryList(sessionId: 's1'),
         Endpoint.file(sessionId: 's1', path: 'a.txt'),
         Endpoint.rawFile(sessionId: 's1', path: 'a.txt'),
@@ -179,7 +181,7 @@ void main() {
       expect(chat, hasLength(9));
       expect(approval, hasLength(3));
       expect(clarify, hasLength(3));
-      expect(workspace, hasLength(10));
+      expect(workspace, hasLength(12));
       expect(git, hasLength(16));
       expect(models, hasLength(9));
       expect(profiles, hasLength(5));
@@ -208,7 +210,7 @@ void main() {
         ...skills,
         ...upload,
       ];
-      expect(all, hasLength(123), reason: '端点总数必须为 123');
+      expect(all, hasLength(125), reason: '端点总数必须为 125');
     });
 
     test('静态端点路径与规格逐项一致', () {
