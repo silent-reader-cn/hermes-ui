@@ -21,10 +21,21 @@ import 'widgets/chat_message_list.dart';
 ///
 /// `/chat/:sessionId`，sessionId 为空串表示新会话。
 class ChatPage extends ConsumerWidget {
-  const ChatPage({super.key, required this.sessionId});
+  const ChatPage({
+    super.key,
+    required this.sessionId,
+    this.searchQuery,
+    this.matchType,
+  });
 
   /// 会话 id；空串 = 新会话。
   final String sessionId;
+
+  /// 搜索结果关键词（深链定位用；非空且匹配 content 时定位高亮）。
+  final String? searchQuery;
+
+  /// 搜索命中类型：'title'（不定位，仅打开）或 'content'（定位到消息）。
+  final String? matchType;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,9 +48,41 @@ class ChatPage extends ConsumerWidget {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
-        middle: Text(
-          state.displayTitle,
-          overflow: TextOverflow.ellipsis,
+        middle: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              state.displayTitle,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (state.parentSessionId != null)
+              CupertinoButton(
+                key: const ValueKey('chat-branch-badge'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 18),
+                onPressed: () =>
+                    _showParentSessionDialog(context, state.parentSessionId!),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.arrow_2_squarepath,
+                      size: 12,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '分支',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel
+                            .resolveFrom(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         trailing: CupertinoButton(
           key: const ValueKey('chat-session-actions'),
@@ -54,7 +97,12 @@ class ChatPage extends ConsumerWidget {
           children: [
             if (state.pendingAction.hasPendingPrompt)
               _PendingPromptCard(sessionId: sessionId),
-            Expanded(child: ChatMessageList(sessionId: sessionId)),
+            Expanded(
+              child: ChatMessageList(
+                sessionId: sessionId,
+                highlightQuery: matchType == 'content' ? searchQuery : null,
+              ),
+            ),
             if (state.sendErrorMessage != null)
               _ErrorBanner(
                 message: state.sendErrorMessage!,
@@ -77,6 +125,36 @@ class ChatPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// 分支标识点击：展示父会话信息与跳转入口。
+Future<void> _showParentSessionDialog(
+  BuildContext context,
+  String parentSessionId,
+) async {
+  await showCupertinoDialog<void>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      key: const ValueKey('chat-branch-dialog'),
+      title: const Text('分支会话'),
+      content: Text('该会话是另一个会话的分支。\n父会话 $parentSessionId'),
+      actions: [
+        CupertinoDialogAction(
+          key: const ValueKey('chat-branch-dialog-close'),
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('关闭'),
+        ),
+        CupertinoDialogAction(
+          key: const ValueKey('chat-goto-parent'),
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            context.go('/chat/$parentSessionId');
+          },
+          child: const Text('跳转父会话'),
+        ),
+      ],
+    ),
+  );
 }
 
 Future<void> _showSessionActions(

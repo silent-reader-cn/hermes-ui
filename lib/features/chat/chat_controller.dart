@@ -511,6 +511,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           hasPendingUserMessage:
               detail.pendingUserMessage?.trim().isNotEmpty == true ||
                   detail.pendingAttachments?.isNotEmpty == true,
+          parentSessionId: detail.parentSessionId,
           responseCompletionNeedsTranscriptRefresh: false,
         );
         // 跨页面/杀进程恢复：会话已有活跃流 → 接管并重连。

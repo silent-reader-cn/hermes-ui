@@ -10,15 +10,23 @@ import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
+import 'message_highlight.dart';
 
 /// 消息列表（ListView.builder + 稳定 renderId key + 自动滚动跟随）。
 ///
 /// 流式消息由独立气泡层渲染（transcriptMessagesProvider 已隐藏它），
 /// 工具卡片/reasoning 折叠块按 anchorMessageID 锚定到对应气泡。
 class ChatMessageList extends ConsumerStatefulWidget {
-  const ChatMessageList({super.key, required this.sessionId});
+  const ChatMessageList({
+    super.key,
+    required this.sessionId,
+    this.highlightQuery,
+  });
 
   final String sessionId;
+
+  /// 搜索结果定位关键词（匹配 content 的第一条消息滚动+高亮；null 关闭）。
+  final String? highlightQuery;
 
   @override
   ConsumerState<ChatMessageList> createState() => _ChatMessageListState();
@@ -26,6 +34,7 @@ class ChatMessageList extends ConsumerStatefulWidget {
 
 class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   final ScrollController _controller = ScrollController();
+  final GlobalKey _highlightKey = GlobalKey();
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -34,6 +43,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _userHasScrolled = false;
   int _layoutGeneration = 0;
   bool _initialPositionScheduled = false;
+  String? _highlightTargetId;
+  bool _highlightPositioned = false;
+  bool _highlightSettled = false;
 
   @override
   void initState() {
@@ -157,6 +169,70 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
+  /// 解析搜索定位目标（幂等）：在 messages 里找第一条含关键词的消息。
+  ///
+  /// messages 尚未加载完成时返回 false，由下一次 build 重试；
+  /// 已加载但无匹配 → 置 settled 不再尝试。
+  bool _resolveHighlightTarget() {
+    if (_highlightSettled) return true;
+    final query = widget.highlightQuery;
+    if (query == null || query.isEmpty) {
+      _highlightSettled = true;
+      return true;
+    }
+    final state = ref.read(chatControllerProvider(widget.sessionId));
+    if (state.messages.isEmpty) return false;
+    final lower = query.toLowerCase();
+    for (final message in state.messages) {
+      final text = message.content ?? '';
+      if (text.toLowerCase().contains(lower)) {
+        _highlightTargetId = message.id;
+        break;
+      }
+    }
+    _highlightSettled = true;
+    return true;
+  }
+
+  /// 定位到高亮消息：优先 GlobalKey.ensureVisible；未构建（列表懒加载）
+  /// 时先按索引比例粗跳，下一帧再 ensureVisible。
+  void _scrollToHighlight() {
+    if (_highlightTargetId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final ctx = _highlightKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          alignment: 0.25,
+        );
+        return;
+      }
+      // 目标未构建：按「目标序次 / 消息总数」比例粗跳到附近。
+      final state = ref.read(chatControllerProvider(widget.sessionId));
+      final index = state.messages.indexWhere(
+        (m) => m.id == _highlightTargetId,
+      );
+      if (index < 0 || state.messages.isEmpty) return;
+      final ratio = index / state.messages.length;
+      final target = _controller.position.maxScrollExtent * ratio;
+      _controller.jumpTo(target);
+      // 下一帧再精确对准（此时目标多半已入视口构建）。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final retryCtx = _highlightKey.currentContext;
+        if (retryCtx != null) {
+          Scrollable.ensureVisible(
+            retryCtx,
+            duration: const Duration(milliseconds: 250),
+            alignment: 0.25,
+          );
+        }
+      });
+    });
+  }
+
   /// 长按/右键消息弹操作菜单并执行动作。
   Future<void> _showMessageActions(ChatMessage message) async {
     final action = await showMessageActionMenu(context, message: message);
@@ -192,6 +268,12 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
     _positionInitialView(hasContent: transcript.isNotEmpty || streaming != null);
+
+    // 搜索定位：解析目标（幂等）→ 首次到位时触发滚动一次。
+    if (_resolveHighlightTarget() && !_highlightPositioned) {
+      _highlightPositioned = true;
+      _scrollToHighlight();
+    }
 
     // 滚动跟随：每次 flush 出内容（16ms 合并节流）后，若用户在底部则跟随。
     ref.listen<int>(
@@ -249,11 +331,21 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           behavior: HitTestBehavior.opaque,
           onLongPress: () => _showMessageActions(entry.message),
           onSecondaryTapDown: (_) => _showMessageActions(entry.message),
-          child: ChatMessageBubble(
-            key: ValueKey(entry.renderId),
-            message: entry.message,
-            toolGroups: groups,
-            reasoningGroups: reasoning,
+          child: KeyedSubtree(
+            key: _highlightTargetId != null &&
+                    entry.message.id == _highlightTargetId
+                ? _highlightKey
+                : null,
+            child: SearchMessageHighlight(
+              highlight: _highlightTargetId != null &&
+                  entry.message.id == _highlightTargetId,
+              child: ChatMessageBubble(
+                key: ValueKey(entry.renderId),
+                message: entry.message,
+                toolGroups: groups,
+                reasoningGroups: reasoning,
+              ),
+            ),
           ),
         );
       },

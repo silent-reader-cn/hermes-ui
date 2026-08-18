@@ -70,6 +70,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat/:sessionId',
         builder: (context, state) => ChatPage(
           sessionId: state.pathParameters['sessionId'] ?? '',
+          searchQuery: state.uri.queryParameters['q'],
+          matchType: state.uri.queryParameters['match'],
         ),
       ),
       GoRoute(

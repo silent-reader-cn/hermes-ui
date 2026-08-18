@@ -312,6 +312,7 @@ class ChatState {
     this.isViewingCachedData = false,
     this.isReadOnly = false,
     this.hasPendingUserMessage = false,
+    this.parentSessionId,
     this.yoloEnabled = false,
     this.composerPrefill,
     this.pendingAssistantTokenChunks = const [],
@@ -381,6 +382,9 @@ class ChatState {
 
   /// 会话有待处理消息（pending_user_message / pending_attachments 非空）。
   final bool hasPendingUserMessage;
+
+  /// 父会话 ID（分支会话非空，用于展示「分支」标识与跳转）。
+  final String? parentSessionId;
 
   /// YOLO 模式开关（服务端内存态，重启丢失）。
   final bool yoloEnabled;
@@ -454,6 +458,7 @@ class ChatState {
     bool? isViewingCachedData,
     bool? isReadOnly,
     bool? hasPendingUserMessage,
+    String? parentSessionId,
     bool? yoloEnabled,
     String? composerPrefill,
     bool clearComposerPrefill = false,
@@ -490,6 +495,7 @@ class ChatState {
       isViewingCachedData: isViewingCachedData ?? this.isViewingCachedData,
       isReadOnly: isReadOnly ?? this.isReadOnly,
       hasPendingUserMessage: hasPendingUserMessage ?? this.hasPendingUserMessage,
+      parentSessionId: parentSessionId ?? this.parentSessionId,
       yoloEnabled: yoloEnabled ?? this.yoloEnabled,
       composerPrefill: clearComposerPrefill
           ? null
