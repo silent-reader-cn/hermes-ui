@@ -22,7 +22,10 @@ void main() {
       initialLocation: '/',
       routes: [
         GoRoute(path: '/', builder: (_, _) => const SessionListPage()),
-        GoRoute(path: '/chat', builder: (_, _) => const _ChatStub(sessionId: '')),
+        GoRoute(
+          path: '/chat',
+          builder: (_, _) => const _ChatStub(sessionId: ''),
+        ),
         GoRoute(
           path: '/chat/:sessionId',
           builder: (_, state) =>
@@ -37,8 +40,11 @@ void main() {
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
           sessionListApiFactoryProvider.overrideWithValue((_) => api),
-          if (projectApi != null)
-            projectApiFactoryProvider.overrideWithValue((_) => projectApi),
+          // 列表页 watch 项目（筛选 chips）：无 projectApi 时用空 stub，
+          // 避免真实 ApiClient 发出 dio 请求残留超时 Timer。
+          projectApiFactoryProvider.overrideWithValue(
+            (_) => projectApi ?? _FakeProjectApi(),
+          ),
         ],
         child: CupertinoApp.router(routerConfig: router),
       ),
@@ -55,6 +61,7 @@ void main() {
     String? parentSessionId,
     bool readOnly = false,
     double? cost,
+    String? projectId,
   }) {
     return SessionSummary(
       sessionId: id,
@@ -65,6 +72,7 @@ void main() {
       readOnly: readOnly,
       isReadOnly: readOnly,
       estimatedCost: cost,
+      projectId: projectId,
       createdAt: (DateTime.now().millisecondsSinceEpoch / 1000) - 3600,
     );
   }
@@ -85,7 +93,10 @@ void main() {
       );
       expect(find.text('全部'), findsOneWidget);
       expect(find.text('已归档'), findsOneWidget);
-      expect(find.byKey(const ValueKey('filter-chip-telegram')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('filter-chip-telegram')),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('filter-chip-qq')), findsOneWidget);
     });
 
@@ -121,7 +132,7 @@ void main() {
       );
       await pumpList(tester, api);
 
-      await tester.tap(find.text('已归档'));
+      await tester.tap(find.textContaining('已归档'));
       await tester.pump();
       await tester.pump();
 
@@ -178,10 +189,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-        api.archiveCalls.where((c) => c.endsWith(':true')),
-        hasLength(2),
-      );
+      expect(api.archiveCalls.where((c) => c.endsWith(':true')), hasLength(2));
       // 多选模式退出（清空勾选）
       expect(find.text('已选 0 个'), findsNothing);
       expect(find.byKey(const ValueKey('batch-archive')), findsNothing);
@@ -211,19 +219,25 @@ void main() {
     });
 
     testWidgets('取消按键退出多选', (tester) async {
-      final api = FakeSessionListApi(
-        sessions: [session('s1', '会话一')],
-      );
+      final api = FakeSessionListApi(sessions: [session('s1', '会话一')]);
       await pumpList(tester, api);
 
       await tester.longPress(find.byKey(const ValueKey('session-row-s1')));
       await tester.pump();
-      expect(find.byKey(const ValueKey('session-list-selection-done')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('session-list-selection-done')),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.byKey(const ValueKey('session-list-selection-done')));
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-selection-done')),
+      );
       await tester.pump();
       expect(find.byKey(const ValueKey('batch-archive')), findsNothing);
-      expect(find.byKey(const ValueKey('session-list-settings')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('session-list-settings')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -244,7 +258,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('游戏'), findsOneWidget);
+      expect(find.byKey(const ValueKey('project-picker-p1')), findsOneWidget);
+      expect(find.text('游戏'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('project-picker-p1')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -302,6 +317,168 @@ void main() {
       expect(find.textContaining('· qq'), findsOneWidget);
     });
   });
+
+  group('搜索高亮与深链', () {
+    testWidgets('搜索命中标题关键词高亮（TextSpan）+ 点击带 q 深链跳转', (tester) async {
+      final api = FakeSessionListApi();
+      api.searchResults['flutter'] = [session('s1', '今天修了 Flutter 样式问题')];
+      await pumpList(tester, api);
+
+      // 输入关键词触发搜索（FakeSessionListApi 同步返回命中）
+      await tester.enterText(
+        find.byKey(const ValueKey('session-list-search')),
+        'flutter',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // 标题命中片段被拆成 RichText（含高亮 TextSpan，大小写不敏感）
+      final rich = tester
+          .widgetList<Text>(find.byType(Text))
+          .where(
+            (t) =>
+                t.textSpan != null &&
+                t.textSpan!.toPlainText().toLowerCase().contains('flutter'),
+          );
+      expect(rich, isNotEmpty);
+
+      // 点击命中行 → 跳 /chat/s1?q=flutter&match=title
+      await tester.tap(find.byKey(const ValueKey('session-row-s1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('chat-s1'), findsWidgets);
+    });
+
+    testWidgets('content 命中行点击 → 深链带 match=content', (tester) async {
+      final api = FakeSessionListApi();
+      api.searchResults['flutter'] = [
+        SessionSummary(
+          sessionId: 's2',
+          title: '标题不含关键词',
+          matchType: 'content',
+          matchPreview: '正文命中 flutter 片段',
+          createdAt: (DateTime.now().millisecondsSinceEpoch / 1000) - 3600,
+        ),
+      ];
+      await pumpList(tester, api);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('session-list-search')),
+        'flutter',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // 摘录展示在元数据行
+      expect(find.textContaining('正文命中'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('session-row-s2')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('chat-s2'), findsWidgets);
+    });
+  });
+
+  group('项目筛选与 CRUD', () {
+    testWidgets('有项目时显示项目 chips，点击 → 项目筛选', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [session('s1', '会话一', projectId: 'p1')],
+      );
+      final projectApi = _FakeProjectApi(
+        projects: [const ProjectSummary(projectId: 'p1', name: '游戏')],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
+
+      expect(find.byKey(const ValueKey('project-chip-p1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('project-chip-p1')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('session-row-s1')), findsOneWidget);
+    });
+
+    testWidgets('picker 长按项目行 → 重命名（调用 rename）', (tester) async {
+      final api = FakeSessionListApi(sessions: [session('s1', '会话一')]);
+      final projectApi = _FakeProjectApi(
+        projects: [const ProjectSummary(projectId: 'p1', name: '旧名')],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
+
+      await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(
+        find.byKey(const ValueKey('session-action-move-project')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 长按项目行 → 管理菜单 → 重命名 → 输入新名 → 保存
+      await tester.longPress(find.byKey(const ValueKey('project-picker-p1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.byKey(const ValueKey('project-action-rename')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('project-action-rename')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(
+        find.byKey(const ValueKey('project-create-name')),
+        '新名',
+      );
+      await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(projectApi.renamedName, '新名');
+    });
+
+    testWidgets('picker 长按项目行 → 删除（确认后调用 delete）', (tester) async {
+      final api = FakeSessionListApi(sessions: [session('s1', '会话一')]);
+      final projectApi = _FakeProjectApi(
+        projects: [const ProjectSummary(projectId: 'p1', name: '游戏')],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
+
+      await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(
+        find.byKey(const ValueKey('session-action-move-project')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.longPress(find.byKey(const ValueKey('project-picker-p1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('project-action-delete')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.byKey(const ValueKey('project-delete-confirm')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(projectApi.deletedIds, ['p1']);
+    });
+  });
+
+  group('已归档 count', () {
+    testWidgets('segmented 显示已归档数量角标', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('a1', '归档A', archived: true),
+          session('a2', '归档B', archived: true),
+          session('s1', '普通'),
+        ],
+      );
+      await pumpList(tester, api);
+      expect(find.textContaining('已归档 (2)'), findsOneWidget);
+    });
+  });
 }
 
 class _ChatStub extends StatelessWidget {
@@ -310,14 +487,22 @@ class _ChatStub extends StatelessWidget {
   final String sessionId;
 
   @override
-  Widget build(BuildContext context) =>
-      const CupertinoPageScaffold(child: SizedBox());
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    navigationBar: CupertinoNavigationBar(middle: Text('chat-$sessionId')),
+    child: const SizedBox(),
+  );
 }
 
 class _FakeProjectApi implements ProjectApi {
   _FakeProjectApi({this.projects = const []});
 
   List<ProjectSummary> projects;
+
+  /// 最近一次重命名的目标名称（断言用）。
+  String? renamedName;
+
+  /// 已删除的项目 id（断言用）。
+  final List<String> deletedIds = [];
 
   @override
   Future<ProjectsResponse> fetchProjects() async {
@@ -329,10 +514,7 @@ class _FakeProjectApi implements ProjectApi {
     required String name,
     String? color,
   }) async {
-    return const ProjectMutationResponse(
-      ok: true,
-      project: null,
-    );
+    return const ProjectMutationResponse(ok: true, project: null);
   }
 
   @override
@@ -341,11 +523,13 @@ class _FakeProjectApi implements ProjectApi {
     required String name,
     String? color,
   }) async {
+    renamedName = name;
     return const ProjectMutationResponse();
   }
 
   @override
   Future<ProjectMutationResponse> deleteProject(String projectId) async {
+    deletedIds.add(projectId);
     return const ProjectMutationResponse();
   }
 }

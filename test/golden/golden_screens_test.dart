@@ -29,6 +29,7 @@ import 'package:hermex_flutter/features/memory/memory_page.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/projects/project_providers.dart';
 import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:hermex_flutter/features/skills/skills_api.dart';
@@ -106,9 +107,17 @@ Future<List<Override>> sessionListOverrides() async {
         isStreaming: true,
         at: secAgo(const Duration(minutes: 30)),
       ),
-      buildSession('s-today', '今天：Flutter 主题对比度修复进展', at: secAgo(const Duration(hours: 1))),
+      buildSession(
+        's-today',
+        '今天：Flutter 主题对比度修复进展',
+        at: secAgo(const Duration(hours: 1)),
+      ),
       buildSession('s-y1', '昨天会话', at: secAgo(const Duration(days: 1))),
-      buildSession('s-old', '更早：golden 截图回归计划', at: secAgo(const Duration(days: 3))),
+      buildSession(
+        's-old',
+        '更早：golden 截图回归计划',
+        at: secAgo(const Duration(days: 3)),
+      ),
       buildSession(
         's-old2',
         '更早的另一个会话标题也很长用来测试元数据行与标题行的换行表现是否正常',
@@ -121,6 +130,8 @@ Future<List<Override>> sessionListOverrides() async {
       ApiClient(baseUrl: 'http://test.local:30002'),
     ),
     sessionListApiFactoryProvider.overrideWithValue((_) => api),
+    // 列表页 watch 项目（筛选 chips）：注入空 stub 避免真实 dio 请求。
+    projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
   ];
 }
 
@@ -200,13 +211,15 @@ void main() {
           'messages': [
             {
               'role': 'user',
-              'content': '帮我把 Hermex 客户端的所有页面文字对比度检查一遍，'
+              'content':
+                  '帮我把 Hermex 客户端的所有页面文字对比度检查一遍，'
                   '特别是深色模式下次要文字的可读性，同时排查列表行标题被截断的问题。',
               'message_id': 'u1',
             },
             {
               'role': 'assistant',
-              'content': '**好的，我来分析。**\n\n'
+              'content':
+                  '**好的，我来分析。**\n\n'
                   '当前进度：\n\n'
                   '- 主题基建已完成（CupertinoThemeData 双色）\n'
                   '- 深色对比度修复进行中\n'
@@ -227,9 +240,7 @@ void main() {
           ],
         },
       };
-      return [
-        chatApiProvider.overrideWithValue(api),
-      ];
+      return [chatApiProvider.overrideWithValue(api)];
     },
   );
 
@@ -264,7 +275,8 @@ void main() {
             const SkillSummary(
               name: 'flutter-golden-testing',
               category: '测试工程',
-              description: '使用 golden_toolkit 建立双主题截图回归基线，'
+              description:
+                  '使用 golden_toolkit 建立双主题截图回归基线，'
                   '人工核对文字对比度与溢出问题（描述很长用于测试换行）。',
               path: 'skills/flutter-golden-testing/',
               tags: ['flutter', 'golden', '测试'],
@@ -296,13 +308,16 @@ void main() {
       memoryApiFactoryProvider.overrideWithValue(
         (_) => FakeMemoryApi(
           response: const MemoryResponse(
-            memory: '用户偏好：界面使用中文，喜欢 iOS 风格设计；'
+            memory:
+                '用户偏好：界面使用中文，喜欢 iOS 风格设计；'
                 '正在推进 hermex-flutter 客户端移植，关注主题对比度与文字溢出问题。\n'
                 '常用命令通过 f.bat 封装执行 Flutter 命令。',
             user: '用户名：Admin\n偏好：深色模式\n活跃时间：夜间',
-            soul: '你是一个乐于助人的 AI 助手，回答使用中文，'
+            soul:
+                '你是一个乐于助人的 AI 助手，回答使用中文，'
                 '注重可读性与排版细节。',
-            projectContext: '当前项目 hermex-flutter（Flutter + Cupertino 移植 iOS Hermex '
+            projectContext:
+                '当前项目 hermex-flutter（Flutter + Cupertino 移植 iOS Hermex '
                 '客户端）。并行推进：主题对比度修复、golden 截图回归基建。',
             projectContextName: 'hermex-flutter (D:/projects/hermex-flutter)',
           ),
@@ -447,10 +462,7 @@ void main() {
                 additions: 120,
                 deletions: 8,
               ),
-              GitFile(
-                path: '新增的未跟踪文件名称很长用于测试溢出显示.md',
-                untracked: true,
-              ),
+              GitFile(path: '新增的未跟踪文件名称很长用于测试溢出显示.md', untracked: true),
             ],
           ),
         ),
@@ -578,9 +590,7 @@ void main() {
             activityByDay: [
               InsightsActivityByDay(day: '2026-08-16', sessions: 5),
             ],
-            activityByHour: [
-              InsightsActivityByHour(hour: 14, sessions: 3),
-            ],
+            activityByHour: [InsightsActivityByHour(hour: 14, sessions: 3)],
           ),
         ),
       ),
@@ -619,8 +629,10 @@ class _StaticChatApi implements ChatServerApi {
   Future<Object?> cancelChat(String streamId) async => {'ok': true};
 
   @override
-  Future<Object?> chatStreamStatus(String streamId) async =>
-      {'active': false, 'replay_available': false};
+  Future<Object?> chatStreamStatus(String streamId) async => {
+    'active': false,
+    'replay_available': false,
+  };
 
   @override
   Future<Object?> session({
@@ -659,7 +671,10 @@ class _StaticChatApi implements ChatServerApi {
     required String sessionId,
     required String title,
   }) async {
-    return {'ok': true, 'session': {'session_id': sessionId, 'title': title}};
+    return {
+      'ok': true,
+      'session': {'session_id': sessionId, 'title': title},
+    };
   }
 
   @override
@@ -682,10 +697,10 @@ class _StaticChatApi implements ChatServerApi {
   Future<Object?> deleteSession(String sessionId) async => {'ok': true};
 
   @override
-  Future<Object?> branchSession(String sessionId) async => {
-        'session_id': 'branch-$sessionId',
-        'parent_session_id': sessionId,
-      };
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async => {
+    'session_id': 'branch-$sessionId',
+    'parent_session_id': sessionId,
+  };
 
   @override
   Future<Object?> truncateSession({
@@ -708,9 +723,9 @@ class _StaticChatApi implements ChatServerApi {
 
   @override
   Future<Object?> retrySession(String sessionId) async => {
-        'ok': true,
-        'text': '最后一条用户消息',
-      };
+    'ok': true,
+    'text': '最后一条用户消息',
+  };
 
   @override
   Future<Object?> updateSession({
@@ -724,9 +739,9 @@ class _StaticChatApi implements ChatServerApi {
 
   @override
   Future<Object?> getYolo(String sessionId) async => {
-        'ok': true,
-        'yolo_enabled': false,
-      };
+    'ok': true,
+    'yolo_enabled': false,
+  };
 
   @override
   Future<Object?> setYolo({
@@ -748,4 +763,28 @@ class _StaticChatApi implements ChatServerApi {
 
   @override
   void stopStream() {}
+}
+
+/// 项目 API 空实现 stub：列表页 golden 容器注入，避免真实 dio 请求。
+class _StubProjectApi implements ProjectApi {
+  @override
+  Future<ProjectsResponse> fetchProjects() async =>
+      const ProjectsResponse(projects: []);
+
+  @override
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
 }

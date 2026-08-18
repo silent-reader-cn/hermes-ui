@@ -43,12 +43,12 @@ class SessionsResponse {
 
   @override
   int get hashCode => Object.hash(
-        deepHash(sessions),
-        cliCount,
-        archivedCount,
-        serverTime,
-        serverTz,
-      );
+    deepHash(sessions),
+    cliCount,
+    archivedCount,
+    serverTime,
+    serverTz,
+  );
 
   @override
   String toString() => 'SessionsResponse(sessions: ${sessions?.length})';
@@ -98,7 +98,8 @@ class SessionResponse {
   final SessionDetail? session;
 
   @override
-  bool operator ==(Object other) => other is SessionResponse && other.session == session;
+  bool operator ==(Object other) =>
+      other is SessionResponse && other.session == session;
 
   @override
   int get hashCode => Object.hashAll([session]);
@@ -475,8 +476,13 @@ class SessionStatusResponse {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(sessionId, activeStreamId, isStreaming, pendingUserMessage, error);
+  int get hashCode => Object.hash(
+    sessionId,
+    activeStreamId,
+    isStreaming,
+    pendingUserMessage,
+    error,
+  );
 
   @override
   String toString() => 'SessionStatusResponse(sessionId: $sessionId)';
@@ -518,6 +524,7 @@ class SessionSummary {
     this.readOnly,
     this.isReadOnly,
     this.matchType,
+    this.matchPreview,
   });
 
   factory SessionSummary.fromJson(Map<String, Object?> json) {
@@ -554,44 +561,47 @@ class SessionSummary {
       readOnly: lossyBool(json, 'read_only'),
       isReadOnly: lossyBool(json, 'is_read_only'),
       matchType: lossyString(json, 'match_type'),
+      matchPreview: lossyString(json, 'match_preview'),
     );
   }
 
   /// 从 SessionDetail 构造摘要（对应 Swift `init(from detail:)`）。
   SessionSummary.fromDetail(SessionDetail detail)
-      : sessionId = detail.sessionId,
-        title = detail.title,
-        workspace = detail.workspace,
-        model = detail.model,
-        modelProvider = detail.modelProvider,
-        messageCount = detail.messageCount ?? detail.messages?.length,
-        createdAt = detail.createdAt,
-        updatedAt = detail.updatedAt,
-        lastMessageAt = detail.lastMessageAt,
-        pinned = detail.pinned,
-        archived = detail.archived,
-        projectId = detail.projectId,
-        profile = detail.profile,
-        inputTokens = detail.inputTokens,
-        outputTokens = detail.outputTokens,
-        estimatedCost = detail.estimatedCost,
-        activeStreamId = detail.activeStreamId,
-        isStreaming = null,
-        isCliSession = detail.isCliSession,
-        userMessageCount = null,
-        hasPendingUserMessage = _nonEmpty(detail.pendingUserMessage) != null ||
-            detail.pendingAttachments?.isNotEmpty == true,
-        pendingStartedAt = detail.pendingStartedAt,
-        worktreePath = detail.worktreePath,
-        sourceTag = detail.sourceTag,
-        rawSource = detail.rawSource,
-        sessionSource = detail.sessionSource,
-        sourceLabel = detail.sourceLabel,
-        parentSessionId = detail.parentSessionId,
-        relationshipType = detail.relationshipType,
-        readOnly = detail.readOnly,
-        isReadOnly = detail.isReadOnly,
-        matchType = null;
+    : sessionId = detail.sessionId,
+      title = detail.title,
+      workspace = detail.workspace,
+      model = detail.model,
+      modelProvider = detail.modelProvider,
+      messageCount = detail.messageCount ?? detail.messages?.length,
+      createdAt = detail.createdAt,
+      updatedAt = detail.updatedAt,
+      lastMessageAt = detail.lastMessageAt,
+      pinned = detail.pinned,
+      archived = detail.archived,
+      projectId = detail.projectId,
+      profile = detail.profile,
+      inputTokens = detail.inputTokens,
+      outputTokens = detail.outputTokens,
+      estimatedCost = detail.estimatedCost,
+      activeStreamId = detail.activeStreamId,
+      isStreaming = null,
+      isCliSession = detail.isCliSession,
+      userMessageCount = null,
+      hasPendingUserMessage =
+          _nonEmpty(detail.pendingUserMessage) != null ||
+          detail.pendingAttachments?.isNotEmpty == true,
+      pendingStartedAt = detail.pendingStartedAt,
+      worktreePath = detail.worktreePath,
+      sourceTag = detail.sourceTag,
+      rawSource = detail.rawSource,
+      sessionSource = detail.sessionSource,
+      sourceLabel = detail.sourceLabel,
+      parentSessionId = detail.parentSessionId,
+      relationshipType = detail.relationshipType,
+      readOnly = detail.readOnly,
+      isReadOnly = detail.isReadOnly,
+      matchType = null,
+      matchPreview = null;
 
   final String? sessionId;
   final String? title;
@@ -625,6 +635,9 @@ class SessionSummary {
   final bool? readOnly;
   final bool? isReadOnly;
   final String? matchType;
+
+  /// 搜索命中摘录（`match_preview`，content 命中时由服务端生成）。
+  final String? matchPreview;
 
   String get id {
     final sid = sessionId;
@@ -669,23 +682,26 @@ class SessionSummary {
       readOnly: readOnly,
       isReadOnly: isReadOnly,
       matchType: matchType,
+      matchPreview: matchPreview,
     );
   }
 
   /// sourceTag/rawSource/sessionSource/sourceLabel 任一 normalize 后含 `subagent`。
   bool get isDelegatedSubagentSession {
-    return [sourceTag, rawSource, sessionSource, sourceLabel]
-        .map(_normalizedSourceMarker)
-        .whereType<String>()
-        .contains('subagent');
+    return [
+      sourceTag,
+      rawSource,
+      sessionSource,
+      sourceLabel,
+    ].map(_normalizedSourceMarker).whereType<String>().contains('subagent');
   }
 
   /// sourceTag/rawSource 含 `claude_code`。
   bool get isClaudeCodeSession {
-    return [sourceTag, rawSource]
-        .map(_normalizedSourceMarker)
-        .whereType<String>()
-        .contains('claude_code');
+    return [
+      sourceTag,
+      rawSource,
+    ].map(_normalizedSourceMarker).whereType<String>().contains('claude_code');
   }
 
   /// 委派子代理会话或 readOnly==true 或 isReadOnly==true。
@@ -707,16 +723,19 @@ class SessionSummary {
   bool get isCronSession {
     final sid = sessionId?.trim().toLowerCase();
     if (sid != null && sid.startsWith('cron_')) return true;
-    return [sessionSource, sourceTag, rawSource, sourceLabel]
-        .map(_normalizedSourceMarker)
-        .whereType<String>()
-        .contains('cron');
+    return [
+      sessionSource,
+      sourceTag,
+      rawSource,
+      sourceLabel,
+    ].map(_normalizedSourceMarker).whereType<String>().contains('cron');
   }
 
   bool get hasPlaceholderTitle {
     final normalizedTitle = _nonEmpty(title)?.toLowerCase();
     if (normalizedTitle == null) return true;
-    return normalizedTitle == 'untitled' || normalizedTitle == 'untitled session';
+    return normalizedTitle == 'untitled' ||
+        normalizedTitle == 'untitled session';
   }
 
   bool get hasSidebarState {
@@ -863,7 +882,8 @@ class AutomatedSessionVisibility {
   }
 
   @override
-  int get hashCode => Object.hash(showsCron, showsCli, showsClaudeCode, showsSubagents);
+  int get hashCode =>
+      Object.hash(showsCron, showsCli, showsClaudeCode, showsSubagents);
 
   @override
   String toString() {
@@ -961,31 +981,28 @@ class SessionDetail {
       lastPromptTokens: lossyInt(json, 'last_prompt_tokens'),
       messages: _decodeMessagesTolerantly(json),
       toolCalls: _decodeToolCallsTolerantly(json),
-      messagesTruncated: firstKey(
-        json,
-        ['_messages_truncated', '_messagesTruncated', 'messages_truncated'],
-        lossyBool,
-      ),
-      messagesOffset: firstKey(
-        json,
-        ['_messages_offset', '_messagesOffset', 'messages_offset'],
-        lossyInt,
-      ),
-      compressionAnchorVisibleIdx: firstKey(
-        json,
-        ['compression_anchor_visible_idx', 'compressionAnchorVisibleIdx'],
-        lossyInt,
-      ),
-      compressionAnchorMessageKey: firstKeyModel(
-        json,
-        ['compression_anchor_message_key', 'compressionAnchorMessageKey'],
-        CompressionAnchorMessageKey.fromJson,
-      ),
-      compressionAnchorSummary: firstKey(
-        json,
-        ['compression_anchor_summary', 'compressionAnchorSummary'],
-        lossyString,
-      ),
+      messagesTruncated: firstKey(json, [
+        '_messages_truncated',
+        '_messagesTruncated',
+        'messages_truncated',
+      ], lossyBool),
+      messagesOffset: firstKey(json, [
+        '_messages_offset',
+        '_messagesOffset',
+        'messages_offset',
+      ], lossyInt),
+      compressionAnchorVisibleIdx: firstKey(json, [
+        'compression_anchor_visible_idx',
+        'compressionAnchorVisibleIdx',
+      ], lossyInt),
+      compressionAnchorMessageKey: firstKeyModel(json, [
+        'compression_anchor_message_key',
+        'compressionAnchorMessageKey',
+      ], CompressionAnchorMessageKey.fromJson),
+      compressionAnchorSummary: firstKey(json, [
+        'compression_anchor_summary',
+        'compressionAnchorSummary',
+      ], lossyString),
     );
   }
 
@@ -1041,7 +1058,9 @@ class SessionDetail {
   }
 
   /// messages 容错解码（同 ChatMessage.attachments 的两级兜底模式）。
-  static List<ChatMessage>? _decodeMessagesTolerantly(Map<String, Object?> json) {
+  static List<ChatMessage>? _decodeMessagesTolerantly(
+    Map<String, Object?> json,
+  ) {
     final raw = json['messages'];
     if (raw is! List) return null;
 
@@ -1061,9 +1080,11 @@ class SessionDetail {
     for (final element in raw) {
       final value = JsonValue.fromJson(element);
       if (value is JsonObject) {
-        slow.add(ChatMessage.fromJson(
-          Map<String, Object?>.from(value.toJson() as Map),
-        ));
+        slow.add(
+          ChatMessage.fromJson(
+            Map<String, Object?>.from(value.toJson() as Map),
+          ),
+        );
       }
     }
     return slow.isEmpty ? null : slow;
@@ -1080,7 +1101,9 @@ class SessionDetail {
     final fast = <PersistedToolCall>[];
     for (final element in raw) {
       if (element is Map) {
-        fast.add(PersistedToolCall.fromJson(Map<String, Object?>.from(element)));
+        fast.add(
+          PersistedToolCall.fromJson(Map<String, Object?>.from(element)),
+        );
       } else {
         fastOk = false;
         break;
@@ -1092,9 +1115,11 @@ class SessionDetail {
     for (final element in raw) {
       final value = JsonValue.fromJson(element);
       if (value is JsonObject) {
-        slow.add(PersistedToolCall.fromJson(
-          Map<String, Object?>.from(value.toJson() as Map),
-        ));
+        slow.add(
+          PersistedToolCall.fromJson(
+            Map<String, Object?>.from(value.toJson() as Map),
+          ),
+        );
       }
     }
     return slow.isEmpty ? null : slow;

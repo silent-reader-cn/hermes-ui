@@ -12,6 +12,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../app/theme/status_colors.dart';
 import '../projects/project_picker_sheet.dart';
+import '../projects/project_providers.dart';
 import 'session_list_providers.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
@@ -52,15 +53,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final sections = ref.watch(sessionListSectionsProvider);
     final isSearchMode = state?.searchQuery?.trim().isNotEmpty == true;
 
-    ref.listen<AsyncValue<SessionListState>>(
-      sessionListControllerProvider,
-      (previous, next) {
-        final error = next.valueOrNull?.actionError;
-        if (error != null && error != previous?.valueOrNull?.actionError) {
-          unawaited(_showActionError(context, error));
-        }
-      },
-    );
+    ref.listen<AsyncValue<SessionListState>>(sessionListControllerProvider, (
+      previous,
+      next,
+    ) {
+      final error = next.valueOrNull?.actionError;
+      if (error != null && error != previous?.valueOrNull?.actionError) {
+        unawaited(_showActionError(context, error));
+      }
+    });
 
     // 首帧后自动补充分页窗口，直到填满视口或耗尽（内容不足一屏时也能翻页）。
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
@@ -81,8 +82,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       : const ValueKey('session-list-settings'),
                   padding: EdgeInsets.zero,
                   onPressed: () {
-                    final controller =
-                        ref.read(sessionListControllerProvider.notifier);
+                    final controller = ref.read(
+                      sessionListControllerProvider.notifier,
+                    );
                     if (state?.isSelectionMode == true) {
                       controller.clearSelection();
                     } else {
@@ -134,6 +136,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   // 顶部 chrome
   // -------------------------------------------------------------------------
 
+  /// 已归档 count 角标文案（无数据时不显示）。
+  String _archivedCountLabel(SessionListState state) {
+    final count = state.archivedCount ?? state.archivedSessions.length;
+    return count > 0 ? ' ($count)' : '';
+  }
+
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -160,12 +168,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             // source/project 模式不属于分段键 → null（无段高亮）。
             groupValue:
                 (mode == SessionListFilterMode.all ||
-                        mode == SessionListFilterMode.archived)
-                    ? mode
-                    : null,
-            children: const {
-              SessionListFilterMode.all: Text('全部'),
-              SessionListFilterMode.archived: Text('已归档'),
+                    mode == SessionListFilterMode.archived)
+                ? mode
+                : null,
+            children: {
+              SessionListFilterMode.all: const Text('全部'),
+              SessionListFilterMode.archived: Text(
+                '已归档${_archivedCountLabel(state)}',
+              ),
             },
             onValueChanged: (value) {
               if (value != null) {
@@ -185,7 +195,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 _filterChip(
                   key: ValueKey('filter-chip-$label'),
                   label: label,
-                  selected: mode == SessionListFilterMode.source &&
+                  selected:
+                      mode == SessionListFilterMode.source &&
                       state.filterValue == label,
                   onTap: () => unawaited(
                     controller.setFilter(
@@ -198,9 +209,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               if (mode == SessionListFilterMode.archived)
                 _filterChip(
                   key: const ValueKey('filter-chip-archived-all'),
-                  label: '已归档 ${state.archivedCount ?? state.archivedSessions.length}',
+                  label:
+                      '已归档 ${state.archivedCount ?? state.archivedSessions.length}',
                   selected: true,
-                  onTap: () => unawaited(controller.setFilter(SessionListFilterMode.all)),
+                  onTap: () => unawaited(
+                    controller.setFilter(SessionListFilterMode.all),
+                  ),
                 ),
               if (state.filterMode != SessionListFilterMode.all &&
                   state.filterMode != SessionListFilterMode.archived) ...[
@@ -217,7 +231,40 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ],
           ),
         ),
+        _buildProjectFilterRow(state),
       ],
+    );
+  }
+
+  /// 项目筛选 chips（有项目才显示）。
+  Widget _buildProjectFilterRow(SessionListState state) {
+    final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    if (projects.isEmpty) return const SizedBox.shrink();
+    final controller = ref.read(sessionListControllerProvider.notifier);
+    final mode = state.filterMode;
+    return SizedBox(
+      height: 34,
+      child: ListView(
+        key: const ValueKey('session-list-project-chips'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          for (final project in projects)
+            _filterChip(
+              key: ValueKey('project-chip-${project.id}'),
+              label: project.name ?? '未命名项目',
+              selected:
+                  mode == SessionListFilterMode.project &&
+                  state.filterValue == project.id,
+              onTap: () => unawaited(
+                controller.setFilter(
+                  SessionListFilterMode.project,
+                  value: project.id,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -293,37 +340,37 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   /// 单个筛选 chip（自绘圆角胶囊）。
   Widget _filterChip({
-      Key? key,
-      required String label,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return Padding(
-        key: key,
-        padding: const EdgeInsets.only(right: 6),
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
+    Key? key,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? CupertinoColors.activeBlue.resolveFrom(context)
+                : CupertinoColors.systemGrey5.resolveFrom(context),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
               color: selected
-                  ? CupertinoColors.activeBlue.resolveFrom(context)
-                  : CupertinoColors.systemGrey5.resolveFrom(context),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: selected
-                    ? CupertinoColors.white
-                    : CupertinoColors.label.resolveFrom(context),
-              ),
+                  ? CupertinoColors.white
+                  : CupertinoColors.label.resolveFrom(context),
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
   // -------------------------------------------------------------------------
   // 内容 slivers：加载 / 错误 / 空态 / 分区列表
@@ -344,9 +391,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           ),
         ];
       }
-      return [
-        _buildErrorSliver(async.error),
-      ];
+      return [_buildErrorSliver(async.error)];
     }
 
     final hasVisible = sections.any((section) => section.sessions.isNotEmpty);
@@ -367,15 +412,17 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       'session-row-${session.sessionId ?? session.id}',
                     ),
                     session: session,
+                    highlightQuery: isSearchMode
+                        ? state.searchQuery?.trim()
+                        : null,
                     selectionMode: state.isSelectionMode,
-                    selected: state.selectedSessionIds
-                        .contains(session.sessionId ?? session.id),
+                    selected: state.selectedSessionIds.contains(
+                      session.sessionId ?? session.id,
+                    ),
                     onTap: () => state.isSelectionMode
                         ? ref
-                            .read(sessionListControllerProvider.notifier)
-                            .toggleSelection(
-                              session.sessionId ?? session.id,
-                            )
+                              .read(sessionListControllerProvider.notifier)
+                              .toggleSelection(session.sessionId ?? session.id)
                         : _openSession(context, session),
                     onLongPress: () => ref
                         .read(sessionListControllerProvider.notifier)
@@ -394,7 +441,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             child: Center(child: CupertinoActivityIndicator(radius: 12)),
           ),
         ),
-      if (!state.hasMore && state.displaySessions.length > SessionListState.pageSize)
+      if (!state.hasMore &&
+          state.displaySessions.length > SessionListState.pageSize)
         const SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
@@ -434,10 +482,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -646,10 +691,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     final sessionId = session.sessionId ?? session.id;
     try {
-      final response = await ref.read(apiClientProvider).exportSession(
-        sessionId: sessionId,
-        format: format == 'markdown' ? 'md' : 'json',
-      );
+      final response = await ref
+          .read(apiClientProvider)
+          .exportSession(
+            sessionId: sessionId,
+            format: format == 'markdown' ? 'md' : 'json',
+          );
       if (!context.mounted) return;
       final content = utf8.decode(response.data, allowMalformed: true);
       await showCupertinoDialog<void>(
@@ -709,7 +756,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, SessionSummary session) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    SessionSummary session,
+  ) async {
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
@@ -765,7 +815,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   Future<void> _confirmBatchDelete(BuildContext context) async {
     final count =
-        ref.read(sessionListControllerProvider).valueOrNull?.selectedSessionIds.length ?? 0;
+        ref
+            .read(sessionListControllerProvider)
+            .valueOrNull
+            ?.selectedSessionIds
+            .length ??
+        0;
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
@@ -844,6 +899,7 @@ class _SessionRow extends StatelessWidget {
     this.onActions,
     this.selectionMode = false,
     this.selected = false,
+    this.highlightQuery,
   });
 
   final SessionSummary session;
@@ -856,6 +912,9 @@ class _SessionRow extends StatelessWidget {
   /// 多选模式：显示勾选圈，点击切换勾选。
   final bool selectionMode;
   final bool selected;
+
+  /// 搜索关键词：非空时标题与摘录中的命中片段高亮。
+  final String? highlightQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -898,10 +957,9 @@ class _SessionRow extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
+                        child: _highlightedSpan(
+                          context,
                           _displayTitle(session),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 17),
                         ),
                       ),
@@ -944,10 +1002,9 @@ class _SessionRow extends StatelessWidget {
                   ),
                   if (metadata != null) ...[
                     const SizedBox(height: 2),
-                    Text(
+                    _highlightedSpan(
+                      context,
                       metadata,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 13,
                         color: CupertinoColors.secondaryLabel,
@@ -983,6 +1040,54 @@ class _SessionRow extends StatelessWidget {
     return title;
   }
 
+  /// 构造标题/摘要文本：搜索模式下把 [query] 命中片段染成高亮。
+  Widget _highlightedSpan(
+    BuildContext context,
+    String text, {
+    TextStyle? style,
+  }) {
+    final query = highlightQuery;
+    if (query == null ||
+        query.isEmpty ||
+        !text.toLowerCase().contains(query.toLowerCase())) {
+      return Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+    final spans = <TextSpan>[];
+    final lower = text.toLowerCase();
+    final q = query.toLowerCase();
+    var index = 0;
+    while (true) {
+      final hit = lower.indexOf(q, index);
+      if (hit < 0) {
+        spans.add(TextSpan(text: text.substring(index)));
+        break;
+      }
+      if (hit > index) {
+        spans.add(TextSpan(text: text.substring(index, hit)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(hit, hit + query.length),
+          style: TextStyle(
+            color: CupertinoColors.activeBlue.resolveFrom(context),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+      index = hit + query.length;
+    }
+    return Text.rich(
+      TextSpan(style: style, children: spans),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
   static String? _metadataLabel(SessionSummary session) {
     final parts = <String>[
       if (session.messageCount != null && session.messageCount! >= 0)
@@ -993,6 +1098,8 @@ class _SessionRow extends StatelessWidget {
         '· ${_nonEmpty(session.sourceLabel)}',
       if (session.estimatedCost != null)
         '· \$${session.estimatedCost!.toStringAsFixed(2)}',
+      if (_nonEmpty(session.matchPreview) != null)
+        _nonEmpty(session.matchPreview)!,
     ];
     return parts.isEmpty ? null : parts.join(' ');
   }

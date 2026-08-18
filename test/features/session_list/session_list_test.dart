@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/session.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/projects/project_providers.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
@@ -61,6 +63,9 @@ ProviderContainer makeContainer(
         ApiClient(baseUrl: 'http://test.local:30002'),
       ),
       sessionListApiFactoryProvider.overrideWithValue((_) => api),
+      // 列表页 now 会 watch 项目（项目筛选 chips）：注入空列表 stub，
+      // 避免真实 ApiClient 发出 dio 请求残留超时 Timer。
+      projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
       if (active != null)
         activeConnectionProvider.overrideWith(
           () => _StubActiveConnection(active),
@@ -89,15 +94,34 @@ void main() {
     test('置顶 / 今天 / 昨天 / 更早 分组，组内时间倒序，空组剔除', () {
       final now = DateTime(2026, 8, 16, 12);
       final pinned = buildSession('p1', '置顶会话', pinned: true, at: now);
-      final today = buildSession('t1', '今天会话', at: now.subtract(const Duration(hours: 1)));
-      final yesterday = buildSession('y1', '昨天会话', at: now.subtract(const Duration(days: 1)));
-      final earlier = buildSession('e1', '更早会话', at: now.subtract(const Duration(days: 10)));
-      final noTimestamp = buildSession('n1', '无时间戳', at: DateTime.fromMillisecondsSinceEpoch(0));
-
-      final sections = buildSessionSections(
-        [noTimestamp, earlier, yesterday, today, pinned],
-        now: now,
+      final today = buildSession(
+        't1',
+        '今天会话',
+        at: now.subtract(const Duration(hours: 1)),
       );
+      final yesterday = buildSession(
+        'y1',
+        '昨天会话',
+        at: now.subtract(const Duration(days: 1)),
+      );
+      final earlier = buildSession(
+        'e1',
+        '更早会话',
+        at: now.subtract(const Duration(days: 10)),
+      );
+      final noTimestamp = buildSession(
+        'n1',
+        '无时间戳',
+        at: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+
+      final sections = buildSessionSections([
+        noTimestamp,
+        earlier,
+        yesterday,
+        today,
+        pinned,
+      ], now: now);
 
       expect(sections.map((s) => s.title).toList(), ['置顶', '今天', '昨天', '更早']);
       expect(sections[0].sessions.map((s) => s.sessionId), ['p1']);
@@ -108,17 +132,17 @@ void main() {
     });
 
     test('全空输入 → 无分区', () {
-      expect(buildSessionSections(const [], now: DateTime(2026, 1, 1)), isEmpty);
+      expect(
+        buildSessionSections(const [], now: DateTime(2026, 1, 1)),
+        isEmpty,
+      );
     });
   });
 
   group('SessionListController 状态机', () {
     test('初始加载成功：AsyncData + 首屏分页窗口 + 派生可见列表', () async {
       final api = FakeSessionListApi(
-        sessions: [
-          buildSession('s1', 'A'),
-          buildSession('s2', 'B'),
-        ],
+        sessions: [buildSession('s1', 'A'), buildSession('s2', 'B')],
       );
       final container = makeContainer(api);
 
@@ -238,7 +262,11 @@ void main() {
       final api = FakeSessionListApi(
         sessions: [
           for (var i = 0; i < 120; i++)
-            SessionSummary(sessionId: 's$i', title: '会话 $i', createdAt: 1000.0 + i),
+            SessionSummary(
+              sessionId: 's$i',
+              title: '会话 $i',
+              createdAt: 1000.0 + i,
+            ),
         ],
       );
       final container = makeContainer(api);
@@ -297,10 +325,7 @@ void main() {
       state = container.read(sessionListControllerProvider).valueOrNull!;
       expect(state.searchQuery, isNull);
       expect(state.searchResults, isNull);
-      expect(
-        container.read(sessionListVisibleSessionsProvider),
-        hasLength(2),
-      );
+      expect(container.read(sessionListVisibleSessionsProvider), hasLength(2));
     });
 
     test('搜索失败：actionError + 空结果；clearActionError 清除', () async {
@@ -334,8 +359,11 @@ void main() {
       final ok = await controller.setPinned(s1, true);
       expect(ok, isTrue);
       expect(api.pinCalls, ['s1:true']);
-      final updated =
-          container.read(sessionListControllerProvider).valueOrNull!.sessions.single;
+      final updated = container
+          .read(sessionListControllerProvider)
+          .valueOrNull!
+          .sessions
+          .single;
       expect(updated.pinned, isTrue);
       final sections = container.read(sessionListSectionsProvider);
       expect(sections.single.title, '置顶');
@@ -350,7 +378,11 @@ void main() {
       final controller = container.read(sessionListControllerProvider.notifier);
 
       final ok = await controller.setArchived(
-        container.read(sessionListControllerProvider).valueOrNull!.sessions.first,
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .first,
         true,
       );
       expect(ok, isTrue);
@@ -374,7 +406,11 @@ void main() {
       final controller = container.read(sessionListControllerProvider.notifier);
 
       final ok = await controller.delete(
-        container.read(sessionListControllerProvider).valueOrNull!.sessions.first,
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .first,
       );
       expect(ok, isTrue);
       expect(api.deleteCalls, ['s1']);
@@ -399,12 +435,18 @@ void main() {
       final controller = container.read(sessionListControllerProvider.notifier);
 
       final id = await controller.branch(
-        container.read(sessionListControllerProvider).valueOrNull!.sessions.single,
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .single,
       );
       expect(id, 'b1');
       expect(api.branchCalls, ['s1']);
-      final sessions =
-          container.read(sessionListControllerProvider).valueOrNull!.sessions;
+      final sessions = container
+          .read(sessionListControllerProvider)
+          .valueOrNull!
+          .sessions;
       expect(sessions.first.sessionId, 'b1');
       expect(sessions.first.title, '分支副本');
     });
@@ -417,7 +459,11 @@ void main() {
       final controller = container.read(sessionListControllerProvider.notifier);
 
       final id = await controller.branch(
-        container.read(sessionListControllerProvider).valueOrNull!.sessions.single,
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .single,
       );
       expect(id, isNull);
       final state = container.read(sessionListControllerProvider).valueOrNull!;
@@ -435,8 +481,10 @@ void main() {
       final id = await controller.createSession();
       expect(id, 'n1');
       expect(api.createCount, 1);
-      final sessions =
-          container.read(sessionListControllerProvider).valueOrNull!.sessions;
+      final sessions = container
+          .read(sessionListControllerProvider)
+          .valueOrNull!
+          .sessions;
       expect(sessions.first.sessionId, 'n1');
     });
 
@@ -448,7 +496,11 @@ void main() {
       final controller = container.read(sessionListControllerProvider.notifier);
 
       final ok = await controller.setPinned(
-        container.read(sessionListControllerProvider).valueOrNull!.sessions.single,
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .single,
         true,
       );
       expect(ok, isFalse);
@@ -486,6 +538,9 @@ void main() {
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
             sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
           ],
           child: CupertinoApp.router(routerConfig: router),
         ),
@@ -580,7 +635,10 @@ void main() {
 
     testWidgets('新建会话：悬浮 + 按钮创建并跳转 /chat/:id', (tester) async {
       final api = FakeSessionListApi(sessions: [buildSession('s1', '已有会话')]);
-      api.createdSession = const SessionSummary(sessionId: 'n1', title: '新建的会话');
+      api.createdSession = const SessionSummary(
+        sessionId: 'n1',
+        title: '新建的会话',
+      );
       await pumpSessionList(tester, api);
 
       await tester.tap(find.byKey(const ValueKey('session-list-new')));
@@ -711,10 +769,32 @@ class _ChatStub extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text('chat-$sessionId'),
-      ),
+      navigationBar: CupertinoNavigationBar(middle: Text('chat-$sessionId')),
       child: const Center(child: Text('聊天占位')),
     );
   }
+}
+
+/// 项目 API 空实现 stub：列表容器注入，避免真实 dio 请求。
+class _StubProjectApi implements ProjectApi {
+  @override
+  Future<ProjectsResponse> fetchProjects() async =>
+      const ProjectsResponse(projects: []);
+
+  @override
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
 }

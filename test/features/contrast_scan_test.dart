@@ -33,6 +33,7 @@ import 'package:hermex_flutter/features/onboarding/onboarding_page.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/projects/project_providers.dart';
 import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:hermex_flutter/features/skills/skills_api.dart';
@@ -189,12 +190,18 @@ List<ContrastFinding> scanTextContrast(
 /// 判断 [element] 是否处于真实输入框（CupertinoTextField 系）子树内。
 bool _isRealInputField(Element element) {
   return element.findAncestorWidgetOfExactType<CupertinoTextField>() != null ||
-      element.findAncestorWidgetOfExactType<CupertinoSearchTextField>() != null ||
-      element.findAncestorWidgetOfExactType<CupertinoTextFormFieldRow>() != null;
+      element.findAncestorWidgetOfExactType<CupertinoSearchTextField>() !=
+          null ||
+      element.findAncestorWidgetOfExactType<CupertinoTextFormFieldRow>() !=
+          null;
 }
 
 /// 输出单页扫描报告（页面 + 主题 + 文字 + 颜色 + 对比度数值）。
-void _printReport(String page, Brightness brightness, List<ContrastFinding> findings) {
+void _printReport(
+  String page,
+  Brightness brightness,
+  List<ContrastFinding> findings,
+) {
   for (final f in findings) {
     final level = f.ratio < 3.0
         ? '❌'
@@ -330,7 +337,6 @@ final Set<String> allKnownIssues = <String>{
   'git|light|push', // 主按钮白字
   'kanban|light|主看板', // 主按钮白字
   'session_list_error|light|重试', // 错误态「重试」CupertinoButton.filled 白字（真背景是主题蓝）
-
   // ---- 模型误报：iOS 次要文字（label 浅色 #3C3C43 衬浅灰分组背景，设计规范既定）----
   'onboarding|light|https://hermes.examp', // 服务地址输入框 URL 文字
   'chat|light|发送消息…', // 输入框占位符（WCAG 豁免）
@@ -380,7 +386,7 @@ Future<void> _scanPage(
   WidgetTester tester, {
   required String page,
   required Future<void> Function(WidgetTester tester, Brightness brightness)
-      pump,
+  pump,
 }) async {
   for (final brightness in [Brightness.light, Brightness.dark]) {
     await pump(tester, brightness);
@@ -408,7 +414,8 @@ Future<void> _scanPage(
     if (unexpected.isNotEmpty) {
       final detail = unexpected
           .map(
-            (f) => '${f.page}·${brightnessName(f.brightness)} '
+            (f) =>
+                '${f.page}·${brightnessName(f.brightness)} '
                 '"${textPrefix(f.text)}" ${formatColor(f.color)} '
                 '${f.ratio.toStringAsFixed(2)}:1',
           )
@@ -423,7 +430,8 @@ Future<void> _scanPage(
     if (unexpectedBackground.isNotEmpty) {
       final detail = unexpectedBackground
           .map(
-            (f) => '${f.page}·${brightnessName(f.brightness)} '
+            (f) =>
+                '${f.page}·${brightnessName(f.brightness)} '
                 '${formatColor(f.color)} 亮度 ${f.luminance.toStringAsFixed(2)}',
           )
           .join('\n  - ');
@@ -493,19 +501,18 @@ void main() {
             overrides: [
               apiClientProvider.overrideWithValue(_dummyClient()),
               sessionListApiFactoryProvider.overrideWithValue((_) => api),
+              projectApiFactoryProvider.overrideWithValue(
+                (_) => _StubProjectApi(),
+              ),
             ],
-            child: _routerApp(
-              brightness,
-              const SessionListPage(),
-            ),
+            child: _routerApp(brightness, const SessionListPage()),
           ),
         );
       },
     );
   });
 
-  testWidgets('session_list 加载失败态对比度扫描（浅/深，含「密码被拒绝」错误详情）',
-      (tester) async {
+  testWidgets('session_list 加载失败态对比度扫描（浅/深，含「密码被拒绝」错误详情）', (tester) async {
     // 401 场景：fetchSessions 抛 UnauthorizedException → 页面渲染错误详情
     // 「密码被拒绝。请检查服务器密码后重试。」（statusRedText，两种主题均须 ≥4.5:1）。
     final api = FakeSessionListApi()
@@ -519,11 +526,11 @@ void main() {
             overrides: [
               apiClientProvider.overrideWithValue(_dummyClient()),
               sessionListApiFactoryProvider.overrideWithValue((_) => api),
+              projectApiFactoryProvider.overrideWithValue(
+                (_) => _StubProjectApi(),
+              ),
             ],
-            child: _routerApp(
-              brightness,
-              const SessionListPage(),
-            ),
+            child: _routerApp(brightness, const SessionListPage()),
           ),
         );
       },
@@ -550,11 +557,7 @@ void main() {
                 '> 引用块\n\n```dart\nfinal x = 1;\n```\n',
             'message_id': 'a2',
           },
-          {
-            'role': 'user',
-            'content': '用深色主题再看看',
-            'message_id': 'u2',
-          },
+          {'role': 'user', 'content': '用深色主题再看看', 'message_id': 'u2'},
         ],
       },
     };
@@ -566,8 +569,10 @@ void main() {
           ProviderScope(
             overrides: [
               chatApiProvider.overrideWithValue(api),
-              chatAvailableModelsProvider
-                  .overrideWithValue(const ['gpt-5', 'claude']),
+              chatAvailableModelsProvider.overrideWithValue(const [
+                'gpt-5',
+                'claude',
+              ]),
             ],
             child: _app(brightness, const ChatPage(sessionId: 's1')),
           ),
@@ -664,7 +669,8 @@ void main() {
   });
 
   testWidgets('memory 页面对比度扫描（浅/深）', (tester) async {
-    final mtime = DateTime.now()
+    final mtime =
+        DateTime.now()
             .subtract(const Duration(hours: 2))
             .millisecondsSinceEpoch /
         1000;
@@ -739,7 +745,8 @@ void main() {
   });
 
   testWidgets('workspace 页面对比度扫描（浅/深）', (tester) async {
-    final modified = DateTime.now()
+    final modified =
+        DateTime.now()
             .subtract(const Duration(hours: 1))
             .millisecondsSinceEpoch ~/
         1000;
@@ -780,10 +787,7 @@ void main() {
               apiClientProvider.overrideWithValue(_dummyClient()),
               workspaceApiFactoryProvider.overrideWithValue((_) => api),
             ],
-            child: _app(
-              brightness,
-              const WorkspacePage(sessionId: 's1'),
-            ),
+            child: _app(brightness, const WorkspacePage(sessionId: 's1')),
           ),
         );
       },
@@ -827,10 +831,7 @@ void main() {
               apiClientProvider.overrideWithValue(_dummyClient()),
               gitApiFactoryProvider.overrideWithValue((_) => api),
             ],
-            child: _routerApp(
-              brightness,
-              const GitPage(sessionId: 's1'),
-            ),
+            child: _routerApp(brightness, const GitPage(sessionId: 's1')),
           ),
         );
       },
@@ -914,7 +915,11 @@ void main() {
             totalTokens: 1000,
             tokenShare: 60,
           ),
-          InsightsModelBreakdown(model: 'claude', totalTokens: 500, tokenShare: 40),
+          InsightsModelBreakdown(
+            model: 'claude',
+            totalTokens: 500,
+            tokenShare: 40,
+          ),
         ],
         dailyTokens: [
           InsightsDailyToken(
@@ -931,12 +936,8 @@ void main() {
             sessions: 1,
           ),
         ],
-        activityByDay: [
-          InsightsActivityByDay(day: '2026-08-16', sessions: 5),
-        ],
-        activityByHour: [
-          InsightsActivityByHour(hour: 14, sessions: 3),
-        ],
+        activityByDay: [InsightsActivityByDay(day: '2026-08-16', sessions: 5)],
+        activityByHour: [InsightsActivityByHour(hour: 14, sessions: 3)],
       ),
     );
     await _scanPage(
@@ -990,8 +991,10 @@ class _FakeChatApi implements ChatServerApi {
   Future<Object?> cancelChat(String streamId) async => {'ok': true};
 
   @override
-  Future<Object?> chatStreamStatus(String streamId) async =>
-      {'active': false, 'replay_available': false};
+  Future<Object?> chatStreamStatus(String streamId) async => {
+    'active': false,
+    'replay_available': false,
+  };
 
   @override
   Future<Object?> session({
@@ -1030,7 +1033,10 @@ class _FakeChatApi implements ChatServerApi {
     required String sessionId,
     required String title,
   }) async {
-    return {'ok': true, 'session': {'session_id': sessionId, 'title': title}};
+    return {
+      'ok': true,
+      'session': {'session_id': sessionId, 'title': title},
+    };
   }
 
   @override
@@ -1053,10 +1059,10 @@ class _FakeChatApi implements ChatServerApi {
   Future<Object?> deleteSession(String sessionId) async => {'ok': true};
 
   @override
-  Future<Object?> branchSession(String sessionId) async => {
-        'session_id': 'branch-$sessionId',
-        'parent_session_id': sessionId,
-      };
+  Future<Object?> branchSession(String sessionId, {int? keepCount}) async => {
+    'session_id': 'branch-$sessionId',
+    'parent_session_id': sessionId,
+  };
 
   @override
   Future<Object?> truncateSession({
@@ -1079,9 +1085,9 @@ class _FakeChatApi implements ChatServerApi {
 
   @override
   Future<Object?> retrySession(String sessionId) async => {
-        'ok': true,
-        'last_user_text': '你好',
-      };
+    'ok': true,
+    'last_user_text': '你好',
+  };
 
   @override
   Future<Object?> updateSession({
@@ -1094,8 +1100,10 @@ class _FakeChatApi implements ChatServerApi {
   }
 
   @override
-  Future<Object?> getYolo(String sessionId) async =>
-      {'ok': true, 'yolo_enabled': false};
+  Future<Object?> getYolo(String sessionId) async => {
+    'ok': true,
+    'yolo_enabled': false,
+  };
 
   @override
   Future<Object?> setYolo({
@@ -1128,4 +1136,28 @@ class _FakeOnboardingApi implements OnboardingServerApi {
 
   @override
   Future<Object?> login(String password) async => {'ok': true};
+}
+
+/// 项目 API 空实现 stub：列表页扫描容器注入，避免真实 dio 请求。
+class _StubProjectApi implements ProjectApi {
+  @override
+  Future<ProjectsResponse> fetchProjects() async =>
+      const ProjectsResponse(projects: []);
+
+  @override
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
 }
