@@ -1060,9 +1060,23 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+  int compressCalls = 0;
+  int undoCalls = 0;
+  int retryCalls = 0;
+  int updateSessionCalls = 0;
+  int getYoloCalls = 0;
+  int setYoloCalls = 0;
   String? lastRenameTitle;
   bool? lastPinned;
   bool? lastArchived;
+  String? lastFocusTopic;
+  String? lastUpdatedWorkspace;
+  String? lastUpdatedModel;
+  bool? lastYoloEnabled;
+  Map<String, Object?>? retryResult;
+  Map<String, Object?>? updateSessionResult;
+  Map<String, Object?>? yoloResult;
+  Map<String, Object?>? setYoloResult;
 
   int startChatCalls = 0;
   int steerCalls = 0;
@@ -1207,6 +1221,73 @@ class _FakeChatApi implements ChatServerApi {
       'parent_session_id': sessionId,
       'error': mutationOk ? null : mutationError,
     };
+  }
+
+  @override
+  Future<Object?> compressSession({
+    required String sessionId,
+    String? focusTopic,
+  }) async {
+    compressCalls++;
+    lastFocusTopic = focusTopic;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {'ok': mutationOk, 'error': mutationError};
+  }
+
+  @override
+  Future<Object?> undoSession(String sessionId) async {
+    undoCalls++;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {'ok': mutationOk, 'error': mutationError};
+  }
+
+  @override
+  Future<Object?> retrySession(String sessionId) async {
+    retryCalls++;
+    if (mutationThrows != null) throw mutationThrows!;
+    if (retryResult != null) return retryResult;
+    return {'ok': mutationOk, 'error': mutationError, 'last_user_text': '你好'};
+  }
+
+  @override
+  Future<Object?> updateSession({
+    required String sessionId,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+  }) async {
+    updateSessionCalls++;
+    lastUpdatedWorkspace = workspace;
+    lastUpdatedModel = model;
+    if (mutationThrows != null) throw mutationThrows!;
+    if (updateSessionResult != null) return updateSessionResult;
+    return {
+      'ok': mutationOk,
+      'error': mutationError,
+      'session': {
+        'session_id': sessionId,
+        'workspace': workspace,
+        'model': model,
+      },
+    };
+  }
+
+  @override
+  Future<Object?> getYolo(String sessionId) async {
+    getYoloCalls++;
+    return yoloResult ?? {'ok': true, 'yolo_enabled': false};
+  }
+
+  @override
+  Future<Object?> setYolo({
+    required String sessionId,
+    required bool enabled,
+  }) async {
+    setYoloCalls++;
+    lastYoloEnabled = enabled;
+    if (mutationThrows != null) throw mutationThrows!;
+    if (setYoloResult != null) return setYoloResult;
+    return {'ok': mutationOk, 'error': mutationError, 'yolo_enabled': enabled};
   }
 
   @override

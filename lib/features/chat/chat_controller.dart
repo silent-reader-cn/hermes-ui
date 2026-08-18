@@ -68,6 +68,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// SSE 连接当前是否存活（409 恢复路径判断是否需要重连）。
   bool _streamConnected = false;
 
+  /// loadYoloState 一次性守卫（页面每次 build 都会触发，仅首次真正拉取）。
+  bool _yoloLoaded = false;
+
   DateTime _now() => ref.read(chatClockProvider)();
 
   ChatWatchdogConfig get _watchdogConfig =>
@@ -181,7 +184,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 重命名当前会话，并立即更新聊天页标题。
   Future<bool> renameSession(String title) async {
     final trimmed = title.trim();
-    if (state.sessionId.isEmpty || trimmed.isEmpty) return false;
+    if (state.sessionId.isEmpty || state.isReadOnly || trimmed.isEmpty) {
+      return false;
+    }
     try {
       final raw = await _api!.renameSession(
             sessionId: state.sessionId,
@@ -222,7 +227,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     Future<Object?> Function() request, {
     required String failure,
   }) async {
-    if (state.sessionId.isEmpty) return false;
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
       final response = SessionMutationResponse.fromJson(
         _asStringMap(await request()),
@@ -240,7 +245,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 删除当前会话。
   Future<bool> deleteSession() async {
-    if (state.sessionId.isEmpty) return false;
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
       final response = SessionMutationResponse.fromJson(
         _asStringMap(await _api!.deleteSession(state.sessionId)),
@@ -258,7 +263,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 从当前会话创建分支，返回新会话 ID。
   Future<String?> branchSession() async {
-    if (state.sessionId.isEmpty) return null;
+    if (state.sessionId.isEmpty || state.isReadOnly) return null;
     try {
       final raw = await _api!.branchSession(state.sessionId);
       final response = SessionBranchResponse.fromJson(_asStringMap(raw));
@@ -269,6 +274,151 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } on ApiException catch (error) {
       _setSendError(error.message);
       return null;
+    }
+  }
+
+  /// 压缩当前会话（可带聚焦主题）；成功后刷新消息列表并轻提示。
+  Future<bool> compressSession({String? focusTopic}) async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    final trimmedTopic = focusTopic?.trim();
+    try {
+      final raw = await _api!.compressSession(
+        sessionId: state.sessionId,
+        focusTopic: (trimmedTopic == null || trimmedTopic.isEmpty)
+            ? null
+            : trimmedTopic,
+      );
+      final response = SessionCompressResponse.fromJson(_asStringMap(raw));
+      if (response.ok == false) {
+        _setSendError(response.error ?? '压缩会话失败。');
+        return false;
+      }
+      _setNotice('会话已压缩');
+      await loadMessages();
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 撤销上一轮（删除最后一轮用户消息及其后全部）；成功后刷新消息列表。
+  Future<bool> undoLastTurn() async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    try {
+      final raw = await _api!.undoSession(state.sessionId);
+      final response = SessionUndoResponse.fromJson(_asStringMap(raw));
+      if (response.ok == false) {
+        _setSendError(response.error ?? '撤销上一轮失败。');
+        return false;
+      }
+      await loadMessages();
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 重试上一轮：服务端删除最后一轮并返回该轮用户消息原文。
+  ///
+  /// 成功时把文本写入 [ChatState.composerPrefill]（UI 回填输入框，不自动发送），
+  /// 并刷新消息列表；返回该文本供调用方直接使用。
+  Future<String?> retryLastTurn() async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return null;
+    try {
+      final raw = await _api!.retrySession(state.sessionId);
+      final response = SessionRetryResponse.fromJson(_asStringMap(raw));
+      final lastText = response.lastUserText;
+      if (response.ok == false || lastText == null || lastText.isEmpty) {
+        _setSendError(response.error ?? '重试上一轮失败。');
+        return null;
+      }
+      state = state.copyWith(composerPrefill: lastText);
+      await loadMessages();
+      return lastText;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return null;
+    }
+  }
+
+  /// 更新会话设置（workspace / model）；成功后乐观更新本地元数据并轻提示。
+  ///
+  /// 模型列表由 [chatAvailableModelsProvider] 注入、无服务端状态可刷新，
+  /// 这里仅同步 state.model/modelProvider 供后续发送使用。
+  Future<bool> updateSessionSettings({
+    String? workspace,
+    String? model,
+  }) async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    final trimmedWorkspace = workspace?.trim();
+    final trimmedModel = model?.trim();
+    try {
+      final raw = await _api!.updateSession(
+        sessionId: state.sessionId,
+        workspace:
+            (trimmedWorkspace == null || trimmedWorkspace.isEmpty)
+            ? null
+            : trimmedWorkspace,
+        model: (trimmedModel == null || trimmedModel.isEmpty) ? null : trimmedModel,
+      );
+      final response = SessionMutationResponse.fromJson(_asStringMap(raw));
+      if (response.ok == false) {
+        _setSendError(response.error ?? '保存会话设置失败。');
+        return false;
+      }
+      final updated = response.session;
+      state = state.copyWith(
+        workspace: updated?.workspace ?? trimmedWorkspace ?? state.workspace,
+        model: updated?.model ?? trimmedModel ?? state.model,
+        modelProvider: updated?.modelProvider ?? state.modelProvider,
+      );
+      _setNotice('设置已保存');
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 切换 YOLO 模式；成功后乐观更新开关状态。
+  Future<bool> toggleYolo(bool enabled) async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    try {
+      final raw = await _api!.setYolo(
+        sessionId: state.sessionId,
+        enabled: enabled,
+      );
+      final map = _asStringMap(raw);
+      if (map['ok'] == false) {
+        _setSendError('YOLO 状态更新失败。');
+        return false;
+      }
+      final yoloEnabled = map['yolo_enabled'] ?? map['yoloEnabled'];
+      state = state.copyWith(yoloEnabled: yoloEnabled is bool ? yoloEnabled : enabled);
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 拉取当前会话 YOLO 状态（页面初始化调用；一次性守卫，失败静默）。
+  Future<void> loadYoloState() async {
+    if (_yoloLoaded || state.sessionId.isEmpty) return;
+    _yoloLoaded = true;
+    final gen = _generation;
+    try {
+      final raw = await _api!.getYolo(state.sessionId);
+      if (_disposed || gen != _generation) return;
+      final map = _asStringMap(raw);
+      final enabled = map['yolo_enabled'] ?? map['yoloEnabled'] ?? map['enabled'];
+      if (enabled is bool) {
+        state = state.copyWith(yoloEnabled: enabled);
+      }
+    } on ApiException {
+      // YOLO 状态拉取失败静默（保持关闭默认值）。
     }
   }
 
@@ -325,6 +475,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           model: detail.model ?? state.model,
           modelProvider: detail.modelProvider ?? state.modelProvider,
           profile: detail.profile ?? state.profile,
+          isReadOnly: detail.readOnly == true || detail.isReadOnly == true,
+          hasPendingUserMessage:
+              detail.pendingUserMessage?.trim().isNotEmpty == true ||
+                  detail.pendingAttachments?.isNotEmpty == true,
           responseCompletionNeedsTranscriptRefresh: false,
         );
         // 跨页面/杀进程恢复：会话已有活跃流 → 接管并重连。
@@ -1755,6 +1909,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _setSendError(String message) {
     state = state.copyWith(sendErrorMessage: message);
+  }
+
+  /// 轻提示（成功类会话操作结果）。
+  void _setNotice(String message) {
+    state = state.copyWith(noticeMessage: message);
+  }
+
+  /// 清除轻提示。
+  void dismissNotice() {
+    state = state.copyWith(clearNoticeMessage: true);
+  }
+
+  /// 清除重试回填预填值（输入栏已消费后调用）。
+  void clearComposerPrefill() {
+    state = state.copyWith(clearComposerPrefill: true);
   }
 
   void _markProgress() {

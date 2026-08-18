@@ -308,7 +308,12 @@ class ChatState {
     this.explicitModelPick = false,
     this.errorMessage,
     this.sendErrorMessage,
+    this.noticeMessage,
     this.isViewingCachedData = false,
+    this.isReadOnly = false,
+    this.hasPendingUserMessage = false,
+    this.yoloEnabled = false,
+    this.composerPrefill,
     this.pendingAssistantTokenChunks = const [],
     this.pendingReasoningChunks = const [],
     this.liveReasoningText = '',
@@ -365,8 +370,23 @@ class ChatState {
   /// 发送错误（error/apperror 事件、send/stop 失败）。
   final String? sendErrorMessage;
 
+  /// 轻提示（成功类会话操作；非错误，渲染为中性横幅）。
+  final String? noticeMessage;
+
   /// 离线缓存兜底模式（send 拒绝）。
   final bool isViewingCachedData;
+
+  /// 只读会话（read_only / is_read_only 为 true；变更操作全部拒绝）。
+  final bool isReadOnly;
+
+  /// 会话有待处理消息（pending_user_message / pending_attachments 非空）。
+  final bool hasPendingUserMessage;
+
+  /// YOLO 模式开关（服务端内存态，重启丢失）。
+  final bool yoloEnabled;
+
+  /// 重试上一轮后待回填输入框的文本（UI 消费后立即清除）。
+  final String? composerPrefill;
 
   /// token 三段式缓冲：合并缓冲（16ms 后进入词级 reveal 队列）。
   final List<String> pendingAssistantTokenChunks;
@@ -429,7 +449,14 @@ class ChatState {
     bool clearErrorMessage = false,
     String? sendErrorMessage,
     bool clearSendErrorMessage = false,
+    String? noticeMessage,
+    bool clearNoticeMessage = false,
     bool? isViewingCachedData,
+    bool? isReadOnly,
+    bool? hasPendingUserMessage,
+    bool? yoloEnabled,
+    String? composerPrefill,
+    bool clearComposerPrefill = false,
     List<String>? pendingAssistantTokenChunks,
     List<String>? pendingReasoningChunks,
     String? liveReasoningText,
@@ -459,7 +486,14 @@ class ChatState {
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       sendErrorMessage:
           clearSendErrorMessage ? null : (sendErrorMessage ?? this.sendErrorMessage),
+      noticeMessage: clearNoticeMessage ? null : (noticeMessage ?? this.noticeMessage),
       isViewingCachedData: isViewingCachedData ?? this.isViewingCachedData,
+      isReadOnly: isReadOnly ?? this.isReadOnly,
+      hasPendingUserMessage: hasPendingUserMessage ?? this.hasPendingUserMessage,
+      yoloEnabled: yoloEnabled ?? this.yoloEnabled,
+      composerPrefill: clearComposerPrefill
+          ? null
+          : (composerPrefill ?? this.composerPrefill),
       pendingAssistantTokenChunks:
           pendingAssistantTokenChunks ?? this.pendingAssistantTokenChunks,
       pendingReasoningChunks:

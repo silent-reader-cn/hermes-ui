@@ -375,7 +375,13 @@ Future<void> _pumpPage(WidgetTester tester, _FakeChatApi api) async {
 }
 
 /// 组装带 GoRouter 的 ChatPage（会话菜单的导航跳转走真实路由）。
+///
+/// 菜单项已超过 10 个（压缩/撤销/重试/设置/YOLO 等），默认 600px 高视口
+/// 会裁剪底部项导致 tap miss——统一放大视口高度。
 Future<GoRouter> _pumpRouted(WidgetTester tester, _FakeChatApi api) async {
+  tester.view.physicalSize = const Size(800, 2000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
   final router = GoRouter(
     initialLocation: '/chat/s1',
     routes: [
@@ -425,8 +431,20 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+  int compressCalls = 0;
+  int undoCalls = 0;
+  int retryCalls = 0;
+  int updateSessionCalls = 0;
+  int getYoloCalls = 0;
+  int setYoloCalls = 0;
   String? lastRenameTitle;
   bool? lastPinned;
+  String? lastFocusTopic;
+  String? lastUpdatedWorkspace;
+  String? lastUpdatedModel;
+  bool? lastYoloEnabled;
+  Map<String, Object?>? yoloResult;
+  Map<String, Object?>? retryResult;
 
   void Function(SseEvent event)? _onEvent;
 
@@ -538,6 +556,65 @@ class _FakeChatApi implements ChatServerApi {
       'session_id': 'branch-$sessionId',
       'parent_session_id': sessionId,
     };
+  }
+
+  @override
+  Future<Object?> compressSession({
+    required String sessionId,
+    String? focusTopic,
+  }) async {
+    compressCalls++;
+    lastFocusTopic = focusTopic;
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> undoSession(String sessionId) async {
+    undoCalls++;
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> retrySession(String sessionId) async {
+    retryCalls++;
+    if (retryResult != null) return retryResult;
+    return {'ok': true, 'last_user_text': '你好'};
+  }
+
+  @override
+  Future<Object?> updateSession({
+    required String sessionId,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+  }) async {
+    updateSessionCalls++;
+    lastUpdatedWorkspace = workspace;
+    lastUpdatedModel = model;
+    return {
+      'ok': true,
+      'session': {
+        'session_id': sessionId,
+        'workspace': workspace,
+        'model': model,
+      },
+    };
+  }
+
+  @override
+  Future<Object?> getYolo(String sessionId) async {
+    getYoloCalls++;
+    return yoloResult ?? {'ok': true, 'yolo_enabled': false};
+  }
+
+  @override
+  Future<Object?> setYolo({
+    required String sessionId,
+    required bool enabled,
+  }) async {
+    setYoloCalls++;
+    lastYoloEnabled = enabled;
+    return {'ok': true, 'yolo_enabled': enabled};
   }
 
   @override

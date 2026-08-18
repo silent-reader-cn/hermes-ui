@@ -18,9 +18,16 @@ import '../../../core/utils/file_picker.dart';
 /// - 流式：附件按钮 + 输入框 + steer 发送 + 停止；
 /// - sending：输入禁用（发送请求在途）。
 class ChatInputBar extends ConsumerStatefulWidget {
-  const ChatInputBar({super.key, required this.sessionId});
+  const ChatInputBar({
+    super.key,
+    required this.sessionId,
+    this.enabled = true,
+  });
 
   final String sessionId;
+
+  /// 输入栏可用性（只读会话传 false：输入/附件/模型/发送全部禁用）。
+  final bool enabled;
 
   @override
   ConsumerState<ChatInputBar> createState() => _ChatInputBarState();
@@ -31,6 +38,27 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   bool _hasText = false;
 
   bool _uploading = false;
+
+  /// 已消费的 composerPrefill 值（去重，避免重复写入输入框）。
+  String? _appliedPrefill;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 重试上一轮：controller 写入 composerPrefill，这里同步到输入框并清除。
+    final prefill =
+        ref.watch(chatControllerProvider(widget.sessionId)).composerPrefill;
+    if (prefill != null && prefill != _appliedPrefill) {
+      _appliedPrefill = prefill;
+      _textController.text = prefill;
+      _hasText = prefill.trim().isNotEmpty;
+      ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .clearComposerPrefill();
+    } else if (prefill == null) {
+      _appliedPrefill = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -214,6 +242,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         phase == ChatPhase.clarifyPending ||
         phase == ChatPhase.recovering;
     final isSending = phase == ChatPhase.sending;
+    final interactive = widget.enabled;
 
     return Container(
       decoration: BoxDecoration(
@@ -232,7 +261,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           children: [
             CupertinoButton(
               key: const ValueKey('chat-attach-button'),
-              onPressed: (isSending || _uploading) ? null : _handleAttachment,
+              onPressed: (!interactive || isSending || _uploading)
+                  ? null
+                  : _handleAttachment,
               padding: EdgeInsets.zero,
               child: _uploading
                   ? const CupertinoActivityIndicator()
@@ -245,8 +276,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               child: CupertinoTextField(
                 key: const ValueKey('chat-input-field'),
                 controller: _textController,
-                placeholder: isStreaming ? '提示当前回复（steer）…' : '发送消息…',
-                enabled: !isSending,
+                placeholder: !interactive
+                    ? '此会话为只读'
+                    : (isStreaming ? '提示当前回复（steer）…' : '发送消息…'),
+                enabled: !isSending && interactive,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 onChanged: (value) {
                   final hasText = value.trim().isNotEmpty;
@@ -258,7 +291,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             if (isStreaming) ...[
               CupertinoButton(
                 key: const ValueKey('chat-steer-button'),
-                onPressed: _hasText ? _submit : null,
+                onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
                   CupertinoIcons.arrow_right_circle,
@@ -277,7 +310,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             ] else if (!isSending)
               CupertinoButton(
                 key: const ValueKey('chat-send-button'),
-                onPressed: _hasText ? _submit : null,
+                onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
                   CupertinoIcons.arrow_up_circle,
@@ -286,7 +319,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             CupertinoButton(
               key: const ValueKey('chat-model-button'),
-              onPressed: _showModelPicker,
+              onPressed: interactive ? _showModelPicker : null,
               padding: EdgeInsets.zero,
               child: const Icon(
                 CupertinoIcons.slider_horizontal_3,

@@ -67,6 +67,36 @@ abstract interface class ChatServerApi {
   /// POST /api/session/branch {session_id} → SessionBranchResponse。
   Future<Object?> branchSession(String sessionId);
 
+  /// POST /api/session/compress {session_id, focus_topic?} → SessionCompressResponse。
+  Future<Object?> compressSession({
+    required String sessionId,
+    String? focusTopic,
+  });
+
+  /// POST /api/session/undo {session_id} → SessionUndoResponse（删最后一轮）。
+  Future<Object?> undoSession(String sessionId);
+
+  /// POST /api/session/retry {session_id} → SessionRetryResponse（text=最后一轮用户消息原文）。
+  Future<Object?> retrySession(String sessionId);
+
+  /// POST /api/session/update {session_id, workspace?, model?, model_provider?}
+  /// → SessionMutationResponse（只读导入会话返回 403）。
+  Future<Object?> updateSession({
+    required String sessionId,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+  });
+
+  /// GET /api/session/yolo?session_id= → `{ok, yolo_enabled}`（容错）。
+  Future<Object?> getYolo(String sessionId);
+
+  /// POST /api/session/yolo {session_id, enabled} → `{ok, yolo_enabled}`。
+  Future<Object?> setYolo({
+    required String sessionId,
+    required bool enabled,
+  });
+
   /// 建立 SSE 连接并持续派发解码后的事件；流自然结束/出错后返回。
   ///
   /// [onEventId] 在收到事件 `id:` 字段时回调（lastEventID 跟踪用）。
@@ -208,6 +238,51 @@ class ChatApiClient implements ChatServerApi {
   @override
   Future<Object?> branchSession(String sessionId) =>
       _client.branchSession(sessionId: sessionId);
+
+  @override
+  Future<Object?> compressSession({
+    required String sessionId,
+    String? focusTopic,
+  }) {
+    return _client.compressSession(
+      sessionId: sessionId,
+      focusTopic: focusTopic,
+    );
+  }
+
+  @override
+  Future<Object?> undoSession(String sessionId) =>
+      _client.undoSession(sessionId);
+
+  @override
+  Future<Object?> retrySession(String sessionId) =>
+      _client.retrySession(sessionId);
+
+  @override
+  Future<Object?> updateSession({
+    required String sessionId,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+  }) {
+    return _client.updateSession(
+      sessionId: sessionId,
+      workspace: workspace,
+      model: model,
+      modelProvider: modelProvider,
+    );
+  }
+
+  @override
+  Future<Object?> getYolo(String sessionId) => _client.sessionYolo(sessionId);
+
+  @override
+  Future<Object?> setYolo({
+    required String sessionId,
+    required bool enabled,
+  }) {
+    return _client.setSessionYolo(sessionId: sessionId, enabled: enabled);
+  }
 
   @override
   Future<void> startStream(

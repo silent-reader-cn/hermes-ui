@@ -688,6 +688,47 @@ class _StaticChatApi implements ChatServerApi {
       };
 
   @override
+  Future<Object?> compressSession({
+    required String sessionId,
+    String? focusTopic,
+  }) async {
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> undoSession(String sessionId) async => {'ok': true};
+
+  @override
+  Future<Object?> retrySession(String sessionId) async => {
+        'ok': true,
+        'text': '最后一条用户消息',
+      };
+
+  @override
+  Future<Object?> updateSession({
+    required String sessionId,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+  }) async {
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> getYolo(String sessionId) async => {
+        'ok': true,
+        'yolo_enabled': false,
+      };
+
+  @override
+  Future<Object?> setYolo({
+    required String sessionId,
+    required bool enabled,
+  }) async {
+    return {'ok': true, 'yolo_enabled': enabled};
+  }
+
+  @override
   Future<void> startStream(
     String streamId, {
     int? replayAfterSeq,

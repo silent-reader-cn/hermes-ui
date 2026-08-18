@@ -59,26 +59,40 @@ class FakeSessionListApi implements SessionListApi {
 
   /// 已调用的变更操作记录（含参数，如 `pin s1:true`）。
   final List<String> pinCalls = [];
-  final List<String> archiveCalls = [];
-  final List<String> deleteCalls = [];
-  final List<String> branchCalls = [];
-  final List<String> searchQueries = [];
+    final List<String> archiveCalls = [];
+    final List<String> deleteCalls = [];
+    final List<String> branchCalls = [];
+    final List<String> searchQueries = [];
+    final List<String> moveCalls = [];
 
-  @override
-  Future<SessionsResponse> fetchSessions({
-    bool includeArchived = false,
-    int? archivedLimit,
-  }) async {
-    fetchCount++;
-    final error = fetchError;
-    if (error != null && (fetchErrorCap < 0 || _fetchErrorsThrown < fetchErrorCap)) {
-      _fetchErrorsThrown++;
-      throw error;
+    /// `fetchSessions` 是否最近一次以 includeArchived=true 调用。
+    bool lastFetchedArchived = false;
+
+    /// `moveSession` 抛出的异常。
+    Object? moveError;
+
+    @override
+    Future<SessionsResponse> fetchSessions({
+      bool includeArchived = false,
+      int? archivedLimit,
+    }) async {
+      fetchCount++;
+      lastFetchedArchived = includeArchived;
+      final error = fetchError;
+      if (error != null && (fetchErrorCap < 0 || _fetchErrorsThrown < fetchErrorCap)) {
+        _fetchErrorsThrown++;
+        throw error;
+      }
+      final gate = fetchGate;
+      if (gate != null) await gate.future;
+      final list = includeArchived
+          ? sessions.where((s) => s.archived == true).toList()
+          : sessions.where((s) => s.archived != true).toList();
+      return SessionsResponse(
+        sessions: list,
+        archivedCount: sessions.where((s) => s.archived == true).length,
+      );
     }
-    final gate = fetchGate;
-    if (gate != null) await gate.future;
-    return SessionsResponse(sessions: sessions);
-  }
 
   @override
   Future<SessionSearchResponse> searchSessions({required String query}) async {
@@ -124,12 +138,23 @@ class FakeSessionListApi implements SessionListApi {
   }
 
   @override
-  Future<SessionMutationResponse> deleteSession(String sessionId) async {
-    deleteCalls.add(sessionId);
-    final error = deleteError;
-    if (error != null) throw error;
-    return const SessionMutationResponse(ok: true);
-  }
+    Future<SessionMutationResponse> deleteSession(String sessionId) async {
+      deleteCalls.add(sessionId);
+      final error = deleteError;
+      if (error != null) throw error;
+      return const SessionMutationResponse(ok: true);
+    }
+
+    @override
+    Future<SessionMutationResponse> moveSession({
+      required String sessionId,
+      String? projectId,
+    }) async {
+      moveCalls.add('$sessionId:${projectId ?? 'null'}');
+      final error = moveError;
+      if (error != null) throw error;
+      return const SessionMutationResponse(ok: true);
+    }
 
   @override
   Future<SessionBranchResponse> branchSession(String sessionId) async {
