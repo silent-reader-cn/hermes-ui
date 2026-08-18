@@ -688,6 +688,14 @@ class _StaticChatApi implements ChatServerApi {
       };
 
   @override
+  Future<Object?> truncateSession({
+    required String sessionId,
+    required int keepCount,
+  }) async {
+    return {'ok': true};
+  }
+
+  @override
   Future<Object?> compressSession({
     required String sessionId,
     String? focusTopic,

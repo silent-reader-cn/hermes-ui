@@ -293,13 +293,45 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _setSendError(response.error ?? '压缩会话失败。');
         return false;
       }
-      _setNotice('会话已压缩');
+      setNotice('会话已压缩');
       await loadMessages();
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
       return false;
     }
+  }
+
+  /// 从此处截断：保留 [messageIndex] 及其之前的全部消息，删除其后所有。
+  ///
+  /// 服务端 keep_count = index + 1（从开头保留条数）；越界或只读返回 false。
+  Future<bool> truncateAt(int messageIndex) async {
+    if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    final messages = state.messages;
+    if (messageIndex < 0 || messageIndex >= messages.length) return false;
+    final keepCount = messageIndex + 1;
+    try {
+      final raw = await _api!.truncateSession(
+        sessionId: state.sessionId,
+        keepCount: keepCount,
+      );
+      final json = _asStringMap(raw);
+      if (json['ok'] != true) {
+        _setSendError(json['error'] as String? ?? '截断会话失败。');
+        return false;
+      }
+      await loadMessages();
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 用 [text] 预填输入框（编辑/重试复用；不自动发送）。
+  void prefillComposer(String text) {
+    if (state.sessionId.isEmpty || state.isReadOnly) return;
+    state = state.copyWith(composerPrefill: text);
   }
 
   /// 撤销上一轮（删除最后一轮用户消息及其后全部）；成功后刷新消息列表。
@@ -374,7 +406,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         model: updated?.model ?? trimmedModel ?? state.model,
         modelProvider: updated?.modelProvider ?? state.modelProvider,
       );
-      _setNotice('设置已保存');
+      setNotice('设置已保存');
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -1912,7 +1944,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   /// 轻提示（成功类会话操作结果）。
-  void _setNotice(String message) {
+  void setNotice(String message) {
     state = state.copyWith(noticeMessage: message);
   }
 

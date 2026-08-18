@@ -67,6 +67,14 @@ abstract interface class ChatServerApi {
   /// POST /api/session/branch {session_id} → SessionBranchResponse。
   Future<Object?> branchSession(String sessionId);
 
+  /// POST /api/session/truncate {session_id, keep_count} → `{ok, session:{messages}}`。
+  ///
+  /// [keepCount] 为从开头保留的消息条数（0 = 清空）。
+  Future<Object?> truncateSession({
+    required String sessionId,
+    required int keepCount,
+  });
+
   /// POST /api/session/compress {session_id, focus_topic?} → SessionCompressResponse。
   Future<Object?> compressSession({
     required String sessionId,
@@ -238,6 +246,14 @@ class ChatApiClient implements ChatServerApi {
   @override
   Future<Object?> branchSession(String sessionId) =>
       _client.branchSession(sessionId: sessionId);
+
+  @override
+  Future<Object?> truncateSession({
+    required String sessionId,
+    required int keepCount,
+  }) {
+    return _client.truncateSession(sessionId: sessionId, keepCount: keepCount);
+  }
 
   @override
   Future<Object?> compressSession({

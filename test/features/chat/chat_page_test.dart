@@ -7,6 +7,7 @@ import 'package:hermex_flutter/core/api/sse_client.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/chat/chat_server_api.dart';
+import 'package:hermex_flutter/features/chat/widgets/message_bubble.dart';
 
 void main() {
   testWidgets('渲染已加载的会话消息列表', (tester) async {
@@ -357,6 +358,138 @@ void main() {
       await _unmount(tester);
     });
   });
+
+  group('消息级操作（长按菜单）', () {
+    testWidgets('长按用户消息 → 弹出操作菜单（复制/编辑/截断）', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': '第一条用户消息', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': '回复内容', 'message_id': 'm2'},
+          ],
+        },
+      };
+      await _pumpPage(tester, api);
+
+      await _longPressBubble(tester, '第一条用户消息');
+      expect(find.byKey(const ValueKey('msg-action-copy')), findsOneWidget);
+      expect(find.byKey(const ValueKey('msg-action-copy-md')), findsOneWidget);
+      expect(find.byKey(const ValueKey('msg-action-edit')), findsOneWidget);
+      expect(find.byKey(const ValueKey('msg-action-truncate')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('msg-action-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await _unmount(tester);
+    });
+
+    testWidgets('截断：菜单 → 确认对话框 → 确认后调用 truncate(keepCount)', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': '第一条用户消息', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': '回复内容', 'message_id': 'm2'},
+          ],
+        },
+      };
+      await _pumpPage(tester, api);
+
+      await _longPressBubble(tester, '第一条用户消息');
+      await tester.tap(find.byKey(const ValueKey('msg-action-truncate')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 确认对话框
+      expect(find.byKey(const ValueKey('msg-truncate-confirm')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('msg-truncate-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.truncateCalls, 1);
+      // 第一条消息 index=0 → keepCount=1
+      expect(api.truncateKeepCounts, [1]);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('截断：取消确认 → 不调用 truncate', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': '第一条用户消息', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': '回复内容', 'message_id': 'm2'},
+          ],
+        },
+      };
+      await _pumpPage(tester, api);
+
+      await _longPressBubble(tester, '第一条用户消息');
+      await tester.tap(find.byKey(const ValueKey('msg-action-truncate')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('msg-truncate-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.truncateCalls, 0);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('复制：长按 → 复制 → 提示已复制', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': '第一条用户消息', 'message_id': 'm1'},
+          ],
+        },
+      };
+      await _pumpPage(tester, api);
+
+      await _longPressBubble(tester, '第一条用户消息');
+      await tester.tap(find.byKey(const ValueKey('msg-action-copy')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // Clipboard 平台通道异步完成
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 复制完成 → controller 轻提示就位（横幅渲染机制已有独立用例）
+      final ctx = tester.element(find.byType(ChatPage));
+      final container = ProviderScope.containerOf(ctx);
+      final notice = container.read(chatControllerProvider('s1')).noticeMessage;
+      expect(notice, contains('已复制'));
+
+      await _unmount(tester);
+    });
+
+    testWidgets('assistant 消息菜单无「编辑」项', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'assistant', 'content': '只有助手消息', 'message_id': 'm1'},
+          ],
+        },
+      };
+      await _pumpPage(tester, api);
+
+      await _longPressBubble(tester, '只有助手消息');
+      expect(find.byKey(const ValueKey('msg-action-edit')), findsNothing);
+      expect(find.byKey(const ValueKey('msg-action-truncate')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('msg-action-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await _unmount(tester);
+    });
+  });
 }
 
 /// 组装 ChatPage（override chatApiProvider 注入 fake）。
@@ -431,6 +564,8 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+  int truncateCalls = 0;
+  final List<int> truncateKeepCounts = [];
   int compressCalls = 0;
   int undoCalls = 0;
   int retryCalls = 0;
@@ -559,6 +694,16 @@ class _FakeChatApi implements ChatServerApi {
   }
 
   @override
+  Future<Object?> truncateSession({
+    required String sessionId,
+    required int keepCount,
+  }) async {
+    truncateCalls++;
+    truncateKeepCounts.add(keepCount);
+    return {'ok': true};
+  }
+
+  @override
   Future<Object?> compressSession({
     required String sessionId,
     String? focusTopic,
@@ -633,4 +778,16 @@ class _FakeChatApi implements ChatServerApi {
   void stopStream() {}
 
   void emit(SseEvent event) => _onEvent?.call(event);
+}
+
+/// 消息级操作：长按气泡空白区（文本区被 selectable 抢占，模拟真实交互）。
+Future<void> _longPressBubble(WidgetTester tester, String text) async {
+  final bubble = find
+      .ancestor(of: find.text(text), matching: find.byType(ChatMessageBubble))
+      .first;
+  final rect = tester.getRect(bubble);
+  // 气泡左上角内侧 padding 区域（避开文本）
+  await tester.longPressAt(rect.topLeft + const Offset(8, 8));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }

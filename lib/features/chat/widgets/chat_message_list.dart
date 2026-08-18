@@ -8,6 +8,7 @@ import '../../../core/models/tool_call.dart';
 import '../../chat/chat_models.dart';
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import 'message_action_menu.dart';
 import 'message_bubble.dart';
 
 /// 消息列表（ListView.builder + 稳定 renderId key + 自动滚动跟随）。
@@ -156,6 +157,32 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
+  /// 长按/右键消息弹操作菜单并执行动作。
+  Future<void> _showMessageActions(ChatMessage message) async {
+    final action = await showMessageActionMenu(context, message: message);
+    if (action == null || !mounted) return;
+    final controller =
+        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    switch (action) {
+      case MessageAction.copy:
+      case MessageAction.copyMd:
+        // 先提示，再异步写剪贴板（立即反馈，不阻塞菜单关闭）。
+        unawaited(copyMessageText(message));
+        if (mounted) controller.setNotice('已复制到剪贴板');
+      case MessageAction.edit:
+        final text = message.content;
+        if (text != null && text.isNotEmpty) {
+          controller.prefillComposer(text);
+        }
+      case MessageAction.truncate:
+        final index = ref
+            .read(chatControllerProvider(widget.sessionId))
+            .messages
+            .indexWhere((m) => m.id == message.id);
+        if (index >= 0) await controller.truncateAt(index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionId = widget.sessionId;
@@ -218,11 +245,16 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         final reasoning = reasoningGroups
             .where((g) => g.anchorMessageId == entry.message.messageId)
             .toList();
-        return ChatMessageBubble(
-          key: ValueKey(entry.renderId),
-          message: entry.message,
-          toolGroups: groups,
-          reasoningGroups: reasoning,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPress: () => _showMessageActions(entry.message),
+          onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+          child: ChatMessageBubble(
+            key: ValueKey(entry.renderId),
+            message: entry.message,
+            toolGroups: groups,
+            reasoningGroups: reasoning,
+          ),
         );
       },
     );

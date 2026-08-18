@@ -1028,6 +1028,107 @@ void main() {
       expect(api.deleteCalls, 0);
       expect(api.branchCalls, 0);
     });
+
+    test('从此处截断成功 → keepCount = index+1 并刷新', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': 'a', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': 'b', 'message_id': 'm2'},
+            {'role': 'user', 'content': 'c', 'message_id': 'm3'},
+          ],
+        },
+      };
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+      await controller.loadMessages();
+
+      final ok = await controller.truncateAt(1);
+      expect(ok, isTrue);
+      expect(api.truncateCalls, 1);
+      expect(api.truncateKeepCounts, [2]);
+    });
+
+    test('从此处截断：服务端失败 → false + 错误', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': 'a', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': 'b', 'message_id': 'm2'},
+          ],
+        },
+      };
+      api.mutationOk = false;
+      api.mutationError = '截断被拒绝';
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+      await controller.loadMessages();
+
+      final ok = await controller.truncateAt(0);
+      expect(ok, isFalse);
+      expect(container.read(chatControllerProvider('s1')).sendErrorMessage,
+          '截断被拒绝');
+      expect(api.truncateKeepCounts, [1]);
+    });
+
+    test('从此处截断：越界 → false 且不发请求', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': 'a', 'message_id': 'm1'},
+          ],
+        },
+      };
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+      await controller.loadMessages();
+
+      expect(await controller.truncateAt(5), isFalse);
+      expect(await controller.truncateAt(-1), isFalse);
+      expect(api.truncateCalls, 0);
+    });
+
+    test('prefillComposer → 设置 composerPrefill', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      controller.prefillComposer('回填内容');
+      expect(
+        container.read(chatControllerProvider('s1')).composerPrefill,
+        '回填内容',
+      );
+    });
+
+    test('只读会话：truncate/prefill 拒绝', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'read_only': true,
+          'messages': [
+            {'role': 'user', 'content': 'a', 'message_id': 'm1'},
+          ],
+        },
+      };
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+      await controller.loadMessages();
+
+      expect(await controller.truncateAt(0), isFalse);
+      expect(api.truncateCalls, 0);
+      controller.prefillComposer('x');
+      expect(
+        container.read(chatControllerProvider('s1')).composerPrefill,
+        isNull,
+      );
+    });
   });
 }
 
@@ -1060,6 +1161,8 @@ class _FakeChatApi implements ChatServerApi {
   int archiveCalls = 0;
   int deleteCalls = 0;
   int branchCalls = 0;
+  int truncateCalls = 0;
+  final List<int> truncateKeepCounts = [];
   int compressCalls = 0;
   int undoCalls = 0;
   int retryCalls = 0;
@@ -1221,6 +1324,18 @@ class _FakeChatApi implements ChatServerApi {
       'parent_session_id': sessionId,
       'error': mutationOk ? null : mutationError,
     };
+  }
+
+  @override
+  Future<Object?> truncateSession({
+    required String sessionId,
+    required int keepCount,
+  }) async {
+    truncateCalls++;
+    truncateKeepCounts.add(keepCount);
+    if (mutationThrows != null) throw mutationThrows!;
+    if (!mutationOk) return {'ok': false, 'error': mutationError};
+    return {'ok': true};
   }
 
   @override
