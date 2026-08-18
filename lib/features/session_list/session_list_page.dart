@@ -11,6 +11,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../app/theme/status_colors.dart';
+import '../projects/project_picker_sheet.dart';
 import 'session_list_providers.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
@@ -75,10 +76,24 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('会话'),
                 trailing: CupertinoButton(
-                  key: const ValueKey('session-list-settings'),
+                  key: state?.isSelectionMode == true
+                      ? const ValueKey('session-list-selection-done')
+                      : const ValueKey('session-list-settings'),
                   padding: EdgeInsets.zero,
-                  onPressed: () => context.go('/settings'),
-                  child: const Icon(CupertinoIcons.gear_alt),
+                  onPressed: () {
+                    final controller =
+                        ref.read(sessionListControllerProvider.notifier);
+                    if (state?.isSelectionMode == true) {
+                      controller.clearSelection();
+                    } else {
+                      context.go('/settings');
+                    }
+                  },
+                  child: Icon(
+                    state?.isSelectionMode == true
+                        ? CupertinoIcons.xmark
+                        : CupertinoIcons.gear_alt,
+                  ),
                 ),
               ),
               // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
@@ -86,12 +101,21 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               // 指示器拿不到负 overlap 而无法触发）。
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
               SliverToBoxAdapter(child: _buildSearchBar()),
+              if (state != null && !isSearchMode)
+                SliverToBoxAdapter(child: _buildFilterBar(state)),
               ..._buildContentSlivers(async, state, sections, isSearchMode),
             ],
           ),
+          if (state?.isSelectionMode == true)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildBatchBar(state!),
+            ),
           Positioned(
             right: 20,
-            bottom: 24,
+            bottom: state?.isSelectionMode == true ? 76 : 24,
             child: CupertinoButton.filled(
               key: const ValueKey('session-list-new'),
               onPressed: () => unawaited(_onNewSession(context)),
@@ -121,6 +145,185 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       ),
     );
   }
+
+  /// 筛选栏：全部 / 已归档(count) / 来源标签（横向滚动 chips）/ 项目 chips。
+  Widget _buildFilterBar(SessionListState state) {
+    final controller = ref.read(sessionListControllerProvider.notifier);
+    final mode = state.filterMode;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+          child: CupertinoSlidingSegmentedControl<SessionListFilterMode>(
+            key: const ValueKey('session-list-filter-mode'),
+            // source/project 模式不属于分段键 → null（无段高亮）。
+            groupValue:
+                (mode == SessionListFilterMode.all ||
+                        mode == SessionListFilterMode.archived)
+                    ? mode
+                    : null,
+            children: const {
+              SessionListFilterMode.all: Text('全部'),
+              SessionListFilterMode.archived: Text('已归档'),
+            },
+            onValueChanged: (value) {
+              if (value != null) {
+                unawaited(controller.setFilter(value));
+              }
+            },
+          ),
+        ),
+        SizedBox(
+          height: 34,
+          child: ListView(
+            key: const ValueKey('session-list-filter-chips'),
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              for (final label in state.sourceLabels)
+                _filterChip(
+                  key: ValueKey('filter-chip-$label'),
+                  label: label,
+                  selected: mode == SessionListFilterMode.source &&
+                      state.filterValue == label,
+                  onTap: () => unawaited(
+                    controller.setFilter(
+                      SessionListFilterMode.source,
+                      value: label,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              if (mode == SessionListFilterMode.archived)
+                _filterChip(
+                  key: const ValueKey('filter-chip-archived-all'),
+                  label: '已归档 ${state.archivedCount ?? state.archivedSessions.length}',
+                  selected: true,
+                  onTap: () => unawaited(controller.setFilter(SessionListFilterMode.all)),
+                ),
+              if (state.filterMode != SessionListFilterMode.all &&
+                  state.filterMode != SessionListFilterMode.archived) ...[
+                const SizedBox(width: 4),
+                _filterChip(
+                  key: const ValueKey('filter-chip-clear'),
+                  label: '清除筛选',
+                  selected: false,
+                  onTap: () => unawaited(
+                    controller.setFilter(SessionListFilterMode.all),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 底部批量操作栏（多选模式）：选中计数 + 全选 / 归档 / 删除 / 移动项目。
+  Widget _buildBatchBar(SessionListState state) {
+    final controller = ref.read(sessionListControllerProvider.notifier);
+    final count = state.selectedSessionIds.length;
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        border: Border(
+          top: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '已选 $count 个',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              CupertinoButton(
+                key: const ValueKey('batch-select-all'),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: controller.selectAllInSection,
+                child: const Text('全选', style: TextStyle(fontSize: 14)),
+              ),
+              CupertinoButton(
+                key: const ValueKey('batch-archive'),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: count == 0
+                    ? null
+                    : () => unawaited(_confirmBatchArchive(context)),
+                child: const Text('归档', style: TextStyle(fontSize: 14)),
+              ),
+              CupertinoButton(
+                key: const ValueKey('batch-delete'),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: count == 0
+                    ? null
+                    : () => unawaited(_confirmBatchDelete(context)),
+                child: Text(
+                  '删除',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: CupertinoColors.systemRed.resolveFrom(context),
+                  ),
+                ),
+              ),
+              CupertinoButton(
+                key: const ValueKey('batch-move'),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: count == 0
+                    ? null
+                    : () => unawaited(_batchMoveToProject(context)),
+                child: const Text('移动项目', style: TextStyle(fontSize: 14)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 单个筛选 chip（自绘圆角胶囊）。
+  Widget _filterChip({
+      Key? key,
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return Padding(
+        key: key,
+        padding: const EdgeInsets.only(right: 6),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? CupertinoColors.activeBlue.resolveFrom(context)
+                  : CupertinoColors.systemGrey5.resolveFrom(context),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: selected
+                    ? CupertinoColors.white
+                    : CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
   // -------------------------------------------------------------------------
   // 内容 slivers：加载 / 错误 / 空态 / 分区列表
@@ -164,8 +367,22 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       'session-row-${session.sessionId ?? session.id}',
                     ),
                     session: session,
-                    onTap: () => _openSession(context, session),
-                    onActions: () => _showRowActions(context, session),
+                    selectionMode: state.isSelectionMode,
+                    selected: state.selectedSessionIds
+                        .contains(session.sessionId ?? session.id),
+                    onTap: () => state.isSelectionMode
+                        ? ref
+                            .read(sessionListControllerProvider.notifier)
+                            .toggleSelection(
+                              session.sessionId ?? session.id,
+                            )
+                        : _openSession(context, session),
+                    onLongPress: () => ref
+                        .read(sessionListControllerProvider.notifier)
+                        .toggleSelection(session.sessionId ?? session.id),
+                    onActions: state.isSelectionMode
+                        ? null
+                        : () => _showRowActions(context, session),
                   ),
               ],
             ),
@@ -363,6 +580,23 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               child: const Text('导出'),
             ),
             CupertinoActionSheetAction(
+              key: const ValueKey('session-action-move-project'),
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                unawaited(_moveToProject(context, session));
+              },
+              child: const Text('移动到项目'),
+            ),
+            if (session.archived == true)
+              CupertinoActionSheetAction(
+                key: const ValueKey('session-action-unarchive'),
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  unawaited(controller.setArchived(session, false));
+                },
+                child: const Text('恢复归档'),
+              ),
+            CupertinoActionSheetAction(
               key: const ValueKey('session-action-delete'),
               isDestructiveAction: true,
               onPressed: () {
@@ -501,6 +735,82 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     }
   }
 
+  Future<void> _confirmBatchArchive(BuildContext context) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        key: const ValueKey('batch-archive-dialog'),
+        title: const Text('批量归档'),
+        content: const Text('归档选中的会话？'),
+        actions: [
+          CupertinoDialogAction(
+            key: const ValueKey('batch-archive-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            key: const ValueKey('batch-archive-confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('归档'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await ref
+          .read(sessionListControllerProvider.notifier)
+          .batchArchive(archived: true);
+    }
+  }
+
+  Future<void> _confirmBatchDelete(BuildContext context) async {
+    final count =
+        ref.read(sessionListControllerProvider).valueOrNull?.selectedSessionIds.length ?? 0;
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        key: const ValueKey('batch-delete-dialog'),
+        title: const Text('批量删除'),
+        content: Text('删除选中的 $count 个会话？此操作不可撤销。'),
+        actions: [
+          CupertinoDialogAction(
+            key: const ValueKey('batch-delete-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            key: const ValueKey('batch-delete-confirm'),
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await ref.read(sessionListControllerProvider.notifier).batchDelete();
+    }
+  }
+
+  Future<void> _batchMoveToProject(BuildContext context) async {
+    final projectId = await showProjectPicker(context);
+    if (projectId == null || !context.mounted) return;
+    await ref
+        .read(sessionListControllerProvider.notifier)
+        .batchMove(projectId.isEmpty ? null : projectId);
+  }
+
+  Future<void> _moveToProject(
+    BuildContext context,
+    SessionSummary session,
+  ) async {
+    final projectId = await showProjectPicker(context);
+    if (projectId == null || !context.mounted) return;
+    await ref
+        .read(sessionListControllerProvider.notifier)
+        .moveToProject(session, projectId.isEmpty ? null : projectId);
+  }
+
   Future<void> _showActionError(BuildContext context, String message) async {
     await showCupertinoDialog<void>(
       context: context,
@@ -530,12 +840,22 @@ class _SessionRow extends StatelessWidget {
     super.key,
     required this.session,
     required this.onTap,
-    required this.onActions,
+    this.onLongPress,
+    this.onActions,
+    this.selectionMode = false,
+    this.selected = false,
   });
 
   final SessionSummary session;
   final VoidCallback onTap;
-  final VoidCallback onActions;
+  final VoidCallback? onLongPress;
+
+  /// 行尾操作按钮回调；null = 隐藏（多选模式下）。
+  final VoidCallback? onActions;
+
+  /// 多选模式：显示勾选圈，点击切换勾选。
+  final bool selectionMode;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -543,10 +863,23 @@ class _SessionRow extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
+            if (selectionMode) ...[
+              Icon(
+                selected
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                size: 22,
+                color: selected
+                    ? CupertinoColors.activeBlue
+                    : CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+              const SizedBox(width: 10),
+            ],
             if (_isStreaming(session)) ...[
               Container(
                 width: 8,
@@ -580,6 +913,33 @@ class _SessionRow extends StatelessWidget {
                           color: CupertinoColors.systemBlue,
                         ),
                       ],
+                      if (session.parentSessionId != null) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          CupertinoIcons.arrow_2_squarepath,
+                          size: 12,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ],
+                      if (session.readOnly == true ||
+                          session.isReadOnly == true) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          CupertinoIcons.lock_fill,
+                          size: 12,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ],
+                      if (session.hasPendingUserMessage == true) ...[
+                        const SizedBox(width: 6),
+                        const Text(
+                          '待输入',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: CupertinoColors.systemOrange,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   if (metadata != null) ...[
@@ -597,19 +957,20 @@ class _SessionRow extends StatelessWidget {
                 ],
               ),
             ),
-            CupertinoButton(
-              key: ValueKey(
-                'session-actions-${session.sessionId ?? session.id}',
+            if (onActions != null)
+              CupertinoButton(
+                key: ValueKey(
+                  'session-actions-${session.sessionId ?? session.id}',
+                ),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(36, 36),
+                onPressed: onActions,
+                child: const Icon(
+                  CupertinoIcons.ellipsis,
+                  size: 20,
+                  color: CupertinoColors.systemGrey,
+                ),
               ),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(36, 36),
-              onPressed: onActions,
-              child: const Icon(
-                CupertinoIcons.ellipsis,
-                size: 20,
-                color: CupertinoColors.systemGrey,
-              ),
-            ),
           ],
         ),
       ),
@@ -628,8 +989,12 @@ class _SessionRow extends StatelessWidget {
         '${session.messageCount} 条消息',
       if (_nonEmpty(session.workspace) != null)
         _lastPathComponent(_nonEmpty(session.workspace)!),
+      if (_nonEmpty(session.sourceLabel) != null)
+        '· ${_nonEmpty(session.sourceLabel)}',
+      if (session.estimatedCost != null)
+        '· \$${session.estimatedCost!.toStringAsFixed(2)}',
     ];
-    return parts.isEmpty ? null : parts.join(' · ');
+    return parts.isEmpty ? null : parts.join(' ');
   }
 
   static bool _isStreaming(SessionSummary session) =>
