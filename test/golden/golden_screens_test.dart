@@ -655,6 +655,39 @@ class _StaticChatApi implements ChatServerApi {
   }
 
   @override
+  Future<Object?> renameSession({
+    required String sessionId,
+    required String title,
+  }) async {
+    return {'ok': true, 'session': {'session_id': sessionId, 'title': title}};
+  }
+
+  @override
+  Future<Object?> pinSession({
+    required String sessionId,
+    required bool pinned,
+  }) async {
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> archiveSession({
+    required String sessionId,
+    required bool archived,
+  }) async {
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> deleteSession(String sessionId) async => {'ok': true};
+
+  @override
+  Future<Object?> branchSession(String sessionId) async => {
+        'session_id': 'branch-$sessionId',
+        'parent_session_id': sessionId,
+      };
+
+  @override
   Future<void> startStream(
     String streamId, {
     int? replayAfterSeq,

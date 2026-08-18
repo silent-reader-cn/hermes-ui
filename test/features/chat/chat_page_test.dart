@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/api/sse_client.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
@@ -220,6 +221,142 @@ void main() {
 
     await _unmount(tester);
   });
+
+  group('第一阶段：聊天页会话菜单', () {
+    testWidgets('导航栏菜单按钮打开操作菜单，展示全部操作项', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '测试会话', 'messages': const []},
+      };
+      await _pumpRouted(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey('chat-action-rename')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-pin')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-archive')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-branch')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-export')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-delete')), findsOneWidget);
+
+      // 关闭菜单
+      await tester.tap(find.byKey(const ValueKey('chat-action-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await _unmount(tester);
+    });
+
+    testWidgets('重命名：输入新标题保存 → 标题更新且请求发出', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '旧标题', 'messages': const []},
+      };
+      await _pumpRouted(tester, api);
+      expect(find.text('旧标题'), findsWidgets);
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-action-rename')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 对话框内有输入框（预填当前标题）
+      final input = find.byType(CupertinoTextField).last;
+      await tester.enterText(input, '新标题');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-rename-save')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.renameCalls, 1);
+      expect(api.lastRenameTitle, '新标题');
+      expect(find.text('新标题'), findsWidgets); // 导航栏标题已更新
+
+      await _unmount(tester);
+    });
+
+    testWidgets('置顶：选择置顶 → setPinned(true)', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '会话', 'messages': const []},
+      };
+      await _pumpRouted(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-action-pin')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.pinCalls, 1);
+      expect(api.lastPinned, isTrue);
+      await _unmount(tester);
+    });
+
+    testWidgets('删除：确认后删除并返回列表；取消则不删除', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '会话', 'messages': const []},
+      };
+      await _pumpRouted(tester, api);
+
+      // 取消路径：不删除
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-action-delete')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('此操作不可撤销'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('chat-delete-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(api.deleteCalls, 0);
+
+      // 确认路径：删除并返回列表页
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-action-delete')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-delete-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.deleteCalls, 1);
+      expect(find.text('列表页'), findsOneWidget); // 已回到会话列表路由
+
+      await _unmount(tester);
+    });
+
+    testWidgets('分支：创建分支后跳转到分支会话', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '会话', 'messages': const []},
+      };
+      final router = await _pumpRouted(tester, api);
+      expect(router.routeInformationProvider.value.uri.path, '/chat/s1');
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('chat-action-branch')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.branchCalls, 1);
+      // 已跳转到新分支会话路由
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        '/chat/branch-s1',
+      );
+
+      await _unmount(tester);
+    });
+  });
 }
 
 /// 组装 ChatPage（override chatApiProvider 注入 fake）。
@@ -237,6 +374,37 @@ Future<void> _pumpPage(WidgetTester tester, _FakeChatApi api) async {
   await tester.pump(const Duration(milliseconds: 50));
 }
 
+/// 组装带 GoRouter 的 ChatPage（会话菜单的导航跳转走真实路由）。
+Future<GoRouter> _pumpRouted(WidgetTester tester, _FakeChatApi api) async {
+  final router = GoRouter(
+    initialLocation: '/chat/s1',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const CupertinoPageScaffold(
+          child: Center(child: Text('列表页')),
+        ),
+      ),
+      GoRoute(
+        path: '/chat/:id',
+        builder: (context, state) =>
+            ChatPage(sessionId: state.pathParameters['id']!),
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        chatApiProvider.overrideWithValue(api),
+      ],
+      child: CupertinoApp.router(routerConfig: router),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  return router;
+}
+
 /// 卸载 ProviderScope（dispose 容器 → 取消看门狗等周期定时器，避免 pending timer）。
 Future<void> _unmount(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
@@ -250,6 +418,15 @@ class _FakeChatApi implements ChatServerApi {
   String? lastSentText;
   String? lastModel;
   bool? lastExplicitModelPick;
+
+  // 会话操作计数（第一阶段：聊天页会话菜单）
+  int renameCalls = 0;
+  int pinCalls = 0;
+  int archiveCalls = 0;
+  int deleteCalls = 0;
+  int branchCalls = 0;
+  String? lastRenameTitle;
+  bool? lastPinned;
 
   void Function(SseEvent event)? _onEvent;
 
@@ -317,6 +494,50 @@ class _FakeChatApi implements ChatServerApi {
     String? clarifyId,
   }) async {
     return {'ok': true};
+  }
+
+  @override
+  Future<Object?> renameSession({
+    required String sessionId,
+    required String title,
+  }) async {
+    renameCalls++;
+    lastRenameTitle = title;
+    return {'ok': true, 'session': {'session_id': sessionId, 'title': title}};
+  }
+
+  @override
+  Future<Object?> pinSession({
+    required String sessionId,
+    required bool pinned,
+  }) async {
+    pinCalls++;
+    lastPinned = pinned;
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> archiveSession({
+    required String sessionId,
+    required bool archived,
+  }) async {
+    archiveCalls++;
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> deleteSession(String sessionId) async {
+    deleteCalls++;
+    return {'ok': true};
+  }
+
+  @override
+  Future<Object?> branchSession(String sessionId) async {
+    branchCalls++;
+    return {
+      'session_id': 'branch-$sessionId',
+      'parent_session_id': sessionId,
+    };
   }
 
   @override

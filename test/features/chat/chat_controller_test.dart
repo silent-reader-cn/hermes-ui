@@ -919,6 +919,116 @@ void main() {
       expect(units.join(), '你好世界你好世界你好');
     });
   });
+
+  group('会话操作（第一阶段：聊天页会话菜单）', () {
+    test('重命名成功 → 更新 displayTitle', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      final ok = await controller.renameSession('新标题');
+      expect(ok, isTrue);
+      expect(container.read(chatControllerProvider('s1')).displayTitle, '新标题');
+      expect(api.renameCalls, 1);
+      expect(api.lastRenameTitle, '新标题');
+    });
+
+    test('重命名空白标题 → 拒绝且不发请求', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      final ok = await controller.renameSession('   ');
+      expect(ok, isFalse);
+      expect(api.renameCalls, 0);
+    });
+
+    test('重命名服务端失败 → 返回 false 且设置错误', () async {
+      final api = _FakeChatApi();
+      api.mutationOk = false;
+      api.mutationError = '标题已存在';
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      final ok = await controller.renameSession('新标题');
+      expect(ok, isFalse);
+      expect(container.read(chatControllerProvider('s1')).sendErrorMessage, '标题已存在');
+    });
+
+    test('重命名网络异常 → 返回 false 且设置错误', () async {
+      final api = _FakeChatApi();
+      api.mutationThrows = NetworkException(NetworkExceptionKind.cannotConnect);
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      final ok = await controller.renameSession('新标题');
+      expect(ok, isFalse);
+      expect(
+        container.read(chatControllerProvider('s1')).sendErrorMessage,
+        startsWith('无法连接'),
+      );
+    });
+
+    test('置顶/归档成功 → 返回 true', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      expect(await controller.setPinned(true), isTrue);
+      expect(api.pinCalls, 1);
+      expect(api.lastPinned, isTrue);
+      expect(await controller.setArchived(true), isTrue);
+      expect(api.archiveCalls, 1);
+      expect(api.lastArchived, isTrue);
+    });
+
+    test('置顶保持状态 → 返回 true', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      expect(await controller.setPinned(false), isTrue);
+      expect(api.lastPinned, isFalse);
+      expect(await controller.setArchived(false), isTrue);
+      expect(api.lastArchived, isFalse);
+    });
+
+    test('删除成功 → 返回 true', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      expect(await controller.deleteSession(), isTrue);
+      expect(api.deleteCalls, 1);
+    });
+
+    test('分支成功 → 返回新会话 ID', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+
+      final newId = await controller.branchSession();
+      expect(newId, 'branch-s1');
+      expect(api.branchCalls, 1);
+    });
+
+    test('新会话（空 sessionId）操作全部拒绝', () async {
+      final api = _FakeChatApi();
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('').notifier);
+
+      expect(await controller.renameSession('标题'), isFalse);
+      expect(await controller.setPinned(true), isFalse);
+      expect(await controller.setArchived(true), isFalse);
+      expect(await controller.deleteSession(), isFalse);
+      expect(await controller.branchSession(), isNull);
+      expect(api.renameCalls, 0);
+      expect(api.pinCalls, 0);
+      expect(api.archiveCalls, 0);
+      expect(api.deleteCalls, 0);
+      expect(api.branchCalls, 0);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -940,6 +1050,19 @@ class _FakeChatApi implements ChatServerApi {
   Map<String, Object?>? startChatResult;
   Map<String, Object?>? statusResult;
   Map<String, Object?>? sessionResult;
+
+  // 会话操作控制（第一阶段：聊天页会话菜单）
+  bool mutationOk = true;
+  String? mutationError;
+  Object? mutationThrows;
+  int renameCalls = 0;
+  int pinCalls = 0;
+  int archiveCalls = 0;
+  int deleteCalls = 0;
+  int branchCalls = 0;
+  String? lastRenameTitle;
+  bool? lastPinned;
+  bool? lastArchived;
 
   int startChatCalls = 0;
   int steerCalls = 0;
@@ -1029,6 +1152,61 @@ class _FakeChatApi implements ChatServerApi {
     String? clarifyId,
   }) async {
     return {'ok': true};
+  }
+
+  @override
+  Future<Object?> renameSession({
+    required String sessionId,
+    required String title,
+  }) async {
+    renameCalls++;
+    lastRenameTitle = title;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {
+      'ok': mutationOk,
+      'error': mutationError,
+      'session': {'session_id': sessionId, 'title': title},
+    };
+  }
+
+  @override
+  Future<Object?> pinSession({
+    required String sessionId,
+    required bool pinned,
+  }) async {
+    pinCalls++;
+    lastPinned = pinned;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {'ok': mutationOk, 'error': mutationError};
+  }
+
+  @override
+  Future<Object?> archiveSession({
+    required String sessionId,
+    required bool archived,
+  }) async {
+    archiveCalls++;
+    lastArchived = archived;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {'ok': mutationOk, 'error': mutationError};
+  }
+
+  @override
+  Future<Object?> deleteSession(String sessionId) async {
+    deleteCalls++;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {'ok': mutationOk, 'error': mutationError};
+  }
+
+  @override
+  Future<Object?> branchSession(String sessionId) async {
+    branchCalls++;
+    if (mutationThrows != null) throw mutationThrows!;
+    return {
+      'session_id': mutationOk ? 'branch-$sessionId' : null,
+      'parent_session_id': sessionId,
+      'error': mutationOk ? null : mutationError,
+    };
   }
 
   @override

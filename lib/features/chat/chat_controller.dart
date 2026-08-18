@@ -178,6 +178,100 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  /// 重命名当前会话，并立即更新聊天页标题。
+  Future<bool> renameSession(String title) async {
+    final trimmed = title.trim();
+    if (state.sessionId.isEmpty || trimmed.isEmpty) return false;
+    try {
+      final raw = await _api!.renameSession(
+            sessionId: state.sessionId,
+            title: trimmed,
+          );
+      final response = SessionMutationResponse.fromJson(_asStringMap(raw));
+      if (response.ok == false) {
+        _setSendError(response.error ?? '重命名会话失败。');
+        return false;
+      }
+      state = state.copyWith(displayTitle: trimmed);
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 更新当前会话的置顶状态。
+  Future<bool> setPinned(bool pinned) => _mutateSession(
+        () => _api!.pinSession(
+              sessionId: state.sessionId,
+              pinned: pinned,
+            ),
+        failure: '置顶状态更新失败。',
+      );
+
+  /// 更新当前会话的归档状态。
+  Future<bool> setArchived(bool archived) => _mutateSession(
+        () => _api!.archiveSession(
+              sessionId: state.sessionId,
+              archived: archived,
+            ),
+        failure: '归档状态更新失败。',
+      );
+
+  Future<bool> _mutateSession(
+    Future<Object?> Function() request, {
+    required String failure,
+  }) async {
+    if (state.sessionId.isEmpty) return false;
+    try {
+      final response = SessionMutationResponse.fromJson(
+        _asStringMap(await request()),
+      );
+      if (response.ok == false) {
+        _setSendError(response.error ?? failure);
+        return false;
+      }
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 删除当前会话。
+  Future<bool> deleteSession() async {
+    if (state.sessionId.isEmpty) return false;
+    try {
+      final response = SessionMutationResponse.fromJson(
+        _asStringMap(await _api!.deleteSession(state.sessionId)),
+      );
+      if (response.ok == false) {
+        _setSendError(response.error ?? '删除会话失败。');
+        return false;
+      }
+      return true;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return false;
+    }
+  }
+
+  /// 从当前会话创建分支，返回新会话 ID。
+  Future<String?> branchSession() async {
+    if (state.sessionId.isEmpty) return null;
+    try {
+      final raw = await _api!.branchSession(state.sessionId);
+      final response = SessionBranchResponse.fromJson(_asStringMap(raw));
+      if (response.sessionId == null) {
+        _setSendError(response.error ?? '创建会话分支失败。');
+      }
+      return response.sessionId;
+    } on ApiException catch (error) {
+      _setSendError(error.message);
+      return null;
+    }
+  }
+
   /// 加载更早的消息（分页）。
   Future<void> loadOlderMessages() async {
     final offset = state.messagesOffset;

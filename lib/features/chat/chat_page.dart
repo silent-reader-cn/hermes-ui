@@ -1,9 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../core/api/api_client_sessions.dart';
+import '../../core/api/api_exception.dart';
+import '../../core/connections/connection_providers.dart';
 import '../shared/app_back_button.dart';
+import 'chat_controller.dart';
 import 'chat_providers.dart';
+import 'chat_state.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_message_list.dart';
 
@@ -27,6 +37,12 @@ class ChatPage extends ConsumerWidget {
           state.displayTitle,
           overflow: TextOverflow.ellipsis,
         ),
+        trailing: CupertinoButton(
+          key: const ValueKey('chat-session-actions'),
+          padding: EdgeInsets.zero,
+          onPressed: () => _showSessionActions(context, ref, sessionId, state),
+          child: const Icon(CupertinoIcons.ellipsis),
+        ),
       ),
       child: SafeArea(
         bottom: false,
@@ -48,6 +64,163 @@ class ChatPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _showSessionActions(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+  ChatState state,
+) async {
+  if (sessionId.isEmpty) return;
+  final action = await showCupertinoModalPopup<String>(
+    context: context,
+    builder: (sheetContext) => CupertinoActionSheet(
+      title: Text(state.displayTitle),
+      actions: [
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-rename'),
+          onPressed: () => Navigator.pop(sheetContext, 'rename'),
+          child: const Text('重命名'),
+        ),
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-pin'),
+          onPressed: () => Navigator.pop(sheetContext, 'pin'),
+          child: const Text('置顶'),
+        ),
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-archive'),
+          onPressed: () => Navigator.pop(sheetContext, 'archive'),
+          child: const Text('归档'),
+        ),
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-branch'),
+          onPressed: () => Navigator.pop(sheetContext, 'branch'),
+          child: const Text('创建分支'),
+        ),
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-export'),
+          onPressed: () => Navigator.pop(sheetContext, 'export'),
+          child: const Text('导出'),
+        ),
+        CupertinoActionSheetAction(
+          key: const ValueKey('chat-action-delete'),
+          isDestructiveAction: true,
+          onPressed: () => Navigator.pop(sheetContext, 'delete'),
+          child: const Text('删除'),
+        ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        key: const ValueKey('chat-action-cancel'),
+        onPressed: () => Navigator.pop(sheetContext),
+        child: const Text('取消'),
+      ),
+    ),
+  );
+  if (!context.mounted || action == null) return;
+  final controller = ref.read(chatControllerProvider(sessionId).notifier);
+  switch (action) {
+    case 'rename':
+      await _renameSession(context, controller, state.displayTitle);
+    case 'pin':
+      await controller.setPinned(true);
+    case 'archive':
+      if (await controller.setArchived(true)) {
+        if (context.mounted) context.go('/');
+      }
+    case 'branch':
+      final newId = await controller.branchSession();
+      if (newId != null) {
+        if (context.mounted) context.go('/chat/$newId');
+      }
+    case 'export':
+      await _exportSession(context, ref, sessionId);
+    case 'delete':
+      final confirmed = await _confirmSessionDelete(context, state.displayTitle);
+      if (confirmed) {
+        if (await controller.deleteSession()) {
+          if (context.mounted) context.go('/');
+        }
+      }
+  }
+}
+
+Future<void> _renameSession(BuildContext context, ChatController controller, String current) async {
+  final input = TextEditingController(text: current);
+  final title = await showCupertinoDialog<String>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: const Text('重命名会话'),
+      content: Padding(padding: const EdgeInsets.only(top: 12), child: CupertinoTextField(controller: input, autofocus: true)),
+      actions: [
+        CupertinoDialogAction(
+          key: const ValueKey('chat-rename-cancel'),
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('取消'),
+        ),
+        CupertinoDialogAction(
+          key: const ValueKey('chat-rename-save'),
+          onPressed: () => Navigator.pop(dialogContext, input.text),
+          child: const Text('保存'),
+        ),
+      ],
+    ),
+  );
+  input.dispose();
+  if (title != null) await controller.renameSession(title);
+}
+
+Future<bool> _confirmSessionDelete(BuildContext context, String title) async {
+  final result = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: const Text('删除会话'),
+      content: Text('确定删除「$title」？此操作不可撤销。'),
+      actions: [
+        CupertinoDialogAction(
+          key: const ValueKey('chat-delete-cancel'),
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('取消'),
+        ),
+        CupertinoDialogAction(
+          key: const ValueKey('chat-delete-confirm'),
+          isDestructiveAction: true,
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('删除'),
+        ),
+      ],
+    ),
+  );
+  return result == true;
+}
+
+Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionId) async {
+  try {
+    final response = await ref.read(apiClientProvider).exportSession(sessionId: sessionId, format: 'md');
+    final content = utf8.decode(response.data, allowMalformed: true);
+    await Clipboard.setData(ClipboardData(text: content));
+    if (context.mounted) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('导出成功'),
+          content: const Text('Markdown 已复制到剪贴板。'),
+          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: const Text('好'))],
+        ),
+      );
+    }
+  } on ApiException catch (error) {
+    if (context.mounted) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('导出失败'),
+          content: Text(error.message),
+          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: const Text('好'))],
+        ),
+      );
+    }
   }
 }
 

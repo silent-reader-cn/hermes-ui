@@ -52,6 +52,21 @@ abstract interface class ChatServerApi {
     bool expandRenderable = false,
   });
 
+  /// POST /api/session/rename {session_id, title} → SessionMutationResponse。
+  Future<Object?> renameSession({required String sessionId, required String title});
+
+  /// POST /api/session/pin {session_id, pinned} → SessionMutationResponse。
+  Future<Object?> pinSession({required String sessionId, required bool pinned});
+
+  /// POST /api/session/archive {session_id, archived} → SessionMutationResponse。
+  Future<Object?> archiveSession({required String sessionId, required bool archived});
+
+  /// POST /api/session/delete {session_id} → SessionMutationResponse。
+  Future<Object?> deleteSession(String sessionId);
+
+  /// POST /api/session/branch {session_id} → SessionBranchResponse。
+  Future<Object?> branchSession(String sessionId);
+
   /// 建立 SSE 连接并持续派发解码后的事件；流自然结束/出错后返回。
   ///
   /// [onEventId] 在收到事件 `id:` 字段时回调（lastEventID 跟踪用）。
@@ -161,6 +176,38 @@ class ChatApiClient implements ChatServerApi {
       expandRenderable: expandRenderable,
     );
   }
+
+  @override
+  Future<Object?> renameSession({
+    required String sessionId,
+    required String title,
+  }) {
+    return _client.renameSession(sessionId: sessionId, title: title);
+  }
+
+  @override
+  Future<Object?> pinSession({
+    required String sessionId,
+    required bool pinned,
+  }) {
+    return _client.pinSession(sessionId: sessionId, pinned: pinned);
+  }
+
+  @override
+  Future<Object?> archiveSession({
+    required String sessionId,
+    required bool archived,
+  }) {
+    return _client.archiveSession(sessionId: sessionId, archived: archived);
+  }
+
+  @override
+  Future<Object?> deleteSession(String sessionId) =>
+      _client.deleteSession(sessionId);
+
+  @override
+  Future<Object?> branchSession(String sessionId) =>
+      _client.branchSession(sessionId: sessionId);
 
   @override
   Future<void> startStream(
