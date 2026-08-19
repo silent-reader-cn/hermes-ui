@@ -33,7 +33,7 @@
 |---|---|---|---|
 | 1 | 聊天附件上传 | **已完成**：file picker、20MB 预检、上传状态、成功/失败提示 | `chat_input_bar.dart`, `core/utils/file_picker.dart` |
 | 2 | 工作区文件上传 | **已完成**：路由生产注入 picker；删除/重命名仍受服务端限制 | `router.dart`, `workspace_page.dart` |
-| 3 | 工作区文件删除/重命名 | 服务端（hermes-webui）尚无删除/重命名端点，生产实现抛 HTTP 501（Not Implemented），UI 弹「操作失败」 | `workspace_api.dart:90-152`（§api_spec 1.7 workspace 域 10 端点无此能力） |
+| 3 | 工作区文件删除/重命名 | **已接线**（2026-08-19：delete recursive + rename 端点，fake_gateway 已同步）；真实服务端支持待验证，不支持时仍会 501 | `workspace_api.dart`、`api_client_workspace.dart` |
 | 4 | 看板拖拽 | **已完成跨列拖拽**；服务端暂无卡片顺序端点，当前拖拽映射为状态 PATCH | `kanban_page.dart`, `kanban_providers.dart` |
 
 ### 3.2 类型化待合并（TODO(merge)，全部为 API 返回类型占位）
@@ -43,15 +43,15 @@
 | 1 | `api_client.dart:428` 及 server/cron/git/kanban/memory_skills/server_panels/sessions/workspace/upload 各域扩展 | 返回类型暂为 `Object?`（解码后 JSON 透传），模型就绪后改为类型化响应 |
 | 2 | `sse_client.dart:226,234,375,378` | approval / clarify / context window / session detail 待类型化 |
 | 3 | `ws_client.dart:49` | `List<KanbanEvent>` 待类型化（现为 `List<Map<String, Object?>>`） |
-| 4 | `cookie_store.dart:89` | Cookie 持久化待接入 dio_cookie_jar / flutter_secure_storage |
+| 4 | `cookie_store.dart` | Cookie 持久化已实现（自研 store + 401 自动重登防递归，见 882d126）；接 dio_cookie_jar 可后置 |
 | 5 | `custom_header.dart` | 已增加 `persist/restore` 安全存储 API；设置页接线仍可继续完善 |
 
 ### 3.3 发布相关（见 docs/RELEASE.md）
 
 - Android release 签名仍用 debug keystore（`android/app/build.gradle.kts:37` TODO）
 - 仓库缺 LICENSE 文件；README 截图待补；pubspec 版本 `1.0.0+1` 与 CHANGELOG v0.1.0 未对齐
-- macOS / Linux / Web 平台目录已生成，构建链路未验证；无 CI workflows（.github/ 为空）
-- `tools/fake_gateway`（CODING_STYLE.md 提及的契约测试模拟服务器）尚未创建
+- macOS / Linux / Web 平台目录已生成，构建链路未验证；CI 已落地（.github/workflows/ci.yml：analyze + test / android debug / fake_gateway smoke）
+- `tools/fake_gateway` 已创建（08-19：smoke_test + 契约测试 + CI job 落地），待补：完整 150 端点形状覆盖
 
 ## 4. 迭代建议（按优先级）
 

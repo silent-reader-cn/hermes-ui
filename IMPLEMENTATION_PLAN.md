@@ -1,6 +1,6 @@
 # Hermex 全平台移植实施计划（Flutter + Cupertino）
 
-> 版本：v1.0 ｜ 日期：2026-08-16 ｜ 状态：待评审
+> 版本：v1.1 ｜ 日期：2026-08-19 ｜ 状态：功能完成（Phase 1-6 主体合入 main，v0.1.0 发布收尾中）
 > 目标：将 Hermex（iOS 原生 SwiftUI 客户端）移植为 Flutter 全平台客户端，界面质感对齐 Hermex，API 契约对齐 nesquena/hermes-webui
 
 ---
@@ -178,59 +178,60 @@ hermex-flutter/
 ## 7. 分阶段实施计划
 
 ### Phase 0 — 环境与脚手架（0.5 天）
-- [ ] 安装 Flutter SDK（Windows，含 Android toolchain；iOS 构建需 macOS 或 CI）
-- [ ] `flutter create` 脚手架 + 平台目录清理
-- [ ] 接入 CI（GitHub Actions：analyze + test + build android/windows/web）
-- [ ] 提交初始骨架（git init，分支约定）
+- [x] 安装 Flutter SDK（Windows，含 Android toolchain；iOS 构建需 macOS 或 CI）
+- [x] `flutter create` 脚手架 + 平台目录清理
+- [x] 接入 CI（GitHub Actions：analyze + test + build android/windows/web）
+- [x] 提交初始骨架（git init，分支约定）
 
 ### Phase 1 — 核心基建（1 周）
-- [ ] `core/api`：dio 封装、认证（API Key / Cookie）、错误归一化
-- [ ] `endpoints.dart`：150 端点迁移（对照 Hermex Endpoints.swift 逐条）
-- [ ] 23 个 Models 迁移（容错解码，对齐 Hermex 的 tolerant 策略）
-- [ ] SSE 客户端（心跳、断线重连、消息顺序）
-- [ ] 连接配置 + 多服务器保存（flutter_secure_storage）
-- [ ] Cupertino 主题（深/浅色）+ 字体策略
+- [x] `core/api`：dio 封装、认证（API Key / Cookie）、错误归一化
+- [x] `endpoints.dart`：150 端点迁移（对照 Hermex Endpoints.swift 逐条）
+- [x] 23 个 Models 迁移（容错解码，对齐 Hermex 的 tolerant 策略）
+- [x] SSE 客户端（心跳、断线重连、消息顺序）
+- [x] 连接配置 + 多服务器保存（flutter_secure_storage）
+- [x] Cupertino 主题（深/浅色）+ 字体策略
 - **验收**：连接真实 30002，拉取会话列表成功；单元测试覆盖 ApiClient 解析
 
 ### Phase 2 — MVP（1.5-2 周）
-- [ ] 会话列表（分页、搜索、pin/archive/delete/branch）
-- [ ] 聊天核心：SSE 流式渲染、思考/工具调用卡片、Markdown、代码块
-- [ ] 模型切换（每会话/全局）、reasoning effort
-- [ ] 附件上传（图片/文件，multipart，10 个/64MiB 上限）
-- [ ] 中途 steer / stop
+- [x] 会话列表（分页、搜索、pin/archive/delete/branch；后续补齐筛选/批量/项目/搜索高亮深链，见 Phase 3 备注）
+- [x] 聊天核心：SSE 流式渲染、思考/工具调用卡片、Markdown、代码块
+- [x] 模型切换（每会话/全局）、reasoning effort
+- [x] 附件上传（图片/文件，multipart，10 个/64MiB 上限）
+- [x] 中途 steer / stop
 - **验收**：Android 真机 + Windows 桌面可完成一次完整流式对话 + 附件上传
 
 ### Phase 3 — 功能补齐（2-3 周）
-- [ ] Tasks（Cron 列表/创建/编辑/启停/触发/输出查看）
-- [ ] Skills 浏览、Memory 查看
-- [ ] Workspace 文件树 + 上传/下载/删除
-- [ ] Approval / Clarify / sudo 审批流（原生对话框）
-- [ ] Settings 全量（模型、服务器、外观、verbose 模式）
-- [ ] 多 Profile 切换（切换时正确加载 profile home）
+- [x] Tasks（Cron 列表/创建/编辑/启停/触发/输出查看）
+- [x] Skills 浏览、Memory 查看
+- [x] Workspace 文件树 + 上传/下载/删除（删除/重命名端点 2026-08-19 接线，fake_gateway 已同步；真实服务端支持待验证）
+- [x] Approval / Clarify / sudo 审批流（聊天内审批/澄清卡片 + respond，chat_spec §2.3）
+- [x] Settings 全量（模型、服务器、外观、verbose 模式）
+- [x] 多 Profile 切换（切换时正确加载 profile home）
 - **验收**：对照 Hermex 功能清单逐项勾选，无缺失
 
 ### Phase 4 — 高级功能（2 周）
-- [ ] Kanban 看板（boards/cards/依赖/事件流/worker 日志）
-- [ ] Insights 用量统计（fl_chart）
-- [ ] Git 面板（status/diff/commit/push/pull）
-- [ ] 离线只读缓存（drift：最近会话）
-- [ ] 会话导出（Markdown/JSON）
+- [x] Kanban 看板（boards/cards/依赖/事件流/worker 日志；跨列拖拽已完成，同列排序待服务端顺序端点）
+- [x] Insights 用量统计（fl_chart）
+- [x] Git 面板（status/diff/commit/push/pull）
+- [x] 离线只读缓存（drift：最近会话）
+- [x] 会话导出（Markdown/JSON）
 - **验收**：Kanban 事件实时刷新；断网重连后消息不丢
 
 ### Phase 5 — 平台化（1-2 周）
-- [ ] **Android 后台回合完成通知**（前台服务 + 通知通道，对齐 hermes-android v2.0.1 的 Background turn notifications）
-- [ ] Android 深链；iOS URL scheme
+- [x] **Android 后台回合完成通知**（前台服务 + 通知通道，对齐 hermes-android v2.0.1 的 Background turn notifications）
+- [x] Android 深链（通知点击回跳 `/chat/:sessionId`；搜索深链 `/chat/:id?q=` 定位）
+- [ ] iOS URL scheme（需 macOS 环境验证）
 - [ ] 桌面：窗口记忆、全局快捷键、系统托盘
 - [ ] Web：PWA manifest + 可安装；可选 Web Push（评估 FCM 国内可用性，否则跳过）
-- **验收**：手机退后台任务完成弹通知；桌面窗口体验正常
+- **验收**：手机退后台任务完成弹通知 ✅；桌面窗口体验正常 ❌（未做）
 
 ### Phase 6 — 打磨（1-2 周）
 - [ ] 动画手感（Spring 曲线参数对照 SwiftUI：`spring(duration:bounce:)` → Flutter `Curves`/自定义 `TweenAnimationBuilder`）
-- [ ] 触觉反馈（HapticFeedback）
-- [ ] 主题细节、空态/错误态、加载骨架
-- [ ] 无障碍（语义标签、字体缩放）
-- [ ] 国际化（中文/英文）
-- **验收**：与 Hermex 截图逐屏对比，视觉差异清单清零
+- [x] 触觉反馈（HapticFeedback：`AccessibleButton` + haptic helpers 已落地，既有按钮渐进迁移中）
+- [x] 主题细节、空态/错误态、加载骨架（golden 截图测试 20+ 屏 + 对比度自动扫描）
+- [x] 无障碍（语义标签：`AccessibleButton` 新增，既有页面待迁移；字体缩放未专项验证）
+- [x] 国际化（中文/英文：框架层 en/zh + 业务文案基础 facade；完整 ARB 抽离待续）
+- **验收**：与 Hermex 截图逐屏对比，视觉差异清单清零 ❌（未做，需 Hermex 真机截图）
 
 **总计：单开发者约 9-13 周；两人并行（1 基建+UI / 1 业务）可压至 6-8 周。**
 
@@ -346,3 +347,6 @@ gantt
 | 2026-08-16 | 工具链全就绪（Flutter 3.47.0 / JDK17 / SDK36 / licenses）；脚手架 + 依赖 + lint 入仓（a371dbf） |
 | 2026-08-16 | 预研规格 3 份验收通过：models_spec(145 模型) / api_spec(123 端点) / chat_spec(9 态状态机) |
 | 2026-08-16 | Phase 1 编码进行中：core/models + core/api 双线程（deleg_011b30ed） |
+| 2026-08-17 | Phase 1-6 全功能合入 main：722 测试全绿、analyze 零告警、Android debug APK 可构建（CHANGELOG v0.1.0） |
+| 2026-08-18 | Phase 2 会话缺口补强（feat/session-gaps-phase2 批 1-2 合入）：筛选/归档/批量/项目 CRUD、聊天会话操作（压缩/撤销/重试/设置/YOLO/只读）、消息级操作、搜索高亮+深链定位 |
+| 2026-08-19 | workspace 删除/重命名端点接线 + fake_gateway 同步；CI 工作流落地（analyze+test / android debug / fake_gateway smoke）；**842 测试全绿、analyze 零告警** |
