@@ -3,6 +3,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../models/approval.dart';
+import '../models/clarification.dart';
+import '../models/context_window_snapshot.dart';
+import '../models/json_value.dart';
+import '../models/session.dart';
 import 'custom_header.dart';
 
 // ---------------------------------------------------------------------------
@@ -221,18 +226,40 @@ class DoneSseEvent extends SseEvent {
 
 /// `approval` / `initial`（无澄清标记时）。
 class ApprovalPendingSseEvent extends SseEvent {
-  const ApprovalPendingSseEvent(this.payload);
+  const ApprovalPendingSseEvent(
+    this.payload, {
+    ApprovalPendingResponse? explicitApproval,
+  }) : _approval = explicitApproval;
 
-  /// TODO(merge)：模型就绪后改为 ApprovalPendingResponse。
+  /// 兼容原始 Map 载荷。
   final Map<String, Object?> payload;
+  final ApprovalPendingResponse? _approval;
+
+  /// 强类型审批响应（对齐 Swift `streamPayload` 容错解码）。
+  ApprovalPendingResponse get approval =>
+      _approval ?? ApprovalPendingResponse.streamPayload(payload);
+
+  /// 别名：保持与 response 命名兼容。
+  ApprovalPendingResponse get response => approval;
 }
 
 /// `clarify` / `initial`（含澄清标记时）。
 class ClarificationPendingSseEvent extends SseEvent {
-  const ClarificationPendingSseEvent(this.payload);
+  const ClarificationPendingSseEvent(
+    this.payload, {
+    ClarificationPendingResponse? explicitClarification,
+  }) : _clarification = explicitClarification;
 
-  /// TODO(merge)：模型就绪后改为 ClarificationPendingResponse。
+  /// 兼容原始 Map 载荷。
   final Map<String, Object?> payload;
+  final ClarificationPendingResponse? _clarification;
+
+  /// 强类型澄清响应（对齐 Swift `streamPayload` 容错解码）。
+  ClarificationPendingResponse get clarification =>
+      _clarification ?? ClarificationPendingResponse.streamPayload(payload);
+
+  /// 别名：保持与 response 命名兼容。
+  ClarificationPendingResponse get response => clarification;
 }
 
 /// `pending_steer_leftover` → `{text}`。
@@ -287,21 +314,30 @@ class ToolStreamEvent {
     this.name,
     this.preview,
     this.args,
+    Map<String, JsonValue>? explicitJsonArgs,
     this.duration,
     this.isError,
     this.stableId,
-  });
+  }) : _jsonArgs = explicitJsonArgs;
 
   final String? eventType;
   final String? name;
   final String? preview;
   final Map<String, Object?>? args;
+  final Map<String, JsonValue>? _jsonArgs;
   final double? duration;
   final bool? isError;
 
   /// stable_id ← 依次取 `tid` / `id` / `tool_call_id` / `tool_use_id` / `call_id`
   /// 的第一个非空（trim 后）。
   final String? stableId;
+
+  /// 类型化参数（`Map<String, JsonValue>`，对齐 ToolCall.args）。
+  Map<String, JsonValue>? get jsonArgs =>
+      _jsonArgs ??
+      (args != null && args!.isNotEmpty
+          ? args!.map((k, v) => MapEntry(k, JsonValue.fromJson(v)))
+          : null);
 
   factory ToolStreamEvent.fromJson(Object? json) {
     final map = _asMap(json);
@@ -323,13 +359,18 @@ class ToolStreamEvent {
       }
     }
     final rawArgs = map['args'];
+    final parsedArgs = rawArgs is Map<String, Object?>
+        ? Map<String, Object?>.from(rawArgs)
+        : (rawArgs is Map ? Map<String, Object?>.from(rawArgs) : null);
+    final jsonArgs = parsedArgs != null && parsedArgs.isNotEmpty
+        ? parsedArgs.map((k, v) => MapEntry(k, JsonValue.fromJson(v)))
+        : null;
     return ToolStreamEvent(
       eventType: _string(map['event_type']),
       name: _string(map['name']),
       preview: _string(map['preview']),
-      args: rawArgs is Map<String, Object?>
-          ? Map<String, Object?>.from(rawArgs)
-          : null,
+      args: parsedArgs,
+      explicitJsonArgs: jsonArgs,
       duration: _double(map['duration']),
       isError: _bool(map['is_error']),
       stableId: stable,
@@ -362,6 +403,15 @@ class MeteringStreamEvent {
     this.sessionId,
   });
 
+  factory MeteringStreamEvent.fromJson(Map<String, Object?> json) {
+    return MeteringStreamEvent(
+      tokensPerSecond: _double(json['tps']),
+      isTokensPerSecondAvailable: _bool(json['tps_available']),
+      isEstimated: _bool(json['estimated']),
+      sessionId: _string(json['session_id']),
+    );
+  }
+
   final double? tokensPerSecond;
   final bool? isTokensPerSecondAvailable;
   final bool? isEstimated;
@@ -370,13 +420,32 @@ class MeteringStreamEvent {
 
 /// `done` 事件载荷（DonePayload.event）。
 class DoneStreamEvent {
-  const DoneStreamEvent({this.usage, this.session});
+  const DoneStreamEvent({
+    this.usage,
+    this.session,
+    ContextWindowSnapshot? explicitUsageSnapshot,
+    SessionDetail? explicitSessionDetail,
+  })  : _usageSnapshot = explicitUsageSnapshot,
+        _sessionDetail = explicitSessionDetail;
 
-  /// TODO(merge)：模型就绪后改为 ContextWindowSnapshot。
+  /// 兼容原始 Map 字段。
   final Map<String, Object?>? usage;
 
-  /// TODO(merge)：模型就绪后改为 SessionDetail。
+  /// 兼容原始 Map 字段。
   final Map<String, Object?>? session;
+
+  final ContextWindowSnapshot? _usageSnapshot;
+  final SessionDetail? _sessionDetail;
+
+  /// 强类型用量快照（ContextWindowSnapshot）。
+  ContextWindowSnapshot? get usageSnapshot =>
+      _usageSnapshot ??
+      (usage != null ? ContextWindowSnapshot.fromJson(usage!) : null);
+
+  /// 强类型会话详情（SessionDetail）。
+  SessionDetail? get sessionDetail =>
+      _sessionDetail ??
+      (session != null ? SessionDetail.fromJson(session!) : null);
 }
 
 // ---------------------------------------------------------------------------
@@ -458,14 +527,22 @@ class SseEventDecoder {
     final event = Map<String, Object?>.from(rawEvent);
     final rawUsage = event['usage'];
     final rawSession = event['session'];
+    final usageMap = rawUsage is Map<String, Object?>
+        ? Map<String, Object?>.from(rawUsage)
+        : (rawUsage is Map ? Map<String, Object?>.from(rawUsage) : null);
+    final sessionMap = rawSession is Map<String, Object?>
+        ? Map<String, Object?>.from(rawSession)
+        : (rawSession is Map ? Map<String, Object?>.from(rawSession) : null);
+    final usageSnapshot =
+        usageMap != null ? ContextWindowSnapshot.fromJson(usageMap) : null;
+    final sessionDetail =
+        sessionMap != null ? SessionDetail.fromJson(sessionMap) : null;
     return DoneSseEvent(
       DoneStreamEvent(
-        usage: rawUsage is Map<String, Object?>
-            ? Map<String, Object?>.from(rawUsage)
-            : null,
-        session: rawSession is Map<String, Object?>
-            ? Map<String, Object?>.from(rawSession)
-            : null,
+        usage: usageMap,
+        session: sessionMap,
+        explicitUsageSnapshot: usageSnapshot,
+        explicitSessionDetail: sessionDetail,
       ),
     );
   }

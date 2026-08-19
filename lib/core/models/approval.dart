@@ -20,6 +20,9 @@ ApprovalChoice? approvalChoiceFromJson(Object? value) {
   }
 }
 
+/// 待审批请求/响应类型别名（兼容 TASK W3 强类型命名）。
+typedef ApprovalRequest = ApprovalPendingResponse;
+
 /// 待审批响应信封（Swift: ApprovalPendingResponse）。
 class ApprovalPendingResponse {
   const ApprovalPendingResponse({this.pending, this.pendingCount});

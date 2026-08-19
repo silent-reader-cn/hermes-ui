@@ -1126,7 +1126,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       id: evt.stableId,
       name: evt.name,
       preview: evt.preview,
-      args: _argsToJsonValue(evt.args),
+      args: evt.jsonArgs ?? _argsToJsonValue(evt.args),
       isCompleted: false,
     );
     final anchor =
@@ -1163,7 +1163,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         id: existing.id,
         name: evt.name ?? existing.name,
         preview: evt.preview ?? existing.preview,
-        args: evt.args != null ? _argsToJsonValue(evt.args) : existing.args,
+        args: evt.jsonArgs ?? (evt.args != null ? _argsToJsonValue(evt.args) : existing.args),
         duration: evt.duration,
         isError: evt.isError,
         isCompleted: true,
@@ -1179,7 +1179,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             id: evt.stableId,
             name: evt.name,
             preview: evt.preview,
-            args: _argsToJsonValue(evt.args),
+            args: evt.jsonArgs ?? _argsToJsonValue(evt.args),
             duration: evt.duration,
             isError: evt.isError,
             isCompleted: true,
@@ -1313,8 +1313,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _applyCompletedStreamSession(rawSession, currentStreamingId);
     }
     final rawUsage = event.usage;
-    if (rawUsage != null) {
-      final snapshot = ContextWindowSnapshot.fromJson(rawUsage);
+    final snapshot = event.usageSnapshot ??
+        (rawUsage != null ? ContextWindowSnapshot.fromJson(rawUsage) : null);
+    if (snapshot != null) {
       state = state.copyWith(contextWindowSnapshot: snapshot);
       final tps = snapshot.tokensPerSecond;
       if (tps != null && tps.isFinite && tps > 0) {

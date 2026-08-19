@@ -1,5 +1,8 @@
 import '../utils/lossy_json.dart';
 
+/// 待澄清请求/响应类型别名（兼容 TASK W3 强类型命名）。
+typedef ClarificationRequest = ClarificationPendingResponse;
+
 /// 待澄清响应信封（Swift: ClarificationPendingResponse）。
 class ClarificationPendingResponse {
   const ClarificationPendingResponse({this.pending, this.pendingCount});
@@ -71,7 +74,7 @@ class PendingClarification {
 
   factory PendingClarification.fromJson(Map<String, Object?> json) {
     return PendingClarification(
-      clarifyId: firstKey(json, ['clarify_id', 'clarifyId'], lossyString),
+      clarifyId: firstKey(json, ['clarify_id', 'clarifyId', 'id'], lossyString),
       question: lossyString(json, 'question'),
       choicesOffered: lossyStringArray(json, ['choices_offered', 'choicesOffered']),
       sessionId: firstKey(json, ['session_id', 'sessionId'], lossyString),
