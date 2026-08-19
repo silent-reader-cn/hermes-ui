@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../shared/app_back_button.dart';
 import 'workspace_providers.dart';
@@ -124,8 +125,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CupertinoButton(
+                AccessibleButton(
                   key: const ValueKey('workspace-refresh'),
+                  label: '刷新文件列表',
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       unawaited(ref.read(provider.notifier).refresh()),
@@ -508,8 +510,9 @@ class _UploadButton extends StatelessWidget {
         child: CupertinoActivityIndicator(radius: 10),
       );
     }
-    return CupertinoButton(
+    return AccessibleButton(
       key: const ValueKey('workspace-upload'),
+      label: '上传文件',
       padding: EdgeInsets.zero,
       onPressed: onPressed,
       child: const Icon(CupertinoIcons.arrow_up_doc),
@@ -771,8 +774,9 @@ class _WorkspaceEntryRow extends StatelessWidget {
                 color: CupertinoColors.tertiaryLabel,
               )
             else
-              CupertinoButton(
+              AccessibleButton(
                 key: ValueKey('workspace-actions-${entry.name ?? entry.path}'),
+                label: '文件操作',
                 padding: EdgeInsets.zero,
                 onPressed: onActions,
                 child: const Icon(

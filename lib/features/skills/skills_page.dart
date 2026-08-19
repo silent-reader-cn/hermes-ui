@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
@@ -48,8 +49,9 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('技能'),
             leading: const AppBackButton(),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('skills-refresh'),
+              label: '刷新技能',
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(skillsControllerProvider.notifier).refresh(),

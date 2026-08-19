@@ -10,6 +10,7 @@ import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/providers/file_picker_provider.dart';
+import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/file_picker.dart';
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
@@ -259,8 +260,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            CupertinoButton(
+            AccessibleButton(
               key: const ValueKey('chat-attach-button'),
+              label: '添加附件',
               onPressed: (!interactive || isSending || _uploading)
                   ? null
                   : _handleAttachment,
@@ -289,8 +291,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             ),
             if (isStreaming) ...[
-              CupertinoButton(
+              AccessibleButton(
                 key: const ValueKey('chat-steer-button'),
+                label: '提示当前回复',
                 onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -298,8 +301,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   color: CupertinoColors.activeBlue,
                 ),
               ),
-              CupertinoButton(
+              AccessibleButton(
                 key: const ValueKey('chat-stop-button'),
+                label: '停止生成',
                 onPressed: _stop,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -308,8 +312,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 ),
               ),
             ] else if (!isSending)
-              CupertinoButton(
+              AccessibleButton(
                 key: const ValueKey('chat-send-button'),
+                label: '发送消息',
                 onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -317,8 +322,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   color: CupertinoColors.activeBlue,
                 ),
               ),
-            CupertinoButton(
+            AccessibleButton(
               key: const ValueKey('chat-model-button'),
+              label: '选择模型',
               onPressed: interactive ? _showModelPicker : null,
               padding: EdgeInsets.zero,
               child: const Icon(

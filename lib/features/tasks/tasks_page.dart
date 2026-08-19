@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
+import '../../core/utils/accessibility.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
 
@@ -85,8 +86,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('定时任务'),
             leading: const AppBackButton(),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('tasks-create'),
+              label: '新建定时任务',
               padding: EdgeInsets.zero,
               onPressed: () => _openEditor(context),
               child: const Icon(CupertinoIcons.add),
@@ -431,8 +433,9 @@ class _TaskRow extends StatelessWidget {
               child: CupertinoActivityIndicator(radius: 9),
             )
           else
-            CupertinoButton(
+            AccessibleButton(
               key: ValueKey('tasks-actions-${job.jobId ?? job.id}'),
+              label: '任务操作',
               padding: EdgeInsets.zero,
               minimumSize: const Size(36, 36),
               onPressed: onActions,
@@ -498,8 +501,9 @@ class _TaskOutputSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  CupertinoButton(
+                  AccessibleButton(
                     key: const ValueKey('tasks-output-close'),
+                    label: '关闭输出面板',
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(36, 36),
                     onPressed: () => Navigator.pop(context),

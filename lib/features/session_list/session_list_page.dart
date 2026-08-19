@@ -10,6 +10,7 @@ import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
@@ -76,10 +77,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('会话'),
-                trailing: CupertinoButton(
+                trailing: AccessibleButton(
                   key: state?.isSelectionMode == true
                       ? const ValueKey('session-list-selection-done')
                       : const ValueKey('session-list-settings'),
+                  label: state?.isSelectionMode == true ? '完成选择' : '设置',
                   padding: EdgeInsets.zero,
                   onPressed: () {
                     final controller = ref.read(
@@ -118,8 +120,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           Positioned(
             right: 20,
             bottom: state?.isSelectionMode == true ? 76 : 24,
-            child: CupertinoButton.filled(
+            child: AccessibleButton.filled(
               key: const ValueKey('session-list-new'),
+              label: '新建会话',
               onPressed: () => unawaited(_onNewSession(context)),
               padding: EdgeInsets.zero,
               minimumSize: const Size(56, 56),
@@ -1015,10 +1018,11 @@ class _SessionRow extends StatelessWidget {
               ),
             ),
             if (onActions != null)
-              CupertinoButton(
+              AccessibleButton(
                 key: ValueKey(
                   'session-actions-${session.sessionId ?? session.id}',
                 ),
+                label: '会话操作',
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(36, 36),
                 onPressed: onActions,

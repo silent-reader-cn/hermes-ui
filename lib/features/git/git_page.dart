@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/git_workspace.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../shared/app_back_button.dart';
 import 'git_providers.dart';
@@ -45,8 +46,9 @@ class _GitPageState extends ConsumerState<GitPage> {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('Git 面板'),
             leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('git-refresh'),
+              label: '刷新 Git 状态',
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref
@@ -499,8 +501,9 @@ class _FileTile extends StatelessWidget {
               style: const TextStyle(fontSize: 13),
             ),
           ),
-          CupertinoButton(
+          AccessibleButton(
             key: ValueKey('git-discard-${file.id}'),
+            label: '放弃更改',
             padding: const EdgeInsets.symmetric(horizontal: 6),
             onPressed: isActionRunning ? null : onDiscard,
             child: const Icon(
@@ -687,9 +690,10 @@ class _ActionBanner extends StatelessWidget {
             Expanded(
               child: Text(text, style: TextStyle(fontSize: 13, color: color)),
             ),
-            GestureDetector(
+            AccessibleButton(
               key: const ValueKey('git-banner-dismiss'),
-              onTap: onDismiss,
+              label: '关闭提示',
+              onPressed: onDismiss,
               child: Icon(
                 CupertinoIcons.xmark_circle_fill,
                 size: 16,
