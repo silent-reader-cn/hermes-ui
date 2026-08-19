@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import 'tool_call_card.dart';
 
@@ -181,7 +182,8 @@ class _AttachmentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = attachment.name ?? attachment.path ?? '附件';
+    final l10n = AppLocalizations.of(context);
+    final name = attachment.name ?? attachment.path ?? l10n.attachmentFallback;
     final isImage = attachment.isImage == true;
     return Container(
       margin: const EdgeInsets.only(top: 3),
@@ -263,9 +265,10 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final text = widget.group.text.trim();
     if (text.isEmpty) return const SizedBox.shrink();
-    final summary = text.replaceAll(RegExp(r'\\s+'), ' ');
+    final summary = text.replaceAll(RegExp(r'\s+'), ' ');
     final preview = summary.length > 80 ? '${summary.substring(0, 80)}…' : summary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -291,9 +294,9 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                     color: CupertinoColors.systemGrey,
                   ),
                   const SizedBox(width: 4),
-                  const Text(
-                    'Thinking',
-                    style: TextStyle(
+                  Text(
+                    l10n.thinkingLabel,
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: CupertinoColors.secondaryLabel,

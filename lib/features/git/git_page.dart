@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/git_workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'git_providers.dart';
 
@@ -35,6 +36,7 @@ class _GitPageState extends ConsumerState<GitPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(gitControllerProvider(widget.sessionId));
     final state = async.valueOrNull;
 
@@ -44,11 +46,11 @@ class _GitPageState extends ConsumerState<GitPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('Git 面板'),
+            largeTitle: Text(l10n.gitPanelTitle),
             leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
             trailing: AccessibleButton(
               key: const ValueKey('git-refresh'),
-              label: '刷新 Git 状态',
+              label: l10n.refreshGitStatus,
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref
@@ -108,6 +110,7 @@ class _GitPageState extends ConsumerState<GitPage> {
     AsyncValue<GitState> async,
     GitState? state,
   ) {
+    final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
         return const [
@@ -121,12 +124,12 @@ class _GitPageState extends ConsumerState<GitPage> {
     }
 
     if (state.isNonRepository) {
-      return [_buildEmptySliver('不是 Git 仓库', '该工作区不是 git 仓库，无法使用 Git 功能。')];
+      return [_buildEmptySliver(l10n.notAGitRepo, l10n.notAGitRepoDetail)];
     }
 
     if (!state.isGitRepository) {
       // status 已加载但 is_git 缺失：按非仓库处理（容错）。
-      return [_buildEmptySliver('不是 Git 仓库', '该工作区不是 git 仓库，无法使用 Git 功能。')];
+      return [_buildEmptySliver(l10n.notAGitRepo, l10n.notAGitRepoDetail)];
     }
 
     return [
@@ -135,18 +138,18 @@ class _GitPageState extends ConsumerState<GitPage> {
         SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
       else ...[
         if (state.stagedFiles.isNotEmpty)
-          _buildFileSectionSliver(ref, state, '已暂存', state.stagedFiles),
+          _buildFileSectionSliver(ref, state, l10n.stagedSection, state.stagedFiles),
         if (state.unstagedFiles.isNotEmpty)
-          _buildFileSectionSliver(ref, state, '未暂存', state.unstagedFiles),
+          _buildFileSectionSliver(ref, state, l10n.unstagedSection, state.unstagedFiles),
       ],
       if (state.status?.truncated == true)
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Text(
-              '变更文件过多，仅显示前 500 个。',
+              l10n.tooManyChangedFilesWarning,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -159,6 +162,7 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Widget _buildSummarySliver(WidgetRef ref, GitState state) {
+    final l10n = AppLocalizations.of(context);
     final branches = state.branches;
     final current = branches?.current ?? state.status?.branch;
     final ahead = state.status?.ahead ?? 0;
@@ -175,9 +179,9 @@ class _GitPageState extends ConsumerState<GitPage> {
               CupertinoIcons.arrow_branch,
               color: CupertinoColors.systemBlue,
             ),
-            title: Text(current?.isNotEmpty == true ? current! : '未知分支'),
+            title: Text(current?.isNotEmpty == true ? current! : l10n.unknownBranch),
             subtitle: Text(
-              ahead > 0 || behind > 0 ? '领先 $ahead · 落后 $behind' : '与远程同步',
+              ahead > 0 || behind > 0 ? l10n.aheadBehind(ahead, behind) : l10n.syncedWithRemote,
             ),
             trailing: CupertinoButton(
               key: const ValueKey('git-branch-picker'),
@@ -185,12 +189,12 @@ class _GitPageState extends ConsumerState<GitPage> {
               onPressed: branches == null || state.isActionRunning
                   ? null
                   : () => unawaited(_showBranchPicker(ref, state)),
-              child: const Text('切换分支'),
+              child: Text(l10n.switchBranch),
             ),
           ),
           CupertinoListTile(
-            title: const Text('变更'),
-            subtitle: Text('+$additions −$deletions · 共 $changed 个文件'),
+            title: Text(l10n.changesLabel),
+            subtitle: Text(l10n.changesSummary(additions, deletions, changed)),
           ),
         ],
       ),
@@ -229,19 +233,20 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Widget _buildCommitSliver(WidgetRef ref, GitState state) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(
       gitControllerProvider(widget.sessionId).notifier,
     );
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
-        header: const Text('提交'),
+        header: Text(l10n.commitSection),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: CupertinoTextField(
               key: const ValueKey('git-commit-message'),
               controller: _messageController,
-              placeholder: '提交信息',
+              placeholder: l10n.commitMessagePlaceholder,
               minLines: 2,
               maxLines: 4,
               enabled: !state.isActionRunning,
@@ -264,7 +269,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                         }),
                       );
                     },
-              child: const Text('提交'),
+              child: Text(l10n.commitButton),
             ),
           ),
         ],
@@ -273,13 +278,14 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Widget _buildRemoteSliver(WidgetRef ref, GitState state) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(
       gitControllerProvider(widget.sessionId).notifier,
     );
     final running = state.isActionRunning;
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
-        header: const Text('远程操作'),
+        header: Text(l10n.remoteOperations),
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -323,6 +329,7 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Widget _buildErrorSliver(WidgetRef ref, Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -336,9 +343,9 @@ class _GitPageState extends ConsumerState<GitPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -357,7 +364,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                     .read(gitControllerProvider(widget.sessionId).notifier)
                     .refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -399,6 +406,7 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Future<void> _showBranchPicker(WidgetRef ref, GitState state) async {
+    final l10n = AppLocalizations.of(context);
     final local = (state.branches?.local ?? const <GitBranchRef>[])
         .where((b) => b.name != null && b.name!.trim().isNotEmpty)
         .toList(growable: false);
@@ -412,7 +420,7 @@ class _GitPageState extends ConsumerState<GitPage> {
     final selected = await showCupertinoModalPopup<String>(
       context: context,
       builder: (modalContext) => CupertinoActionSheet(
-        title: const Text('切换分支'),
+        title: Text(l10n.switchBranch),
         actions: [
           for (final branch in local)
             CupertinoActionSheetAction(
@@ -424,7 +432,7 @@ class _GitPageState extends ConsumerState<GitPage> {
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.pop(modalContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ),
     );
@@ -444,7 +452,7 @@ class _GitPageState extends ConsumerState<GitPage> {
 
   String _errorMessage(Object? error) {
     if (error is Exception) return gitFriendlyError(error);
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 }
 
@@ -471,6 +479,7 @@ class _FileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final kind = file.changeKind;
     return CupertinoListTile(
       key: ValueKey('git-file-${file.id}'),
@@ -481,7 +490,7 @@ class _FileTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        '${_kindLabel(kind)}'
+        '${_kindLabel(context, kind)}'
         '${(file.additions ?? 0) > 0 ? ' +${file.additions}' : ''}'
         '${(file.deletions ?? 0) > 0 ? ' −${file.deletions}' : ''}',
       ),
@@ -497,13 +506,13 @@ class _FileTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             onPressed: isActionRunning ? null : onStage,
             child: Text(
-              file.staged == true ? '取消暂存' : '暂存',
+              file.staged == true ? l10n.unstageAction : l10n.stageAction,
               style: const TextStyle(fontSize: 13),
             ),
           ),
           AccessibleButton(
             key: ValueKey('git-discard-${file.id}'),
-            label: '放弃更改',
+            label: l10n.discardChanges,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             onPressed: isActionRunning ? null : onDiscard,
             child: const Icon(
@@ -557,23 +566,24 @@ class _FileTile extends StatelessWidget {
     }
   }
 
-  static String _kindLabel(GitFileChangeKind kind) {
+  static String _kindLabel(BuildContext context, GitFileChangeKind kind) {
+    final l10n = AppLocalizations.of(context);
     switch (kind) {
       case GitFileChangeKind.added:
-        return '新增';
+        return l10n.gitChangeAdded;
       case GitFileChangeKind.deleted:
-        return '删除';
+        return l10n.gitChangeDeleted;
       case GitFileChangeKind.renamed:
-        return '重命名';
+        return l10n.gitChangeRenamed;
       case GitFileChangeKind.conflict:
-        return '冲突';
+        return l10n.gitChangeConflict;
       case GitFileChangeKind.untracked:
-        return '未跟踪';
+        return l10n.gitChangeUntracked;
       case GitFileChangeKind.ignored:
-        return '忽略';
+        return l10n.gitChangeIgnored;
       case GitFileChangeKind.modified:
       case GitFileChangeKind.unknown:
-        return '修改';
+        return l10n.gitChangeModified;
     }
   }
 }
@@ -589,6 +599,7 @@ class _DiffExpansion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (state.isDiffLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -598,15 +609,15 @@ class _DiffExpansion extends StatelessWidget {
     final diff = state.diff;
     String content;
     if (diff == null) {
-      content = '无法加载 diff。';
+      content = l10n.cannotLoadDiff;
     } else if (diff.binary == true) {
-      content = '二进制文件，无法显示 diff。';
+      content = l10n.binaryFileCannotShowDiff;
     } else {
       final text = diff.diff ?? '';
       if (text.isEmpty) {
-        content = '无 diff 内容。';
+        content = l10n.noDiffContent;
       } else if (diff.tooLarge == true) {
-        content = '文件过大，以下为部分内容：\n$text';
+        content = l10n.fileTooLargePartialContent(text);
       } else {
         content = text;
       }
@@ -631,24 +642,25 @@ class _DiffExpansion extends StatelessWidget {
 class _CleanWorkspacePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 36),
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 36),
       child: Column(
         children: [
-          Icon(
+          const Icon(
             CupertinoIcons.checkmark_circle,
             size: 44,
             color: CupertinoColors.systemGreen,
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           Text(
-            '工作区干净',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            l10n.workspaceClean,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            '没有待提交的变更。',
-            style: TextStyle(
+            l10n.noPendingChanges,
+            style: const TextStyle(
               fontSize: 13,
               color: CupertinoColors.secondaryLabel,
             ),
@@ -677,6 +689,7 @@ class _ActionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
       child: Container(
@@ -692,7 +705,7 @@ class _ActionBanner extends StatelessWidget {
             ),
             AccessibleButton(
               key: const ValueKey('git-banner-dismiss'),
-              label: '关闭提示',
+              label: l10n.closeNotice,
               onPressed: onDismiss,
               child: Icon(
                 CupertinoIcons.xmark_circle_fill,

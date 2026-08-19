@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
 
@@ -36,6 +37,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(skillsControllerProvider);
     final state = async.valueOrNull;
     final groups = ref.watch(skillsGroupsProvider);
@@ -47,11 +49,11 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('技能'),
+            largeTitle: Text(l10n.skillsTitle),
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('skills-refresh'),
-              label: '刷新技能',
+              label: l10n.refreshSkills,
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(skillsControllerProvider.notifier).refresh(),
@@ -71,12 +73,13 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   }
 
   Widget _buildSearchBar() {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: CupertinoSearchTextField(
         key: const ValueKey('skills-search'),
         controller: _searchController,
-        placeholder: '搜索技能',
+        placeholder: l10n.searchSkills,
         onChanged: (value) =>
             ref.read(skillsControllerProvider.notifier).setSearchQuery(value),
       ),
@@ -113,7 +116,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
       for (final group in groups)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
-            header: Text(group.title),
+            header: Text(_skillsGroupTitle(context, group.title)),
             children: [
               for (final skill in group.skills)
                 _SkillRow(
@@ -129,6 +132,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   }
 
   Widget _buildErrorSliver(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -142,9 +146,9 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -161,7 +165,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               onPressed: () => unawaited(
                 ref.read(skillsControllerProvider.notifier).refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -170,6 +174,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   }
 
   Widget _buildEmptySliver({required bool isSearchMode}) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -184,12 +189,12 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              isSearchMode ? '未找到相关技能' : '暂无技能',
+              isSearchMode ? l10n.noMatchingSkillsFound : l10n.noSkills,
               style: const TextStyle(fontSize: 17),
             ),
             const SizedBox(height: 6),
             Text(
-              isSearchMode ? '换个关键词试试' : '服务器的技能将显示在这里',
+              isSearchMode ? l10n.tryAnotherKeyword : l10n.serverSkillsWillShowHere,
               style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
@@ -216,7 +221,23 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
+  }
+}
+
+String _skillsGroupTitle(BuildContext context, String rawTitle) {
+  final l10n = AppLocalizations.of(context);
+  switch (rawTitle) {
+    case '内置':
+      return l10n.skillsGroupBuiltin;
+    case '项目':
+      return l10n.skillsGroupProject;
+    case '全局':
+      return l10n.skillsGroupGlobal;
+    case '其他':
+      return l10n.skillsGroupOther;
+    default:
+      return rawTitle;
   }
 }
 
@@ -288,7 +309,7 @@ class _SkillRow extends StatelessWidget {
                             runSpacing: 4,
                             children: [
                               if (disabled)
-                                const _Badge(text: '已禁用', highlighted: false),
+                                _Badge(text: AppLocalizations.of(context).skillDisabledBadge, highlighted: false),
                               for (final tag in tags)
                                 _Badge(text: tag, highlighted: true),
                             ],
@@ -336,6 +357,7 @@ class _SkillDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final path = skill.path?.trim();
     final related = (skill.relatedSkills ?? const <String>[])
         .map((name) => name.trim())
@@ -344,11 +366,11 @@ class _SkillDetail extends StatelessWidget {
     final hasDetail = (path != null && path.isNotEmpty) || related.isNotEmpty;
 
     if (!hasDetail) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 8),
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
         child: Text(
-          '该技能没有更多详情',
-          style: TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
+          l10n.noMoreDetailsForSkill,
+          style: const TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
         ),
       );
     }
@@ -359,11 +381,11 @@ class _SkillDetail extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (path != null && path.isNotEmpty) ...[
-            _DetailLine(label: '路径', value: path),
+            _DetailLine(label: l10n.skillPathLabel, value: path),
             const SizedBox(height: 4),
           ],
           if (related.isNotEmpty)
-            _DetailLine(label: '相关技能', value: related.join('、')),
+            _DetailLine(label: l10n.relatedSkillsLabel, value: related.join('、')),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// 消息级操作菜单返回的动作 tag。
 ///
@@ -26,36 +27,37 @@ Future<String?> showMessageActionMenu(
   BuildContext context, {
   required ChatMessage message,
 }) {
+  final l10n = AppLocalizations.of(context);
   final hasContent = (message.content ?? '').trim().isNotEmpty;
   return showCupertinoModalPopup<String>(
     context: context,
     builder: (sheetContext) => CupertinoActionSheet(
-      title: const Text('消息操作', style: TextStyle(fontSize: 15)),
+      title: Text(l10n.messageActions, style: const TextStyle(fontSize: 15)),
       actions: [
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-copy'),
           onPressed: hasContent
               ? () => Navigator.pop(sheetContext, MessageAction.copy)
               : () {},
-          child: const Text('复制文本'),
+          child: Text(l10n.copyText),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-copy-md'),
           onPressed: hasContent
               ? () => Navigator.pop(sheetContext, MessageAction.copyMd)
               : () {},
-          child: const Text('复制 Markdown'),
+          child: Text(l10n.copyMarkdown),
         ),
         if (message.role == 'user')
           CupertinoActionSheetAction(
             key: const ValueKey('msg-action-edit'),
             onPressed: () => Navigator.pop(sheetContext, MessageAction.edit),
-            child: const Text('编辑并重新发送'),
+            child: Text(l10n.editAndResend),
           ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-branch'),
           onPressed: () => Navigator.pop(sheetContext, MessageAction.branch),
-          child: const Text('从此处创建分支'),
+          child: Text(l10n.branchFromHere),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-truncate'),
@@ -64,19 +66,19 @@ Future<String?> showMessageActionMenu(
             final confirmed = await showCupertinoDialog<bool>(
               context: sheetContext,
               builder: (dialogContext) => CupertinoAlertDialog(
-                title: const Text('从此处截断'),
-                content: const Text('删除此消息之后的所有消息？此操作不可撤销。'),
+                title: Text(l10n.truncateFromHere),
+                content: Text(l10n.confirmTruncatePrompt),
                 actions: [
                   CupertinoDialogAction(
                     key: const ValueKey('msg-truncate-cancel'),
                     onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('取消'),
+                    child: Text(l10n.cancel),
                   ),
                   CupertinoDialogAction(
                     key: const ValueKey('msg-truncate-confirm'),
                     isDestructiveAction: true,
                     onPressed: () => Navigator.pop(dialogContext, true),
-                    child: const Text('截断'),
+                    child: Text(l10n.truncate),
                   ),
                 ],
               ),
@@ -85,13 +87,13 @@ Future<String?> showMessageActionMenu(
               Navigator.pop(sheetContext, MessageAction.truncate);
             }
           },
-          child: const Text('从此处截断'),
+          child: Text(l10n.truncateFromHere),
         ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('msg-action-cancel'),
         onPressed: () => Navigator.pop(sheetContext),
-        child: const Text('取消'),
+        child: Text(l10n.cancel),
       ),
     ),
   );

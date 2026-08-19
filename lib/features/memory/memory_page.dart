@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
 
@@ -21,6 +22,7 @@ class MemoryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(memoryControllerProvider);
     final response = async.valueOrNull;
 
@@ -30,11 +32,11 @@ class MemoryPage extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('记忆'),
+            largeTitle: Text(l10n.memoryTitle),
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('memory-refresh'),
-              label: '刷新记忆',
+              label: l10n.refreshMemory,
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(memoryControllerProvider.notifier).refresh(),
@@ -46,7 +48,7 @@ class MemoryPage extends ConsumerWidget {
             onRefresh: () =>
                 ref.read(memoryControllerProvider.notifier).refresh(),
           ),
-          ..._buildContentSlivers(ref, async, response),
+          ..._buildContentSlivers(context, ref, async, response),
         ],
       ),
     );
@@ -57,6 +59,7 @@ class MemoryPage extends ConsumerWidget {
   // -------------------------------------------------------------------------
 
   List<Widget> _buildContentSlivers(
+    BuildContext context,
     WidgetRef ref,
     AsyncValue<MemoryResponse> async,
     MemoryResponse? response,
@@ -70,11 +73,11 @@ class MemoryPage extends ConsumerWidget {
           ),
         ];
       }
-      return [_buildErrorSliver(ref, async.error)];
+      return [_buildErrorSliver(context, ref, async.error)];
     }
 
     if (!memoryHasContent(response)) {
-      return [_buildEmptySliver()];
+      return [_buildEmptySliver(context)];
     }
 
     return [
@@ -115,7 +118,8 @@ class MemoryPage extends ConsumerWidget {
     ];
   }
 
-  Widget _buildErrorSliver(WidgetRef ref, Object? error) {
+  Widget _buildErrorSliver(BuildContext context, WidgetRef ref, Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -129,13 +133,13 @@ class MemoryPage extends ConsumerWidget {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
-              _errorMessage(error),
+              _errorMessage(context, error),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -148,7 +152,7 @@ class MemoryPage extends ConsumerWidget {
               onPressed: () => unawaited(
                 ref.read(memoryControllerProvider.notifier).refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -156,25 +160,26 @@ class MemoryPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptySliver() {
-    return const SliverFillRemaining(
+  Widget _buildEmptySliver(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               CupertinoIcons.doc_text,
               size: 48,
               color: CupertinoColors.systemGrey,
             ),
-            SizedBox(height: 12),
-            Text('暂无记忆', style: TextStyle(fontSize: 17)),
-            SizedBox(height: 6),
+            const SizedBox(height: 12),
+            Text(l10n.noMemory, style: const TextStyle(fontSize: 17)),
+            const SizedBox(height: 6),
             Text(
-              '还没有任何记忆内容',
-              style: TextStyle(
+              l10n.noMemoryContentYet,
+              style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -185,9 +190,9 @@ class MemoryPage extends ConsumerWidget {
     );
   }
 
-  String _errorMessage(Object? error) {
+  String _errorMessage(BuildContext context, Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 
   String _sectionContent(MemoryResponse response, MemorySection section) {
@@ -213,6 +218,30 @@ class MemoryPage extends ConsumerWidget {
   }
 }
 
+String _memorySectionTitle(BuildContext context, MemorySection section) {
+  final l10n = AppLocalizations.of(context);
+  switch (section) {
+    case MemorySection.memory:
+      return l10n.memoryNotesTitle;
+    case MemorySection.user:
+      return l10n.memoryUserTitle;
+    case MemorySection.soul:
+      return l10n.memorySoulTitle;
+  }
+}
+
+String _memorySectionEmptyMessage(BuildContext context, MemorySection section) {
+  final l10n = AppLocalizations.of(context);
+  switch (section) {
+    case MemorySection.memory:
+      return l10n.memoryNotesEmpty;
+    case MemorySection.user:
+      return l10n.memoryUserEmpty;
+    case MemorySection.soul:
+      return l10n.memorySoulEmpty;
+  }
+}
+
 /// 记忆分区头：图标 + 标题 + 相对修改时间。
 class _MemorySectionHeader extends StatelessWidget {
   const _MemorySectionHeader({required this.section, required this.mtime});
@@ -222,7 +251,6 @@ class _MemorySectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final info = memorySectionInfo(section);
     final modified = formatMemoryMtime(mtime);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -235,7 +263,7 @@ class _MemorySectionHeader extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            info.title,
+            _memorySectionTitle(context, section),
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
@@ -278,7 +306,7 @@ class _MemorySectionBody extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(
-          memorySectionInfo(section).emptyMessage,
+          _memorySectionEmptyMessage(context, section),
           style: const TextStyle(
             fontSize: 15,
             fontStyle: FontStyle.italic,
@@ -302,6 +330,7 @@ class _ProjectContextHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -313,9 +342,9 @@ class _ProjectContextHeader extends StatelessWidget {
             color: CupertinoColors.label,
           ),
           const SizedBox(width: 6),
-          const Text(
-            '项目上下文',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          Text(
+            l10n.projectContextTitle,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           if (modified != null) ...[
@@ -349,6 +378,7 @@ class _ProjectContextFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -362,9 +392,9 @@ class _ProjectContextFooter extends StatelessWidget {
           ),
         if (shadowed) ...[
           const SizedBox(height: 4),
-          const Text(
-            '工作区本地文件正在覆盖全局项目上下文。',
-            style: TextStyle(
+          Text(
+            l10n.projectContextShadowedWarning,
+            style: const TextStyle(
               fontSize: 12,
               color: CupertinoColors.secondaryLabel,
             ),

@@ -12,6 +12,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
 import 'session_list_providers.dart';
@@ -67,6 +68,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     // 首帧后自动补充分页窗口，直到填满视口或耗尽（内容不足一屏时也能翻页）。
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
 
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
       child: Stack(
         children: [
@@ -76,12 +78,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               CupertinoSliverNavigationBar(
-                largeTitle: const Text('会话'),
+                largeTitle: Text(l10n.sessions),
                 trailing: AccessibleButton(
                   key: state?.isSelectionMode == true
                       ? const ValueKey('session-list-selection-done')
                       : const ValueKey('session-list-settings'),
-                  label: state?.isSelectionMode == true ? '完成选择' : '设置',
+                  label: state?.isSelectionMode == true
+                      ? l10n.doneSelecting
+                      : l10n.settings,
                   padding: EdgeInsets.zero,
                   onPressed: () {
                     final controller = ref.read(
@@ -122,7 +126,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             bottom: state?.isSelectionMode == true ? 76 : 24,
             child: AccessibleButton.filled(
               key: const ValueKey('session-list-new'),
-              label: '新建会话',
+              label: l10n.newSession,
               onPressed: () => unawaited(_onNewSession(context)),
               padding: EdgeInsets.zero,
               minimumSize: const Size(56, 56),
@@ -146,12 +150,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Widget _buildSearchBar() {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: CupertinoSearchTextField(
         key: const ValueKey('session-list-search'),
         controller: _searchController,
-        placeholder: '搜索会话',
+        placeholder: l10n.searchSessions,
         onChanged: _onSearchChanged,
       ),
     );
@@ -159,6 +164,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   /// 筛选栏：全部 / 已归档(count) / 来源标签（横向滚动 chips）/ 项目 chips。
   Widget _buildFilterBar(SessionListState state) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     final mode = state.filterMode;
     return Column(
@@ -175,9 +181,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 ? mode
                 : null,
             children: {
-              SessionListFilterMode.all: const Text('全部'),
+              SessionListFilterMode.all: Text(l10n.all),
               SessionListFilterMode.archived: Text(
-                '已归档${_archivedCountLabel(state)}',
+                '${l10n.archived}${_archivedCountLabel(state)}',
               ),
             },
             onValueChanged: (value) {
@@ -213,7 +219,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 _filterChip(
                   key: const ValueKey('filter-chip-archived-all'),
                   label:
-                      '已归档 ${state.archivedCount ?? state.archivedSessions.length}',
+                      '${l10n.archived} ${state.archivedCount ?? state.archivedSessions.length}',
                   selected: true,
                   onTap: () => unawaited(
                     controller.setFilter(SessionListFilterMode.all),
@@ -224,7 +230,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 const SizedBox(width: 4),
                 _filterChip(
                   key: const ValueKey('filter-chip-clear'),
-                  label: '清除筛选',
+                  label: l10n.clearFilter,
                   selected: false,
                   onTap: () => unawaited(
                     controller.setFilter(SessionListFilterMode.all),
@@ -241,6 +247,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   /// 项目筛选 chips（有项目才显示）。
   Widget _buildProjectFilterRow(SessionListState state) {
+    final l10n = AppLocalizations.of(context);
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
     if (projects.isEmpty) return const SizedBox.shrink();
     final controller = ref.read(sessionListControllerProvider.notifier);
@@ -255,7 +262,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           for (final project in projects)
             _filterChip(
               key: ValueKey('project-chip-${project.id}'),
-              label: project.name ?? '未命名项目',
+              label: project.name ?? l10n.untitledProject,
               selected:
                   mode == SessionListFilterMode.project &&
                   state.filterValue == project.id,
@@ -273,6 +280,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   /// 底部批量操作栏（多选模式）：选中计数 + 全选 / 归档 / 删除 / 移动项目。
   Widget _buildBatchBar(SessionListState state) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     final count = state.selectedSessionIds.length;
     return Container(
@@ -293,7 +301,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             children: [
               Expanded(
                 child: Text(
-                  '已选 $count 个',
+                  l10n.selectedCount(count),
                   style: const TextStyle(fontSize: 14),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -302,7 +310,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 key: const ValueKey('batch-select-all'),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 onPressed: controller.selectAllInSection,
-                child: const Text('全选', style: TextStyle(fontSize: 14)),
+                child: Text(l10n.selectAll, style: const TextStyle(fontSize: 14)),
               ),
               CupertinoButton(
                 key: const ValueKey('batch-archive'),
@@ -310,7 +318,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 onPressed: count == 0
                     ? null
                     : () => unawaited(_confirmBatchArchive(context)),
-                child: const Text('归档', style: TextStyle(fontSize: 14)),
+                child: Text(l10n.archive, style: const TextStyle(fontSize: 14)),
               ),
               CupertinoButton(
                 key: const ValueKey('batch-delete'),
@@ -319,7 +327,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     ? null
                     : () => unawaited(_confirmBatchDelete(context)),
                 child: Text(
-                  '删除',
+                  l10n.delete,
                   style: TextStyle(
                     fontSize: 14,
                     color: CupertinoColors.systemRed.resolveFrom(context),
@@ -332,7 +340,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 onPressed: count == 0
                     ? null
                     : () => unawaited(_batchMoveToProject(context)),
-                child: const Text('移动项目', style: TextStyle(fontSize: 14)),
+                child: Text(l10n.batchMoveProject, style: const TextStyle(fontSize: 14)),
               ),
             ],
           ),
@@ -402,12 +410,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       return [_buildEmptySliver(isSearchMode: isSearchMode)];
     }
 
+    final l10n = AppLocalizations.of(context);
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty)
           SliverToBoxAdapter(
             child: CupertinoListSection.insetGrouped(
-              header: Text(section.title),
+              header: Text(_sectionTitle(context, section.title)),
               children: [
                 for (final session in section.sessions)
                   _SessionRow(
@@ -446,13 +455,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         ),
       if (!state.hasMore &&
           state.displaySessions.length > SessionListState.pageSize)
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             child: Center(
               child: Text(
-                '没有更多了',
-                style: TextStyle(
+                l10n.noMore,
+                style: const TextStyle(
                   fontSize: 13,
                   color: CupertinoColors.secondaryLabel,
                 ),
@@ -464,6 +473,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Widget _buildErrorSliver(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -477,9 +487,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -493,7 +503,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               onPressed: () => unawaited(
                 ref.read(sessionListControllerProvider.notifier).refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -502,6 +512,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Widget _buildEmptySliver({required bool isSearchMode}) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -518,12 +529,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              isSearchMode ? '未找到相关会话' : '暂无会话',
+              isSearchMode
+                  ? l10n.noMatchingSessionsFound
+                  : l10n.noSessions,
               style: const TextStyle(fontSize: 17),
             ),
             const SizedBox(height: 6),
             Text(
-              isSearchMode ? '换个关键词试试' : '点击下方按钮开始新对话',
+              isSearchMode
+                  ? l10n.tryAnotherKeyword
+                  : l10n.tapButtonToStartNewChat,
               style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
@@ -534,7 +549,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               CupertinoButton.filled(
                 key: const ValueKey('session-list-empty-new'),
                 onPressed: () => unawaited(_onNewSession(context)),
-                child: const Text('新建会话'),
+                child: Text(l10n.newSession),
               ),
             ],
           ],
@@ -586,12 +601,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   void _showRowActions(BuildContext context, SessionSummary session) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     unawaited(
       showCupertinoModalPopup<void>(
         context: context,
         builder: (sheetContext) => CupertinoActionSheet(
-          title: Text(_displayTitle(session)),
+          title: Text(_displayTitle(context, session)),
           actions: [
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-pin'),
@@ -601,7 +617,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   controller.setPinned(session, !(session.pinned ?? false)),
                 );
               },
-              child: Text(session.pinned == true ? '取消置顶' : '置顶'),
+              child: Text(session.pinned == true ? l10n.unpin : l10n.pin),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-archive'),
@@ -609,7 +625,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Navigator.pop(sheetContext);
                 unawaited(controller.setArchived(session, true));
               },
-              child: const Text('归档'),
+              child: Text(l10n.archive),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-branch'),
@@ -617,7 +633,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_onBranch(context, controller, session));
               },
-              child: const Text('分支'),
+              child: Text(l10n.branch),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-export'),
@@ -625,7 +641,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_showExportFormat(context, session));
               },
-              child: const Text('导出'),
+              child: Text(l10n.export),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-move-project'),
@@ -633,7 +649,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_moveToProject(context, session));
               },
-              child: const Text('移动到项目'),
+              child: Text(l10n.moveToProject),
             ),
             if (session.archived == true)
               CupertinoActionSheetAction(
@@ -642,7 +658,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   Navigator.pop(sheetContext);
                   unawaited(controller.setArchived(session, false));
                 },
-                child: const Text('恢复归档'),
+                child: Text(l10n.unarchive),
               ),
             CupertinoActionSheetAction(
               key: const ValueKey('session-action-delete'),
@@ -651,13 +667,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_confirmDelete(context, session));
               },
-              child: const Text('删除'),
+              child: Text(l10n.delete),
             ),
           ],
           cancelButton: CupertinoActionSheetAction(
             isDefaultAction: true,
             onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
         ),
       ),
@@ -668,25 +684,26 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     BuildContext context,
     SessionSummary session,
   ) async {
+    final l10n = AppLocalizations.of(context);
     final format = await showCupertinoModalPopup<String>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        title: const Text('导出会话'),
+        title: Text(l10n.exportSession),
         actions: [
           CupertinoActionSheetAction(
             key: const ValueKey('session-export-markdown'),
             onPressed: () => Navigator.pop(sheetContext, 'markdown'),
-            child: const Text('Markdown'),
+            child: Text(l10n.markdownFormat),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('session-export-json'),
             onPressed: () => Navigator.pop(sheetContext, 'json'),
-            child: const Text('JSON'),
+            child: Text(l10n.jsonFormat),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.pop(sheetContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ),
     );
@@ -705,11 +722,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       await showCupertinoDialog<void>(
         context: context,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text('$format 导出成功'),
+          title: Text(l10n.exportSuccess(format)),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 260),
             child: SingleChildScrollView(
-              child: Text(content.isEmpty ? '导出内容为空' : content),
+              child: Text(content.isEmpty ? l10n.exportContentEmpty : content),
             ),
           ),
           actions: [
@@ -718,11 +735,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 await Clipboard.setData(ClipboardData(text: content));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
               },
-              child: const Text('复制内容'),
+              child: Text(l10n.copyContent),
             ),
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('关闭'),
+              child: Text(l10n.close),
             ),
           ],
         ),
@@ -732,7 +749,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       await showCupertinoDialog<void>(
         context: context,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('导出失败'),
+          title: Text(l10n.exportFailed),
           content: Text(
             error is ApiException ? error.message : '$error',
             style: TextStyle(color: statusRedText.resolveFrom(context)),
@@ -740,7 +757,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('好'),
+              child: Text(l10n.ok),
             ),
           ],
         ),
@@ -763,22 +780,23 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     BuildContext context,
     SessionSummary session,
   ) async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('删除会话'),
-        content: Text('确定删除「${_displayTitle(session)}」？此操作不可撤销。'),
+        title: Text(l10n.deleteSession),
+        content: Text(l10n.confirmDeleteSession(_displayTitle(context, session))),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('session-delete-cancel'),
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('session-delete-confirm'),
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -789,22 +807,23 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Future<void> _confirmBatchArchive(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
         key: const ValueKey('batch-archive-dialog'),
-        title: const Text('批量归档'),
-        content: const Text('归档选中的会话？'),
+        title: Text(l10n.batchArchiveTitle),
+        content: Text(l10n.confirmBatchArchivePrompt),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('batch-archive-cancel'),
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('batch-archive-confirm'),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('归档'),
+            child: Text(l10n.archive),
           ),
         ],
       ),
@@ -817,6 +836,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Future<void> _confirmBatchDelete(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
     final count =
         ref
             .read(sessionListControllerProvider)
@@ -828,19 +848,19 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
         key: const ValueKey('batch-delete-dialog'),
-        title: const Text('批量删除'),
-        content: Text('删除选中的 $count 个会话？此操作不可撤销。'),
+        title: Text(l10n.batchDeleteTitle),
+        content: Text(l10n.confirmBatchDeletePrompt(count)),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('batch-delete-cancel'),
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('batch-delete-confirm'),
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -870,15 +890,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {
+    final l10n = AppLocalizations.of(context);
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('操作失败'),
+        title: Text(l10n.actionFailed),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -888,7 +909,25 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
+  }
+}
+
+String _sectionTitle(BuildContext context, String rawTitle) {
+  final l10n = AppLocalizations.of(context);
+  switch (rawTitle) {
+    case '置顶':
+      return l10n.pinnedSection;
+    case '今天':
+      return l10n.todaySection;
+    case '昨天':
+      return l10n.yesterdaySection;
+    case '更早':
+      return l10n.earlierSection;
+    case '搜索结果':
+      return l10n.searchResultsSection;
+    default:
+      return rawTitle;
   }
 }
 
@@ -921,7 +960,8 @@ class _SessionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final metadata = _metadataLabel(session);
+    final l10n = AppLocalizations.of(context);
+    final metadata = _metadataLabel(context, session);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -962,7 +1002,7 @@ class _SessionRow extends StatelessWidget {
                       Flexible(
                         child: _highlightedSpan(
                           context,
-                          _displayTitle(session),
+                          _displayTitle(context, session),
                           style: const TextStyle(fontSize: 17),
                         ),
                       ),
@@ -993,9 +1033,9 @@ class _SessionRow extends StatelessWidget {
                       ],
                       if (session.hasPendingUserMessage == true) ...[
                         const SizedBox(width: 6),
-                        const Text(
-                          '待输入',
-                          style: TextStyle(
+                        Text(
+                          l10n.pendingInput,
+                          style: const TextStyle(
                             fontSize: 11,
                             color: CupertinoColors.systemOrange,
                           ),
@@ -1022,7 +1062,7 @@ class _SessionRow extends StatelessWidget {
                 key: ValueKey(
                   'session-actions-${session.sessionId ?? session.id}',
                 ),
-                label: '会话操作',
+                label: l10n.sessionActions,
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(36, 36),
                 onPressed: onActions,
@@ -1036,12 +1076,6 @@ class _SessionRow extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _displayTitle(SessionSummary session) {
-    final title = session.title?.trim();
-    if (title == null || title.isEmpty) return '未命名会话';
-    return title;
   }
 
   /// 构造标题/摘要文本：搜索模式下把 [query] 命中片段染成高亮。
@@ -1092,10 +1126,11 @@ class _SessionRow extends StatelessWidget {
     );
   }
 
-  static String? _metadataLabel(SessionSummary session) {
+  static String? _metadataLabel(BuildContext context, SessionSummary session) {
+    final l10n = AppLocalizations.of(context);
     final parts = <String>[
       if (session.messageCount != null && session.messageCount! >= 0)
-        '${session.messageCount} 条消息',
+        l10n.messageCountLabel(session.messageCount!),
       if (_nonEmpty(session.workspace) != null)
         _lastPathComponent(_nonEmpty(session.workspace)!),
       if (_nonEmpty(session.sourceLabel) != null)
@@ -1123,8 +1158,10 @@ class _SessionRow extends StatelessWidget {
   }
 }
 
-String _displayTitle(SessionSummary session) {
+String _displayTitle(BuildContext context, SessionSummary session) {
   final title = session.title?.trim();
-  if (title == null || title.isEmpty) return '未命名会话';
+  if (title == null || title.isEmpty) {
+    return AppLocalizations.of(context).untitledSession;
+  }
   return title;
 }

@@ -8,6 +8,7 @@ import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/server_catalog.dart';
+import '../../l10n/app_localizations.dart';
 import '../session_list/session_list_providers.dart';
 
 /// Profile 管理区块：服务端 profile 与本地服务器是两个独立概念。
@@ -59,39 +60,43 @@ class _ProfileSectionState extends ConsumerState<ProfileSection> {
     }
   }
 
-  Future<void> _showError(Object error) => showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('Profile 切换失败'),
-          content: Text(
-            error is ApiException ? error.message : '$error',
-            style: TextStyle(color: statusRedText.resolveFrom(context)),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('好'),
-            ),
-          ],
+  Future<void> _showError(Object error) {
+    final l10n = AppLocalizations.of(context);
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(l10n.profileSwitchFailed),
+        content: Text(
+          error is ApiException ? error.message : '$error',
+          style: TextStyle(color: statusRedText.resolveFrom(context)),
         ),
-      );
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final profiles = _profiles?.profiles ?? const <ProfileSummary>[];
     return CupertinoListSection(
-      header: const Text('Profile'),
+      header: Text(l10n.profile),
       children: [
         CupertinoListTile(
-          title: Text(_profiles?.active ?? (_loading ? '加载中…' : '未读取')),
+          title: Text(_profiles?.active ?? (_loading ? l10n.loadingEllipsis : l10n.notRead)),
           leading: const Icon(CupertinoIcons.person_2),
           trailing: const CupertinoListTileChevron(),
           onTap: profiles.isEmpty ? _load : () => _showPicker(profiles),
         ),
         if (_error != null)
           CupertinoListTile(
-            title: const Text('读取失败'),
-            subtitle: const Text('点击重试'),
+            title: Text(l10n.readFailed),
+            subtitle: Text(l10n.clickToRetry),
             onTap: _load,
           ),
       ],
@@ -99,20 +104,21 @@ class _ProfileSectionState extends ConsumerState<ProfileSection> {
   }
 
   Future<void> _showPicker(List<ProfileSummary> profiles) async {
+    final l10n = AppLocalizations.of(context);
     final selected = await showCupertinoModalPopup<ProfileSummary>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        title: const Text('选择 Profile'),
+        title: Text(l10n.selectProfile),
         actions: [
           for (final profile in profiles)
             CupertinoActionSheetAction(
               onPressed: () => Navigator.pop(sheetContext, profile),
-              child: Text(profile.name ?? '未命名'),
+              child: Text(profile.name ?? l10n.unnamed),
             ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.pop(sheetContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ),
     );

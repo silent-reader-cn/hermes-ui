@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../../core/models/tool_call.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 
 /// 单条工具调用卡片（chat_spec.md §3.5 ToolCallCardView）。
@@ -77,13 +78,13 @@ class ToolCallCard extends StatelessWidget {
           ],
           if (!call.isCompleted) ...[
             const SizedBox(height: 4),
-            const Row(
+            Row(
               children: [
-                CupertinoActivityIndicator(radius: 6),
-                SizedBox(width: 6),
+                const CupertinoActivityIndicator(radius: 6),
+                const SizedBox(width: 6),
                 Text(
-                  '运行中…',
-                  style: TextStyle(
+                  AppLocalizations.of(context).runningIndicator,
+                  style: const TextStyle(
                     fontSize: 11,
                     color: CupertinoColors.secondaryLabel,
                   ),
@@ -151,6 +152,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final group = widget.group;
     final failed = group.hasFailedTool;
     final running = !group.isComplete;
@@ -199,9 +201,9 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                   ),
                 ),
                 if (failed)
-                  Text('失败', style: TextStyle(fontSize: 11, color: CupertinoColors.systemRed.resolveFrom(context)))
+                  Text(l10n.toolFailedStatus, style: TextStyle(fontSize: 11, color: CupertinoColors.systemRed.resolveFrom(context)))
                 else if (running)
-                  Text('运行中', style: TextStyle(fontSize: 11, color: CupertinoColors.secondaryLabel.resolveFrom(context))),
+                  Text(l10n.toolRunningStatus, style: TextStyle(fontSize: 11, color: CupertinoColors.secondaryLabel.resolveFrom(context))),
                 const SizedBox(width: 6),
                 Icon(
                   _expanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,

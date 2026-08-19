@@ -12,6 +12,7 @@ import '../../../core/connections/connection_providers.dart';
 import '../../../core/providers/file_picker_provider.dart';
 import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/file_picker.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
 ///
@@ -80,12 +81,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   Future<void> _handleAttachment() async {
     if (_uploading) return;
+    final l10n = AppLocalizations.of(context);
     final picker = ref.read(filePickerServiceProvider);
     final FilePickerResult? picked;
     try {
       picked = await picker.pickFile();
     } catch (error) {
-      await _showError('选择文件失败', _errorMessage(error));
+      await _showError(l10n.selectFileFailed, _errorMessage(error));
       return;
     }
     if (picked == null) return; // 用户取消
@@ -103,16 +105,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       await ref
           .read(chatControllerProvider(widget.sessionId).notifier)
           .send('📎 ${picked.name}');
-      await _showNotice('上传成功', '附件「${picked.name}」已上传。');
+      await _showNotice(l10n.uploadSuccess, l10n.attachmentUploaded(picked.name));
     } catch (error) {
       if (!mounted) return;
-      await _showError('上传失败', _errorMessage(error));
+      await _showError(l10n.uploadFailed, _errorMessage(error));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
   }
 
   Future<void> _showNotice(String title, String message) {
+    final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -121,7 +124,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -129,6 +132,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _showError(String title, String message) {
+    final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -140,7 +144,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -149,7 +153,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 
   Future<void> _stop() async {
@@ -157,6 +161,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _showModelPicker() async {
+    final l10n = AppLocalizations.of(context);
     var models = ref.read(chatAvailableModelsProvider);
     try {
       final raw = await ref.read(apiClientProvider).modelsLive();
@@ -169,7 +174,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     unawaited(showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
-        title: const Text('选择模型'),
+        title: Text(l10n.selectModel),
         actions: [
           CupertinoActionSheetAction(
             key: const ValueKey('chat-model-default'),
@@ -179,7 +184,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   .selectModel(null);
               Navigator.of(context).pop();
             },
-            child: const Text('跟随服务器默认'),
+            child: Text(l10n.followServerDefault),
           ),
           for (final model in models)
             CupertinoActionSheetAction(
@@ -195,7 +200,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ),
     ));
@@ -236,6 +241,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final phase = ref.watch(chatPhaseProvider(widget.sessionId));
     final isStreaming = phase == ChatPhase.streaming ||
         phase == ChatPhase.steered ||
@@ -262,7 +268,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           children: [
             AccessibleButton(
               key: const ValueKey('chat-attach-button'),
-              label: '添加附件',
+              label: l10n.addAttachment,
               onPressed: (!interactive || isSending || _uploading)
                   ? null
                   : _handleAttachment,
@@ -279,8 +285,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 key: const ValueKey('chat-input-field'),
                 controller: _textController,
                 placeholder: !interactive
-                    ? '此会话为只读'
-                    : (isStreaming ? '提示当前回复（steer）…' : '发送消息…'),
+                    ? l10n.readOnlySessionPlaceholder
+                    : (isStreaming ? l10n.steerPromptPlaceholder : l10n.sendMessagePlaceholder),
                 enabled: !isSending && interactive,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 onChanged: (value) {
@@ -293,7 +299,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             if (isStreaming) ...[
               AccessibleButton(
                 key: const ValueKey('chat-steer-button'),
-                label: '提示当前回复',
+                label: l10n.steerPrompt,
                 onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -303,7 +309,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
               AccessibleButton(
                 key: const ValueKey('chat-stop-button'),
-                label: '停止生成',
+                label: l10n.stopGenerating,
                 onPressed: _stop,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -314,7 +320,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             ] else if (!isSending)
               AccessibleButton(
                 key: const ValueKey('chat-send-button'),
-                label: '发送消息',
+                label: l10n.sendMessage,
                 onPressed: (interactive && _hasText) ? _submit : null,
                 padding: EdgeInsets.zero,
                 child: const Icon(
@@ -324,7 +330,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             AccessibleButton(
               key: const ValueKey('chat-model-button'),
-              label: '选择模型',
+              label: l10n.selectModel,
               onPressed: interactive ? _showModelPicker : null,
               padding: EdgeInsets.zero,
               child: const Icon(

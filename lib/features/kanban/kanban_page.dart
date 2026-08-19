@@ -7,11 +7,36 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 
 /// Kanban 状态展示标题（对齐 Hermex KanbanStatusPresentation.title）。
-String kanbanStatusTitle(String? rawValue) {
+String kanbanStatusTitle(String? rawValue, [BuildContext? context]) {
+  if (context != null) {
+    final l10n = AppLocalizations.of(context);
+    switch (rawValue) {
+      case 'triage':
+        return l10n.kanbanStatusTriage;
+      case 'todo':
+        return l10n.kanbanStatusTodo;
+      case 'ready':
+        return l10n.kanbanStatusReady;
+      case 'running':
+        return l10n.kanbanStatusRunning;
+      case 'blocked':
+        return l10n.kanbanStatusBlocked;
+      case 'done':
+        return l10n.kanbanStatusDone;
+      case 'archived':
+        return l10n.kanbanStatusArchived;
+      case null:
+      case '':
+        return l10n.kanbanStatusUnknown;
+      default:
+        return l10n.kanbanStatusUnsupported(rawValue);
+    }
+  }
   switch (rawValue) {
     case 'triage':
       return '待分类';
@@ -87,17 +112,18 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
       },
     );
 
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
       child: CustomScrollView(
         key: const ValueKey('kanban-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('看板'),
+            largeTitle: Text(l10n.kanbanTitle),
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('kanban-create'),
-              label: '新建卡片',
+              label: l10n.newCard,
               padding: EdgeInsets.zero,
               onPressed:
                   state == null || state.readOnly ? null : () => _openCreate(context),
@@ -150,6 +176,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   Widget _buildBoardSwitcher(KanbanState state) {
+    final l10n = AppLocalizations.of(context);
     return SizedBox(
       height: 44,
       child: ListView.separated(
@@ -171,7 +198,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             onPressed:
                 selected ? null : () => unawaited(_selectBoard(slug)),
             child: Text(
-              board.name ?? board.slug ?? '未命名看板',
+              board.name ?? board.slug ?? l10n.unnamedBoard,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
@@ -221,24 +248,25 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   Widget _buildEmptyBoard() {
-    return const SliverFillRemaining(
+    final l10n = AppLocalizations.of(context);
+    return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               CupertinoIcons.rectangle_stack,
               size: 48,
               color: CupertinoColors.systemGrey,
             ),
-            SizedBox(height: 12),
-            Text('看板暂无内容', style: TextStyle(fontSize: 17)),
-            SizedBox(height: 6),
+            const SizedBox(height: 12),
+            Text(l10n.kanbanEmptyContent, style: const TextStyle(fontSize: 17)),
+            const SizedBox(height: 6),
             Text(
-              '点击右上角 + 创建第一张卡片',
-              style: TextStyle(
+              l10n.clickPlusToCreateFirstCard,
+              style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -250,24 +278,25 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   Widget _buildEmptySliver() {
-    return const SliverFillRemaining(
+    final l10n = AppLocalizations.of(context);
+    return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               CupertinoIcons.square_stack_3d_up,
               size: 48,
               color: CupertinoColors.systemGrey,
             ),
-            SizedBox(height: 12),
-            Text('暂无看板', style: TextStyle(fontSize: 17)),
-            SizedBox(height: 6),
+            const SizedBox(height: 12),
+            Text(l10n.noKanbanBoards, style: const TextStyle(fontSize: 17)),
+            const SizedBox(height: 6),
             Text(
-              '在服务器端创建看板后下拉刷新',
-              style: TextStyle(
+              l10n.createBoardOnServerPrompt,
+              style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -279,6 +308,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   Widget _buildErrorSliver(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -292,9 +322,9 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -309,7 +339,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             CupertinoButton.filled(
               key: const ValueKey('kanban-retry'),
               onPressed: () => unawaited(_onRefresh()),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -335,15 +365,16 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {
+    final l10n = AppLocalizations.of(context);
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('操作失败'),
+        title: Text(l10n.actionFailed),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -353,7 +384,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 }
 
@@ -366,6 +397,7 @@ class _KanbanColumnView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final cards = column.cards ?? const <KanbanCard>[];
     final name = column.name ?? '';
     return SizedBox(
@@ -388,7 +420,7 @@ class _KanbanColumnView extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    kanbanStatusTitle(name),
+                    kanbanStatusTitle(name, context),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -414,7 +446,7 @@ class _KanbanColumnView extends StatelessWidget {
               builder: (context, candidate, _) => cards.isEmpty
                   ? Center(
                     child: Text(
-                      '暂无卡片',
+                      l10n.noCards,
                       style: TextStyle(
                         fontSize: 13,
                         color: CupertinoColors.secondaryLabel.withValues(
@@ -460,8 +492,9 @@ class _KanbanCardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final id = card.cardID ?? '';
-    final dependencyBadge = _dependencyBadge(card.linkCounts);
+    final dependencyBadge = _dependencyBadge(context, card.linkCounts);
     return CupertinoButton(
       key: ValueKey('kanban-card-$id'),
       padding: EdgeInsets.zero,
@@ -481,7 +514,7 @@ class _KanbanCardTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              card.title ?? '未命名卡片',
+              card.title ?? l10n.unnamedCard,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -500,7 +533,7 @@ class _KanbanCardTile extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    card.assignee ?? '未指派',
+                    card.assignee ?? l10n.unassigned,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -521,8 +554,9 @@ class _KanbanCardTile extends StatelessWidget {
     );
   }
 
-  Widget? _dependencyBadge(KanbanLinkCounts? linkCounts) {
+  Widget? _dependencyBadge(BuildContext context, KanbanLinkCounts? linkCounts) {
     if (linkCounts == null) return null;
+    final l10n = AppLocalizations.of(context);
     final parents = linkCounts.parents ?? 0;
     final children = linkCounts.children ?? 0;
     if (parents <= 0 && children <= 0) return null;
@@ -542,7 +576,7 @@ class _KanbanCardTile extends StatelessWidget {
           ),
           const SizedBox(width: 3),
           Text(
-            parents > 0 ? '前驱 $parents' : '后继 $children',
+            parents > 0 ? l10n.parentsDependency(parents) : l10n.childrenDependency(children),
             style: const TextStyle(
               fontSize: 11,
               // 徽章文字用全强度 label：statusOrangeText 在 20% 黄底上
@@ -603,10 +637,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       },
     );
 
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: Text(
-          state?.card?.title ?? '卡片详情',
+          state?.card?.title ?? l10n.cardDetail,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -620,6 +655,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     KanbanDetailState? state,
     bool readOnly,
   ) {
+    final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
         return const Center(child: CupertinoActivityIndicator(radius: 14));
@@ -629,7 +665,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final envelope = state.envelope;
     final card = envelope?.card;
     if (envelope == null || card == null) {
-      return const Center(child: Text('卡片不存在'));
+      return Center(child: Text(l10n.cardDoesNotExist));
     }
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -648,13 +684,14 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   }
 
   Widget _buildDescription(KanbanCard card) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoListSection.insetGrouped(
-      header: const Text('描述'),
+      header: Text(l10n.description),
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
           child: Text(
-            (card.body ?? '').trim().isEmpty ? '暂无描述' : card.body!,
+            (card.body ?? '').trim().isEmpty ? l10n.noDescription : card.body!,
             style: TextStyle(
               fontSize: 15,
               color: (card.body ?? '').trim().isEmpty
@@ -668,21 +705,22 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   }
 
   Widget _buildMetadata(KanbanCard card) {
+    final l10n = AppLocalizations.of(context);
     final rows = <Widget>[
-      _metadataRow('状态', Text(kanbanStatusTitle(card.status?.rawValue))),
+      _metadataRow(l10n.statusLabel, Text(kanbanStatusTitle(card.status?.rawValue, context))),
       _metadataRow(
-        '负责人',
-        Text(card.assignee ?? '未指派'),
+        l10n.assigneeLabel,
+        Text(card.assignee ?? l10n.unassigned),
       ),
       if (card.priority != null)
-        _metadataRow('优先级', Text('P${card.priority}')),
+        _metadataRow(l10n.priorityLabel, Text('P${card.priority}')),
       if (card.createdAt != null && card.createdAt!.isNotEmpty)
-        _metadataRow('创建时间', Text(card.createdAt!)),
+        _metadataRow(l10n.createdAtLabel, Text(card.createdAt!)),
       if (card.updatedAt != null && card.updatedAt!.isNotEmpty)
-        _metadataRow('更新时间', Text(card.updatedAt!)),
+        _metadataRow(l10n.updatedAtLabel, Text(card.updatedAt!)),
     ];
     return CupertinoListSection.insetGrouped(
-      header: const Text('信息'),
+      header: Text(l10n.info),
       children: rows,
     );
   }
@@ -711,6 +749,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   /// 状态变更按钮：workflow 状态（triage/todo/ready/done/blocked）去掉当前
   /// 状态（running 只能由 dispatcher 设置，不提供按钮）。
   Widget _buildStatusActions(KanbanCard card) {
+    final l10n = AppLocalizations.of(context);
     const destinations = ['triage', 'todo', 'ready', 'done', 'blocked'];
     final current = card.status?.rawValue ?? '';
     final buttons = <Widget>[
@@ -727,13 +766,13 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             child: _busyStatus == status
                 ? const CupertinoActivityIndicator(radius: 8)
                 : Text(
-                    kanbanStatusTitle(status),
+                    kanbanStatusTitle(status, context),
                     style: const TextStyle(fontSize: 13),
                   ),
           ),
     ];
     return CupertinoListSection.insetGrouped(
-      header: const Text('变更状态'),
+      header: Text(l10n.changeStatus),
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
@@ -748,16 +787,17 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   }
 
   Widget _buildCommentsSection(KanbanDetailState state) {
+    final l10n = AppLocalizations.of(context);
     final comments = state.comments;
     return CupertinoListSection.insetGrouped(
-      header: Text('评论（${comments.length}）'),
+      header: Text(l10n.commentsHeader(comments.length)),
       children: [
         if (comments.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(12),
+          Padding(
+            padding: const EdgeInsets.all(12),
             child: Text(
-              '暂无评论',
-              style: TextStyle(
+              l10n.noComments,
+              style: const TextStyle(
                 fontSize: 14,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -794,7 +834,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                 child: CupertinoTextField(
                   key: const ValueKey('kanban-comment-input'),
                   controller: _commentController,
-                  placeholder: '添加评论…',
+                  placeholder: l10n.addCommentPlaceholder,
                   minLines: 1,
                   maxLines: 4,
                   onChanged: (_) => setState(() {}),
@@ -803,7 +843,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               const SizedBox(width: 8),
               AccessibleButton(
                 key: const ValueKey('kanban-comment-send'),
-                label: '发送评论',
+                label: l10n.sendComment,
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(36, 36),
                 onPressed:
@@ -863,15 +903,16 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {
+    final l10n = AppLocalizations.of(context);
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('操作失败'),
+        title: Text(l10n.actionFailed),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -883,6 +924,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   }
 
   Widget _buildError(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -895,13 +937,13 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
-              error is ApiException ? error.message : (error?.toString() ?? '未知错误'),
+              error is ApiException ? error.message : (error?.toString() ?? l10n.unknownError),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -914,7 +956,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               onPressed: () => unawaited(
                 ref.read(kanbanDetailControllerProvider(widget.cardId).notifier).refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -955,17 +997,18 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final boardAsync = ref.watch(kanbanControllerProvider);
     final currentBoard = boardAsync.valueOrNull?.currentBoard;
 
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('新建卡片'),
+        middle: Text(l10n.newCard),
         trailing: CupertinoButton(
           key: const ValueKey('kanban-form-save'),
           padding: EdgeInsets.zero,
           onPressed: _canSave ? () => unawaited(_save(context)) : null,
-          child: const Text('创建'),
+          child: Text(l10n.create),
         ),
       ),
       child: ListView(
@@ -973,7 +1016,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
         children: [
           if (currentBoard != null) ...[
             Text(
-              '看板：${currentBoard.name ?? currentBoard.slug}',
+              l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
               style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
@@ -982,30 +1025,30 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
             const SizedBox(height: 12),
           ],
           _buildField(
-            label: '标题',
+            label: l10n.titleLabel,
             fieldKey: const ValueKey('kanban-form-title'),
             controller: _titleController,
-            placeholder: '卡片标题',
+            placeholder: l10n.cardTitlePlaceholder,
           ),
           const SizedBox(height: 16),
           _buildField(
-            label: '描述',
+            label: l10n.description,
             fieldKey: const ValueKey('kanban-form-body'),
             controller: _bodyController,
-            placeholder: '卡片描述（可选）',
+            placeholder: l10n.cardDescriptionPlaceholder,
             maxLines: 5,
           ),
           const SizedBox(height: 16),
           _buildField(
-            label: '负责人',
+            label: l10n.assigneeLabel,
             fieldKey: const ValueKey('kanban-form-assignee'),
             controller: _assigneeController,
-            placeholder: '指派 profile（可选）',
+            placeholder: l10n.assignProfilePlaceholder,
           ),
           const SizedBox(height: 16),
-          const Text(
-            '初始状态',
-            style: TextStyle(
+          Text(
+            l10n.initialStatus,
+            style: const TextStyle(
               fontSize: 13,
               color: CupertinoColors.secondaryLabel,
             ),
@@ -1019,7 +1062,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
               for (final status in KanbanController.createStatuses)
                 status: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(kanbanStatusTitle(status)),
+                  child: Text(kanbanStatusTitle(status, context)),
                 ),
             },
           ),
