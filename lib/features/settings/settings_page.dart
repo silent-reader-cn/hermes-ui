@@ -3,23 +3,22 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
 import '../../core/api/api_exception.dart';
-
 import '../../core/api/custom_header.dart';
-
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
-import '../../app/theme/status_colors.dart';
+import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../shared/app_back_button.dart';
-import 'settings_providers.dart';
 import 'profile_section.dart';
+import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 四个分组：外观（主题三态）、服务器（当前服务器 + 列表增删改切换）、
+/// 分组：外观（主题三态）、桌面（平台能力开关）、服务器（当前服务器 + 列表增删改切换）、
 /// 模型（默认模型选择 + 推理强度）、关于（版本号）。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -28,15 +27,16 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
-              leading: AppBackButton(),
-              middle: Text('设置'),
-            ),
+        leading: AppBackButton(),
+        middle: Text('设置'),
+      ),
       child: ListView(
         children: const [
           _AppearanceSection(),
           _ServerSection(),
           ProfileSection(),
           _ModelSection(),
+          _DesktopSection(),
           _AboutSection(),
         ],
       ),
@@ -71,6 +71,70 @@ class _AppearanceSection extends ConsumerWidget {
               AppThemeMode.system: Text('跟随系统'),
               AppThemeMode.light: Text('浅色'),
               AppThemeMode.dark: Text('深色'),
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 桌面
+// ---------------------------------------------------------------------------
+
+/// 桌面分组：最小化到托盘 / 全局快捷键 / 记住窗口位置。
+class _DesktopSection extends ConsumerWidget {
+  const _DesktopSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(desktopSettingsProvider);
+    return CupertinoListSection(
+      header: const Text('桌面'),
+      children: [
+        CupertinoListTile(
+          title: const Text('最小化到托盘'),
+          subtitle: const Text('关闭窗口时隐藏到托盘而非退出'),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-desktop-minimize-to-tray'),
+            value: settings.minimizeToTray,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(desktopSettingsProvider.notifier)
+                    .setMinimizeToTray(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: const Text('全局快捷键'),
+          subtitle: const Text('Ctrl+Shift+H 唤起主窗口，Ctrl+Shift+N 新建会话'),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-desktop-global-shortcuts'),
+            value: settings.globalShortcutsEnabled,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(desktopSettingsProvider.notifier)
+                    .setGlobalShortcutsEnabled(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: const Text('记住窗口位置'),
+          subtitle: const Text('启动时恢复上次窗口位置与尺寸'),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-desktop-remember-window'),
+            value: settings.rememberWindowPosition,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(desktopSettingsProvider.notifier)
+                    .setRememberWindowPosition(value),
+              );
             },
           ),
         ),

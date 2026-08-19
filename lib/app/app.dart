@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-
-import '../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/desktop/desktop_lifecycle_observer.dart';
 import '../features/notifications/notification_lifecycle_observer.dart';
+import '../l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
 import 'theme/theme_provider.dart';
@@ -28,19 +28,21 @@ class HermexApp extends ConsumerWidget {
       AppThemeMode.dark => Brightness.dark,
       AppThemeMode.system => MediaQuery.platformBrightnessOf(context),
     };
-    return NotificationLifecycleObserver(
-      child: CupertinoApp.router(
-        title: 'Hermex',
-        theme: buildCupertinoTheme(brightness),
-        routerConfig: router,
-        localizationsDelegates: const [
-        AppLocalizationsDelegate(),
-          DefaultCupertinoLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-        ],
-        supportedLocales: const [Locale('en'), Locale('zh')],
+    return DesktopLifecycleObserver(
+      child: NotificationLifecycleObserver(
+        child: CupertinoApp.router(
+          title: 'Hermex',
+          theme: buildCupertinoTheme(brightness),
+          routerConfig: router,
+          localizationsDelegates: const [
+            AppLocalizationsDelegate(),
+            DefaultCupertinoLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en'), Locale('zh')],
+        ),
       ),
     );
   }
