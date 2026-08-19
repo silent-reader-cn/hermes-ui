@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -44,8 +45,10 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
 
   return GoRouter(
-    initialLocation: '/',
-    refreshListenable: refresh,
+      initialLocation: resolveInitialRoute(
+        PlatformDispatcher.instance.defaultRouteName,
+      ),
+      refreshListenable: refresh,
     redirect: (context, state) {
       final hasActive = ref.read(activeConnectionProvider) != null;
       final isOnboarding = state.matchedLocation == '/onboarding';
