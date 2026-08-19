@@ -350,3 +350,7 @@ gantt
 | 2026-08-17 | Phase 1-6 全功能合入 main：722 测试全绿、analyze 零告警、Android debug APK 可构建（CHANGELOG v0.1.0） |
 | 2026-08-18 | Phase 2 会话缺口补强（feat/session-gaps-phase2 批 1-2 合入）：筛选/归档/批量/项目 CRUD、聊天会话操作（压缩/撤销/重试/设置/YOLO/只读）、消息级操作、搜索高亮+深链定位 |
 | 2026-08-19 | workspace 删除/重命名端点接线 + fake_gateway 同步；CI 工作流落地（analyze+test / android debug / fake_gateway smoke）；**842 测试全绿、analyze 零告警** |
+| 2026-08-19 | 批 1 完成：桌面平台化（托盘/快捷键/窗口记忆）+ Web PWA + core 事件类型化 → 886 测试 |
+| 2026-08-19 | 批 2 完成：api 域全类型化（~150 处 Object? 收敛）+ 无障碍迁移（AccessibleButton+动态字号审计）→ 904/896 测试 |
+| 2026-08-19 | 批 3 完成：ARB 业务文案全量抽离（~200 处硬编码）→ 942 测试；iOS URL scheme 深链冷启动 |
+| 2026-08-19 | **B/C 系列全部完成**：桌面/PWA/iOS 深链/上游联动 + 类型化/无障碍/ARB。**942 测试全绿、analyze 零告警**。B/C 剩余：桌面托盘图标自定义、iOS 热启动深链（需 macOS） |
