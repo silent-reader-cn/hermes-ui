@@ -33,7 +33,7 @@
 |---|---|---|---|
 | 1 | 聊天附件上传 | **已完成**：file picker、20MB 预检、上传状态、成功/失败提示 | `chat_input_bar.dart`, `core/utils/file_picker.dart` |
 | 2 | 工作区文件上传 | **已完成**：路由生产注入 picker；删除/重命名仍受服务端限制 | `router.dart`, `workspace_page.dart` |
-| 3 | 工作区文件删除/重命名 | **已接线**（2026-08-19：delete recursive + rename 端点，fake_gateway 已同步）；真实服务端支持待验证，不支持时仍会 501 | `workspace_api.dart`、`api_client_workspace.dart` |
+| 3 | 工作区文件删除/重命名 | **已完成并验证**：客户端 delete-recursive/rename 已接线（08-19），服务端 30002 路由确认存在（/api/file/delete、/api/file/rename、/api/workspaces/rename） | `workspace_api.dart`、`api_client_workspace.dart` |
 | 4 | 看板拖拽 | **已完成跨列拖拽**；服务端暂无卡片顺序端点，当前拖拽映射为状态 PATCH | `kanban_page.dart`, `kanban_providers.dart` |
 
 ### 3.2 类型化待合并（TODO(merge)，全部为 API 返回类型占位）
