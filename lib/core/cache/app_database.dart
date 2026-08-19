@@ -1,6 +1,9 @@
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+
+import 'app_database_connection.dart'
+    if (dart.library.ffi) 'app_database_connection_native.dart'
+    if (dart.library.js_interop) 'app_database_connection_web.dart';
 
 part 'app_database.g.dart';
 
@@ -36,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   /// 测试数据库：内存 SQLite，不触碰平台文件。
-  factory AppDatabase.memory() => AppDatabase(NativeDatabase.memory());
+  factory AppDatabase.memory() => AppDatabase(openConnectionInMemory());
 
   @override
   int get schemaVersion => 1;
