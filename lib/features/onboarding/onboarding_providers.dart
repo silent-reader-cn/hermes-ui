@@ -2,20 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/custom_header.dart';
+import '../../core/models/server_info.dart';
 
 /// onboarding 向导所需的最小服务器 API 面。
 ///
 /// 生产实现 [OnboardingApiClient] 包 [ApiClient]（health/authStatus/login 走
 /// 真实网络）；测试可注入纯 Dart fake，彻底绕开网络/事件循环。
 abstract interface class OnboardingServerApi {
-  /// GET /health → HealthResponse；成功返回含 `status` 键的 Map。
-  Future<Object?> health();
+  /// GET /health → HealthResponse。
+  Future<HealthResponse> health();
 
   /// GET /api/auth/status → AuthStatusResponse（含 `auth_enabled`）。
-  Future<Object?> authStatus();
+  Future<AuthStatusResponse> authStatus();
 
   /// POST /api/auth/login {password} → LoginResponse；成功即种会话 cookie。
-  Future<Object?> login(String password);
+  Future<LoginResponse> login(String password);
 }
 
 /// [OnboardingServerApi] 的生产实现（包 [ApiClient]）。
@@ -28,13 +29,13 @@ class OnboardingApiClient implements OnboardingServerApi {
   final ApiClient _client;
 
   @override
-  Future<Object?> health() => _client.health();
+  Future<HealthResponse> health() => _client.health();
 
   @override
-  Future<Object?> authStatus() => _client.authStatus();
+  Future<AuthStatusResponse> authStatus() => _client.authStatus();
 
   @override
-  Future<Object?> login(String password) => _client.login(password);
+  Future<LoginResponse> login(String password) => _client.login(password);
 }
 
 /// 构建 onboarding 用 [OnboardingServerApi] 的工厂（测试可 override 注入 fake）。

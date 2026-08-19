@@ -122,7 +122,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     });
     try {
       final result = await _buildClient().health();
-      final ok = result is Map && result['status'] == 'ok';
+      final ok = result.status == 'ok';
       setState(() {
         _health = ok ? _HealthState.ok : _HealthState.failed;
         _healthMessage = ok ? '连接成功' : '服务器返回异常状态';
@@ -161,7 +161,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     setState(() => _auth = _AuthState.checking);
     try {
       final result = await _buildClient().authStatus();
-      final enabled = result is Map && result['auth_enabled'] == true;
+      final enabled = result.authEnabled == true;
       setState(() {
         _auth = enabled ? _AuthState.required : _AuthState.notRequired;
       });

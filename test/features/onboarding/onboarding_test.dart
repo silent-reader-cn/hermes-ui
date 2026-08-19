@@ -7,6 +7,7 @@ import 'package:hermex_flutter/app/app.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermex_flutter/core/models/server_info.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -234,24 +235,24 @@ class _FakeOnboardingApi implements OnboardingServerApi {
   String? lastPassword;
 
   @override
-  Future<Object?> health() async {
+  Future<HealthResponse> health() async {
     healthCalls++;
-    return {'status': healthOk ? 'ok' : 'degraded'};
+    return HealthResponse(status: healthOk ? 'ok' : 'degraded');
   }
 
   @override
-  Future<Object?> authStatus() async {
+  Future<AuthStatusResponse> authStatus() async {
     authCalls++;
-    return {'auth_enabled': authEnabled};
+    return AuthStatusResponse(authEnabled: authEnabled);
   }
 
   @override
-  Future<Object?> login(String password) async {
+  Future<LoginResponse> login(String password) async {
     loginCalls++;
     lastPassword = password;
     if (!loginOk) {
       throw const UnauthorizedException('密码错误');
     }
-    return {'ok': true};
+    return const LoginResponse(ok: true);
   }
 }

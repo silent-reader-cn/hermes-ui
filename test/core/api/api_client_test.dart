@@ -566,8 +566,7 @@ void main() {
       final body = bodyOf(req);
       expect(body['session_id'], 's1');
       expect(body['path'], 'a.txt');
-      expect(body['new_name'], 'b.txt');
-      expect((json as Map<String, Object?>)['new_path'], 'b.txt');
+      expect(json.newPath, 'b.txt');
     });
   });
 }

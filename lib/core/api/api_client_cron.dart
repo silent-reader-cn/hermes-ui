@@ -1,16 +1,17 @@
 import 'api_client.dart';
 import 'endpoints.dart';
+import '../models/cron.dart';
 
 /// cron 域方法（10 个端点）。
-///
-/// 返回类型暂为 `Object?`（解码后的 JSON）；TODO(merge)：模型就绪后改为对应
-/// 类型并 `return XxxResponse.fromJson(json)`。
 extension ApiClientCron on ApiClient {
   /// GET /api/crons。
-  Future<Object?> crons() => sendJson(Endpoint.crons);
+  Future<CronJobsResponse> crons() async {
+    final json = await sendJson(Endpoint.crons);
+    return CronJobsResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/create。
-  Future<Object?> createCron({
+  Future<CronMutationResponse> createCron({
     required String prompt,
     required String schedule,
     String? name,
@@ -20,24 +21,27 @@ extension ApiClientCron on ApiClient {
     String? provider,
     String? profile,
     required bool toastNotifications,
-  }) => sendJson(
-    Endpoint.cronCreate,
-    method: 'POST',
-    body: {
-      'prompt': prompt,
-      'schedule': schedule,
-      'name': ?name,
-      'deliver': ?deliver,
-      'skills': skills,
-      'model': ?model,
-      'provider': ?provider,
-      'profile': ?profile,
-      'toast_notifications': toastNotifications,
-    },
-  );
+  }) async {
+    final json = await sendJson(
+      Endpoint.cronCreate,
+      method: 'POST',
+      body: {
+        'prompt': prompt,
+        'schedule': schedule,
+        'name': ?name,
+        'deliver': ?deliver,
+        'skills': skills,
+        'model': ?model,
+        'provider': ?provider,
+        'profile': ?profile,
+        'toast_notifications': toastNotifications,
+      },
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/update（全部字段可空）。
-  Future<Object?> updateCron({
+  Future<CronMutationResponse> updateCron({
     required String jobId,
     String? prompt,
     String? schedule,
@@ -48,51 +52,88 @@ extension ApiClientCron on ApiClient {
     String? provider,
     String? profile,
     bool? toastNotifications,
-  }) => sendJson(
-    Endpoint.cronUpdate,
-    method: 'POST',
-    body: {
-      'job_id': jobId,
-      'prompt': ?prompt,
-      'schedule': ?schedule,
-      'name': ?name,
-      'deliver': ?deliver,
-      'skills': ?skills,
-      'model': ?model,
-      'provider': ?provider,
-      'profile': ?profile,
-      'toast_notifications': ?toastNotifications,
-    },
-  );
+  }) async {
+    final json = await sendJson(
+      Endpoint.cronUpdate,
+      method: 'POST',
+      body: {
+        'job_id': jobId,
+        'prompt': ?prompt,
+        'schedule': ?schedule,
+        'name': ?name,
+        'deliver': ?deliver,
+        'skills': ?skills,
+        'model': ?model,
+        'provider': ?provider,
+        'profile': ?profile,
+        'toast_notifications': ?toastNotifications,
+      },
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/delete {job_id}（reason 传 nil 不发键）。
-  Future<Object?> deleteCron(String jobId) =>
-      sendJson(Endpoint.cronDelete, method: 'POST', body: {'job_id': jobId});
+  Future<CronMutationResponse> deleteCron(String jobId) async {
+    final json = await sendJson(
+      Endpoint.cronDelete,
+      method: 'POST',
+      body: {'job_id': jobId},
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/run {job_id}。
-  Future<Object?> runCron(String jobId) =>
-      sendJson(Endpoint.cronRun, method: 'POST', body: {'job_id': jobId});
+  Future<CronMutationResponse> runCron(String jobId) async {
+    final json = await sendJson(
+      Endpoint.cronRun,
+      method: 'POST',
+      body: {'job_id': jobId},
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/pause {job_id, reason?}。
-  Future<Object?> pauseCron(String jobId, {String? reason}) => sendJson(
-    Endpoint.cronPause,
-    method: 'POST',
-    body: {'job_id': jobId, 'reason': ?reason},
-  );
+  Future<CronMutationResponse> pauseCron(String jobId, {String? reason}) async {
+    final json = await sendJson(
+      Endpoint.cronPause,
+      method: 'POST',
+      body: {'job_id': jobId, 'reason': ?reason},
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/crons/resume {job_id}。
-  Future<Object?> resumeCron(String jobId) =>
-      sendJson(Endpoint.cronResume, method: 'POST', body: {'job_id': jobId});
+  Future<CronMutationResponse> resumeCron(String jobId) async {
+    final json = await sendJson(
+      Endpoint.cronResume,
+      method: 'POST',
+      body: {'job_id': jobId},
+    );
+    return CronMutationResponse.fromJson(_asMap(json));
+  }
 
   /// GET /api/crons/status（job_id 可选，nil 时不发）。
-  Future<Object?> cronStatus([String? jobId]) =>
-      sendJson(Endpoint.cronStatus(jobId));
+  Future<CronStatusResponse> cronStatus([String? jobId]) async {
+    final json = await sendJson(Endpoint.cronStatus(jobId));
+    return CronStatusResponse.fromJson(_asMap(json));
+  }
 
   /// GET /api/crons/output?job_id=&limit?=（limit 默认 5）。
-  Future<Object?> cronOutput(String jobId, {int? limit = 5}) =>
-      sendJson(Endpoint.cronOutput(jobId: jobId, limit: limit));
+  Future<CronOutputResponse> cronOutput(String jobId, {int? limit = 5}) async {
+    final json = await sendJson(
+      Endpoint.cronOutput(jobId: jobId, limit: limit),
+    );
+    return CronOutputResponse.fromJson(_asMap(json));
+  }
 
   /// GET /api/crons/delivery-options。
-  Future<Object?> cronDeliveryOptions() =>
-      sendJson(Endpoint.cronDeliveryOptions);
+  Future<CronDeliveryOptionsResponse> cronDeliveryOptions() async {
+    final json = await sendJson(Endpoint.cronDeliveryOptions);
+    return CronDeliveryOptionsResponse.fromJson(_asMap(json));
+  }
 }
+
+Map<String, Object?> _asMap(Object? json) =>
+    json is Map<String, Object?>
+        ? json
+        : (json is Map ? Map<String, Object?>.from(json) : const <String, Object?>{});

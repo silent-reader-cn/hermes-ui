@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'api_client.dart';
 import 'api_exception.dart';
 import 'endpoints.dart';
+import '../models/kanban.dart';
 
 /// kanban 域方法（23 个端点）+ §2.5 专属守卫。
-///
-/// 返回类型暂为 `Object?`（解码后的 JSON）；TODO(merge)：模型就绪后改为对应
-/// 类型并 `return XxxResponse.fromJson(json)`。
 extension ApiClientKanban on ApiClient {
   // -------------------------------------------------------------------------
   // 基元：kanbanJSON（校验 Content-Type 以 application/json 开头）
@@ -44,58 +42,80 @@ extension ApiClientKanban on ApiClient {
   // -------------------------------------------------------------------------
 
   /// GET /api/kanban/config。
-  Future<Object?> kanbanConfiguration() => kanbanJson(Endpoint.kanbanConfig);
+  Future<KanbanConfiguration> kanbanConfiguration() async {
+    final json = await kanbanJson(Endpoint.kanbanConfig);
+    return KanbanConfiguration.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/boards。
-  Future<Object?> kanbanBoards() => kanbanJson(Endpoint.kanbanBoards);
+  Future<KanbanBoardsResponse> kanbanBoards() async {
+    final json = await kanbanJson(Endpoint.kanbanBoards);
+    return KanbanBoardsResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/boards {slug, name, description, icon, color}。
-  Future<Object?> createKanbanBoard({
+  Future<KanbanBoardMutationEnvelope> createKanbanBoard({
     required String slug,
     required String name,
     required String description,
     required String icon,
     required String color,
-  }) => kanbanJson(
-    Endpoint.kanbanCreateBoard,
-    method: 'POST',
-    body: {
-      'slug': slug,
-      'name': name,
-      'description': description,
-      'icon': icon,
-      'color': color,
-    },
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanCreateBoard,
+      method: 'POST',
+      body: {
+        'slug': slug,
+        'name': name,
+        'description': description,
+        'icon': icon,
+        'color': color,
+      },
+    );
+    return KanbanBoardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// PATCH /api/kanban/boards/{slug} {name, description, icon, color}（无 slug）。
-  Future<Object?> editKanbanBoard({
+  Future<KanbanBoardMutationEnvelope> editKanbanBoard({
     required String slug,
     required String name,
     required String description,
     required String icon,
     required String color,
-  }) => kanbanJson(
-    Endpoint.kanbanEditBoard(slug),
-    method: 'PATCH',
-    body: {
-      'name': name,
-      'description': description,
-      'icon': icon,
-      'color': color,
-    },
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanEditBoard(slug),
+      method: 'PATCH',
+      body: {
+        'name': name,
+        'description': description,
+        'icon': icon,
+        'color': color,
+      },
+    );
+    return KanbanBoardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// DELETE /api/kanban/boards/{slug}（无 body）。
-  Future<Object?> archiveKanbanBoard(String slug) =>
-      kanbanJson(Endpoint.kanbanArchiveBoard(slug), method: 'DELETE');
+  Future<KanbanBoardMutationEnvelope> archiveKanbanBoard(String slug) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanArchiveBoard(slug),
+      method: 'DELETE',
+    );
+    return KanbanBoardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/boards/{slug}/switch（无 body）。
-  Future<Object?> makeKanbanBoardActive(String slug) =>
-      kanbanJson(Endpoint.kanbanMakeBoardActive(slug), method: 'POST');
+  Future<KanbanBoardMutationEnvelope> makeKanbanBoardActive(String slug) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanMakeBoardActive(slug),
+      method: 'POST',
+    );
+    return KanbanBoardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/dispatch?board=&dry_run=&max=8 — 8 个计数全空 → 报错。
-  Future<Object?> dispatchKanban({
+  Future<KanbanDispatchResult> dispatchKanban({
     required String board,
     bool dryRun = false,
   }) async {
@@ -103,92 +123,103 @@ extension ApiClientKanban on ApiClient {
       Endpoint.kanbanDispatch(board: board, dryRun: dryRun),
       method: 'POST',
     );
-    final map = json is Map<String, Object?> ? json : const <String, Object?>{};
-    const keys = [
-      'spawned',
-      'promoted',
-      'reclaimed',
-      'skipped_unassigned',
-      'skipped_nonspawnable',
-      'auto_blocked',
-      'timed_out',
-      'crashed',
-    ];
-    final hasKnownCategory = keys.any((key) => map[key] != null);
-    if (!hasKnownCategory) {
+    final map = _asMap(json);
+    final result = KanbanDispatchResult.fromJson(map);
+    if (!result.hasKnownCategory) {
       throw const KanbanDispatchMissingResultException();
     }
-    return json;
+    return result;
   }
 
   /// GET /api/kanban/board?board=&tenant?=&assignee?=&include_archived?=&only_mine?=&since?=。
-  Future<Object?> kanbanBoard({
+  Future<KanbanBoardSnapshot> kanbanBoard({
     required String board,
     String? tenant,
     String? assignee,
     bool includeArchived = false,
     bool onlyMine = false,
     String? since,
-  }) => kanbanJson(
-    Endpoint.kanbanBoard(
-      board: board,
-      tenant: tenant,
-      assignee: assignee,
-      includeArchived: includeArchived,
-      onlyMine: onlyMine,
-      since: since,
-    ),
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanBoard(
+        board: board,
+        tenant: tenant,
+        assignee: assignee,
+        includeArchived: includeArchived,
+        onlyMine: onlyMine,
+        since: since,
+      ),
+    );
+    return KanbanBoardSnapshot.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/stats?board=。
-  Future<Object?> kanbanStats(String board) =>
-      kanbanJson(Endpoint.kanbanStats(board));
+  Future<KanbanStats> kanbanStats(String board) async {
+    final json = await kanbanJson(Endpoint.kanbanStats(board));
+    return KanbanStats.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/assignees?board=。
-  Future<Object?> kanbanAssignees(String board) =>
-      kanbanJson(Endpoint.kanbanAssignees(board));
+  Future<KanbanAssigneeHistory> kanbanAssignees(String board) async {
+    final json = await kanbanJson(Endpoint.kanbanAssignees(board));
+    return KanbanAssigneeHistory.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/events?board=&since=&limit=（since max(0)，limit clamp 1–200）。
-  Future<Object?> kanbanEvents({
+  Future<KanbanEventsEnvelope> kanbanEvents({
     required String board,
     required int since,
     int limit = 200,
-  }) => kanbanJson(
-    Endpoint.kanbanEvents(board: board, since: since, limit: limit),
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanEvents(board: board, since: since, limit: limit),
+    );
+    return KanbanEventsEnvelope.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/events/stream?board=&since=（独立帧协议 hello/events，SSE）。
   Uri kanbanEventsStreamUrl({required String board, required int since}) =>
       Endpoint.kanbanEventsStream(board: board, since: since).url(baseUrl);
 
   /// GET /api/kanban/tasks/{cardId}?board=。
-  Future<Object?> kanbanCardDetail({
+  Future<KanbanCardDetailEnvelope> kanbanCardDetail({
     required String board,
     required String cardId,
-  }) => kanbanJson(Endpoint.kanbanCardDetail(board: board, cardId: cardId));
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanCardDetail(board: board, cardId: cardId),
+    );
+    return KanbanCardDetailEnvelope.fromJson(_asMap(json));
+  }
 
   /// GET /api/kanban/tasks/{cardId}/log?board=&tail=（tail 默认 65536，clamp 1–2M）。
-  Future<Object?> kanbanWorkerLog({
+  Future<KanbanWorkerLog> kanbanWorkerLog({
     required String board,
     required String cardId,
     int tail = 65536,
-  }) => kanbanJson(
-    Endpoint.kanbanWorkerLog(board: board, cardId: cardId, tail: tail),
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanWorkerLog(board: board, cardId: cardId, tail: tail),
+    );
+    return KanbanWorkerLog.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/tasks/{cardId}/comments?board= {body}。
-  Future<Object?> addKanbanComment({
+  Future<KanbanAddCommentResponse> addKanbanComment({
     required String board,
     required String cardId,
     required String body,
-  }) => kanbanJson(
-    Endpoint.kanbanAddComment(board: board, cardId: cardId),
-    method: 'POST',
-    body: {'body': body},
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanAddComment(board: board, cardId: cardId),
+      method: 'POST',
+      body: {'body': body},
+    );
+    return KanbanAddCommentResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/tasks?board= — `parents` = `[prerequisiteId]`（有值时）。
-  Future<Object?> createKanbanCard({
+  Future<KanbanCardMutationEnvelope> createKanbanCard({
     required String board,
     required String title,
     String? body,
@@ -202,49 +233,55 @@ extension ApiClientKanban on ApiClient {
     int? maxRuntimeSeconds,
     String? prerequisiteId,
     required String idempotencyKey,
-  }) => kanbanJson(
-    Endpoint.kanbanCreateCard(board),
-    method: 'POST',
-    body: {
-      'title': title,
-      'body': ?body,
-      'status': status,
-      'priority': ?priority,
-      'assignee': ?assignee,
-      'tenant': ?tenant,
-      'workspace_kind': workspaceKind,
-      'workspace_path': ?workspacePath,
-      'skills': ?skills,
-      'max_runtime_seconds': ?maxRuntimeSeconds,
-      if (prerequisiteId != null) 'parents': [prerequisiteId],
-      'idempotency_key': idempotencyKey,
-    },
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanCreateCard(board),
+      method: 'POST',
+      body: {
+        'title': title,
+        'body': ?body,
+        'status': status,
+        'priority': ?priority,
+        'assignee': ?assignee,
+        'tenant': ?tenant,
+        'workspace_kind': workspaceKind,
+        'workspace_path': ?workspacePath,
+        'skills': ?skills,
+        'max_runtime_seconds': ?maxRuntimeSeconds,
+        if (prerequisiteId != null) 'parents': [prerequisiteId],
+        'idempotency_key': idempotencyKey,
+      },
+    );
+    return KanbanCardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/tasks/bulk?board= — 四选一：archive / status / assignee /
   /// priority（assignee 空串当无）。
-  Future<Object?> performKanbanBulkAction({
+  Future<KanbanBulkActionEnvelope> performKanbanBulkAction({
     required String board,
     required List<String> ids,
     bool? archive,
     String? status,
     String? assignee,
     int? priority,
-  }) => kanbanJson(
-    Endpoint.kanbanBulkAction(board),
-    method: 'POST',
-    body: {
-      'ids': ids,
-      'archive': ?archive,
-      'status': ?status,
-      if (assignee != null && assignee.isNotEmpty) 'assignee': assignee,
-      'priority': ?priority,
-    },
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanBulkAction(board),
+      method: 'POST',
+      body: {
+        'ids': ids,
+        'archive': ?archive,
+        'status': ?status,
+        if (assignee != null && assignee.isNotEmpty) 'assignee': assignee,
+        'priority': ?priority,
+      },
+    );
+    return KanbanBulkActionEnvelope.fromJson(_asMap(json));
+  }
 
   /// PATCH /api/kanban/tasks/{cardId}?board= — tenant/assignee 可显式 null
   /// （键照发，值为 null）；status 有值才发。
-  Future<Object?> editKanbanCard({
+  Future<KanbanCardMutationEnvelope> editKanbanCard({
     required String board,
     required String cardId,
     required String title,
@@ -253,22 +290,25 @@ extension ApiClientKanban on ApiClient {
     required int priority,
     required Object? assignee,
     String? status,
-  }) => kanbanJson(
-    Endpoint.kanbanEditCard(board: board, cardId: cardId),
-    method: 'PATCH',
-    body: {
-      'title': title,
-      'body': body,
-      'tenant': tenant,
-      'priority': priority,
-      'assignee': assignee,
-      'status': ?status,
-    },
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanEditCard(board: board, cardId: cardId),
+      method: 'PATCH',
+      body: {
+        'title': title,
+        'body': body,
+        'tenant': tenant,
+        'priority': priority,
+        'assignee': assignee,
+        'status': ?status,
+      },
+    );
+    return KanbanCardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// PATCH /api/kanban/tasks/{cardId}?board= {status} — **status≠running 守卫**
   /// （running 只能由 dispatcher 设置，本地拦截不发请求）。
-  Future<Object?> setKanbanCardStatus({
+  Future<KanbanCardMutationEnvelope> setKanbanCardStatus({
     required String board,
     required String cardId,
     required String status,
@@ -276,53 +316,71 @@ extension ApiClientKanban on ApiClient {
     if (status.trim().toLowerCase() == 'running') {
       throw const KanbanRunningStatusRequiresDispatcherException();
     }
-    return kanbanJson(
+    final json = await kanbanJson(
       Endpoint.kanbanCardStatus(board: board, cardId: cardId),
       method: 'PATCH',
       body: {'status': status},
     );
+    return KanbanCardMutationEnvelope.fromJson(_asMap(json));
   }
 
   /// POST /api/kanban/tasks/{cardId}/block?board= {reason?}。
-  Future<Object?> blockKanbanCard({
+  Future<KanbanCardMutationEnvelope> blockKanbanCard({
     required String board,
     required String cardId,
     String? reason,
-  }) => kanbanJson(
-    Endpoint.kanbanBlockCard(board: board, cardId: cardId),
-    method: 'POST',
-    body: {'reason': ?reason},
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanBlockCard(board: board, cardId: cardId),
+      method: 'POST',
+      body: {'reason': ?reason},
+    );
+    return KanbanCardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/tasks/{cardId}/unblock?board= {}（reason 传 nil 不发键）。
-  Future<Object?> unblockKanbanCard({
+  Future<KanbanCardMutationEnvelope> unblockKanbanCard({
     required String board,
     required String cardId,
-  }) => kanbanJson(
-    Endpoint.kanbanUnblockCard(board: board, cardId: cardId),
-    method: 'POST',
-    body: <String, Object?>{},
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanUnblockCard(board: board, cardId: cardId),
+      method: 'POST',
+      body: <String, Object?>{},
+    );
+    return KanbanCardMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/links?board= {parent_id, child_id}。
-  Future<Object?> addKanbanDependency({
+  Future<KanbanDependencyMutationEnvelope> addKanbanDependency({
     required String board,
     required String parentId,
     required String childId,
-  }) => kanbanJson(
-    Endpoint.kanbanAddDependency(board),
-    method: 'POST',
-    body: {'parent_id': parentId, 'child_id': childId},
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanAddDependency(board),
+      method: 'POST',
+      body: {'parent_id': parentId, 'child_id': childId},
+    );
+    return KanbanDependencyMutationEnvelope.fromJson(_asMap(json));
+  }
 
   /// POST /api/kanban/links/delete?board= {parent_id, child_id}。
-  Future<Object?> removeKanbanDependency({
+  Future<KanbanDependencyMutationEnvelope> removeKanbanDependency({
     required String board,
     required String parentId,
     required String childId,
-  }) => kanbanJson(
-    Endpoint.kanbanRemoveDependency(board),
-    method: 'POST',
-    body: {'parent_id': parentId, 'child_id': childId},
-  );
+  }) async {
+    final json = await kanbanJson(
+      Endpoint.kanbanRemoveDependency(board),
+      method: 'POST',
+      body: {'parent_id': parentId, 'child_id': childId},
+    );
+    return KanbanDependencyMutationEnvelope.fromJson(_asMap(json));
+  }
 }
+
+Map<String, Object?> _asMap(Object? json) =>
+    json is Map<String, Object?>
+        ? json
+        : (json is Map ? Map<String, Object?>.from(json) : const <String, Object?>{});
