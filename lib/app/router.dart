@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'deep_link.dart';
 import '../core/connections/connection_providers.dart';
 import '../core/providers/file_picker_provider.dart';
 import '../features/chat/chat_page.dart';

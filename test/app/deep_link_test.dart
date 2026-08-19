@@ -36,11 +36,11 @@ void main() {
     test('未知路径/未知 scheme 回退根路径', () {
       expect(resolveInitialRoute('hermex://evil/path'), '/');
       expect(resolveInitialRoute('https://example.com/chat/1'), '/');
-      expect(resolveInitialRoute('hermex://chat//double'), '/');
     });
 
     test('多余斜杠收敛', () {
       expect(resolveInitialRoute('hermex:////chat///abc'), '/chat/abc');
+      expect(resolveInitialRoute('hermex://chat//double'), '/chat/double');
     });
   });
 }
