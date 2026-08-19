@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
+import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../app/theme/status_colors.dart';
 import 'onboarding_providers.dart';
@@ -535,8 +536,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           ),
           const SizedBox(width: 4),
-          CupertinoButton(
+          AccessibleButton(
             key: ValueKey('onboarding-header-remove-$index'),
+            label: '删除 Header',
             padding: EdgeInsets.zero,
             onPressed: () => _removeHeaderField(index),
             child: const Icon(

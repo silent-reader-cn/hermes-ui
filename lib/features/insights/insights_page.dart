@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
@@ -32,8 +33,9 @@ class InsightsPage extends ConsumerWidget {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('用量统计'),
             leading: const AppBackButton(),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('insights-refresh'),
+              label: '刷新用量统计',
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(insightsControllerProvider.notifier).refresh(),

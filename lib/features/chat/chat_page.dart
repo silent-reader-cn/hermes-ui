@@ -10,6 +10,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
+import '../../core/utils/accessibility.dart';
 import '../shared/app_back_button.dart';
 import 'chat_controller.dart';
 import 'chat_providers.dart';
@@ -84,8 +85,9 @@ class ChatPage extends ConsumerWidget {
               ),
           ],
         ),
-        trailing: CupertinoButton(
+        trailing: AccessibleButton(
           key: const ValueKey('chat-session-actions'),
+          label: '会话操作',
           padding: EdgeInsets.zero,
           onPressed: () => _showSessionActions(context, ref, sessionId, state),
           child: const Icon(CupertinoIcons.ellipsis),
@@ -601,8 +603,9 @@ class _ErrorBanner extends StatelessWidget {
               ),
             ),
           ),
-          GestureDetector(
-            onTap: onDismiss,
+          AccessibleButton(
+            label: '关闭错误提示',
+            onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
               size: 16,
@@ -690,8 +693,9 @@ class _NoticeBanner extends StatelessWidget {
               style: const TextStyle(fontSize: 13, color: statusGreenText),
             ),
           ),
-          GestureDetector(
-            onTap: onDismiss,
+          AccessibleButton(
+            label: '关闭提示',
+            onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
               size: 16,

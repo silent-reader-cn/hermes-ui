@@ -9,6 +9,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
+import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
@@ -60,18 +61,24 @@ class _AppearanceSection extends ConsumerWidget {
       children: [
         CupertinoListTile(
           title: const Text('主题'),
-          trailing: CupertinoSlidingSegmentedControl<AppThemeMode>(
-            groupValue: mode,
-            onValueChanged: (value) {
-              if (value != null) {
-                unawaited(ref.read(themeModeProvider.notifier).setMode(value));
-              }
-            },
-            children: const {
-              AppThemeMode.system: Text('跟随系统'),
-              AppThemeMode.light: Text('浅色'),
-              AppThemeMode.dark: Text('深色'),
-            },
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: CupertinoSlidingSegmentedControl<AppThemeMode>(
+                groupValue: mode,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(ref.read(themeModeProvider.notifier).setMode(value));
+                  }
+                },
+                children: const {
+                  AppThemeMode.system: Text('跟随系统'),
+                  AppThemeMode.light: Text('浅色'),
+                  AppThemeMode.dark: Text('深色'),
+                },
+              ),
+            ),
           ),
         ),
       ],
@@ -194,8 +201,9 @@ class _ServerSection extends ConsumerWidget {
               CupertinoIcons.checkmark_circle_fill,
               color: CupertinoColors.systemBlue,
             ),
-          CupertinoButton(
+          AccessibleButton(
             key: ValueKey('server-edit-${connection.id}'),
+            label: '编辑服务器',
             padding: EdgeInsets.zero,
             minimumSize: const Size(32, 32),
             onPressed: () => unawaited(
@@ -203,8 +211,9 @@ class _ServerSection extends ConsumerWidget {
             ),
             child: const Icon(CupertinoIcons.pencil, size: 18),
           ),
-          CupertinoButton(
+          AccessibleButton(
             key: ValueKey('server-delete-${connection.id}'),
+            label: '删除服务器',
             padding: EdgeInsets.zero,
             minimumSize: const Size(32, 32),
             onPressed: () => unawaited(_confirmDeleteServer(

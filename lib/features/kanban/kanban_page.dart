@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
+import '../../core/utils/accessibility.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 
@@ -94,8 +95,9 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('看板'),
             leading: const AppBackButton(),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('kanban-create'),
+              label: '新建卡片',
               padding: EdgeInsets.zero,
               onPressed:
                   state == null || state.readOnly ? null : () => _openCreate(context),
@@ -799,8 +801,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              CupertinoButton(
+              AccessibleButton(
                 key: const ValueKey('kanban-comment-send'),
+                label: '发送评论',
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(36, 36),
                 onPressed:

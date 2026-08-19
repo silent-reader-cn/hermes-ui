@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/memory.dart';
+import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
@@ -31,8 +32,9 @@ class MemoryPage extends ConsumerWidget {
           CupertinoSliverNavigationBar(
             largeTitle: const Text('记忆'),
             leading: const AppBackButton(),
-            trailing: CupertinoButton(
+            trailing: AccessibleButton(
               key: const ValueKey('memory-refresh'),
+              label: '刷新记忆',
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(memoryControllerProvider.notifier).refresh(),
