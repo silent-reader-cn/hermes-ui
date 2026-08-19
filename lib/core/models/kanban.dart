@@ -1134,11 +1134,19 @@ class KanbanEvent {
 
   factory KanbanEvent.fromJson(Map<String, Object?> json) {
     return KanbanEvent(
-      eventID: lossyInt(json, 'id'),
-      cardID: lossyString(json, 'taskId'),
-      runID: lossyString(json, 'runId'),
+      eventID: firstKey(json, ['id', 'eventId', 'event_id'], lossyInt),
+      cardID: firstKey(
+        json,
+        ['taskId', 'task_id', 'cardId', 'card_id'],
+        lossyString,
+      ),
+      runID: firstKey(json, ['runId', 'run_id'], lossyString),
       kind: lossyString(json, 'kind'),
-      createdAt: lossyInt(json, 'created_at'),
+      createdAt: firstKey(
+        json,
+        ['created_at', 'createdAt', 'timestamp'],
+        lossyInt,
+      ),
     );
   }
 
@@ -1147,6 +1155,16 @@ class KanbanEvent {
   final String? runID;
   final String? kind;
   final int? createdAt;
+
+  Map<String, Object?> toJson() {
+    return {
+      if (eventID != null) 'id': eventID,
+      if (cardID != null) 'taskId': cardID,
+      if (runID != null) 'runId': runID,
+      if (kind != null) 'kind': kind,
+      if (createdAt != null) 'created_at': createdAt,
+    };
+  }
 
   @override
   bool operator ==(Object other) {

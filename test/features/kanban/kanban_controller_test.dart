@@ -180,7 +180,7 @@ void main() {
       ]);
       api.emitFrame(const KanbanEventsFrame(
         events: [
-          {'id': 8, 'taskId': 'c1', 'kind': 'status_changed'},
+          KanbanEvent(eventID: 8, cardID: 'c1', kind: 'status_changed'),
         ],
         cursor: 8,
       ));

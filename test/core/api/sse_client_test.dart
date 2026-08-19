@@ -4,6 +4,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermex_flutter/core/api/custom_header.dart';
 import 'package:hermex_flutter/core/api/sse_client.dart';
+import 'package:hermex_flutter/core/models/approval.dart';
+import 'package:hermex_flutter/core/models/clarification.dart';
+import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
+import 'package:hermex_flutter/core/models/json_value.dart';
+import 'package:hermex_flutter/core/models/session.dart';
 
 void main() {
   group('SseWireParser（线上协议）', () {
@@ -107,11 +112,11 @@ void main() {
       expect((event as ReasoningSseEvent).text, '思考中');
     });
 
-    test('tool → ToolStarted，含容错字段与 stableId 回退顺序', () {
+    test('tool → ToolStarted，含容错字段与 stableId 回退顺序及 jsonArgs 类型化', () {
       final event = SseEventDecoder.decode(
         'tool',
         '{"event_type":"tool_call","name":"bash","preview":"ls",'
-            '"args":{"cmd":"ls"},"duration":1.5,"is_error":false,'
+            '"args":{"cmd":"ls","count":5},"duration":1.5,"is_error":false,'
             '"tool_use_id":"use-1","tid":"tid-9"}',
       );
       expect(event, isA<ToolStartedSseEvent>());
@@ -119,7 +124,9 @@ void main() {
       expect(tool.eventType, 'tool_call');
       expect(tool.name, 'bash');
       expect(tool.preview, 'ls');
-      expect(tool.args, {'cmd': 'ls'});
+      expect(tool.args, {'cmd': 'ls', 'count': 5});
+      expect(tool.jsonArgs?['cmd'], const JsonString('ls'));
+      expect(tool.jsonArgs?['count'], const JsonNumber(5.0));
       expect(tool.duration, 1.5);
       expect(tool.isError, isFalse);
       // tid 优先于 tool_use_id
@@ -187,15 +194,22 @@ void main() {
       expect(zero.displayableTps, isNull);
     });
 
-    test('done 正常 → DoneSseEvent（usage/session 原样携带）', () {
+    test('done 正常 → DoneSseEvent（usage/session 原样携带 + 强类型解析）', () {
       final event = SseEventDecoder.decode(
         'done',
-        '{"event":{"usage":{"total_tokens":100},"session":{"id":"s1"}}}',
+        '{"event":{"usage":{"context_length":8000,"tps":25.5,"input_tokens":100},"session":{"session_id":"s1","title":"会话标题"}}}',
       );
       expect(event, isA<DoneSseEvent>());
       final done = (event as DoneSseEvent).event;
-      expect(done.usage, {'total_tokens': 100});
-      expect(done.session, {'id': 's1'});
+      expect(done.usage, {'context_length': 8000, 'tps': 25.5, 'input_tokens': 100});
+      expect(done.session, {'session_id': 's1', 'title': '会话标题'});
+      expect(done.usageSnapshot, isA<ContextWindowSnapshot>());
+      expect(done.usageSnapshot?.contextLength, 8000);
+      expect(done.usageSnapshot?.tokensPerSecond, 25.5);
+      expect(done.usageSnapshot?.inputTokens, 100);
+      expect(done.sessionDetail, isA<SessionDetail>());
+      expect(done.sessionDetail?.sessionId, 's1');
+      expect(done.sessionDetail?.title, '会话标题');
     });
 
     test('done 畸形（非 JSON / 缺 event / event 非对象）→ TransportError', () {
@@ -214,35 +228,50 @@ void main() {
       expect(SseEventDecoder.decode('done', ''), isA<TransportErrorSseEvent>());
     });
 
-    test('initial 含澄清标记 → ClarificationPending，否则 ApprovalPending', () {
+    test('initial 含澄清标记 → ClarificationPending，否则 ApprovalPending（含强类型字段）', () {
       final clarify = SseEventDecoder.decode(
         'initial',
-        '{"pending":{"question":"哪个方案？","choices_offered":["a","b"]}}',
-      );
-      expect(clarify, isA<ClarificationPendingSseEvent>());
+        '{"pending":{"question":"哪个方案？","choices_offered":["a","b"],"clarify_id":"c1"}}',
+      ) as ClarificationPendingSseEvent;
+      expect(clarify.clarification, isA<ClarificationPendingResponse>());
+      expect(clarify.clarification.pending?.question, '哪个方案？');
+      expect(clarify.clarification.pending?.choicesOffered, ['a', 'b']);
+      expect(clarify.clarification.pending?.clarifyId, 'c1');
+      expect(clarify.response, clarify.clarification);
 
       final clarifyTopLevel = SseEventDecoder.decode(
         'initial',
         '{"question":"q"}',
-      );
-      expect(clarifyTopLevel, isA<ClarificationPendingSseEvent>());
+      ) as ClarificationPendingSseEvent;
+      expect(clarifyTopLevel.clarification.pending?.question, 'q');
 
       final approval = SseEventDecoder.decode(
         'initial',
-        '{"pending":{"id":"p1"}}',
-      );
-      expect(approval, isA<ApprovalPendingSseEvent>());
+        '{"pending":{"id":"p1","command":"run test","description":"跑测试"}}',
+      ) as ApprovalPendingSseEvent;
+      expect(approval.approval, isA<ApprovalPendingResponse>());
+      expect(approval.approval.pending?.approvalId, 'p1');
+      expect(approval.approval.pending?.command, 'run test');
+      expect(approval.approval.pending?.description, '跑测试');
+      expect(approval.response, approval.approval);
     });
 
-    test('approval / clarify 事件', () {
-      expect(
-        SseEventDecoder.decode('approval', '{"id":"a1"}'),
-        isA<ApprovalPendingSseEvent>(),
-      );
-      expect(
-        SseEventDecoder.decode('clarify', '{"id":"c1"}'),
-        isA<ClarificationPendingSseEvent>(),
-      );
+    test('approval / clarify 事件强类型解析', () {
+      final approval = SseEventDecoder.decode(
+        'approval',
+        '{"id":"a1","command":"git push"}',
+      ) as ApprovalPendingSseEvent;
+      expect(approval.approval, isA<ApprovalPendingResponse>());
+      expect(approval.approval.pending?.approvalId, 'a1');
+      expect(approval.approval.pending?.command, 'git push');
+
+      final clarify = SseEventDecoder.decode(
+        'clarify',
+        '{"id":"c1","question":"继续？"}',
+      ) as ClarificationPendingSseEvent;
+      expect(clarify.clarification, isA<ClarificationPendingResponse>());
+      expect(clarify.clarification.pending?.clarifyId, 'c1');
+      expect(clarify.clarification.pending?.question, '继续？');
     });
 
     test('pending_steer_leftover', () {
@@ -293,6 +322,7 @@ void main() {
           SseEventDecoder.decode('tool', 'garbage') as ToolStartedSseEvent;
       expect(tool.event.eventType, isNull);
       expect(tool.event.stableId, isNull);
+      expect(tool.event.jsonArgs, isNull);
       final interim = SseEventDecoder.decode(
         'interim_assistant',
         'null',
@@ -304,6 +334,20 @@ void main() {
         '{"tps":"oops"}',
       ) as MeteringSseEvent;
       expect(metering.tps, isNull);
+
+      final malformedApproval = SseEventDecoder.decode('approval', 'garbage') as ApprovalPendingSseEvent;
+      expect(malformedApproval.approval.pending, isNull);
+
+      final malformedClarify = SseEventDecoder.decode('clarify', 'not-json') as ClarificationPendingSseEvent;
+      expect(malformedClarify.clarification.pending, isNull);
+
+      const malformedDoneEvent = DoneStreamEvent(
+        usage: {'context_length': 'not-int', 'tps': 'not-double'},
+        session: {'message_count': 'bad-int'},
+      );
+      expect(malformedDoneEvent.usageSnapshot?.contextLength, isNull);
+      expect(malformedDoneEvent.usageSnapshot?.tokensPerSecond, isNull);
+      expect(malformedDoneEvent.sessionDetail?.messageCount, isNull);
     });
   });
 

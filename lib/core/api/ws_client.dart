@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../models/kanban.dart';
 import 'custom_header.dart';
 import 'sse_client.dart';
 
@@ -46,8 +47,8 @@ class KanbanEventsFrame extends KanbanStreamFrame {
     this.frameId,
   });
 
-  /// TODO(merge)：模型就绪后改为 `List<KanbanEvent>`。
-  final List<Map<String, Object?>> events;
+  /// 强类型 Kanban 事件列表。
+  final List<KanbanEvent> events;
   final int cursor;
 
   /// SSE `id:` 行解析出的帧 id（缺失为 null）。
@@ -63,37 +64,12 @@ class KanbanEventsFrame extends KanbanStreamFrame {
   @override
   int get hashCode => Object.hash(events.length, cursor, frameId);
 
-  bool _sameEvents(List<Map<String, Object?>> other) {
+  bool _sameEvents(List<KanbanEvent> other) {
     if (other.length != events.length) return false;
     for (var i = 0; i < events.length; i++) {
-      if (!_mapsEqual(events[i], other[i])) return false;
+      if (events[i] != other[i]) return false;
     }
     return true;
-  }
-
-  bool _mapsEqual(Map<String, Object?> a, Map<String, Object?> b) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      if (!_deepEquals(entry.value, b[entry.key])) return false;
-    }
-    return true;
-  }
-
-  bool _deepEquals(Object? a, Object? b) {
-    if (a is Map && b is Map) {
-      return _mapsEqual(
-        Map<String, Object?>.from(a),
-        Map<String, Object?>.from(b),
-      );
-    }
-    if (a is List && b is List) {
-      if (a.length != b.length) return false;
-      for (var i = 0; i < a.length; i++) {
-        if (!_deepEquals(a[i], b[i])) return false;
-      }
-      return true;
-    }
-    return a == b;
   }
 }
 
@@ -154,9 +130,11 @@ class KanbanStreamFrameDecoder {
           parsedFrameId = int.tryParse(frameId);
           if (parsedFrameId == null) return const KanbanMalformedFrame();
         }
-        final events = <Map<String, Object?>>[];
+        final events = <KanbanEvent>[];
         for (final item in rawEvents) {
-          if (item is Map) events.add(Map<String, Object?>.from(item));
+          if (item is Map) {
+            events.add(KanbanEvent.fromJson(Map<String, Object?>.from(item)));
+          }
         }
         return KanbanEventsFrame(
           events: events,
