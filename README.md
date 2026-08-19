@@ -7,9 +7,9 @@
 - 蓝本：https://github.com/uzairansaruzi/hermex (MIT)
 - 服务端：`D:\hermes-webui`（fork of nesquena/hermes-webui，:30002）
 
-> **当前状态**：核心功能里程碑完成（附件上传、离线缓存、Profile、导出、Kanban 拖拽、Android 后台通知）。
-> 789 个测试全绿、`flutter analyze` 零告警、Android debug APK 可构建。
-> 正式发布前的收尾事项（release 签名、LICENSE、截图等）见 [docs/RELEASE.md](docs/RELEASE.md)。
+> **当前状态**：核心功能里程碑完成（附件上传、离线缓存、Profile、导出、Kanban 拖拽、Android 后台通知、桌面托盘/全局快捷键/窗口记忆、Web PWA、iOS 深链）。
+> 942 个测试全绿、`flutter analyze` 零告警、Android release APK 可构建（v0.1.0）。
+> 正式发布前的收尾事项（真机验证、README 截图等）见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ---
 
