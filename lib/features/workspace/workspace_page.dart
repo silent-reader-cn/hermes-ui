@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'workspace_providers.dart';
 
@@ -97,6 +98,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final provider = workspaceControllerProvider(widget.sessionId);
     final async = ref.watch(provider);
     final state = async.valueOrNull;
@@ -119,15 +121,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('文件'),
-            middle: const Text('文件'),
+            largeTitle: Text(l10n.files),
+            middle: Text(l10n.files),
             leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 AccessibleButton(
                   key: const ValueKey('workspace-refresh'),
-                  label: '刷新文件列表',
+                  label: l10n.refreshFileList,
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       unawaited(ref.read(provider.notifier).refresh()),
@@ -146,7 +148,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           ),
           _PathHeader(
             crumbs: crumbs,
-            displayPath: state?.displayPath ?? '根目录',
+            displayPath: state?.displayPath ?? l10n.rootDir,
             isRefreshing: state?.isRefreshing == true,
             errorMessage:
                 state != null &&
@@ -211,6 +213,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   Widget _buildErrorSliver(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -224,9 +227,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -247,7 +250,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                     )
                     .refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -256,6 +259,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   Widget _buildEmptySliver(WorkspaceState state) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -269,7 +273,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text('暂无文件', style: TextStyle(fontSize: 17)),
+            Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
             const SizedBox(height: 6),
             Text(
               state.displayPath,
@@ -301,6 +305,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   Future<void> _showRowActions(WorkspaceEntry entry) async {
+    final l10n = AppLocalizations.of(context);
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -312,7 +317,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               Navigator.of(context).pop();
               unawaited(_onDownload(entry));
             },
-            child: const Text('下载'),
+            child: Text(l10n.download),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('workspace-action-rename'),
@@ -320,7 +325,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               Navigator.of(context).pop();
               _showRenameDialog(entry);
             },
-            child: const Text('重命名'),
+            child: Text(l10n.rename),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('workspace-action-delete'),
@@ -329,13 +334,13 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               Navigator.of(context).pop();
               _showDeleteDialog(entry);
             },
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           key: const ValueKey('workspace-action-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ),
     );
@@ -348,13 +353,14 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   void _showDeleteDialog(WorkspaceEntry entry) {
+    final l10n = AppLocalizations.of(context);
     setState(() => _pendingDelete = entry);
     unawaited(
       showCupertinoDialog<void>(
         context: context,
         builder: (context) => CupertinoAlertDialog(
-          title: const Text('删除文件'),
-          content: Text('确定要删除「${entry.name ?? entry.path}」吗？此操作不可撤销。'),
+          title: Text(l10n.deleteFile),
+          content: Text(l10n.confirmDeleteFile(entry.name ?? entry.path ?? '')),
           actions: [
             CupertinoDialogAction(
               key: const ValueKey('workspace-delete-cancel'),
@@ -362,7 +368,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 Navigator.of(context).pop();
                 setState(() => _pendingDelete = null);
               },
-              child: const Text('取消'),
+              child: Text(l10n.cancel),
             ),
             CupertinoDialogAction(
               key: const ValueKey('workspace-delete-confirm'),
@@ -382,7 +388,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                   );
                 }
               },
-              child: const Text('删除'),
+              child: Text(l10n.delete),
             ),
           ],
         ),
@@ -391,13 +397,14 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   void _showRenameDialog(WorkspaceEntry entry) {
+    final l10n = AppLocalizations.of(context);
     _renameController.text = entry.name ?? entry.path ?? '';
     setState(() => _renameEntry = entry);
     unawaited(
       showCupertinoDialog<void>(
         context: context,
         builder: (context) => CupertinoAlertDialog(
-          title: const Text('重命名'),
+          title: Text(l10n.rename),
           content: CupertinoTextField(
             key: const ValueKey('workspace-rename-field'),
             controller: _renameController,
@@ -410,7 +417,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 Navigator.of(context).pop();
                 setState(() => _renameEntry = null);
               },
-              child: const Text('取消'),
+              child: Text(l10n.cancel),
             ),
             CupertinoDialogAction(
               key: const ValueKey('workspace-rename-save'),
@@ -430,7 +437,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                   );
                 }
               },
-              child: const Text('保存'),
+              child: Text(l10n.save),
             ),
           ],
         ),
@@ -439,11 +446,12 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   Future<void> _onUploadPressed() async {
+    final l10n = AppLocalizations.of(context);
     final picker = widget.filePicker;
     if (picker == null) {
       await _showInfoDialog(
-        '文件选择功能待接入',
-        '选择本地文件需要平台通道支持（file picker），将在后续版本提供。',
+        l10n.filePickerNotAvailable,
+        l10n.filePickerPendingPlatformSupport,
       );
       return;
     }
@@ -459,20 +467,23 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   // -------------------------------------------------------------------------
 
   Future<void> _showActionError(BuildContext context, String message) async {
-    await _showInfoDialog('操作失败', message);
+    final l10n = AppLocalizations.of(context);
+    await _showInfoDialog(l10n.actionFailed, message);
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)
         .clearActionError();
   }
 
   Future<void> _showNotice(BuildContext context, String message) async {
-    await _showInfoDialog('提示', message);
+    final l10n = AppLocalizations.of(context);
+    await _showInfoDialog(l10n.notice, message);
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)
         .clearNotice();
   }
 
   Future<void> _showInfoDialog(String title, String message) {
+    final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -482,7 +493,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           CupertinoDialogAction(
             key: const ValueKey('workspace-dialog-ok'),
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -491,7 +502,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 }
 
@@ -512,7 +523,7 @@ class _UploadButton extends StatelessWidget {
     }
     return AccessibleButton(
       key: const ValueKey('workspace-upload'),
-      label: '上传文件',
+      label: AppLocalizations.of(context).uploadFile,
       padding: EdgeInsets.zero,
       onPressed: onPressed,
       child: const Icon(CupertinoIcons.arrow_up_doc),
@@ -546,6 +557,7 @@ class _PathHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final isAtRoot = crumbs.length == 1;
     return SliverToBoxAdapter(
       child: Column(
@@ -555,9 +567,9 @@ class _PathHeader extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Row(
               children: [
-                const Text(
-                  '位置',
-                  style: TextStyle(
+                Text(
+                  l10n.locationLabel,
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: CupertinoColors.secondaryLabel,
@@ -587,12 +599,12 @@ class _PathHeader extends StatelessWidget {
                   ),
                   disabledColor: CupertinoColors.quaternaryLabel,
                   onPressed: isAtRoot ? null : onRoot,
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(CupertinoIcons.house, size: 14),
-                      SizedBox(width: 4),
-                      Text('根目录', style: TextStyle(fontSize: 13)),
+                      const Icon(CupertinoIcons.house, size: 14),
+                      const SizedBox(width: 4),
+                      Text(l10n.rootDir, style: const TextStyle(fontSize: 13)),
                     ],
                   ),
                 ),
@@ -605,12 +617,12 @@ class _PathHeader extends StatelessWidget {
                   ),
                   disabledColor: CupertinoColors.quaternaryLabel,
                   onPressed: isAtRoot ? null : onUp,
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(CupertinoIcons.arrow_up, size: 14),
-                      SizedBox(width: 4),
-                      Text('上一级', style: TextStyle(fontSize: 13)),
+                      const Icon(CupertinoIcons.arrow_up, size: 14),
+                      const SizedBox(width: 4),
+                      Text(l10n.parentDir, style: const TextStyle(fontSize: 13)),
                     ],
                   ),
                 ),
@@ -653,16 +665,16 @@ class _PathHeader extends StatelessWidget {
             ),
           ),
           if (isRefreshing)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CupertinoActivityIndicator(radius: 9),
-                  SizedBox(width: 8),
+                  const CupertinoActivityIndicator(radius: 9),
+                  const SizedBox(width: 8),
                   Text(
-                    '加载中…',
-                    style: TextStyle(
+                    l10n.loadingIndicator,
+                    style: const TextStyle(
                       fontSize: 13,
                       color: CupertinoColors.secondaryLabel,
                     ),
@@ -696,7 +708,7 @@ class _PathHeader extends StatelessWidget {
                     key: const ValueKey('workspace-banner-retry'),
                     padding: EdgeInsets.zero,
                     onPressed: onRetry,
-                    child: const Text('重试', style: TextStyle(fontSize: 12)),
+                    child: Text(l10n.retry, style: const TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -725,6 +737,7 @@ class _WorkspaceEntryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final isDirectory = entry.isBrowsableDirectory;
     final detail = workspaceEntryDetail(entry);
     return GestureDetector(
@@ -741,7 +754,7 @@ class _WorkspaceEntryRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.name ?? '未命名',
+                    entry.name ?? l10n.unnamedFile,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -776,7 +789,7 @@ class _WorkspaceEntryRow extends StatelessWidget {
             else
               AccessibleButton(
                 key: ValueKey('workspace-actions-${entry.name ?? entry.path}'),
-                label: '文件操作',
+                label: l10n.fileActions,
                 padding: EdgeInsets.zero,
                 onPressed: onActions,
                 child: const Icon(

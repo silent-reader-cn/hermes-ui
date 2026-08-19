@@ -34,6 +34,7 @@ class HermexApp extends ConsumerWidget {
           title: 'Hermex',
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,
+          locale: const Locale('zh'),
           localizationsDelegates: const [
             AppLocalizationsDelegate(),
             DefaultCupertinoLocalizations.delegate,
@@ -41,7 +42,7 @@ class HermexApp extends ConsumerWidget {
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          supportedLocales: const [Locale('en'), Locale('zh')],
+          supportedLocales: const [Locale('zh'), Locale('en')],
         ),
       ),
     );

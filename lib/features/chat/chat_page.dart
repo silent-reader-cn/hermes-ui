@@ -11,6 +11,7 @@ import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/utils/accessibility.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'chat_controller.dart';
 import 'chat_providers.dart';
@@ -40,6 +41,7 @@ class ChatPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(chatControllerProvider(sessionId));
     final queued = ref.watch(queuedCountProvider(sessionId));
     // 初始化时拉取 YOLO 状态（控制器内部一次性守卫，安全可重复调用）。
@@ -73,7 +75,7 @@ class ChatPage extends ConsumerWidget {
                     ),
                     const SizedBox(width: 3),
                     Text(
-                      '分支',
+                      l10n.branchBadge,
                       style: TextStyle(
                         fontSize: 12,
                         color: CupertinoColors.secondaryLabel
@@ -87,7 +89,7 @@ class ChatPage extends ConsumerWidget {
         ),
         trailing: AccessibleButton(
           key: const ValueKey('chat-session-actions'),
-          label: '会话操作',
+          label: l10n.sessionActions,
           padding: EdgeInsets.zero,
           onPressed: () => _showSessionActions(context, ref, sessionId, state),
           child: const Icon(CupertinoIcons.ellipsis),
@@ -134,17 +136,18 @@ Future<void> _showParentSessionDialog(
   BuildContext context,
   String parentSessionId,
 ) async {
+  final l10n = AppLocalizations.of(context);
   await showCupertinoDialog<void>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
       key: const ValueKey('chat-branch-dialog'),
-      title: const Text('分支会话'),
-      content: Text('该会话是另一个会话的分支。\n父会话 $parentSessionId'),
+      title: Text(l10n.branchSession),
+      content: Text(l10n.branchSessionDescription(parentSessionId)),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('chat-branch-dialog-close'),
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('关闭'),
+          child: Text(l10n.close),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-goto-parent'),
@@ -152,7 +155,7 @@ Future<void> _showParentSessionDialog(
             Navigator.pop(dialogContext);
             context.go('/chat/$parentSessionId');
           },
-          child: const Text('跳转父会话'),
+          child: Text(l10n.jumpToParentSession),
         ),
       ],
     ),
@@ -166,6 +169,7 @@ Future<void> _showSessionActions(
   ChatState state,
 ) async {
   if (sessionId.isEmpty) return;
+  final l10n = AppLocalizations.of(context);
   final isReadOnly = state.isReadOnly;
   final action = await showCupertinoModalPopup<String>(
     context: context,
@@ -177,66 +181,66 @@ Future<void> _showSessionActions(
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-rename'),
             onPressed: () => Navigator.pop(sheetContext, 'rename'),
-            child: const Text('重命名'),
+            child: Text(l10n.rename),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-pin'),
             onPressed: () => Navigator.pop(sheetContext, 'pin'),
-            child: const Text('置顶'),
+            child: Text(l10n.pin),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-archive'),
             onPressed: () => Navigator.pop(sheetContext, 'archive'),
-            child: const Text('归档'),
+            child: Text(l10n.archive),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-compress'),
             onPressed: () => Navigator.pop(sheetContext, 'compress'),
-            child: const Text('压缩会话'),
+            child: Text(l10n.compressSession),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-undo'),
             onPressed: () => Navigator.pop(sheetContext, 'undo'),
-            child: const Text('撤销上一轮'),
+            child: Text(l10n.undoLastTurn),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-retry'),
             onPressed: () => Navigator.pop(sheetContext, 'retry'),
-            child: const Text('重试上一轮'),
+            child: Text(l10n.retryLastTurn),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-settings'),
             onPressed: () => Navigator.pop(sheetContext, 'settings'),
-            child: const Text('会话设置'),
+            child: Text(l10n.sessionSettings),
           ),
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-yolo'),
             onPressed: () => Navigator.pop(sheetContext, 'yolo'),
-            child: Text(state.yoloEnabled ? '关闭 YOLO' : '开启 YOLO'),
+            child: Text(state.yoloEnabled ? l10n.disableYolo : l10n.enableYolo),
           ),
         ],
         CupertinoActionSheetAction(
           key: const ValueKey('chat-action-branch'),
           onPressed: () => Navigator.pop(sheetContext, 'branch'),
-          child: const Text('创建分支'),
+          child: Text(l10n.createBranch),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('chat-action-export'),
           onPressed: () => Navigator.pop(sheetContext, 'export'),
-          child: const Text('导出'),
+          child: Text(l10n.export),
         ),
         if (!isReadOnly)
           CupertinoActionSheetAction(
             key: const ValueKey('chat-action-delete'),
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(sheetContext, 'delete'),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('chat-action-cancel'),
         onPressed: () => Navigator.pop(sheetContext),
-        child: const Text('取消'),
+        child: Text(l10n.cancel),
       ),
     ),
   );
@@ -280,22 +284,23 @@ Future<void> _showSessionActions(
 }
 
 Future<void> _renameSession(BuildContext context, ChatController controller, String current) async {
+  final l10n = AppLocalizations.of(context);
   final input = TextEditingController(text: current);
   final title = await showCupertinoDialog<String>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('重命名会话'),
+      title: Text(l10n.renameSession),
       content: Padding(padding: const EdgeInsets.only(top: 12), child: CupertinoTextField(controller: input, autofocus: true)),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('chat-rename-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-rename-save'),
           onPressed: () => Navigator.pop(dialogContext, input.text),
-          child: const Text('保存'),
+          child: Text(l10n.save),
         ),
       ],
     ),
@@ -305,22 +310,23 @@ Future<void> _renameSession(BuildContext context, ChatController controller, Str
 }
 
 Future<bool> _confirmSessionDelete(BuildContext context, String title) async {
+  final l10n = AppLocalizations.of(context);
   final result = await showCupertinoDialog<bool>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('删除会话'),
-      content: Text('确定删除「$title」？此操作不可撤销。'),
+      title: Text(l10n.deleteSession),
+      content: Text(l10n.confirmDeleteSession(title)),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('chat-delete-cancel'),
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-delete-confirm'),
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('删除'),
+          child: Text(l10n.delete),
         ),
       ],
     ),
@@ -333,17 +339,18 @@ Future<void> _compressSession(
   BuildContext context,
   ChatController controller,
 ) async {
+  final l10n = AppLocalizations.of(context);
   final input = TextEditingController();
   final focusTopic = await showCupertinoDialog<String>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('压缩会话'),
+      title: Text(l10n.compressSession),
       content: Padding(
         padding: const EdgeInsets.only(top: 12),
         child: CupertinoTextField(
           key: const ValueKey('chat-compress-topic'),
           controller: input,
-          placeholder: '聚焦主题（可留空）',
+          placeholder: l10n.focusTopicPlaceholder,
           autofocus: true,
         ),
       ),
@@ -351,12 +358,12 @@ Future<void> _compressSession(
         CupertinoDialogAction(
           key: const ValueKey('chat-compress-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-compress-confirm'),
           onPressed: () => Navigator.pop(dialogContext, input.text),
-          child: const Text('压缩'),
+          child: Text(l10n.compress),
         ),
       ],
     ),
@@ -369,22 +376,23 @@ Future<void> _compressSession(
 
 /// 撤销上一轮确认（删除最后一轮对话，不可撤销）。
 Future<bool> _confirmSessionUndo(BuildContext context) async {
+  final l10n = AppLocalizations.of(context);
   final result = await showCupertinoDialog<bool>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('撤销上一轮'),
-      content: const Text('删除最后一轮对话？此操作不可撤销'),
+      title: Text(l10n.undoLastTurn),
+      content: Text(l10n.confirmUndoLastTurnPrompt),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('chat-undo-cancel'),
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-undo-confirm'),
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('删除'),
+          child: Text(l10n.delete),
         ),
       ],
     ),
@@ -398,12 +406,13 @@ Future<void> _sessionSettings(
   ChatController controller,
   ChatState state,
 ) async {
+  final l10n = AppLocalizations.of(context);
   final workspaceInput = TextEditingController(text: state.workspace ?? '');
   final modelInput = TextEditingController(text: state.model ?? '');
   final result = await showCupertinoDialog<({String workspace, String model})>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('会话设置'),
+      title: Text(l10n.sessionSettings),
       content: Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Column(
@@ -412,13 +421,13 @@ Future<void> _sessionSettings(
             CupertinoTextField(
               key: const ValueKey('chat-settings-workspace'),
               controller: workspaceInput,
-              placeholder: 'Workspace（可留空）',
+              placeholder: l10n.workspaceOptionalPlaceholder,
             ),
             const SizedBox(height: 8),
             CupertinoTextField(
               key: const ValueKey('chat-settings-model'),
               controller: modelInput,
-              placeholder: '模型名（可留空）',
+              placeholder: l10n.modelNameOptionalPlaceholder,
             ),
           ],
         ),
@@ -427,7 +436,7 @@ Future<void> _sessionSettings(
         CupertinoDialogAction(
           key: const ValueKey('chat-settings-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-settings-save'),
@@ -435,7 +444,7 @@ Future<void> _sessionSettings(
             dialogContext,
             (workspace: workspaceInput.text, model: modelInput.text),
           ),
-          child: const Text('保存'),
+          child: Text(l10n.save),
         ),
       ],
     ),
@@ -451,6 +460,7 @@ Future<void> _sessionSettings(
 }
 
 Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionId) async {
+  final l10n = AppLocalizations.of(context);
   try {
     final response = await ref.read(apiClientProvider).exportSession(sessionId: sessionId, format: 'md');
     final content = utf8.decode(response.data, allowMalformed: true);
@@ -459,9 +469,9 @@ Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionI
       await showCupertinoDialog<void>(
         context: context,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('导出成功'),
-          content: const Text('Markdown 已复制到剪贴板。'),
-          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: const Text('好'))],
+          title: Text(l10n.exportSuccessDialogTitle),
+          content: Text(l10n.markdownCopiedToClipboard),
+          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: Text(l10n.ok))],
         ),
       );
     }
@@ -470,9 +480,9 @@ Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionI
       await showCupertinoDialog<void>(
         context: context,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('导出失败'),
+          title: Text(l10n.exportFailed),
           content: Text(error.message),
-          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: const Text('好'))],
+          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: Text(l10n.ok))],
         ),
       );
     }
@@ -487,6 +497,7 @@ class _PendingPromptCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(chatControllerProvider(sessionId));
     final pending = state.pendingAction;
     final isApproval = pending.approvalPrompt != null;
@@ -522,7 +533,7 @@ class _PendingPromptCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isApproval ? '需要审批' : '需要澄清',
+            isApproval ? l10n.approvalNeeded : l10n.clarificationNeeded,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -579,6 +590,7 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -604,7 +616,7 @@ class _ErrorBanner extends StatelessWidget {
             ),
           ),
           AccessibleButton(
-            label: '关闭错误提示',
+            label: l10n.dismissError,
             onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
@@ -626,6 +638,7 @@ class _QueuedBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -634,7 +647,7 @@ class _QueuedBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '已排队 $count 条消息，将在当前回复结束后自动发送',
+        l10n.queuedBannerMessage(count),
         style: const TextStyle(fontSize: 12, color: CupertinoColors.systemBrown),
       ),
     );
@@ -647,6 +660,7 @@ class _PendingUserMessageBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       key: const ValueKey('chat-pending-banner'),
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
@@ -655,9 +669,9 @@ class _PendingUserMessageBanner extends StatelessWidget {
         color: CupertinoColors.systemGrey5.resolveFrom(context),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Text(
-        '（该会话有一条待处理消息…）',
-        style: TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
+      child: Text(
+        l10n.pendingUserMessageBanner,
+        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
       ),
     );
   }
@@ -672,6 +686,7 @@ class _NoticeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -694,7 +709,7 @@ class _NoticeBanner extends StatelessWidget {
             ),
           ),
           AccessibleButton(
-            label: '关闭提示',
+            label: l10n.dismissNotice,
             onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,

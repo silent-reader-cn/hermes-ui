@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
 
@@ -22,6 +23,7 @@ class InsightsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(insightsControllerProvider);
     final state = async.valueOrNull;
 
@@ -31,11 +33,11 @@ class InsightsPage extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('用量统计'),
+            largeTitle: Text(l10n.insightsTitle),
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('insights-refresh'),
-              label: '刷新用量统计',
+              label: l10n.refreshInsights,
               padding: EdgeInsets.zero,
               onPressed: () => unawaited(
                 ref.read(insightsControllerProvider.notifier).refresh(),
@@ -47,7 +49,7 @@ class InsightsPage extends ConsumerWidget {
             onRefresh: () =>
                 ref.read(insightsControllerProvider.notifier).refresh(),
           ),
-          ..._buildContentSlivers(ref, async, state),
+          ..._buildContentSlivers(context, ref, async, state),
         ],
       ),
     );
@@ -58,10 +60,12 @@ class InsightsPage extends ConsumerWidget {
   // -------------------------------------------------------------------------
 
   List<Widget> _buildContentSlivers(
+    BuildContext context,
     WidgetRef ref,
     AsyncValue<InsightsState> async,
     InsightsState? state,
   ) {
+    final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
         return const [
@@ -71,11 +75,11 @@ class InsightsPage extends ConsumerWidget {
           ),
         ];
       }
-      return [_buildErrorSliver(ref, async.error)];
+      return [_buildErrorSliver(context, ref, async.error)];
     }
 
     if (!state.response.hasData) {
-      return [_buildEmptySliver()];
+      return [_buildEmptySliver(context)];
     }
 
     final response = state.response;
@@ -99,7 +103,7 @@ class InsightsPage extends ConsumerWidget {
               for (final t in InsightsTimeframe.values)
                 t: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(t.title),
+                  child: Text(_insightsTimeframeTitle(context, t)),
                 ),
             },
           ),
@@ -107,47 +111,47 @@ class InsightsPage extends ConsumerWidget {
       ),
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
-          header: _periodHeader(response, timeframe),
+          header: _periodHeader(context, response, timeframe),
           children: [
             _MetricTile(
-              title: '会话',
+              title: l10n.metricSessions,
               value: _formatNumber(response.totalSessions),
               icon: CupertinoIcons.bubble_left_bubble_right,
             ),
             _MetricTile(
-              title: '消息',
+              title: l10n.metricMessages,
               value: _formatNumber(response.totalMessages),
               icon: CupertinoIcons.text_bubble,
             ),
             _MetricTile(
-              title: '输入令牌',
+              title: l10n.metricInputTokens,
               value: _formatNumber(response.totalInputTokens),
               icon: CupertinoIcons.arrow_down_circle,
             ),
             _MetricTile(
-              title: '输出令牌',
+              title: l10n.metricOutputTokens,
               value: _formatNumber(response.totalOutputTokens),
               icon: CupertinoIcons.arrow_up_circle,
             ),
             _MetricTile(
-              title: '总令牌',
+              title: l10n.metricTotalTokens,
               value: _formatNumber(response.totalTokens),
               icon: CupertinoIcons.sum,
             ),
             _MetricTile(
-              title: '估算费用',
+              title: l10n.metricEstimatedCost,
               value: _formatCost(response.totalCost),
               icon: CupertinoIcons.money_dollar_circle,
             ),
             if (response.totalCacheHitPercent != null)
               _MetricTile(
-                title: '缓存命中率',
+                title: l10n.metricCacheHitRate,
                 value: _formatPercent(response.totalCacheHitPercent),
                 icon: CupertinoIcons.bolt_circle,
               ),
             if (response.totalCacheReadTokens != null)
               _MetricTile(
-                title: '缓存读取令牌',
+                title: l10n.metricCacheReadTokens,
                 value: _formatNumber(response.totalCacheReadTokens),
                 icon: CupertinoIcons.arrow_counterclockwise_circle,
               ),
@@ -157,7 +161,7 @@ class InsightsPage extends ConsumerWidget {
       if (_modelBreakdowns(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
-            header: const Text('模型'),
+            header: Text(l10n.models),
             children: [
               for (final model in _modelBreakdowns(response))
                 _ModelBreakdownTile(model: model),
@@ -167,7 +171,7 @@ class InsightsPage extends ConsumerWidget {
       if (_recentDailyTokens(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
-            header: const Text('近 14 天令牌'),
+            header: Text(l10n.tokensLast14Days),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -179,14 +183,16 @@ class InsightsPage extends ConsumerWidget {
       if (_hasActivity(response))
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
-            header: const Text('活动'),
+            header: Text(l10n.activity),
             children: [
               if (_peakDay(response) != null)
                 CupertinoListTile(
-                  title: const Text('最活跃的一天'),
+                  title: Text(l10n.mostActiveDay),
                   trailing: Text(
-                    '${_peakDay(response)!.day ?? '未知'}'
-                    ' · ${_peakDay(response)!.sessions ?? 0} 个会话',
+                    l10n.peakDaySessions(
+                      _peakDay(response)!.day ?? l10n.unknown,
+                      _peakDay(response)!.sessions ?? 0,
+                    ),
                     style: const TextStyle(
                       fontSize: 13,
                       color: CupertinoColors.secondaryLabel,
@@ -195,10 +201,12 @@ class InsightsPage extends ConsumerWidget {
                 ),
               if (_peakHour(response) != null)
                 CupertinoListTile(
-                  title: const Text('最活跃时段'),
+                  title: Text(l10n.mostActiveHour),
                   trailing: Text(
-                    '${_formatHour(_peakHour(response)!.hour)}'
-                    ' · ${_peakHour(response)!.sessions ?? 0} 个会话',
+                    l10n.peakHourSessions(
+                      _formatHour(context, _peakHour(response)!.hour),
+                      _peakHour(response)!.sessions ?? 0,
+                    ),
                     style: const TextStyle(
                       fontSize: 13,
                       color: CupertinoColors.secondaryLabel,
@@ -212,7 +220,7 @@ class InsightsPage extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           child: Text(
-            '来源：服务器按最近 ${response.periodDays ?? timeframe.serverDays} 天统计。',
+            l10n.insightsSourceFooter(response.periodDays ?? timeframe.serverDays),
             style: const TextStyle(
               fontSize: 12,
               color: CupertinoColors.secondaryLabel,
@@ -223,7 +231,8 @@ class InsightsPage extends ConsumerWidget {
     ];
   }
 
-  Widget _buildErrorSliver(WidgetRef ref, Object? error) {
+  Widget _buildErrorSliver(BuildContext context, WidgetRef ref, Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -237,13 +246,13 @@ class InsightsPage extends ConsumerWidget {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
-              _errorMessage(error),
+              _errorMessage(context, error),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -256,7 +265,7 @@ class InsightsPage extends ConsumerWidget {
               onPressed: () => unawaited(
                 ref.read(insightsControllerProvider.notifier).refresh(),
               ),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -264,29 +273,30 @@ class InsightsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptySliver() {
-    return const SliverFillRemaining(
+  Widget _buildEmptySliver(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               CupertinoIcons.chart_bar,
               size: 48,
               color: CupertinoColors.systemGrey,
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
-              '暂无统计',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              l10n.noInsights,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              '有对话后这里会显示用量数据。',
+              l10n.insightsWillShowHere,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -334,16 +344,31 @@ class InsightsPage extends ConsumerWidget {
     );
   }
 
-  Widget _periodHeader(InsightsResponse response, InsightsTimeframe timeframe) {
+  Widget _periodHeader(BuildContext context, InsightsResponse response, InsightsTimeframe timeframe) {
+    final l10n = AppLocalizations.of(context);
     if (response.periodDays != null) {
-      return Text('最近 ${response.periodDays} 天');
+      return Text(l10n.recentDaysHeader(response.periodDays!));
     }
-    return Text(timeframe.title);
+    return Text(_insightsTimeframeTitle(context, timeframe));
   }
 
-  String _errorMessage(Object? error) {
+  String _errorMessage(BuildContext context, Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
+  }
+}
+
+String _insightsTimeframeTitle(BuildContext context, InsightsTimeframe timeframe) {
+  final l10n = AppLocalizations.of(context);
+  switch (timeframe) {
+    case InsightsTimeframe.today:
+      return l10n.timeframeToday;
+    case InsightsTimeframe.last7Days:
+      return l10n.timeframeLast7Days;
+    case InsightsTimeframe.last30Days:
+      return l10n.timeframeLast30Days;
+    case InsightsTimeframe.allTime:
+      return l10n.timeframeAll;
   }
 }
 
@@ -382,11 +407,12 @@ class _ModelBreakdownTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final share = model.displayShare;
-    final title = model.model?.isNotEmpty == true ? model.model! : '未知模型';
+    final title = model.model?.isNotEmpty == true ? model.model! : l10n.unknownModel;
     return CupertinoListTile(
       title: Text(title),
-      subtitle: Text('${formatInsightsNumber(model.totalTokens)} 令牌'),
+      subtitle: Text(l10n.modelTokensSubtitle(formatInsightsNumber(model.totalTokens))),
       trailing: share == null
           ? null
           : Text(
@@ -532,7 +558,7 @@ String _formatCost(double? value) => formatInsightsCost(value);
 
 String _formatPercent(double? value) => formatInsightsPercent(value);
 
-String _formatHour(int? hour) {
-  if (hour == null) return '未知';
+String _formatHour(BuildContext context, int? hour) {
+  if (hour == null) return AppLocalizations.of(context).unknown;
   return '${hour.toString().padLeft(2, '0')}:00';
 }

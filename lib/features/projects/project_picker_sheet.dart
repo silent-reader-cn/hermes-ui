@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/session.dart';
+import '../../l10n/app_localizations.dart';
 import '../projects/project_providers.dart';
 
 /// 弹出项目选择器（底部 ActionSheet 列表 + 新建项目入口）。
@@ -20,11 +21,12 @@ class _ProjectPickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(projectsProvider);
     final projects = async.valueOrNull ?? const <ProjectSummary>[];
 
     return CupertinoActionSheet(
-      title: const Text('移动到项目'),
+      title: Text(l10n.moveToProject),
       message: async.isLoading
           ? const CupertinoActivityIndicator(radius: 12)
           : null,
@@ -32,7 +34,7 @@ class _ProjectPickerSheet extends ConsumerWidget {
         CupertinoActionSheetAction(
           key: const ValueKey('project-picker-none'),
           onPressed: () => Navigator.pop(context, ''),
-          child: const Text('无项目'),
+          child: Text(l10n.noProject),
         ),
         for (final project in projects)
           GestureDetector(
@@ -46,7 +48,7 @@ class _ProjectPickerSheet extends ConsumerWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      project.name ?? '未命名项目',
+                      project.name ?? l10n.unnamedProject,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -65,8 +67,8 @@ class _ProjectPickerSheet extends ConsumerWidget {
           onPressed: () async {
             final name = await _promptProjectName(
               context,
-              title: '新建项目',
-              confirmText: '创建',
+              title: l10n.newProject,
+              confirmText: l10n.create,
             );
             if (name == null || !context.mounted) return;
             final created = await ref
@@ -77,14 +79,14 @@ class _ProjectPickerSheet extends ConsumerWidget {
               Navigator.pop(context, created.id);
             }
           },
-          child: const Text('新建项目…'),
+          child: Text(l10n.newProjectEllipsis),
         ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('project-picker-cancel'),
         isDefaultAction: true,
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: Text(l10n.cancel),
       ),
     );
   }
@@ -95,6 +97,7 @@ Future<String?> _promptProjectName(
   required String title,
   required String confirmText,
 }) async {
+  final l10n = AppLocalizations.of(context);
   final controller = TextEditingController();
   final name = await showCupertinoDialog<String>(
     context: context,
@@ -105,13 +108,13 @@ Future<String?> _promptProjectName(
         key: const ValueKey('project-create-name'),
         controller: controller,
         autofocus: true,
-        placeholder: '项目名称',
+        placeholder: l10n.projectNamePlaceholder,
       ),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('project-create-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
           key: const ValueKey('project-create-confirm'),
@@ -131,29 +134,30 @@ Future<void> _showProjectActions(
   WidgetRef ref,
   ProjectSummary project,
 ) async {
+  final l10n = AppLocalizations.of(context);
   final action = await showCupertinoModalPopup<String>(
     context: context,
     builder: (sheetContext) => CupertinoActionSheet(
-      title: Text(project.name ?? '未命名项目'),
-      message: const Text('项目管理'),
+      title: Text(project.name ?? l10n.unnamedProject),
+      message: Text(l10n.projectManagement),
       actions: [
         CupertinoActionSheetAction(
           key: const ValueKey('project-action-rename'),
           onPressed: () => Navigator.pop(sheetContext, 'rename'),
-          child: const Text('重命名'),
+          child: Text(l10n.rename),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('project-action-delete'),
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(sheetContext, 'delete'),
-          child: const Text('删除'),
+          child: Text(l10n.delete),
         ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('project-action-cancel'),
         isDefaultAction: true,
         onPressed: () => Navigator.pop(sheetContext),
-        child: const Text('取消'),
+        child: Text(l10n.cancel),
       ),
     ),
   );
@@ -162,8 +166,8 @@ Future<void> _showProjectActions(
   if (action == 'rename') {
     final name = await _promptProjectName(
       context,
-      title: '重命名项目',
-      confirmText: '保存',
+      title: l10n.renameProject,
+      confirmText: l10n.save,
     );
     if (name == null || name.trim().isEmpty || !context.mounted) return;
     await notifier.renameProject(projectId: project.id, name: name.trim());
@@ -171,19 +175,19 @@ Future<void> _showProjectActions(
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('删除项目'),
-        content: const Text('删除后项目内会话不会被删除，仅解除归类。'),
+        title: Text(l10n.deleteProject),
+        content: Text(l10n.deleteProjectWarning),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('project-delete-cancel'),
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('project-delete-confirm'),
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),

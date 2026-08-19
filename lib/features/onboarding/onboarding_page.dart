@@ -11,6 +11,7 @@ import '../../core/connections/server_connection.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../app/theme/status_colors.dart';
+import '../../l10n/app_localizations.dart';
 import 'onboarding_providers.dart';
 
 /// 健康检查状态。
@@ -92,13 +93,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   String? _validateUrl(String raw) {
+    final l10n = AppLocalizations.of(context);
     final url = raw.trim();
-    if (url.isEmpty) return '请输入服务器地址';
+    if (url.isEmpty) return l10n.pleaseEnterServerUrl;
     final uri = Uri.tryParse(url);
     if (uri == null ||
         !uri.hasAuthority ||
         (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return '请输入有效的服务器地址，例如 https://hermes.example.com:30002';
+      return l10n.pleaseEnterValidServerUrl;
     }
     return null;
   }
@@ -108,6 +110,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   // ---------------------------------------------------------------------------
 
   Future<void> _runHealthCheck() async {
+    final l10n = AppLocalizations.of(context);
     final error = _validateUrl(_urlController.text);
     if (error != null) {
       setState(() {
@@ -125,7 +128,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       final ok = result.status == 'ok';
       setState(() {
         _health = ok ? _HealthState.ok : _HealthState.failed;
-        _healthMessage = ok ? '连接成功' : '服务器返回异常状态';
+        _healthMessage = ok
+            ? l10n.connectionSuccessful
+            : l10n.serverReturnedAbnormalStatus;
       });
     } on ApiException catch (error) {
       setState(() {
@@ -135,7 +140,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     } on Exception {
       setState(() {
         _health = _HealthState.failed;
-        _healthMessage = '无法连接到服务器';
+        _healthMessage = l10n.cannotConnectToServer;
       });
     }
   }
@@ -172,6 +177,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _login() async {
+    final l10n = AppLocalizations.of(context);
     final password = _passwordController.text;
     if (password.isEmpty) return;
     setState(() => _loginState = _LoginState.loggingIn);
@@ -183,11 +189,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _loginState = _LoginState.failed);
-      await _showAlert('登录失败', error.message);
+      await _showAlert(l10n.loginFailed, error.message);
     } on Exception {
       if (!mounted) return;
       setState(() => _loginState = _LoginState.failed);
-      await _showAlert('登录失败', '无法连接到服务器，请稍后重试');
+      await _showAlert(l10n.loginFailed, l10n.cannotConnectRetryLater);
     }
   }
 
@@ -212,12 +218,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   /// Header 校验：空行跳过；非空行必须 name 为合法 token 且 value 无换行。
   String? _headerErrorText() {
+    final l10n = AppLocalizations.of(context);
     for (final field in _headers) {
       final name = field.nameController.text.trim();
       final value = field.valueController.text;
       if (name.isEmpty && value.trim().isEmpty) continue;
       if (!CustomHeader(name: name, value: value).isApplicable) {
-        return 'Header 名必须是合法 token，值不能包含换行';
+        return l10n.headerValidationFailed;
       }
     }
     return null;
@@ -273,6 +280,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _showAlert(String title, String message) {
+    final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -282,7 +290,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           CupertinoDialogAction(
             isDefaultAction: true,
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -291,6 +299,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: _step > 1
@@ -298,7 +307,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 onPressed: () => _goToStep(_step - 1),
               )
             : null,
-        middle: const Text('连接服务器'),
+        middle: Text(l10n.connectServer),
       ),
       child: SafeArea(
         child: Column(
@@ -326,18 +335,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildStep1() {
+    final l10n = AppLocalizations.of(context);
     final checking = _health == _HealthState.checking;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text(
-          '连接你的 Hermex 服务器',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        Text(
+          l10n.connectYourHermexServer,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
-          '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:30002',
-          style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+        Text(
+          l10n.inputServerAddressHint,
+          style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -354,7 +364,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             CupertinoButton(
               key: const ValueKey('onboarding-health-check'),
               onPressed: checking ? null : () => unawaited(_runHealthCheck()),
-              child: const Text('连接测试'),
+              child: Text(l10n.testConnection),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -367,9 +377,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           child: CupertinoButton(
             key: const ValueKey('onboarding-skip-wizard'),
             onPressed: () => unawaited(_skipToHeaders()),
-            child: const Text(
-              '已有 API Key？跳过向导',
-              style: TextStyle(fontSize: 14),
+            child: Text(
+              l10n.haveApiKeySkipWizard,
+              style: const TextStyle(fontSize: 14),
             ),
           ),
         ),
@@ -378,19 +388,20 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildHealthStatus() {
+    final l10n = AppLocalizations.of(context);
     switch (_health) {
       case _HealthState.idle:
         return const SizedBox.shrink();
       case _HealthState.checking:
-        return const Row(
+        return Row(
           children: [
-            CupertinoActivityIndicator(),
-            SizedBox(width: 8),
-            Text('正在检查…'),
+            const CupertinoActivityIndicator(),
+            const SizedBox(width: 8),
+            Text(l10n.checking),
           ],
         );
       case _HealthState.ok:
-        return const Text('✅ 连接成功');
+        return Text(l10n.connectionSuccessfulWithCheck);
       case _HealthState.failed:
         return Text(
           '❌ $_healthMessage',
@@ -412,40 +423,41 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildStep2() {
+    final l10n = AppLocalizations.of(context);
     final checking = _auth == _AuthState.checking;
     final loggingIn = _loginState == _LoginState.loggingIn;
     final notRequired = _auth == _AuthState.notRequired;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text(
-          '认证',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        Text(
+          l10n.authentication,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         if (checking)
-          const Row(
+          Row(
             children: [
-              CupertinoActivityIndicator(),
-              SizedBox(width: 8),
-              Text('正在检测服务器认证…'),
+              const CupertinoActivityIndicator(),
+              const SizedBox(width: 8),
+              Text(l10n.detectingServerAuth),
             ],
           )
         else if (notRequired)
-          const Text(
-            '该服务器未启用密码认证，可直接继续',
-            style: TextStyle(fontSize: 15, color: CupertinoColors.systemGreen),
+          Text(
+            l10n.serverNoPasswordRequired,
+            style: const TextStyle(fontSize: 15, color: CupertinoColors.systemGreen),
           )
         else
-          const Text(
-            '该服务器需要密码认证，请登录',
-            style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+          Text(
+            l10n.serverPasswordRequired,
+            style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
           ),
         const SizedBox(height: 24),
         CupertinoTextField(
           key: const ValueKey('onboarding-username'),
           controller: _usernameController,
-          placeholder: '用户名（可选）',
+          placeholder: l10n.usernameOptional,
           autocorrect: false,
           padding: const EdgeInsets.all(12),
         ),
@@ -453,7 +465,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         CupertinoTextField(
           key: const ValueKey('onboarding-password'),
           controller: _passwordController,
-          placeholder: '密码',
+          placeholder: l10n.password,
           obscureText: true,
           padding: const EdgeInsets.all(12),
         ),
@@ -462,9 +474,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           child: CupertinoButton(
             key: const ValueKey('onboarding-skip-auth'),
             onPressed: () => _goToStep(3),
-            child: const Text(
-              '跳过认证（无密码模式）',
-              style: TextStyle(fontSize: 14),
+            child: Text(
+              l10n.skipAuthNoPasswordMode,
+              style: const TextStyle(fontSize: 14),
             ),
           ),
         ),
@@ -478,17 +490,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildStep3() {
+    final l10n = AppLocalizations.of(context);
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text(
-          '自定义 Headers（可选）',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        Text(
+          l10n.customHeadersOptional,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
-          '反向代理场景可添加自定义请求头，如 Authorization: Bearer xxx',
-          style: TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+        Text(
+          l10n.customHeadersDescription,
+          style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
         ),
         const SizedBox(height: 16),
         for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),
@@ -504,13 +517,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         CupertinoButton(
           key: const ValueKey('onboarding-add-header'),
           onPressed: _addHeaderField,
-          child: const Text('添加 Header'),
+          child: Text(l10n.addHeader),
         ),
       ],
     );
   }
 
   Widget _buildHeaderRow(int index) {
+    final l10n = AppLocalizations.of(context);
     final field = _headers[index];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -520,7 +534,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             child: CupertinoTextField(
               key: ValueKey('onboarding-header-name-$index'),
               controller: field.nameController,
-              placeholder: 'Header 名',
+              placeholder: l10n.headerName,
               autocorrect: false,
               padding: const EdgeInsets.all(10),
             ),
@@ -530,7 +544,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             child: CupertinoTextField(
               key: ValueKey('onboarding-header-value-$index'),
               controller: field.valueController,
-              placeholder: '值',
+              placeholder: l10n.value,
               autocorrect: false,
               padding: const EdgeInsets.all(10),
             ),
@@ -538,7 +552,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           const SizedBox(width: 4),
           AccessibleButton(
             key: ValueKey('onboarding-header-remove-$index'),
-            label: '删除 Header',
+            label: l10n.deleteHeader,
             padding: EdgeInsets.zero,
             onPressed: () => _removeHeaderField(index),
             child: const Icon(
@@ -552,21 +566,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildFooter() {
+    final l10n = AppLocalizations.of(context);
     final (String label, VoidCallback? onPressed) = switch (_step) {
       1 => (
-        '下一步',
+        l10n.nextStep,
         () => unawaited(_nextFromStep1()),
       ),
       2 => _auth == _AuthState.notRequired
-          ? ('继续', () => _goToStep(3))
+          ? (l10n.continueAction, () => _goToStep(3))
           : (
-              '登录并继续',
+              l10n.loginAndContinue,
               _loginState == _LoginState.loggingIn
                   ? null
                   : () => unawaited(_login()),
             ),
       _ => (
-        '完成',
+        l10n.finish,
         _saving ? null : () => unawaited(_finish()),
       ),
     };

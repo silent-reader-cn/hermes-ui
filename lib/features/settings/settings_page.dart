@@ -11,6 +11,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
+import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../shared/app_back_button.dart';
@@ -26,10 +27,11 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        leading: AppBackButton(),
-        middle: Text('设置'),
+      navigationBar: CupertinoNavigationBar(
+        leading: const AppBackButton(),
+        middle: Text(l10n.settingsTitle),
       ),
       child: ListView(
         children: const [
@@ -55,12 +57,13 @@ class _AppearanceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
     return CupertinoListSection(
-      header: const Text('外观'),
+      header: Text(l10n.appearanceSection),
       children: [
         CupertinoListTile(
-          title: const Text('主题'),
+          title: Text(l10n.themeLabel),
           trailing: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
             child: FittedBox(
@@ -72,10 +75,10 @@ class _AppearanceSection extends ConsumerWidget {
                     unawaited(ref.read(themeModeProvider.notifier).setMode(value));
                   }
                 },
-                children: const {
-                  AppThemeMode.system: Text('跟随系统'),
-                  AppThemeMode.light: Text('浅色'),
-                  AppThemeMode.dark: Text('深色'),
+                children: {
+                  AppThemeMode.system: Text(l10n.themeSystem),
+                  AppThemeMode.light: Text(l10n.themeLight),
+                  AppThemeMode.dark: Text(l10n.themeDark),
                 },
               ),
             ),
@@ -96,13 +99,14 @@ class _DesktopSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final settings = ref.watch(desktopSettingsProvider);
     return CupertinoListSection(
-      header: const Text('桌面'),
+      header: Text(l10n.desktopSection),
       children: [
         CupertinoListTile(
-          title: const Text('最小化到托盘'),
-          subtitle: const Text('关闭窗口时隐藏到托盘而非退出'),
+          title: Text(l10n.minimizeToTray),
+          subtitle: Text(l10n.minimizeToTraySubtitle),
           trailing: CupertinoSwitch(
             key: const ValueKey('settings-desktop-minimize-to-tray'),
             value: settings.minimizeToTray,
@@ -116,8 +120,8 @@ class _DesktopSection extends ConsumerWidget {
           ),
         ),
         CupertinoListTile(
-          title: const Text('全局快捷键'),
-          subtitle: const Text('Ctrl+Shift+H 唤起主窗口，Ctrl+Shift+N 新建会话'),
+          title: Text(l10n.globalShortcuts),
+          subtitle: Text(l10n.globalShortcutsSubtitle),
           trailing: CupertinoSwitch(
             key: const ValueKey('settings-desktop-global-shortcuts'),
             value: settings.globalShortcutsEnabled,
@@ -131,8 +135,8 @@ class _DesktopSection extends ConsumerWidget {
           ),
         ),
         CupertinoListTile(
-          title: const Text('记住窗口位置'),
-          subtitle: const Text('启动时恢复上次窗口位置与尺寸'),
+          title: Text(l10n.rememberWindowPosition),
+          subtitle: Text(l10n.rememberWindowPositionSubtitle),
           trailing: CupertinoSwitch(
             key: const ValueKey('settings-desktop-remember-window'),
             value: settings.rememberWindowPosition,
@@ -160,22 +164,23 @@ class _ServerSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final connections = ref.watch(connectionsProvider);
     final active = ref.watch(activeConnectionProvider);
     return CupertinoListSection(
-      header: Text(active == null ? '服务器（未连接）' : '服务器'),
+      header: Text(active == null ? l10n.serverSectionDisconnected : l10n.serverSection),
       children: [
         if (connections.isEmpty)
-          const CupertinoListTile(
-            title: Text('尚未配置服务器'),
-            subtitle: Text('点击下方「添加服务器」或从引导页配置'),
+          CupertinoListTile(
+            title: Text(l10n.noServerConfigured),
+            subtitle: Text(l10n.noServerConfiguredSubtitle),
           ),
         for (final connection in connections)
           _buildServerRow(context, ref, connection, connection.id == active?.id),
         CupertinoListTile(
           key: const ValueKey('server-add'),
           leading: const Icon(CupertinoIcons.add_circled),
-          title: const Text('添加服务器'),
+          title: Text(l10n.addServer),
           onTap: () => unawaited(_openServerEditor(context, ref)),
         ),
       ],
@@ -188,6 +193,7 @@ class _ServerSection extends ConsumerWidget {
     ServerConnection connection,
     bool isActive,
   ) {
+    final l10n = AppLocalizations.of(context);
     final name = connection.name.isEmpty ? connection.baseUrl : connection.name;
     return CupertinoListTile(
       key: ValueKey('server-row-${connection.id}'),
@@ -203,7 +209,7 @@ class _ServerSection extends ConsumerWidget {
             ),
           AccessibleButton(
             key: ValueKey('server-edit-${connection.id}'),
-            label: '编辑服务器',
+            label: l10n.editServer,
             padding: EdgeInsets.zero,
             minimumSize: const Size(32, 32),
             onPressed: () => unawaited(
@@ -213,7 +219,7 @@ class _ServerSection extends ConsumerWidget {
           ),
           AccessibleButton(
             key: ValueKey('server-delete-${connection.id}'),
-            label: '删除服务器',
+            label: l10n.deleteServer,
             padding: EdgeInsets.zero,
             minimumSize: const Size(32, 32),
             onPressed: () => unawaited(_confirmDeleteServer(
@@ -256,16 +262,17 @@ class _ServerSection extends ConsumerWidget {
     WidgetRef ref,
     ServerConnection connection,
   ) {
+    final l10n = AppLocalizations.of(context);
     final name = connection.name.isEmpty ? connection.baseUrl : connection.name;
     return showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('删除服务器'),
-        content: Text('确定删除「$name」吗？'),
+        title: Text(l10n.deleteServer),
+        content: Text(l10n.confirmDeleteServer(name)),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('server-delete-confirm'),
@@ -276,7 +283,7 @@ class _ServerSection extends ConsumerWidget {
                 ref.read(connectionsProvider.notifier).remove(connection.id),
               );
             },
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -318,13 +325,14 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
   }
 
   String? _validate() {
+    final l10n = AppLocalizations.of(context);
     final url = _urlController.text.trim();
-    if (url.isEmpty) return '请输入服务器地址';
+    if (url.isEmpty) return l10n.serverUrlRequired;
     final uri = Uri.tryParse(url);
     if (uri == null ||
         !uri.hasAuthority ||
         (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return '请输入有效的服务器地址，例如 https://hermes.example.com:30002';
+      return l10n.serverUrlInvalid;
     }
     return null;
   }
@@ -378,6 +386,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     String password,
     ServerConnection? existing,
   ) async {
+    final l10n = AppLocalizations.of(context);
     final factory = ref.read(onboardingApiFactoryProvider);
     final api = factory(url, [
       for (final entry in (existing?.customHeaders ?? const <String, String>{}).entries)
@@ -387,25 +396,26 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
       await api.login(password);
       return null;
     } on ApiException catch (error) {
-      return '登录失败：${error.message}';
+      return l10n.loginFailedWithMessage(error.message);
     } on Exception {
-      return '无法连接到服务器，请稍后重试';
+      return l10n.cannotConnectToServer;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final isEditing = widget.connection != null;
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: CupertinoNavigationBarBackButton(
           onPressed: () => Navigator.of(context).pop(),
         ),
-        middle: Text(isEditing ? '编辑服务器' : '添加服务器'),
+        middle: Text(isEditing ? l10n.editServer : l10n.addServer),
         trailing: CupertinoButton(
           key: const ValueKey('server-editor-save'),
           onPressed: _saving ? null : () => unawaited(_save()),
-          child: const Text('保存'),
+          child: Text(l10n.save),
         ),
       ),
       child: SafeArea(
@@ -415,7 +425,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
             CupertinoTextField(
               key: const ValueKey('server-editor-name'),
               controller: _nameController,
-              placeholder: '名称（可选，默认使用主机名）',
+              placeholder: l10n.serverNamePlaceholder,
               autocorrect: false,
               padding: const EdgeInsets.all(12),
             ),
@@ -432,7 +442,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
             CupertinoTextField(
               key: const ValueKey('server-editor-password'),
               controller: _passwordController,
-              placeholder: '密码（可选；编辑时留空保持原密码）',
+              placeholder: l10n.serverPasswordPlaceholder,
               obscureText: true,
               padding: const EdgeInsets.all(12),
             ),
@@ -461,27 +471,28 @@ class _ModelSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsControllerProvider);
     return settings.when(
       loading: () => CupertinoListSection(
-        header: const Text('模型'),
-        children: const [
+        header: Text(l10n.models),
+        children: [
           CupertinoListTile(
-            title: Text('正在加载模型…'),
-            trailing: CupertinoActivityIndicator(),
+            title: Text(l10n.loadingModels),
+            trailing: const CupertinoActivityIndicator(),
           ),
         ],
       ),
       error: (error, _) => CupertinoListSection(
-        header: const Text('模型'),
+        header: Text(l10n.models),
         children: [
           CupertinoListTile(
-            title: const Text('模型加载失败'),
-            subtitle: Text(_describeError(error)),
+            title: Text(l10n.modelsLoadFailed),
+            subtitle: Text(_describeError(context, error)),
           ),
           CupertinoListTile(
             key: const ValueKey('settings-models-retry'),
-            title: const Text('重试'),
+            title: Text(l10n.retry),
             trailing: const Icon(CupertinoIcons.refresh),
             onTap: () => unawaited(
               ref.read(settingsControllerProvider.notifier).refresh(),
@@ -490,12 +501,12 @@ class _ModelSection extends ConsumerWidget {
         ],
       ),
       data: (state) => CupertinoListSection(
-        header: const Text('模型'),
+        header: Text(l10n.models),
         children: [
           CupertinoListTile(
             key: const ValueKey('settings-default-model'),
-            title: const Text('默认模型'),
-            subtitle: Text(state.defaultModelLabel ?? '未设置'),
+            title: Text(l10n.defaultModel),
+            subtitle: Text(state.defaultModelLabel ?? l10n.notSet),
             trailing: const Icon(CupertinoIcons.chevron_right),
             onTap: () => unawaited(_openModelPicker(context, ref, state)),
           ),
@@ -503,8 +514,8 @@ class _ModelSection extends ConsumerWidget {
               state.supportedEfforts.isNotEmpty)
             CupertinoListTile(
               key: const ValueKey('settings-reasoning'),
-              title: const Text('推理强度'),
-              subtitle: Text(state.reasoningEffort ?? '未设置'),
+              title: Text(l10n.reasoningEffort),
+              subtitle: Text(state.reasoningEffort ?? l10n.notSet),
               trailing: const Icon(CupertinoIcons.chevron_right),
               onTap: () => unawaited(
                 _openReasoningPicker(context, ref, state),
@@ -532,10 +543,11 @@ class _ModelSection extends ConsumerWidget {
     WidgetRef ref,
     SettingsState state,
   ) {
+    final l10n = AppLocalizations.of(context);
     return showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
-        title: const Text('推理强度'),
+        title: Text(l10n.reasoningEffort),
         actions: [
           for (final effort in state.supportedEfforts)
             CupertinoActionSheetAction(
@@ -553,7 +565,7 @@ class _ModelSection extends ConsumerWidget {
             ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
         ],
       ),
@@ -569,14 +581,15 @@ class _ModelPickerPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final groups = state.modelGroups;
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        leading: _PopBackButton(),
-        middle: Text('默认模型'),
+      navigationBar: CupertinoNavigationBar(
+        leading: const _PopBackButton(),
+        middle: Text(l10n.defaultModel),
       ),
       child: groups.isEmpty
-          ? const Center(child: Text('暂无可用模型'))
+          ? Center(child: Text(l10n.noAvailableModels))
           : ListView(
               children: [
                 for (final group in groups)
@@ -630,16 +643,17 @@ class _AboutSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoListSection(
-      header: const Text('关于'),
-      children: const [
+      header: Text(l10n.aboutSection),
+      children: [
         CupertinoListTile(
-          title: Text('Hermex'),
-          subtitle: Text('Hermes WebUI 客户端'),
+          title: const Text('Hermex'),
+          subtitle: Text(l10n.hermesWebUIClient),
         ),
         CupertinoListTile(
-          title: Text('版本'),
-          trailing: Text(
+          title: Text(l10n.version),
+          trailing: const Text(
             appVersion,
             style: TextStyle(color: CupertinoColors.secondaryLabel),
           ),
@@ -650,7 +664,7 @@ class _AboutSection extends StatelessWidget {
 }
 
 /// 统一错误文案：ApiException 展示其消息，其余给通用提示。
-String _describeError(Object error) {
+String _describeError(BuildContext context, Object error) {
   if (error is ApiException) return error.message;
-  return '加载失败，请重试';
+  return AppLocalizations.of(context).loadFailedRetry;
 }

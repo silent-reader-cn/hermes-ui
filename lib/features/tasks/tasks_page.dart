@@ -7,6 +7,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
 import '../../core/utils/accessibility.dart';
+import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
 
@@ -14,7 +15,23 @@ import 'tasks_providers.dart';
 ///
 /// `state == 'running'` 优先于 [CronJob.status]（运行是瞬时态，status 枚举
 /// 不区分）。
-String taskStatusLabel(CronJob job) {
+String taskStatusLabel(CronJob job, [BuildContext? context]) {
+  if (context != null) {
+    final l10n = AppLocalizations.of(context);
+    if (job.state == 'running') return l10n.taskStatusRunning;
+    switch (job.status) {
+      case CronJobStatus.active:
+        return l10n.taskStatusActive;
+      case CronJobStatus.paused:
+        return l10n.taskStatusPaused;
+      case CronJobStatus.off:
+        return l10n.taskStatusOff;
+      case CronJobStatus.error:
+        return l10n.taskStatusError;
+      case CronJobStatus.needsAttention:
+        return l10n.taskStatusNeedsAttention;
+    }
+  }
   if (job.state == 'running') return '运行中';
   switch (job.status) {
     case CronJobStatus.active:
@@ -65,6 +82,7 @@ class TasksPage extends ConsumerStatefulWidget {
 class _TasksPageState extends ConsumerState<TasksPage> {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final async = ref.watch(tasksControllerProvider);
     final state = async.valueOrNull;
 
@@ -84,11 +102,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           CupertinoSliverNavigationBar(
-            largeTitle: const Text('定时任务'),
+            largeTitle: Text(l10n.tasksTitle),
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('tasks-create'),
-              label: '新建定时任务',
+              label: l10n.newTask,
               padding: EdgeInsets.zero,
               onPressed: () => _openEditor(context),
               child: const Icon(CupertinoIcons.add),
@@ -110,6 +128,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     AsyncValue<TasksState> async,
     TasksState? state,
   ) {
+    final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
         return const [
@@ -129,7 +148,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     return [
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
-          header: Text('共 ${state.jobs.length} 个任务'),
+          header: Text(l10n.totalTasksHeader(state.jobs.length)),
           children: [
             for (final job in state.jobs)
               _TaskRow(
@@ -145,6 +164,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   Widget _buildErrorSliver(Object? error) {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -158,9 +178,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Text(
+              l10n.loadFailed,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
@@ -175,7 +195,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             CupertinoButton.filled(
               key: const ValueKey('tasks-retry'),
               onPressed: () => unawaited(_onRefresh()),
-              child: const Text('重试'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -184,6 +204,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   Widget _buildEmptySliver() {
+    final l10n = AppLocalizations.of(context);
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -197,11 +218,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               color: CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
-            const Text('暂无任务', style: TextStyle(fontSize: 17)),
+            Text(l10n.noTasks, style: const TextStyle(fontSize: 17)),
             const SizedBox(height: 6),
-            const Text(
-              '创建定时任务，让助手按调度自动执行',
-              style: TextStyle(
+            Text(
+              l10n.createTaskPrompt,
+              style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -210,7 +231,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             CupertinoButton.filled(
               key: const ValueKey('tasks-empty-create'),
               onPressed: () => _openEditor(context),
-              child: const Text('新建任务'),
+              child: Text(l10n.newTask),
             ),
           ],
         ),
@@ -232,6 +253,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   void _showRowActions(BuildContext context, CronJob job) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(tasksControllerProvider.notifier);
     final paused = job.state == 'paused' || job.enabled == false;
     unawaited(
@@ -246,7 +268,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 Navigator.pop(sheetContext);
                 unawaited(controller.run(job));
               },
-              child: const Text('运行'),
+              child: Text(l10n.runTask),
             ),
             if (paused)
               CupertinoActionSheetAction(
@@ -255,7 +277,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   Navigator.pop(sheetContext);
                   unawaited(controller.resume(job));
                 },
-                child: const Text('恢复'),
+                child: Text(l10n.resumeTask),
               )
             else
               CupertinoActionSheetAction(
@@ -264,7 +286,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                   Navigator.pop(sheetContext);
                   unawaited(controller.pause(job));
                 },
-                child: const Text('暂停'),
+                child: Text(l10n.pauseTask),
               ),
             CupertinoActionSheetAction(
               key: const ValueKey('tasks-action-edit'),
@@ -272,7 +294,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 Navigator.pop(sheetContext);
                 _openEditor(context, job: job);
               },
-              child: const Text('编辑'),
+              child: Text(l10n.edit),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('tasks-action-output'),
@@ -280,7 +302,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_showOutput(context, job));
               },
-              child: const Text('查看输出'),
+              child: Text(l10n.viewOutput),
             ),
             CupertinoActionSheetAction(
               key: const ValueKey('tasks-action-delete'),
@@ -289,13 +311,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 Navigator.pop(sheetContext);
                 unawaited(_confirmDelete(context, job));
               },
-              child: const Text('删除'),
+              child: Text(l10n.delete),
             ),
           ],
           cancelButton: CupertinoActionSheetAction(
             isDefaultAction: true,
             onPressed: () => Navigator.pop(sheetContext),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
         ),
       ),
@@ -311,22 +333,23 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   Future<void> _confirmDelete(BuildContext context, CronJob job) async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('删除任务'),
-        content: Text('确定删除「${job.displayName}」？此操作不可撤销。'),
+        title: Text(l10n.deleteTask),
+        content: Text(l10n.confirmDeleteTask(job.displayName)),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('tasks-delete-cancel'),
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             key: const ValueKey('tasks-delete-confirm'),
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -337,15 +360,16 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {
+    final l10n = AppLocalizations.of(context);
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('操作失败'),
+        title: Text(l10n.actionFailed),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('好'),
+            child: Text(l10n.ok),
           ),
         ],
       ),
@@ -355,7 +379,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
-    return error?.toString() ?? '未知错误';
+    return error?.toString() ?? AppLocalizations.of(context).unknownError;
   }
 }
 
@@ -374,7 +398,8 @@ class _TaskRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = _subtitle(job);
+    final l10n = AppLocalizations.of(context);
+    final subtitle = _subtitle(context, job);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
@@ -404,7 +429,7 @@ class _TaskRow extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      taskStatusLabel(job),
+                      taskStatusLabel(job, context),
                       style: TextStyle(
                         fontSize: 12,
                         color: taskStatusColor(job),
@@ -435,7 +460,7 @@ class _TaskRow extends StatelessWidget {
           else
             AccessibleButton(
               key: ValueKey('tasks-actions-${job.jobId ?? job.id}'),
-              label: '任务操作',
+              label: l10n.taskActions,
               padding: EdgeInsets.zero,
               minimumSize: const Size(36, 36),
               onPressed: onActions,
@@ -450,11 +475,12 @@ class _TaskRow extends StatelessWidget {
     );
   }
 
-  static String? _subtitle(CronJob job) {
+  static String? _subtitle(BuildContext context, CronJob job) {
+    final l10n = AppLocalizations.of(context);
     final parts = <String>[
       if (job.scheduleText != null && job.scheduleText!.isNotEmpty)
         job.scheduleText!,
-      if (job.lastRunAt != null) '上次运行 ${_formatTime(job.lastRunAt!.date)}',
+      if (job.lastRunAt != null) l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -474,6 +500,7 @@ class _TaskOutputSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Container(
         constraints: BoxConstraints(
@@ -492,10 +519,10 @@ class _TaskOutputSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      '任务输出',
-                      style: TextStyle(
+                      l10n.taskOutput,
+                      style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
                       ),
@@ -503,7 +530,7 @@ class _TaskOutputSheet extends StatelessWidget {
                   ),
                   AccessibleButton(
                     key: const ValueKey('tasks-output-close'),
-                    label: '关闭输出面板',
+                    label: l10n.closeOutputPanel,
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(36, 36),
                     onPressed: () => Navigator.pop(context),
@@ -527,9 +554,9 @@ class _TaskOutputSheet extends StatelessWidget {
                   final outputs =
                       snapshot.data?.outputs ?? const <CronOutputItem>[];
                   if (outputs.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('暂无输出')),
+                    return Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(child: Text(l10n.noOutput)),
                     );
                   }
                   return ListView.separated(
@@ -548,7 +575,7 @@ class _TaskOutputSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item.filename ?? '输出 ${index + 1}',
+                              item.filename ?? l10n.outputItemTitle(index + 1),
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -632,43 +659,44 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: Text(_isEdit ? '编辑任务' : '新建任务'),
+        middle: Text(_isEdit ? l10n.editTask : l10n.newTask),
         trailing: CupertinoButton(
           key: const ValueKey('tasks-form-save'),
           padding: EdgeInsets.zero,
           onPressed: _canSave ? () => unawaited(_save(context)) : null,
-          child: Text(_isEdit ? '保存' : '创建'),
+          child: Text(_isEdit ? l10n.save : l10n.create),
         ),
       ),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _buildField(
-            label: '名称',
+            label: l10n.taskName,
             fieldKey: const ValueKey('tasks-form-name'),
             controller: _nameController,
-            placeholder: '任务名称（可选）',
+            placeholder: l10n.taskNamePlaceholder,
           ),
           const SizedBox(height: 16),
           _buildField(
-            label: '调度表达式',
+            label: l10n.scheduleExpression,
             fieldKey: const ValueKey('tasks-form-schedule'),
             controller: _scheduleController,
-            placeholder: '例如 0 9 * * * 或 every 2 hours',
+            placeholder: l10n.schedulePlaceholder,
           ),
           const SizedBox(height: 16),
           _buildField(
-            label: '提示词',
+            label: l10n.promptLabel,
             fieldKey: const ValueKey('tasks-form-prompt'),
             controller: _promptController,
-            placeholder: '定时执行时发送给助手的提示词',
+            placeholder: l10n.promptPlaceholder,
             maxLines: 6,
           ),
           const SizedBox(height: 16),
           CupertinoListTile(
-            title: const Text('推送通知'),
+            title: Text(l10n.pushNotifications),
             trailing: CupertinoSwitch(
               key: const ValueKey('tasks-form-toast'),
               value: _toastNotifications,

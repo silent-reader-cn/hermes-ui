@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
@@ -257,7 +258,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       case MessageAction.copyMd:
         // 先提示，再异步写剪贴板（立即反馈，不阻塞菜单关闭）。
         unawaited(copyMessageText(message));
-        if (mounted) controller.setNotice('已复制到剪贴板');
+        if (mounted) controller.setNotice(AppLocalizations.of(context).copiedToClipboardNotice);
       case MessageAction.edit:
         final text = message.content;
         if (text != null && text.isNotEmpty) {
@@ -395,6 +396,7 @@ class _StreamingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final hasContent = (message.content ?? '').isNotEmpty;
     final isEmpty =
         !hasContent && toolGroups.isEmpty && reasoningGroups.isEmpty;
@@ -406,19 +408,19 @@ class _StreamingBubble extends StatelessWidget {
       );
     }
     // 空流式气泡 → 思考中指示器。
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
               children: [
-                CupertinoActivityIndicator(radius: 8),
-                SizedBox(width: 8),
+                const CupertinoActivityIndicator(radius: 8),
+                const SizedBox(width: 8),
                 Text(
-                  '思考中…',
-                  style: TextStyle(
+                  l10n.thinkingIndicator,
+                  style: const TextStyle(
                     fontSize: 14,
                     color: CupertinoColors.secondaryLabel,
                   ),
@@ -438,19 +440,20 @@ class _SendingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
               children: [
-                CupertinoActivityIndicator(radius: 8),
-                SizedBox(width: 8),
+                const CupertinoActivityIndicator(radius: 8),
+                const SizedBox(width: 8),
                 Text(
-                  '发送中…',
-                  style: TextStyle(
+                  l10n.sendingIndicator,
+                  style: const TextStyle(
                     fontSize: 14,
                     color: CupertinoColors.secondaryLabel,
                   ),
