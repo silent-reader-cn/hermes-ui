@@ -118,7 +118,7 @@ void main() {
   }
 
   group('分组渲染', () {
-    testWidgets('四组标题 + 当前服务器 + 默认模型 + 推理强度 + 版本号', (tester) async {
+    testWidgets('五组标题 + 当前服务器 + 默认模型 + 推理强度 + 版本号', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
@@ -130,7 +130,7 @@ void main() {
       expect(find.text('外观'), findsOneWidget);
       expect(find.text('服务器'), findsOneWidget);
       expect(find.text('模型'), findsOneWidget);
-      expect(find.text('关于'), findsOneWidget);
+      expect(find.text('桌面'), findsOneWidget);
 
       // 列表行渲染 name + url（激活标识在行内勾选图标）
       final rowC1 = find.byKey(const ValueKey('server-row-c1'));
@@ -154,7 +154,8 @@ void main() {
       expect(find.text('medium'), findsOneWidget);
 
       // 关于：版本号
-      await tester.ensureVisible(find.text('版本'));
+      await tester.scrollUntilVisible(find.text('版本'), 50);
+      expect(find.text('关于'), findsOneWidget);
       expect(find.text('版本'), findsOneWidget);
       expect(find.text('1.0.0+1'), findsOneWidget);
     });
