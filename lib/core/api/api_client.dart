@@ -8,6 +8,7 @@ import 'api_exception.dart';
 import 'cookie_store.dart';
 import 'custom_header.dart';
 import 'endpoints.dart';
+import '../models/server_info.dart';
 
 /// sendDataReturningResponse 的返回类型：原始字节 + 响应头 + 状态码。
 typedef ApiByteResponse = ({Uint8List data, Headers headers, int statusCode});
@@ -427,21 +428,42 @@ class ApiClient {
 // ---------------------------------------------------------------------------
 
 /// server 域方法（health / authStatus / login / logout）。
-///
-/// 返回类型暂为 `Object?`（解码后的 JSON）；TODO(merge)：模型就绪后改为对应
-/// 类型并 `return XxxResponse.fromJson(json)`。
 extension ApiClientServer on ApiClient {
   /// GET /health → HealthResponse {status, sessions, active_streams, uptime_seconds}。
-  Future<Object?> health() => sendJson(Endpoint.health);
+  Future<HealthResponse> health() async {
+    final json = await sendJson(Endpoint.health);
+    return HealthResponse.fromJson(_asMap(json));
+  }
 
   /// GET /api/auth/status → AuthStatusResponse {auth_enabled, password_auth_enabled, …}。
-  Future<Object?> authStatus() => sendJson(Endpoint.authStatus);
+  Future<AuthStatusResponse> authStatus() async {
+    final json = await sendJson(Endpoint.authStatus);
+    return AuthStatusResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/auth/login {password} → LoginResponse；成功即种会话 cookie。
-  Future<Object?> login(String password) =>
-      sendJson(Endpoint.login, method: 'POST', body: {'password': password});
+  Future<LoginResponse> login(String password) async {
+    final json = await sendJson(
+      Endpoint.login,
+      method: 'POST',
+      body: {'password': password},
+    );
+    return LoginResponse.fromJson(_asMap(json));
+  }
 
   /// POST /api/auth/logout {} → LoginResponse。
-  Future<Object?> logout() =>
-      sendJson(Endpoint.logout, method: 'POST', body: <String, Object?>{});
+  Future<LoginResponse> logout() async {
+    final json = await sendJson(
+      Endpoint.logout,
+      method: 'POST',
+      body: <String, Object?>{},
+    );
+    return LoginResponse.fromJson(_asMap(json));
+  }
 }
+
+Map<String, Object?> _asMap(Object? json) =>
+    json is Map<String, Object?>
+        ? json
+        : (json is Map ? Map<String, Object?>.from(json) : const <String, Object?>{});
+

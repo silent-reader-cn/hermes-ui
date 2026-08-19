@@ -33,9 +33,8 @@ class _ProfileSectionState extends ConsumerState<ProfileSection> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final raw = await ref.read(apiClientProvider).profiles();
-      final map = raw is Map<String, Object?> ? raw : <String, Object?>{};
-      if (mounted) setState(() => _profiles = ProfilesResponse.fromJson(map));
+      final response = await ref.read(apiClientProvider).profiles();
+      if (mounted) setState(() => _profiles = response);
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -48,10 +47,9 @@ class _ProfileSectionState extends ConsumerState<ProfileSection> {
     if (name.isEmpty || name == _profiles?.active) return;
     setState(() => _loading = true);
     try {
-      final raw = await ref.read(apiClientProvider).switchProfile(name);
-      final map = raw is Map<String, Object?> ? raw : <String, Object?>{};
+      final response = await ref.read(apiClientProvider).switchProfile(name);
       if (mounted) {
-        setState(() => _profiles = ProfileSwitchResponse.fromJson(map).toProfilesResponse(name));
+        setState(() => _profiles = response.toProfilesResponse(name));
         ref.invalidate(sessionListControllerProvider);
       }
     } catch (error) {

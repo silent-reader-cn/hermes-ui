@@ -15,6 +15,7 @@ import 'package:hermex_flutter/core/models/insights.dart';
 import 'package:hermex_flutter/core/models/kanban.dart';
 import 'package:hermex_flutter/core/models/memory.dart';
 import 'package:hermex_flutter/core/models/server_catalog.dart';
+import 'package:hermex_flutter/core/models/server_info.dart';
 import 'package:hermex_flutter/core/models/session.dart';
 import 'package:hermex_flutter/core/models/skills.dart';
 import 'package:hermex_flutter/core/models/workspace.dart';
@@ -1129,13 +1130,15 @@ class _FakeChatApi implements ChatServerApi {
 
 class _FakeOnboardingApi implements OnboardingServerApi {
   @override
-  Future<Object?> health() async => {'status': 'ok'};
+  Future<HealthResponse> health() async => const HealthResponse(status: 'ok');
 
   @override
-  Future<Object?> authStatus() async => {'auth_enabled': false};
+  Future<AuthStatusResponse> authStatus() async =>
+      const AuthStatusResponse(authEnabled: false);
 
   @override
-  Future<Object?> login(String password) async => {'ok': true};
+  Future<LoginResponse> login(String password) async =>
+      const LoginResponse(ok: true);
 }
 
 /// 项目 API 空实现 stub：列表页扫描容器注入，避免真实 dio 请求。

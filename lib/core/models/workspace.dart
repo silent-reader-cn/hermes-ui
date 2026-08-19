@@ -367,6 +367,77 @@ class FileResponse {
   String toString() => 'FileResponse(path: $path, size: $size)';
 }
 
+/// 文件删除响应（`/api/file/delete` 返回形状）。
+class FileDeleteResponse {
+  const FileDeleteResponse({this.ok, this.path, this.error});
+
+  factory FileDeleteResponse.fromJson(Map<String, Object?> json) {
+    return FileDeleteResponse(
+      ok: lossyBool(json, 'ok'),
+      path: optString(json, 'path'),
+      error: optString(json, 'error'),
+    );
+  }
+
+  final bool? ok;
+  final String? path;
+  final String? error;
+
+  @override
+  bool operator ==(Object other) {
+    return other is FileDeleteResponse &&
+        other.ok == ok &&
+        other.path == path &&
+        other.error == error;
+  }
+
+  @override
+  int get hashCode => Object.hash(ok, path, error);
+
+  @override
+  String toString() => 'FileDeleteResponse(ok: $ok, path: $path)';
+}
+
+/// 文件重命名响应（`/api/file/rename` 返回形状）。
+class FileRenameResponse {
+  const FileRenameResponse({
+    this.ok,
+    this.oldPath,
+    this.newPath,
+    this.error,
+  });
+
+  factory FileRenameResponse.fromJson(Map<String, Object?> json) {
+    return FileRenameResponse(
+      ok: lossyBool(json, 'ok'),
+      oldPath: firstKey(json, ['old_path', 'oldPath'], optString),
+      newPath: firstKey(json, ['new_path', 'newPath'], optString),
+      error: optString(json, 'error'),
+    );
+  }
+
+  final bool? ok;
+  final String? oldPath;
+  final String? newPath;
+  final String? error;
+
+  @override
+  bool operator ==(Object other) {
+    return other is FileRenameResponse &&
+        other.ok == ok &&
+        other.oldPath == oldPath &&
+        other.newPath == newPath &&
+        other.error == error;
+  }
+
+  @override
+  int get hashCode => Object.hash(ok, oldPath, newPath, error);
+
+  @override
+  String toString() =>
+      'FileRenameResponse(ok: $ok, oldPath: $oldPath, newPath: $newPath)';
+}
+
 bool _listEquals(List<String>? a, List<String>? b) {
   if (identical(a, b)) return true;
   if (a == null || b == null) return false;
@@ -376,3 +447,4 @@ bool _listEquals(List<String>? a, List<String>? b) {
   }
   return true;
 }
+

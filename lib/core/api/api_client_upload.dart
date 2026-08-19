@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'api_client.dart';
 import 'api_exception.dart';
 import 'endpoints.dart';
+import '../models/transcribe_response.dart';
+import '../models/upload_response.dart';
 
 /// multipart/form-data 构造（对齐 MultipartFormData.swift，§4.1）。
 ///
@@ -42,9 +44,6 @@ class MultipartBody {
 }
 
 /// upload / transcribe / tts 域方法（3 个端点）。
-///
-/// 返回类型暂为 `Object?`（解码后的 JSON）；TODO(merge)：模型就绪后改为对应
-/// 类型并 `return XxxResponse.fromJson(json)`。
 extension ApiClientUpload on ApiClient {
   /// 客户端单文件预检上限：20MB（Models/UploadResponse.swift
   /// `maximumUploadBytes`；服务端上限为 10 附件 / 64MiB 总量，超限错误透传）。
@@ -54,7 +53,7 @@ extension ApiClientUpload on ApiClient {
   ///
   /// 单文件 >20MB 本地拒绝（[UploadFileTooLargeException]）；服务端
   /// 64MiB/10 附件超限以 4xx + `{error}` body 透传为 [HttpException]。
-  Future<Object?> uploadFile({
+  Future<UploadResponse> uploadFile({
     required String sessionId,
     required Uint8List data,
     required String filename,
@@ -86,14 +85,15 @@ extension ApiClientUpload on ApiClient {
         utf8.decode(response.data, allowMalformed: true),
       );
     }
-    return _decodeJsonOrThrow(response.data);
+    final json = _decodeJsonOrThrow(response.data);
+    return UploadResponse.fromJson(_asMap(json));
   }
 
   /// POST /api/transcribe — multipart：仅文件字段 `file`。
   ///
   /// 服务端 503/400/413 也带 `{ok, transcript, error}` body，因此非 2xx 也先
   /// 尝试解码；仅 401 映射为 [UnauthorizedException]。
-  Future<Object?> transcribeAudio({
+  Future<TranscribeResponse> transcribeAudio({
     required Uint8List data,
     required String filename,
     String? boundary,
@@ -121,13 +121,13 @@ extension ApiClientUpload on ApiClient {
     } on FormatException {
       decoded = null;
     }
-    if (decoded is Map<String, Object?>) {
-      return decoded; // 无论 2xx 与否，body 形状对就返回（调用方检查 .error）。
+    if (decoded is Map) {
+      return TranscribeResponse.fromJson(Map<String, Object?>.from(decoded));
     }
     if (status < 200 || status >= 300) {
       throw HttpException.fromBody(status, text);
     }
-    return decoded;
+    return const TranscribeResponse();
   }
 
   /// POST /api/tts {text, voice} — 原始音频字节（audio/mpeg），Accept=`*/*`；
@@ -155,3 +155,8 @@ extension ApiClientUpload on ApiClient {
   String _generateBoundary() =>
       'Boundary-${DateTime.now().microsecondsSinceEpoch.toRadixString(16).toUpperCase()}';
 }
+
+Map<String, Object?> _asMap(Object? json) =>
+    json is Map<String, Object?>
+        ? json
+        : (json is Map ? Map<String, Object?>.from(json) : const <String, Object?>{});

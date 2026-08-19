@@ -118,12 +118,19 @@ class WorkspaceApiClient implements WorkspaceApi {
     required String filename,
     required Uint8List data,
   }) async {
-    final json = await _client.uploadFile(
+    final response = await _client.uploadFile(
       sessionId: sessionId,
       filename: filename,
       data: data,
     );
-    return WorkspaceUploadResult.fromJson(_asMap(json));
+    return WorkspaceUploadResult(
+      filename: response.filename,
+      path: response.path,
+      size: response.size,
+      mime: response.mime,
+      isImage: response.isImage,
+      error: response.error,
+    );
   }
 
   @override

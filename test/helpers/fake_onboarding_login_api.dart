@@ -1,4 +1,5 @@
 import 'package:hermex_flutter/core/api/api_exception.dart';
+import 'package:hermex_flutter/core/models/server_info.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 
 /// 登录 fake：记录调用，可配置成功/失败。
@@ -11,17 +12,18 @@ class FakeOnboardingLoginApi implements OnboardingServerApi {
   ApiException? loginError;
 
   @override
-  Future<Object?> health() async => {'status': 'ok'};
+  Future<HealthResponse> health() async => const HealthResponse(status: 'ok');
 
   @override
-  Future<Object?> authStatus() async => {'auth_enabled': true};
+  Future<AuthStatusResponse> authStatus() async =>
+      const AuthStatusResponse(authEnabled: true);
 
   @override
-  Future<Object?> login(String password) async {
+  Future<LoginResponse> login(String password) async {
     loginCalls++;
     lastPassword = password;
     final error = loginError;
     if (error != null) throw error;
-    return {'ok': true};
+    return const LoginResponse(ok: true);
   }
 }
