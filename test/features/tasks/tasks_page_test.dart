@@ -122,7 +122,8 @@ void main() {
       expect(find.text('已停用'), findsOneWidget);
       expect(find.text('0 9 * * *'), findsNWidgets(3));
       expect(find.text('0 9 * * * · 上次运行 09:30'), findsOneWidget);
-      expect(find.text('共 4 个任务'), findsOneWidget);
+      expect(find.text('正常（3）'), findsOneWidget);
+      expect(find.text('已暂停（1）'), findsOneWidget);
       expect(find.byKey(const ValueKey('tasks-create')), findsOneWidget);
 
       // 验证副标使用 secondaryText 颜色

@@ -145,12 +145,20 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       return [_buildEmptySliver()];
     }
 
-    return [
-      SliverToBoxAdapter(
+    // 分组：正常状态一组 / 暂停状态一组（用户要求分开显示）。
+    final runningJobs = state.jobs
+        .where((j) => j.status != CronJobStatus.paused)
+        .toList();
+    final pausedJobs = state.jobs
+        .where((j) => j.status == CronJobStatus.paused)
+        .toList();
+
+    Widget rowsSection({required String header, required List<CronJob> jobs}) {
+      return SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
-          header: Text(l10n.totalTasksHeader(state.jobs.length)),
+          header: Text('$header（${jobs.length}）'),
           children: [
-            for (final job in state.jobs)
+            for (final job in jobs)
               _TaskRow(
                 key: ValueKey('tasks-row-${job.jobId ?? job.id}'),
                 job: job,
@@ -160,7 +168,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               ),
           ],
         ),
-      ),
+      );
+    }
+
+    return [
+      if (runningJobs.isNotEmpty)
+        rowsSection(header: l10n.statusNormal, jobs: runningJobs),
+      if (pausedJobs.isNotEmpty)
+        rowsSection(header: l10n.statusPaused, jobs: pausedJobs),
     ];
   }
 
