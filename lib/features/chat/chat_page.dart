@@ -78,8 +78,7 @@ class ChatPage extends ConsumerWidget {
                       l10n.branchBadge,
                       style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel
-                            .resolveFrom(context),
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ],
@@ -749,7 +748,7 @@ class _PendingUserMessageBanner extends StatelessWidget {
       ),
       child: Text(
         l10n.pendingUserMessageBanner,
-        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
+        style: const TextStyle(fontSize: 12, color: secondaryText),
       ),
     );
   }

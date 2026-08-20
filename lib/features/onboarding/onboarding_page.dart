@@ -347,7 +347,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.inputServerAddressHint,
-          style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+          style: const TextStyle(fontSize: 15, color: secondaryText),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -451,7 +451,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         else
           Text(
             l10n.serverPasswordRequired,
-            style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+            style: const TextStyle(fontSize: 15, color: secondaryText),
           ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -501,7 +501,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.customHeadersDescription,
-          style: const TextStyle(fontSize: 15, color: CupertinoColors.secondaryLabel),
+          style: const TextStyle(fontSize: 15, color: secondaryText),
         ),
         const SizedBox(height: 16),
         for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),

@@ -216,7 +216,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               l10n.createTaskPrompt,
               style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: secondaryText,
               ),
             ),
             const SizedBox(height: 20),
@@ -445,7 +445,7 @@ class _TaskRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                          color: secondaryText,
                         ),
                       ),
                     ],
@@ -505,7 +505,7 @@ class _TaskOutputSheet extends StatelessWidget {
     final sheetBg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
     final cardBg = CupertinoColors.tertiarySystemBackground.resolveFrom(context);
     final labelColor = CupertinoColors.label.resolveFrom(context);
-    final secondaryLabelColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final secondaryLabelColor = secondaryText.resolveFrom(context);
     final tertiaryLabelColor = CupertinoColors.tertiaryLabel.resolveFrom(context);
     final separatorColor = CupertinoColors.separator.resolveFrom(context);
 
@@ -756,7 +756,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
           label,
           style: TextStyle(
             fontSize: 13,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            color: secondaryText,
           ),
         ),
         const SizedBox(height: 6),

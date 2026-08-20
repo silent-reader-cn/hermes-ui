@@ -729,7 +729,7 @@ class _AboutSection extends StatelessWidget {
           title: Text(l10n.version),
           trailing: const Text(
             appVersion,
-            style: TextStyle(color: CupertinoColors.secondaryLabel),
+            style: TextStyle(color: secondaryText),
           ),
         ),
       ],

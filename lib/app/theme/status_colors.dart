@@ -66,3 +66,16 @@ const CupertinoDynamicColor statusRedText =
   highContrastColor: Color(0xFF8F0018),
   darkHighContrastColor: Color(0xFFFF6961),
 );
+
+/// 辅助/次要信息文字色（对齐 iOS 次级层级，并在深色模式下提亮到 ~72% 白，改善暗色列表行与卡片上的感知对比）。
+///
+/// 用于会话列表副标、列表项次要描述、空态提示、详情元数据等用户需读取的辅助文字。
+/// - 浅色模式：Color.fromARGB(0x99, 0x3C, 0x3C, 0x43)（白底 ~4.5:1，浅灰底 ~5.0:1）
+/// - 深色模式：Color.fromARGB(0xB8, 0xEB, 0xEB, 0xF5)（黑底 ~8.9:1，暗灰分组底 ~7.8:1，清晰不发糊）
+const CupertinoDynamicColor secondaryText =
+    CupertinoDynamicColor.withBrightnessAndContrast(
+  color: Color.fromARGB(0x99, 0x3C, 0x3C, 0x43),
+  darkColor: Color.fromARGB(0xB8, 0xEB, 0xEB, 0xF5),
+  highContrastColor: Color.fromARGB(0xAA, 0x3C, 0x3C, 0x43),
+  darkHighContrastColor: Color.fromARGB(0xD0, 0xEB, 0xEB, 0xF5),
+);

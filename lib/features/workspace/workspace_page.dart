@@ -280,7 +280,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -572,7 +572,7 @@ class _PathHeader extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.secondaryLabel,
+                    color: secondaryText,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -676,7 +676,7 @@ class _PathHeader extends StatelessWidget {
                     l10n.loadingIndicator,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ],
@@ -700,7 +700,7 @@ class _PathHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
+                        color: secondaryText,
                       ),
                     ),
                   ),
@@ -770,7 +770,7 @@ class _WorkspaceEntryRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
+                        color: secondaryText,
                       ),
                     ),
                   ],

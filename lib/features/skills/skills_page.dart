@@ -209,7 +209,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
                   : l10n.serverSkillsWillShowHere,
               style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: secondaryText,
               ),
             ),
           ],
@@ -326,7 +326,7 @@ class _SkillRow extends ConsumerWidget {
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
                                 color: disabled
-                                    ? CupertinoColors.secondaryLabel
+                                    ? secondaryText
                                           .resolveFrom(context)
                                     : CupertinoColors.label.resolveFrom(
                                         context,
@@ -354,7 +354,7 @@ class _SkillRow extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 13,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                            color: secondaryText
                               context,
                             ),
                           ),
@@ -434,7 +434,7 @@ class _SkillDetail extends StatelessWidget {
           l10n.noMoreDetailsForSkill,
           style: TextStyle(
             fontSize: 13,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            color: secondaryText,
           ),
         ),
       );
@@ -475,7 +475,7 @@ class _DetailLine extends StatelessWidget {
           TextSpan(
             text: '$label：',
             style: TextStyle(
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: secondaryText,
             ),
           ),
           TextSpan(
