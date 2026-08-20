@@ -2,14 +2,18 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_client_chat.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/sse_client.dart';
+import '../../core/models/approval.dart';
+import '../../core/models/clarification.dart';
+import '../../core/models/server_catalog.dart';
+import '../../core/models/session.dart';
 
 /// 聊天模块所需的最小服务器 API 面。
 ///
 /// 生产实现 [ChatApiClient] 包 [ApiClient] + [SseClient]；测试可注入纯 Dart
 /// fake，彻底绕开网络/事件循环（对齐 onboarding 的 `OnboardingServerApi` 模式）。
 abstract interface class ChatServerApi {
-  /// POST /api/chat/start → `{stream_id, session_id?}`。
-  Future<Object?> startChat({
+  /// POST /api/chat/start → ChatStartResponse。
+  Future<ChatStartResponse> startChat({
     required String sessionId,
     required String message,
     String? workspace,
@@ -20,31 +24,31 @@ abstract interface class ChatServerApi {
     List<Map<String, Object?>>? attachments,
   });
 
-  /// POST /api/chat/steer {session_id, text} → `{accepted}`。
-  Future<Object?> steerChat({required String sessionId, required String text});
+  /// POST /api/chat/steer {session_id, text} → ChatSteerResponse。
+  Future<ChatSteerResponse> steerChat({required String sessionId, required String text});
 
-  /// GET /api/chat/cancel?stream_id= → `{ok}`。
-  Future<Object?> cancelChat(String streamId);
+  /// GET /api/chat/cancel?stream_id= → ChatCancelResponse。
+  Future<ChatCancelResponse> cancelChat(String streamId);
 
-  /// GET /api/chat/stream/status?stream_id= → ChatStreamStatus。
-  Future<Object?> chatStreamStatus(String streamId);
+  /// GET /api/chat/stream/status?stream_id= → ChatStreamStatusResponse。
+  Future<ChatStreamStatusResponse> chatStreamStatus(String streamId);
 
-  /// POST /api/approval/respond {session_id, choice, approval_id?}。
-  Future<Object?> respondApproval({
+  /// POST /api/approval/respond {session_id, choice, approval_id?} → ApprovalRespondResponse。
+  Future<ApprovalRespondResponse> respondApproval({
     required String sessionId,
     required String choice,
     String? approvalId,
   });
 
-  /// POST /api/clarify/respond {session_id, response, clarify_id?}。
-  Future<Object?> respondClarification({
+  /// POST /api/clarify/respond {session_id, response, clarify_id?} → ClarificationRespondResponse。
+  Future<ClarificationRespondResponse> respondClarification({
     required String sessionId,
     required String response,
     String? clarifyId,
   });
 
-  /// GET /api/session（messages=1 时带 transcript；无消息 = 补拉标题）。
-  Future<Object?> session({
+  /// GET /api/session（messages=1 时带 transcript；无消息 = 补拉标题）→ SessionResponse。
+  Future<SessionResponse> session({
     required String sessionId,
     bool includeMessages = true,
     int? messageLimit,
@@ -53,56 +57,56 @@ abstract interface class ChatServerApi {
   });
 
   /// POST /api/session/rename {session_id, title} → SessionMutationResponse。
-  Future<Object?> renameSession({required String sessionId, required String title});
+  Future<SessionMutationResponse> renameSession({required String sessionId, required String title});
 
   /// POST /api/session/pin {session_id, pinned} → SessionMutationResponse。
-  Future<Object?> pinSession({required String sessionId, required bool pinned});
+  Future<SessionMutationResponse> pinSession({required String sessionId, required bool pinned});
 
   /// POST /api/session/archive {session_id, archived} → SessionMutationResponse。
-  Future<Object?> archiveSession({required String sessionId, required bool archived});
+  Future<SessionMutationResponse> archiveSession({required String sessionId, required bool archived});
 
   /// POST /api/session/delete {session_id} → SessionMutationResponse。
-  Future<Object?> deleteSession(String sessionId);
+  Future<SessionMutationResponse> deleteSession(String sessionId);
 
   /// POST /api/session/branch {session_id, keep_count?} → SessionBranchResponse。
-    ///
-    /// [keepCount] 为复制前 N 条消息（0 = 空分支；缺省 = 全量历史）。
-    Future<Object?> branchSession(String sessionId, {int? keepCount});
+  ///
+  /// [keepCount] 为复制前 N 条消息（0 = 空分支；缺省 = 全量历史）。
+  Future<SessionBranchResponse> branchSession(String sessionId, {int? keepCount});
 
-  /// POST /api/session/truncate {session_id, keep_count} → `{ok, session:{messages}}`。
+  /// POST /api/session/truncate {session_id, keep_count} → SessionResponse。
   ///
   /// [keepCount] 为从开头保留的消息条数（0 = 清空）。
-  Future<Object?> truncateSession({
+  Future<SessionResponse> truncateSession({
     required String sessionId,
     required int keepCount,
   });
 
   /// POST /api/session/compress {session_id, focus_topic?} → SessionCompressResponse。
-  Future<Object?> compressSession({
+  Future<SessionCompressResponse> compressSession({
     required String sessionId,
     String? focusTopic,
   });
 
   /// POST /api/session/undo {session_id} → SessionUndoResponse（删最后一轮）。
-  Future<Object?> undoSession(String sessionId);
+  Future<SessionUndoResponse> undoSession(String sessionId);
 
   /// POST /api/session/retry {session_id} → SessionRetryResponse（text=最后一轮用户消息原文）。
-  Future<Object?> retrySession(String sessionId);
+  Future<SessionRetryResponse> retrySession(String sessionId);
 
   /// POST /api/session/update {session_id, workspace?, model?, model_provider?}
-  /// → SessionMutationResponse（只读导入会话返回 403）。
-  Future<Object?> updateSession({
+  /// → SessionResponse。
+  Future<SessionResponse> updateSession({
     required String sessionId,
     String? workspace,
     String? model,
     String? modelProvider,
   });
 
-  /// GET /api/session/yolo?session_id= → `{ok, yolo_enabled}`（容错）。
-  Future<Object?> getYolo(String sessionId);
+  /// GET /api/session/yolo?session_id= → SessionYoloResponse。
+  Future<SessionYoloResponse> getYolo(String sessionId);
 
-  /// POST /api/session/yolo {session_id, enabled} → `{ok, yolo_enabled}`。
-  Future<Object?> setYolo({
+  /// POST /api/session/yolo {session_id, enabled} → SessionYoloResponse。
+  Future<SessionYoloResponse> setYolo({
     required String sessionId,
     required bool enabled,
   });
@@ -136,7 +140,7 @@ class ChatApiClient implements ChatServerApi {
   final SseClient _sseClient;
 
   @override
-  Future<Object?> startChat({
+  Future<ChatStartResponse> startChat({
     required String sessionId,
     required String message,
     String? workspace,
@@ -159,7 +163,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> steerChat({
+  Future<ChatSteerResponse> steerChat({
     required String sessionId,
     required String text,
   }) {
@@ -167,15 +171,15 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> cancelChat(String streamId) =>
+  Future<ChatCancelResponse> cancelChat(String streamId) =>
       _client.cancelChat(streamId);
 
   @override
-  Future<Object?> chatStreamStatus(String streamId) =>
+  Future<ChatStreamStatusResponse> chatStreamStatus(String streamId) =>
       _client.chatStreamStatus(streamId);
 
   @override
-  Future<Object?> respondApproval({
+  Future<ApprovalRespondResponse> respondApproval({
     required String sessionId,
     required String choice,
     String? approvalId,
@@ -188,7 +192,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> respondClarification({
+  Future<ClarificationRespondResponse> respondClarification({
     required String sessionId,
     required String response,
     String? clarifyId,
@@ -201,7 +205,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> session({
+  Future<SessionResponse> session({
     required String sessionId,
     bool includeMessages = true,
     int? messageLimit,
@@ -218,7 +222,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> renameSession({
+  Future<SessionMutationResponse> renameSession({
     required String sessionId,
     required String title,
   }) {
@@ -226,7 +230,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> pinSession({
+  Future<SessionMutationResponse> pinSession({
     required String sessionId,
     required bool pinned,
   }) {
@@ -234,7 +238,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> archiveSession({
+  Future<SessionMutationResponse> archiveSession({
     required String sessionId,
     required bool archived,
   }) {
@@ -242,15 +246,15 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> deleteSession(String sessionId) =>
+  Future<SessionMutationResponse> deleteSession(String sessionId) =>
       _client.deleteSession(sessionId);
 
   @override
-    Future<Object?> branchSession(String sessionId, {int? keepCount}) =>
-        _client.branchSession(sessionId: sessionId, keepCount: keepCount);
+  Future<SessionBranchResponse> branchSession(String sessionId, {int? keepCount}) =>
+      _client.branchSession(sessionId: sessionId, keepCount: keepCount);
 
   @override
-  Future<Object?> truncateSession({
+  Future<SessionResponse> truncateSession({
     required String sessionId,
     required int keepCount,
   }) {
@@ -258,7 +262,7 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> compressSession({
+  Future<SessionCompressResponse> compressSession({
     required String sessionId,
     String? focusTopic,
   }) {
@@ -269,15 +273,15 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> undoSession(String sessionId) =>
+  Future<SessionUndoResponse> undoSession(String sessionId) =>
       _client.undoSession(sessionId);
 
   @override
-  Future<Object?> retrySession(String sessionId) =>
+  Future<SessionRetryResponse> retrySession(String sessionId) =>
       _client.retrySession(sessionId);
 
   @override
-  Future<Object?> updateSession({
+  Future<SessionResponse> updateSession({
     required String sessionId,
     String? workspace,
     String? model,
@@ -292,10 +296,10 @@ class ChatApiClient implements ChatServerApi {
   }
 
   @override
-  Future<Object?> getYolo(String sessionId) => _client.sessionYolo(sessionId);
+  Future<SessionYoloResponse> getYolo(String sessionId) => _client.sessionYolo(sessionId);
 
   @override
-  Future<Object?> setYolo({
+  Future<SessionYoloResponse> setYolo({
     required String sessionId,
     required bool enabled,
   }) {

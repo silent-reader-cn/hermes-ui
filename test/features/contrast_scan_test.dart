@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/models/cron.dart';
@@ -21,7 +20,7 @@ import 'package:hermex_flutter/core/models/skills.dart';
 import 'package:hermex_flutter/core/models/workspace.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/chat_server_api.dart';
+import '../helpers/fake_chat_api.dart';
 import 'package:hermex_flutter/features/git/git_api.dart';
 import 'package:hermex_flutter/features/git/git_page.dart';
 import 'package:hermex_flutter/features/insights/insights_api.dart';
@@ -963,170 +962,7 @@ void main() {
 // chat / onboarding 的最小 fake（对齐既有测试的占位实现模式）
 // ---------------------------------------------------------------------------
 
-class _FakeChatApi implements ChatServerApi {
-  Map<String, Object?>? sessionResult;
-
-  @override
-  Future<Object?> startChat({
-    required String sessionId,
-    required String message,
-    String? workspace,
-    String? model,
-    String? modelProvider,
-    String? profile,
-    bool explicitModelPick = false,
-    List<Map<String, Object?>>? attachments,
-  }) async {
-    return {'stream_id': 'stream-1', 'session_id': sessionId};
-  }
-
-  @override
-  Future<Object?> steerChat({
-    required String sessionId,
-    required String text,
-  }) async {
-    return {'accepted': true};
-  }
-
-  @override
-  Future<Object?> cancelChat(String streamId) async => {'ok': true};
-
-  @override
-  Future<Object?> chatStreamStatus(String streamId) async => {
-    'active': false,
-    'replay_available': false,
-  };
-
-  @override
-  Future<Object?> session({
-    required String sessionId,
-    bool includeMessages = true,
-    int? messageLimit,
-    int? messageBefore,
-    bool expandRenderable = false,
-  }) async {
-    return sessionResult ??
-        {
-          'session': {'session_id': sessionId, 'messages': const []},
-        };
-  }
-
-  @override
-  Future<Object?> respondApproval({
-    required String sessionId,
-    required String choice,
-    String? approvalId,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> respondClarification({
-    required String sessionId,
-    required String response,
-    String? clarifyId,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> renameSession({
-    required String sessionId,
-    required String title,
-  }) async {
-    return {
-      'ok': true,
-      'session': {'session_id': sessionId, 'title': title},
-    };
-  }
-
-  @override
-  Future<Object?> pinSession({
-    required String sessionId,
-    required bool pinned,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> archiveSession({
-    required String sessionId,
-    required bool archived,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> deleteSession(String sessionId) async => {'ok': true};
-
-  @override
-  Future<Object?> branchSession(String sessionId, {int? keepCount}) async => {
-    'session_id': 'branch-$sessionId',
-    'parent_session_id': sessionId,
-  };
-
-  @override
-  Future<Object?> truncateSession({
-    required String sessionId,
-    required int keepCount,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> compressSession({
-    required String sessionId,
-    String? focusTopic,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> undoSession(String sessionId) async => {'ok': true};
-
-  @override
-  Future<Object?> retrySession(String sessionId) async => {
-    'ok': true,
-    'last_user_text': '你好',
-  };
-
-  @override
-  Future<Object?> updateSession({
-    required String sessionId,
-    String? workspace,
-    String? model,
-    String? modelProvider,
-  }) async {
-    return {'ok': true};
-  }
-
-  @override
-  Future<Object?> getYolo(String sessionId) async => {
-    'ok': true,
-    'yolo_enabled': false,
-  };
-
-  @override
-  Future<Object?> setYolo({
-    required String sessionId,
-    required bool enabled,
-  }) async {
-    return {'ok': true, 'yolo_enabled': enabled};
-  }
-
-  @override
-  Future<void> startStream(
-    String streamId, {
-    int? replayAfterSeq,
-    required void Function(SseEvent event) onEvent,
-    void Function(String eventId)? onEventId,
-    required void Function(String message) onTransportError,
-    required void Function() onClosed,
-  }) async {}
-
-  @override
-  void stopStream() {}
-}
+typedef _FakeChatApi = FakeChatApi;
 
 class _FakeOnboardingApi implements OnboardingServerApi {
   @override
