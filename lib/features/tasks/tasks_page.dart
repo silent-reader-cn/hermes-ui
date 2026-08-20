@@ -63,7 +63,7 @@ CupertinoDynamicColor taskStatusColor(CronJob job) {
     case CronJobStatus.error:
       return statusRedText;
     case CronJobStatus.needsAttention:
-      return CupertinoColors.systemYellow;
+      return statusOrangeText;
   }
 }
 
