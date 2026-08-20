@@ -140,6 +140,7 @@ void main() {
       expect(l10n.sessionActions, '会话操作');
       expect(l10n.untitledSession, '未命名会话');
       expect(l10n.messageCountLabel(10), '10 条消息');
+      expect(l10n.scheduledSection, '定时');
       expect(l10n.pinnedSection, '置顶');
       expect(l10n.todaySection, '今天');
       expect(l10n.yesterdaySection, '昨天');
@@ -560,6 +561,7 @@ void main() {
       expect(l10n.dismissError, 'Dismiss error');
       expect(l10n.offlineCache, 'Offline cache');
       expect(l10n.all, 'All');
+      expect(l10n.scheduledSection, 'Scheduled');
       expect(l10n.name, 'Name');
       expect(l10n.value, 'Value');
       expect(l10n.info, 'Info');
