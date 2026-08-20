@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/sse_client.dart';
+import '../../core/cache/cache_providers.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/context_window_snapshot.dart';
 import '../../core/models/json_value.dart';
@@ -177,6 +178,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearSendErrorMessage: true,
       clearErrorMessage: true,
     );
+  }
+
+  /// 关闭离线缓存横幅。
+  void dismissOfflineCache() {
+    state = state.copyWith(isShowingOfflineCache: false);
   }
 
   /// 重命名当前会话，并立即更新聊天页标题。
@@ -527,7 +533,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
               detail.pendingAttachments?.isNotEmpty == true,
           parentSessionId: detail.parentSessionId,
           responseCompletionNeedsTranscriptRefresh: false,
+          isViewingCachedData: false,
+          isShowingOfflineCache: false,
         );
+        unawaited(_writeCacheMessages(sessionId, loaded));
         // 跨页面/杀进程恢复：会话已有活跃流 → 接管并重连。
         final activeStreamId = detail.activeStreamId;
         if (activeStreamId != null && activeStreamId.isNotEmpty) {
@@ -538,8 +547,49 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           unawaited(_reconnectIfNeeded());
         }
       }
-    } on ApiException {
-      // 加载失败：保留当前状态（新会话无消息时不打扰）。
+    } on ApiException catch (error) {
+      if (_disposed || gen != _generation) return;
+      if (messageBefore == null && ApiException.shouldUseCache(error)) {
+        List<Map<String, Object?>> cachedMaps = const [];
+        try {
+          cachedMaps =
+              await ref.read(cacheServiceProvider).readMessages(sessionId);
+        } catch (_) {
+          // 缓存读取异常静默，继续维持无缓存错误态
+        }
+        if (cachedMaps.isNotEmpty) {
+          final parsed = cachedMaps
+              .map((map) => ChatMessage.fromJson(map))
+              .toList(growable: true);
+          final hasTimestamps = parsed.any(
+            (m) => m.timestamp != null && m.timestamp! > 0,
+          );
+          final List<ChatMessage> cachedMessages;
+          if (hasTimestamps) {
+            parsed.sort((a, b) {
+              final tsA = a.timestamp ?? 0;
+              final tsB = b.timestamp ?? 0;
+              return tsA.compareTo(tsB);
+            });
+            cachedMessages = parsed;
+          } else {
+            // readMessages 按 cachedAt 倒序返回，反转恢复时间正序
+            cachedMessages = parsed.reversed.toList(growable: false);
+          }
+          state = state.copyWith(
+            messages: cachedMessages,
+            isViewingCachedData: true,
+            isShowingOfflineCache: true,
+            clearErrorMessage: true,
+            clearSendErrorMessage: true,
+          );
+          return;
+        }
+      }
+      // 无缓存或非网络类错误（401/业务错误）：保持现状错误态
+      state = state.copyWith(
+        errorMessage: error.message,
+      );
     }
   }
 
@@ -1361,6 +1411,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     // 回合完成（done）：通知 hook（仅后台发通知，见 notifications feature）。
     _notifyTurnCompleted();
+    unawaited(_writeCacheMessages(state.sessionId, state.messages));
   }
 
   void _applyCompletedStreamSession(
@@ -1598,6 +1649,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _notifyTurnCompleted();
     }
     _finishStream();
+    unawaited(_writeCacheMessages(state.sessionId, state.messages));
   }
 
   void _handleCancelled() {
@@ -2213,5 +2265,33 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         (rune >= 0xF900 && rune <= 0xFAFF) ||
         (rune >= 0x3040 && rune <= 0x30FF) ||
         (rune >= 0xAC00 && rune <= 0xD7AF);
+  }
+
+  /// 缓存写入：写入最近至多 50 条消息（错误时不影响聊天主流程）。
+  Future<void> _writeCacheMessages(
+    String sessionId,
+    List<ChatMessage> messages,
+  ) async {
+    if (sessionId.isEmpty || messages.isEmpty) return;
+    try {
+      final cacheService = ref.read(cacheServiceProvider);
+      final takeCount = messages.length > 50 ? 50 : messages.length;
+      final recentMessages = messages.sublist(messages.length - takeCount);
+      final maps = recentMessages.map(_messageToCacheJson).toList();
+      await cacheService.writeMessages(
+        sessionId: sessionId,
+        messages: maps,
+      );
+    } catch (_) {
+      // 写缓存失败不得影响聊天主流程（缓存旁路设计，不吞异常原则下此处属旁路容错）。
+    }
+  }
+
+  static Map<String, Object?> _messageToCacheJson(ChatMessage message) {
+    final json = message.toJson();
+    final id = message.messageId ?? message.id;
+    json['id'] = id;
+    json['message_id'] ??= id;
+    return json;
   }
 }

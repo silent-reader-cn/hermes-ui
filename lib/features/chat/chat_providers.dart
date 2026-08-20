@@ -84,6 +84,7 @@ final canSendProvider = Provider.family<bool, String>((ref, sessionId) {
   final state = ref.watch(chatControllerProvider(sessionId));
   return state.phase == ChatPhase.idle &&
       !state.isViewingCachedData &&
+      !state.isShowingOfflineCache &&
       !state.stream.isCancelling;
 });
 

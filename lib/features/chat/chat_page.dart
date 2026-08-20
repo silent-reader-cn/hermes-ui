@@ -101,6 +101,15 @@ class ChatPage extends ConsumerWidget {
           children: [
             if (state.pendingAction.hasPendingPrompt)
               _PendingPromptCard(sessionId: sessionId),
+            if (state.isShowingOfflineCache)
+              _OfflineCacheBanner(
+                onReload: () => ref
+                    .read(chatControllerProvider(sessionId).notifier)
+                    .loadMessages(),
+                onDismiss: () => ref
+                    .read(chatControllerProvider(sessionId).notifier)
+                    .dismissOfflineCache(),
+              ),
             Expanded(
               child: ChatMessageList(
                 sessionId: sessionId,
@@ -578,6 +587,75 @@ class _PendingPromptCard extends ConsumerWidget {
       }
     }
     return const [];
+  }
+}
+
+/// 离线缓存提示横幅（isShowingOfflineCache 模式，中性/蓝色系，可点重试与关闭）。
+class _OfflineCacheBanner extends StatelessWidget {
+  const _OfflineCacheBanner({
+    required this.onReload,
+    required this.onDismiss,
+  });
+
+  final VoidCallback onReload;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      key: const ValueKey('chat-offline-cache-banner'),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.archivebox,
+            size: 16,
+            color: CupertinoColors.systemBlue,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.offlineCacheBanner,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.systemBlue,
+              ),
+            ),
+          ),
+          CupertinoButton(
+            key: const ValueKey('chat-offline-cache-reload'),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: const Size(0, 0),
+            onPressed: onReload,
+            child: Text(
+              l10n.retry,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.systemBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          AccessibleButton(
+            key: const ValueKey('chat-offline-cache-dismiss'),
+            label: l10n.dismissOfflineBanner,
+            onPressed: onDismiss,
+            child: const Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 16,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

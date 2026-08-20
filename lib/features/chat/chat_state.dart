@@ -310,6 +310,7 @@ class ChatState {
     this.sendErrorMessage,
     this.noticeMessage,
     this.isViewingCachedData = false,
+    this.isShowingOfflineCache = false,
     this.isReadOnly = false,
     this.hasPendingUserMessage = false,
     this.parentSessionId,
@@ -376,6 +377,9 @@ class ChatState {
 
   /// 离线缓存兜底模式（send 拒绝）。
   final bool isViewingCachedData;
+
+  /// 是否正在展示离线缓存（离线回放模式）。
+  final bool isShowingOfflineCache;
 
   /// 只读会话（read_only / is_read_only 为 true；变更操作全部拒绝）。
   final bool isReadOnly;
@@ -456,6 +460,7 @@ class ChatState {
     String? noticeMessage,
     bool clearNoticeMessage = false,
     bool? isViewingCachedData,
+    bool? isShowingOfflineCache,
     bool? isReadOnly,
     bool? hasPendingUserMessage,
     String? parentSessionId,
@@ -493,6 +498,8 @@ class ChatState {
           clearSendErrorMessage ? null : (sendErrorMessage ?? this.sendErrorMessage),
       noticeMessage: clearNoticeMessage ? null : (noticeMessage ?? this.noticeMessage),
       isViewingCachedData: isViewingCachedData ?? this.isViewingCachedData,
+      isShowingOfflineCache:
+          isShowingOfflineCache ?? this.isShowingOfflineCache,
       isReadOnly: isReadOnly ?? this.isReadOnly,
       hasPendingUserMessage: hasPendingUserMessage ?? this.hasPendingUserMessage,
       parentSessionId: parentSessionId ?? this.parentSessionId,
