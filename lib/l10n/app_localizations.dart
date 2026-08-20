@@ -651,6 +651,10 @@ class AppLocalizations {
   String get settings => isEnglish ? 'Settings' : '设置';
   String get appearanceSection => isEnglish ? 'Appearance' : '外观';
   String get appearance => isEnglish ? 'Appearance' : '外观';
+  String get sessionListEntriesSection =>
+      isEnglish ? 'Session List Entries' : '会话列表入口';
+  String get sessionListEntries =>
+      isEnglish ? 'Session List Entries' : '会话列表入口';
   String get themeLabel => isEnglish ? 'Theme' : '主题';
   String get theme => isEnglish ? 'Theme' : '主题';
   String get themeSystem => isEnglish ? 'System' : '跟随系统';

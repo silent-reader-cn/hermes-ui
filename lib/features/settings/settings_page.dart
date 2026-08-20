@@ -14,14 +14,15 @@ import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
+import '../session_list/session_entry_visibility.dart';
 import '../shared/app_back_button.dart';
 import 'profile_section.dart';
 import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 分组：外观（主题三态）、桌面（平台能力开关）、服务器（当前服务器 + 列表增删改切换）、
-/// 模型（默认模型选择 + 推理强度）、关于（版本号）。
+/// 分组：外观（主题三态）、会话列表入口（功能入口显隐）、桌面（平台能力开关）、
+/// 服务器（当前服务器 + 列表增删改切换）、模型（默认模型选择 + 推理强度）、关于（版本号）。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -41,6 +42,7 @@ class SettingsPage extends ConsumerWidget {
           _ModelSection(),
           _DesktopSection(),
           _AboutSection(),
+          _SessionListEntriesSection(),
         ],
       ),
     );
@@ -82,6 +84,78 @@ class _AppearanceSection extends ConsumerWidget {
                 },
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 会话列表入口
+// ---------------------------------------------------------------------------
+
+/// 会话列表入口显隐分组（TASK W5 / 蓝本 SidebarSectionVisibility）。
+class _SessionListEntriesSection extends ConsumerWidget {
+  const _SessionListEntriesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final visibility = ref.watch(sessionEntryVisibilityProvider);
+    final controller = ref.read(sessionEntryVisibilityProvider.notifier);
+
+    return CupertinoListSection(
+      header: Text(l10n.sessionListEntriesSection),
+      children: [
+        CupertinoListTile(
+          title: Text(l10n.tasksTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-tasks'),
+            value: visibility.tasks,
+            onChanged: (value) {
+              unawaited(controller.setVisible('tasks', value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.kanbanTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-kanban'),
+            value: visibility.kanban,
+            onChanged: (value) {
+              unawaited(controller.setVisible('kanban', value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.skillsTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-skills'),
+            value: visibility.skills,
+            onChanged: (value) {
+              unawaited(controller.setVisible('skills', value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.memoryTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-memory'),
+            value: visibility.memory,
+            onChanged: (value) {
+              unawaited(controller.setVisible('memory', value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.insightsTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-insights'),
+            value: visibility.insights,
+            onChanged: (value) {
+              unawaited(controller.setVisible('insights', value));
+            },
           ),
         ),
       ],
