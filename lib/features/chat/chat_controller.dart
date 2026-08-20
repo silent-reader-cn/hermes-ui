@@ -634,9 +634,42 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       if (_disposed || gen != _generation) return false;
       final map = _asStringMap(raw);
-      final streamId = map['stream_id'];
-      final sessionId = map['session_id'];
-      if (streamId == null || (streamId as String).isEmpty) {
+      // 兼容后端 stream_id 的多种形态：snake/camel/data包裹/id
+      String? pickStreamId(Map<String, Object?> m) {
+        final data = m['data'];
+        Map<String, Object?>? dm;
+        if (data is Map) {
+          try {
+            dm = Map<String, Object?>.from(data);
+          } catch (_) {}
+        }
+        String? pick(Map<String, Object?> x, String k) {
+          final v = x[k];
+          if (v is String && v.trim().isNotEmpty) return v;
+          return null;
+        }
+        return pick(m, 'stream_id') ??
+            pick(m, 'streamId') ??
+            pick(m, 'id') ??
+            (dm != null ? pick(dm, 'stream_id') : null) ??
+            (dm != null ? pick(dm, 'streamId') : null) ??
+            (dm != null ? pick(dm, 'id') : null);
+      }
+
+      final streamId = pickStreamId(map);
+      final sessionId = map['session_id'] ??
+          map['sessionId'] ??
+          (() {
+            final d = map['data'];
+            if (d is Map) {
+              try {
+                final dm = Map<String, Object?>.from(d);
+                return dm['session_id'] ?? dm['sessionId'];
+              } catch (_) {}
+            }
+            return null;
+          })();
+      if (streamId == null || streamId.isEmpty) {
         _rollbackOptimisticMessage(messageId);
         state = state.copyWith(
           phase: ChatPhase.idle,

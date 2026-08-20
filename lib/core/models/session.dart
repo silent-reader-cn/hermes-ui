@@ -281,11 +281,57 @@ class SessionBranchResponse {
   });
 
   factory SessionBranchResponse.fromJson(Map<String, Object?> json) {
+    final raw = json['data'];
+    Map<String, Object?>? dataMap;
+    if (raw is Map) {
+      try {
+        dataMap = Map<String, Object?>.from(raw);
+      } catch (_) {
+        dataMap = null;
+      }
+    }
+    // 兼容平坦 / data 包裹 / 顶层 fallback
+    final sid =
+        lossyString(json, 'session_id') ??
+        (dataMap != null ? lossyString(dataMap, 'session_id') : null) ??
+        lossyString(json, 'id') ??
+        (dataMap != null ? lossyString(dataMap, 'id') : null);
+    final title =
+        lossyString(json, 'title') ??
+        (dataMap != null ? lossyString(dataMap, 'title') : null);
+    final parentId =
+        lossyString(json, 'parent_session_id') ??
+        (dataMap != null ? lossyString(dataMap, 'parent_session_id') : null);
+    // session 嵌套形态（部分后端返回 {session:{session_id}}）
+    String? nestedSid;
+    String? nestedTitle;
+    String? nestedParent;
+    final sess = json['session'];
+    if (sess is Map) {
+      try {
+        final m = Map<String, Object?>.from(sess);
+        nestedSid = lossyString(m, 'session_id') ?? lossyString(m, 'id');
+        nestedTitle = lossyString(m, 'title');
+        nestedParent = lossyString(m, 'parent_session_id');
+      } catch (_) {}
+    }
+    if (dataMap != null) {
+      final ds = dataMap['session'];
+      if (ds is Map) {
+        try {
+          final m = Map<String, Object?>.from(ds);
+          nestedSid ??= lossyString(m, 'session_id') ?? lossyString(m, 'id');
+          nestedTitle ??= lossyString(m, 'title');
+          nestedParent ??= lossyString(m, 'parent_session_id');
+        } catch (_) {}
+      }
+    }
     return SessionBranchResponse(
-      sessionId: lossyString(json, 'session_id'),
-      title: lossyString(json, 'title'),
-      parentSessionId: lossyString(json, 'parent_session_id'),
-      error: lossyString(json, 'error'),
+      sessionId: sid ?? nestedSid,
+      title: title ?? nestedTitle,
+      parentSessionId: parentId ?? nestedParent,
+      error: lossyString(json, 'error') ??
+          (dataMap != null ? lossyString(dataMap, 'error') : null),
     );
   }
 

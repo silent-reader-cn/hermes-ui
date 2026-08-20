@@ -13,10 +13,25 @@ class ChatStartResponse {
   const ChatStartResponse({this.streamId, this.sessionId, this.error});
 
   factory ChatStartResponse.fromJson(Map<String, Object?> json) {
+    // 兼容 data 包裹与 camelCase 变体
+    Map<String, Object?>? dataMap;
+    final raw = json['data'];
+    if (raw is Map) {
+      try {
+        dataMap = Map<String, Object?>.from(raw);
+      } catch (_) {}
+    }
+    String? pick(String snake, String camel) =>
+        lossyString(json, snake) ??
+        (dataMap != null ? lossyString(dataMap, snake) : null) ??
+        lossyString(json, camel) ??
+        (dataMap != null ? lossyString(dataMap, camel) : null);
     return ChatStartResponse(
-      streamId: lossyString(json, 'stream_id'),
-      sessionId: lossyString(json, 'session_id'),
-      error: lossyString(json, 'error'),
+      streamId: pick('stream_id', 'streamId') ??
+          lossyString(json, 'id') ??
+          (dataMap != null ? lossyString(dataMap, 'id') : null),
+      sessionId: pick('session_id', 'sessionId'),
+      error: pick('error', 'message'),
     );
   }
 
