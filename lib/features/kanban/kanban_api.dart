@@ -89,14 +89,12 @@ class KanbanApiClient implements KanbanApi {
 
   @override
   Future<KanbanConfiguration> fetchConfiguration() async {
-    final json = await _client.kanbanConfiguration();
-    return KanbanConfiguration.fromJson(_asMap(json));
+    return _client.kanbanConfiguration();
   }
 
   @override
   Future<KanbanBoardsResponse> fetchBoards() async {
-    final json = await _client.kanbanBoards();
-    return KanbanBoardsResponse.fromJson(_asMap(json));
+    return _client.kanbanBoards();
   }
 
   @override
@@ -107,14 +105,13 @@ class KanbanApiClient implements KanbanApi {
     bool includeArchived = false,
     bool onlyMine = false,
   }) async {
-    final json = await _client.kanbanBoard(
+    return _client.kanbanBoard(
       board: board,
       tenant: tenant,
       assignee: assignee,
       includeArchived: includeArchived,
       onlyMine: onlyMine,
     );
-    return KanbanBoardSnapshot.fromJson(_asMap(json));
   }
 
   @override
@@ -122,8 +119,7 @@ class KanbanApiClient implements KanbanApi {
     required String board,
     required String cardId,
   }) async {
-    final json = await _client.kanbanCardDetail(board: board, cardId: cardId);
-    return KanbanCardDetailEnvelope.fromJson(_asMap(json));
+    return _client.kanbanCardDetail(board: board, cardId: cardId);
   }
 
   @override
@@ -138,7 +134,7 @@ class KanbanApiClient implements KanbanApi {
     String? workspacePath,
     required String idempotencyKey,
   }) async {
-    final json = await _client.createKanbanCard(
+    final response = await _client.createKanbanCard(
       board: board,
       title: title,
       body: body,
@@ -149,8 +145,10 @@ class KanbanApiClient implements KanbanApi {
       workspacePath: workspacePath,
       idempotencyKey: idempotencyKey,
     );
-    return KanbanCardMutationEnvelope.fromJson(_asMap(json)).card ??
-        const KanbanCard();
+    // ⚠️ 2026-08：_client.createKanbanCard() 已返回 typed
+    // KanbanCardMutationEnvelope，直接取 .card；曾用 _asMap(json) 二次解析
+    // （json 非 Map → 空 map）导致新建卡片恒返回空 KanbanCard。
+    return response.card ?? const KanbanCard();
   }
 
   @override
@@ -159,12 +157,11 @@ class KanbanApiClient implements KanbanApi {
     required String cardId,
     required String body,
   }) async {
-    final json = await _client.addKanbanComment(
+    return _client.addKanbanComment(
       board: board,
       cardId: cardId,
       body: body,
     );
-    return KanbanAddCommentResponse.fromJson(_asMap(json));
   }
 
   @override
@@ -173,13 +170,12 @@ class KanbanApiClient implements KanbanApi {
     required String cardId,
     required String status,
   }) async {
-    final json = await _client.setKanbanCardStatus(
+    final response = await _client.setKanbanCardStatus(
       board: board,
       cardId: cardId,
       status: status,
     );
-    return KanbanCardMutationEnvelope.fromJson(_asMap(json)).card ??
-        const KanbanCard();
+    return response.card ?? const KanbanCard();
   }
 
   @override
@@ -222,14 +218,10 @@ class KanbanApiClient implements KanbanApi {
     required int since,
     int limit = 200,
   }) async {
-    final json = await _client.kanbanEvents(
+    return _client.kanbanEvents(
       board: board,
       since: since,
       limit: limit,
     );
-    return KanbanEventsEnvelope.fromJson(_asMap(json));
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }

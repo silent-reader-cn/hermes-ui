@@ -23,12 +23,8 @@ class SkillsApiClient implements SkillsApi {
 
   @override
   Future<SkillsResponse> fetchSkills() async {
-    final json = await _client.skills();
-    return SkillsResponse.fromJson(_asMap(json));
+    return _client.skills();
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [SkillsApi] 的工厂（测试可 override 注入 fake）。

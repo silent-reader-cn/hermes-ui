@@ -52,8 +52,7 @@ class TasksApiClient implements TasksApi {
 
   @override
   Future<CronJobsResponse> fetchJobs() async {
-    final json = await _client.crons();
-    return CronJobsResponse.fromJson(_asMap(json));
+    return _client.crons();
   }
 
   @override
@@ -63,13 +62,12 @@ class TasksApiClient implements TasksApi {
     String? name,
     bool toastNotifications = false,
   }) async {
-    final json = await _client.createCron(
+    return _client.createCron(
       prompt: prompt,
       schedule: schedule,
       name: name,
       toastNotifications: toastNotifications,
     );
-    return CronMutationResponse.fromJson(_asMap(json));
   }
 
   @override
@@ -80,46 +78,37 @@ class TasksApiClient implements TasksApi {
     String? name,
     bool? toastNotifications,
   }) async {
-    final json = await _client.updateCron(
+    return _client.updateCron(
       jobId: jobId,
       prompt: prompt,
       schedule: schedule,
       name: name,
       toastNotifications: toastNotifications,
     );
-    return CronMutationResponse.fromJson(_asMap(json));
   }
 
   @override
   Future<CronMutationResponse> deleteJob(String jobId) async {
-    final json = await _client.deleteCron(jobId);
-    return CronMutationResponse.fromJson(_asMap(json));
+    return _client.deleteCron(jobId);
   }
 
   @override
   Future<CronMutationResponse> runJob(String jobId) async {
-    final json = await _client.runCron(jobId);
-    return CronMutationResponse.fromJson(_asMap(json));
+    return _client.runCron(jobId);
   }
 
   @override
   Future<CronMutationResponse> pauseJob(String jobId) async {
-    final json = await _client.pauseCron(jobId);
-    return CronMutationResponse.fromJson(_asMap(json));
+    return _client.pauseCron(jobId);
   }
 
   @override
   Future<CronMutationResponse> resumeJob(String jobId) async {
-    final json = await _client.resumeCron(jobId);
-    return CronMutationResponse.fromJson(_asMap(json));
+    return _client.resumeCron(jobId);
   }
 
   @override
   Future<CronOutputResponse> fetchOutput(String jobId, {int? limit}) async {
-    final json = await _client.cronOutput(jobId, limit: limit);
-    return CronOutputResponse.fromJson(_asMap(json));
+    return _client.cronOutput(jobId, limit: limit);
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }

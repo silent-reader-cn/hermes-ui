@@ -28,41 +28,34 @@ abstract interface class SettingsApi {
   Future<ReasoningStatusResponse> saveReasoningEffort(String effort);
 }
 
-/// [SettingsApi] 的生产实现：包 [ApiClient]，把 `Object?` JSON 解码为模型。
+/// [SettingsApi] 的生产实现：包 [ApiClient]。
+///
+/// ⚠️ 方法一律**透传** [ApiClient] 的 typed 结果：`ApiClientServerPanels`
+/// 扩展（models / saveDefaultModel / reasoning）已把 raw JSON 解码为模型，
+/// 这里若再 `fromJson(_asMap(...))` 二次解析会把已解码对象兜底成空 map，
+/// groups / default_model 全部丢失（2026-08 实锤：默认模型列表永远为空）。
 class SettingsApiClient implements SettingsApi {
   SettingsApiClient(this._client);
 
   final ApiClient _client;
 
   @override
-  Future<ModelsResponse> models() async {
-    final json = await _client.models();
-    return ModelsResponse.fromJson(_asMap(json));
-  }
+  Future<ModelsResponse> models() => _client.models();
 
   @override
-  Future<DefaultModelResponse> saveDefaultModel(String model) async {
-    final json = await _client.saveDefaultModel(model);
-    return DefaultModelResponse.fromJson(_asMap(json));
-  }
+  Future<DefaultModelResponse> saveDefaultModel(String model) =>
+      _client.saveDefaultModel(model);
 
   @override
   Future<ReasoningStatusResponse> reasoning({
     String? model,
     String? provider,
-  }) async {
-    final json = await _client.reasoning(model: model, provider: provider);
-    return ReasoningStatusResponse.fromJson(_asMap(json));
-  }
+  }) =>
+      _client.reasoning(model: model, provider: provider);
 
   @override
-  Future<ReasoningStatusResponse> saveReasoningEffort(String effort) async {
-    final json = await _client.saveReasoningEffort(effort);
-    return ReasoningStatusResponse.fromJson(_asMap(json));
-  }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
+  Future<ReasoningStatusResponse> saveReasoningEffort(String effort) =>
+      _client.saveReasoningEffort(effort);
 }
 
 /// 构建 [SettingsApi] 的工厂（测试可 override 注入 fake）。

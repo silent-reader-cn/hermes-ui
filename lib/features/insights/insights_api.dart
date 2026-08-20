@@ -23,12 +23,8 @@ class InsightsApiClient implements InsightsApi {
 
   @override
   Future<InsightsResponse> fetchInsights({required int days}) async {
-    final json = await _client.insights(days);
-    return InsightsResponse.fromJson(_asMap(json));
+    return _client.insights(days);
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [InsightsApi] 的工厂（测试可 override 注入 fake）。

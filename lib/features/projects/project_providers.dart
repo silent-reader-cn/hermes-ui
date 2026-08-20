@@ -39,8 +39,7 @@ class ProjectApiClient implements ProjectApi {
 
   @override
   Future<ProjectsResponse> fetchProjects() async {
-    final json = await _client.projects();
-    return ProjectsResponse.fromJson(_asMap(json));
+    return _client.projects();
   }
 
   @override
@@ -48,8 +47,7 @@ class ProjectApiClient implements ProjectApi {
     required String name,
     String? color,
   }) async {
-    final json = await _client.createProject(name: name, color: color);
-    return ProjectMutationResponse.fromJson(_asMap(json));
+    return _client.createProject(name: name, color: color);
   }
 
   @override
@@ -58,22 +56,17 @@ class ProjectApiClient implements ProjectApi {
     required String name,
     String? color,
   }) async {
-    final json = await _client.renameProject(
+    return _client.renameProject(
       projectId: projectId,
       name: name,
       color: color,
     );
-    return ProjectMutationResponse.fromJson(_asMap(json));
   }
 
   @override
   Future<ProjectMutationResponse> deleteProject(String projectId) async {
-    final json = await _client.deleteProject(projectId);
-    return ProjectMutationResponse.fromJson(_asMap(json));
+    return _client.deleteProject(projectId);
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [ProjectApi] 的工厂（测试可 override 注入 fake）。

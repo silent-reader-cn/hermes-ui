@@ -65,51 +65,23 @@ class SessionListApiClient implements SessionListApi {
     bool includeArchived = false,
     int? archivedLimit,
   }) async {
-    final json = await _client.sessions(
+    return _client.sessions(
       includeArchived: includeArchived,
       archivedLimit: archivedLimit,
     );
-    return SessionsResponse.fromJson(_asMap(json));
   }
 
   @override
   Future<SessionSearchResponse> searchSessions({required String query}) async {
-    final json = await _client.searchSessions(query: query);
-    return SessionSearchResponse.fromJson(_asMap(json));
+    return _client.searchSessions(query: query);
   }
 
   @override
   Future<SessionSummary> createSession() async {
-    final raw = await _client.createSession();
-    final map = _asMap(raw);
-    // 先按平坦 SessionDetail 试解（服务端常见 {session_id/id} 形态），
-    // 失败再走兼容多形态的 SessionResponse。
-    try {
-      final flat = SessionDetail.fromJson(map);
-      if (flat.sessionId != null && flat.sessionId!.trim().isNotEmpty) {
-        return SessionSummary.fromDetail(flat);
-      }
-    } catch (_) {}
-    try {
-      final data = map['data'];
-      if (data is Map) {
-        final m = Map<String, Object?>.from(data);
-        final inner = m['session'];
-        if (inner is Map) {
-          final d = SessionDetail.fromJson(Map<String, Object?>.from(inner));
-          if (d.sessionId != null && d.sessionId!.trim().isNotEmpty) {
-            return SessionSummary.fromDetail(d);
-          }
-        }
-        try {
-          final d2 = SessionDetail.fromJson(m);
-          if (d2.sessionId != null && d2.sessionId!.trim().isNotEmpty) {
-            return SessionSummary.fromDetail(d2);
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-    final response = SessionResponse.fromJson(map);
+    // ⚠️ 2026-08：_client.createSession() 已返回 typed SessionResponse，
+    // 这里直接取 session 字段；曾把 raw 经 _asMap 二次解析（raw 非 Map →
+    // 空 map）导致下方容错链全部落空，恒返回空 SessionSummary。
+    final response = await _client.createSession();
     final detail = response.session;
     return detail == null
         ? const SessionSummary()
@@ -121,8 +93,7 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     required bool pinned,
   }) async {
-    final json = await _client.pinSession(sessionId: sessionId, pinned: pinned);
-    return SessionMutationResponse.fromJson(_asMap(json));
+    return _client.pinSession(sessionId: sessionId, pinned: pinned);
   }
 
   @override
@@ -130,23 +101,20 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     required bool archived,
   }) async {
-    final json = await _client.archiveSession(
+    return _client.archiveSession(
       sessionId: sessionId,
       archived: archived,
     );
-    return SessionMutationResponse.fromJson(_asMap(json));
   }
 
   @override
   Future<SessionMutationResponse> deleteSession(String sessionId) async {
-    final json = await _client.deleteSession(sessionId);
-    return SessionMutationResponse.fromJson(_asMap(json));
+    return _client.deleteSession(sessionId);
   }
 
   @override
   Future<SessionBranchResponse> branchSession(String sessionId) async {
-    final json = await _client.branchSession(sessionId: sessionId);
-    return SessionBranchResponse.fromJson(_asMap(json));
+    return _client.branchSession(sessionId: sessionId);
   }
 
   @override
@@ -154,15 +122,11 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     String? projectId,
   }) async {
-    final json = await _client.moveSession(
+    return _client.moveSession(
       sessionId: sessionId,
       projectId: projectId,
     );
-    return SessionMutationResponse.fromJson(_asMap(json));
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [SessionListApi] 的工厂（测试可 override 注入 fake）。

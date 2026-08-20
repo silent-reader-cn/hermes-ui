@@ -108,8 +108,7 @@ class WorkspaceApiClient implements WorkspaceApi {
     required String sessionId,
     required String path,
   }) async {
-    final json = await _client.directoryList(sessionId: sessionId, path: path);
-    return DirectoryListResponse.fromJson(_asMap(json));
+    return _client.directoryList(sessionId: sessionId, path: path);
   }
 
   @override
@@ -164,7 +163,4 @@ class WorkspaceApiClient implements WorkspaceApi {
       newName: newName,
     );
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }

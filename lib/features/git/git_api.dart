@@ -75,14 +75,12 @@ class GitApiClient implements GitApi {
 
   @override
   Future<GitStatusResponse> fetchStatus(String sessionId) async {
-    final json = await _client.gitStatus(sessionId);
-    return GitStatusResponse.fromJson(_asMap(json));
+    return _client.gitStatus(sessionId);
   }
 
   @override
   Future<GitBranchesResponse> fetchBranches(String sessionId) async {
-    final json = await _client.gitBranches(sessionId);
-    return GitBranchesResponse.fromJson(_asMap(json));
+    return _client.gitBranches(sessionId);
   }
 
   @override
@@ -91,12 +89,11 @@ class GitApiClient implements GitApi {
     required String path,
     String kind = 'unstaged',
   }) async {
-    final json = await _client.gitDiff(
+    return _client.gitDiff(
       sessionId: sessionId,
       path: path,
       kind: kind,
     );
-    return GitDiffResponse.fromJson(_asMap(json));
   }
 
   @override
@@ -104,8 +101,7 @@ class GitApiClient implements GitApi {
     required String sessionId,
     required List<String> paths,
   }) async {
-    final json = await _client.gitStage(sessionId: sessionId, paths: paths);
-    return GitMutationResponse.fromJson(_asMap(json));
+    return _client.gitStage(sessionId: sessionId, paths: paths);
   }
 
   @override
@@ -113,8 +109,7 @@ class GitApiClient implements GitApi {
     required String sessionId,
     required List<String> paths,
   }) async {
-    final json = await _client.gitUnstage(sessionId: sessionId, paths: paths);
-    return GitMutationResponse.fromJson(_asMap(json));
+    return _client.gitUnstage(sessionId: sessionId, paths: paths);
   }
 
   @override
@@ -123,12 +118,11 @@ class GitApiClient implements GitApi {
     required List<String> paths,
     bool deleteUntracked = false,
   }) async {
-    final json = await _client.gitDiscard(
+    return _client.gitDiscard(
       sessionId: sessionId,
       paths: paths,
       deleteUntracked: deleteUntracked,
     );
-    return GitMutationResponse.fromJson(_asMap(json));
   }
 
   @override
@@ -136,11 +130,10 @@ class GitApiClient implements GitApi {
     required String sessionId,
     required String message,
   }) async {
-    final json = await _client.gitCommit(
+    return _client.gitCommit(
       sessionId: sessionId,
       message: message,
     );
-    return GitCommitResponse.fromJson(_asMap(json));
   }
 
   @override
@@ -151,36 +144,29 @@ class GitApiClient implements GitApi {
     String? newBranch,
     bool track = false,
   }) async {
-    final json = await _client.gitCheckout(
+    return _client.gitCheckout(
       sessionId: sessionId,
       ref: ref,
       mode: mode,
       newBranch: newBranch,
       track: track,
     );
-    return GitCheckoutResponse.fromJson(_asMap(json));
   }
 
   @override
   Future<GitRemoteActionResponse> fetch(String sessionId) async {
-    final json = await _client.gitFetch(sessionId);
-    return GitRemoteActionResponse.fromJson(_asMap(json));
+    return _client.gitFetch(sessionId);
   }
 
   @override
   Future<GitRemoteActionResponse> pull(String sessionId) async {
-    final json = await _client.gitPull(sessionId);
-    return GitRemoteActionResponse.fromJson(_asMap(json));
+    return _client.gitPull(sessionId);
   }
 
   @override
   Future<GitRemoteActionResponse> push(String sessionId) async {
-    final json = await _client.gitPush(sessionId);
-    return GitRemoteActionResponse.fromJson(_asMap(json));
+    return _client.gitPush(sessionId);
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [GitApi] 的工厂（测试可 override 注入 fake）。

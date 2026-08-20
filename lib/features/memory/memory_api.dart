@@ -23,12 +23,8 @@ class MemoryApiClient implements MemoryApi {
 
   @override
   Future<MemoryResponse> fetchMemory() async {
-    final json = await _client.memory();
-    return MemoryResponse.fromJson(_asMap(json));
+    return _client.memory();
   }
-
-  static Map<String, Object?> _asMap(Object? json) =>
-      json is Map<String, Object?> ? json : const <String, Object?>{};
 }
 
 /// 构建 [MemoryApi] 的工厂（测试可 override 注入 fake）。
