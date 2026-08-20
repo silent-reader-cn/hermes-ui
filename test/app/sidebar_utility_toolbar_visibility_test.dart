@@ -50,16 +50,14 @@ class _StubProjectApi implements ProjectApi {
   Future<ProjectMutationResponse> createProject({
     required String name,
     String? color,
-  }) async =>
-      const ProjectMutationResponse(ok: true);
+  }) async => const ProjectMutationResponse(ok: true);
 
   @override
   Future<ProjectMutationResponse> renameProject({
     required String projectId,
     required String name,
     String? color,
-  }) async =>
-      const ProjectMutationResponse(ok: true);
+  }) async => const ProjectMutationResponse(ok: true);
 
   @override
   Future<ProjectMutationResponse> deleteProject(String projectId) async =>
@@ -95,12 +93,30 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-kanban')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-skills')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-memory')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-insights')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-tasks')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-skills')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-memory')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-settings')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('部分关闭时仅过滤关闭的功能入口，设置入口固定保留', (tester) async {
@@ -124,14 +140,29 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-kanban')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-skills')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-memory')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-insights')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-skills')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-memory')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-settings')),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('5 个功能入口全关时整条工具条返回 SizedBox.shrink()', (tester) async {
+    testWidgets('5 个功能入口全关时工具条仅保留设置入口', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -152,11 +183,27 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-kanban')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-skills')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-memory')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-insights')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-kanban')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-skills')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-memory')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsNothing,
+      );
+      // 设置入口恒显：桌面端唯一设置入口收口在工具条
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-settings')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('SessionSidebar 集成：全关功能入口时侧栏仍具备设置能力', (tester) async {
@@ -170,8 +217,12 @@ void main() {
             apiClientProvider.overrideWithValue(
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
-            sessionListApiFactoryProvider.overrideWithValue((_) => FakeSessionListApi()),
-            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
+            sessionListApiFactoryProvider.overrideWithValue(
+              (_) => FakeSessionListApi(),
+            ),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
             sessionEntryVisibilityProvider.overrideWith(
               _AllHiddenVisibilityNotifier.new,
             ),
@@ -191,12 +242,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 工具条内的入口不渲染
+      // 功能入口全关时工具条仅保留设置（桌面唯一设置入口）
       expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsNothing);
-      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-settings')),
+        findsOneWidget,
+      );
 
-      // 但 SessionListPage 顶部导航条仍有设置齿轮图标
+      // 设置齿轮收口在工具条（唯一一个），会话列表头部不再渲染第二个
       expect(find.byIcon(CupertinoIcons.gear_alt), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-settings')), findsNothing);
     });
   });
 }

@@ -20,8 +20,14 @@ class SessionSidebar extends StatelessWidget {
       children: [
         SidebarUtilityToolbar(currentLocation: currentLocation),
         // 侧栏顶部已有 SidebarUtilityToolbar 提供工具入口，内部会话
-        // 列表不再重复渲染工具行，避免宽屏双层入口重叠。
-        const Expanded(child: SessionListPage(showUtilityRows: false)),
+        // 列表不再重复渲染工具行，避免宽屏双层入口重叠；设置图标同样由
+        // 工具条承担，隐藏列表头部右侧齿轮避免双设置入口。
+        const Expanded(
+          child: SessionListPage(
+            showUtilityRows: false,
+            showSettingsTrailing: false,
+          ),
+        ),
       ],
     );
   }

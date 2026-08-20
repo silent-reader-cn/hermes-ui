@@ -25,10 +25,7 @@ class _UtilityItem {
 /// 宽屏下展示在会话列表顶部，提供任务、看板、技能、记忆、统计、设置的快捷跳转与激活高亮。
 /// 受 [sessionEntryVisibilityProvider] 控制功能入口显隐；5 个功能入口全关时整条工具条返回 `SizedBox.shrink()`。
 class SidebarUtilityToolbar extends ConsumerWidget {
-  const SidebarUtilityToolbar({
-    super.key,
-    required this.currentLocation,
-  });
+  const SidebarUtilityToolbar({super.key, required this.currentLocation});
 
   /// 当前激活的路由路径。
   final String currentLocation;
@@ -75,19 +72,18 @@ class SidebarUtilityToolbar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final visibility = ref.watch(sessionEntryVisibilityProvider);
-    if (!visibility.showsAny) {
-      return const SizedBox.shrink();
-    }
 
     final l10n = AppLocalizations.of(context);
     final theme = CupertinoTheme.of(context);
     final primaryColor = theme.primaryColor;
     final inactiveColor = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    final visibleItems = _items.where((item) {
-      if (item.id == 'settings') return true;
-      return visibility.isVisible(item.id);
-    }).toList(growable: false);
+    final visibleItems = _items
+        .where((item) {
+          if (item.id == 'settings') return true;
+          return visibility.isVisible(item.id);
+        })
+        .toList(growable: false);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -96,35 +92,38 @@ class SidebarUtilityToolbar extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: visibleItems.map((item) {
-              final isSelected = currentLocation == item.path ||
-                  currentLocation.startsWith('${item.path}/');
-              final title = item.getTitle(l10n);
+            children: visibleItems
+                .map((item) {
+                  final isSelected =
+                      currentLocation == item.path ||
+                      currentLocation.startsWith('${item.path}/');
+                  final title = item.getTitle(l10n);
 
-              return Expanded(
-                child: Semantics(
-                  label: title,
-                  selected: isSelected,
-                  button: true,
-                  child: CupertinoButton(
-                    key: ValueKey('sidebar-utility-${item.id}'),
-                    padding: const EdgeInsets.symmetric(vertical: 6.0),
-                    borderRadius: BorderRadius.circular(8.0),
-                    color: isSelected
-                        ? primaryColor.withValues(alpha: 0.12)
-                        : CupertinoColors.transparent,
-                    onPressed: () {
-                      context.go(item.path);
-                    },
-                    child: Icon(
-                      item.icon,
-                      size: 20.0,
-                      color: isSelected ? primaryColor : inactiveColor,
+                  return Expanded(
+                    child: Semantics(
+                      label: title,
+                      selected: isSelected,
+                      button: true,
+                      child: CupertinoButton(
+                        key: ValueKey('sidebar-utility-${item.id}'),
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        borderRadius: BorderRadius.circular(8.0),
+                        color: isSelected
+                            ? primaryColor.withValues(alpha: 0.12)
+                            : CupertinoColors.transparent,
+                        onPressed: () {
+                          context.go(item.path);
+                        },
+                        child: Icon(
+                          item.icon,
+                          size: 20.0,
+                          color: isSelected ? primaryColor : inactiveColor,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              );
-            }).toList(growable: false),
+                  );
+                })
+                .toList(growable: false),
           ),
         ),
         Container(
