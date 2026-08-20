@@ -20,7 +20,9 @@ import '../../helpers/fake_memory_api.dart';
 ProviderContainer makeContainer(FakeMemoryApi api) {
   final container = ProviderContainer(
     overrides: [
-      apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+      apiClientProvider.overrideWithValue(
+        ApiClient(baseUrl: 'http://test.local:30002'),
+      ),
       memoryApiFactoryProvider.overrideWithValue((_) => api),
     ],
   );
@@ -32,25 +34,42 @@ void main() {
   group('记忆辅助函数', () {
     test('showsProjectContext：仅非空（trim 后）文档展示', () {
       expect(showsProjectContext(const MemoryResponse()), isFalse);
-      expect(showsProjectContext(const MemoryResponse(projectContext: '   ')), isFalse);
-      expect(showsProjectContext(const MemoryResponse(projectContext: 'x')), isTrue);
+      expect(
+        showsProjectContext(const MemoryResponse(projectContext: '   ')),
+        isFalse,
+      );
+      expect(
+        showsProjectContext(const MemoryResponse(projectContext: 'x')),
+        isTrue,
+      );
     });
 
     test('memoryProjectContextDetail：「名称 — 工作区」，空 → null', () {
       expect(memoryProjectContextDetail(const MemoryResponse()), isNull);
       expect(
         memoryProjectContextDetail(
-          const MemoryResponse(projectContextName: '  ', projectContextWorkspace: ''),
+          const MemoryResponse(
+            projectContextName: '  ',
+            projectContextWorkspace: '',
+          ),
         ),
         isNull,
       );
       expect(
         memoryProjectContextDetail(
-          const MemoryResponse(projectContextName: 'p', projectContextWorkspace: 'w'),
+          const MemoryResponse(
+            projectContextName: 'p',
+            projectContextWorkspace: 'w',
+          ),
         ),
         'p — w',
       );
-      expect(memoryProjectContextDetail(const MemoryResponse(projectContextName: 'p')), 'p');
+      expect(
+        memoryProjectContextDetail(
+          const MemoryResponse(projectContextName: 'p'),
+        ),
+        'p',
+      );
     });
 
     test('memoryHasContent：全空 false，任一分区/项目上下文非空 true', () {
@@ -58,7 +77,10 @@ void main() {
       expect(memoryHasContent(const MemoryResponse(memory: 'm')), isTrue);
       expect(memoryHasContent(const MemoryResponse(user: '  ')), isFalse);
       expect(memoryHasContent(const MemoryResponse(soul: 's')), isTrue);
-      expect(memoryHasContent(const MemoryResponse(projectContext: 'pc')), isTrue);
+      expect(
+        memoryHasContent(const MemoryResponse(projectContext: 'pc')),
+        isTrue,
+      );
     });
 
     test('formatMemoryMtime：相对时间中文描述；null/非法 → null', () {
@@ -67,11 +89,26 @@ void main() {
 
       expect(formatMemoryMtime(null), isNull);
       expect(formatMemoryMtime(double.nan), isNull);
-      expect(formatMemoryMtime(secs(const Duration(seconds: 30)), now: now), '刚刚更新');
-      expect(formatMemoryMtime(secs(const Duration(minutes: 5)), now: now), '5 分钟前更新');
-      expect(formatMemoryMtime(secs(const Duration(hours: 3)), now: now), '3 小时前更新');
-      expect(formatMemoryMtime(secs(const Duration(days: 10)), now: now), '10 天前更新');
-      expect(formatMemoryMtime(secs(const Duration(days: 40)), now: now), '更新于 2026-07-07');
+      expect(
+        formatMemoryMtime(secs(const Duration(seconds: 30)), now: now),
+        '刚刚更新',
+      );
+      expect(
+        formatMemoryMtime(secs(const Duration(minutes: 5)), now: now),
+        '5 分钟前更新',
+      );
+      expect(
+        formatMemoryMtime(secs(const Duration(hours: 3)), now: now),
+        '3 小时前更新',
+      );
+      expect(
+        formatMemoryMtime(secs(const Duration(days: 10)), now: now),
+        '10 天前更新',
+      );
+      expect(
+        formatMemoryMtime(secs(const Duration(days: 40)), now: now),
+        '更新于 2026-07-07',
+      );
     });
   });
 
@@ -92,7 +129,9 @@ void main() {
     });
 
     test('初始加载失败 → AsyncError；refresh 重试成功', () async {
-      final api = FakeMemoryApi(response: const MemoryResponse(memory: '恢复的记忆'));
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: '恢复的记忆'),
+      );
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
       final container = makeContainer(api);
 
@@ -106,7 +145,10 @@ void main() {
       api.fetchError = null;
       await container.read(memoryControllerProvider.notifier).refresh();
 
-      expect(container.read(memoryControllerProvider).valueOrNull!.memory, '恢复的记忆');
+      expect(
+        container.read(memoryControllerProvider).valueOrNull!.memory,
+        '恢复的记忆',
+      );
     });
 
     test('refresh 重新拉取', () async {
@@ -129,7 +171,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             memoryApiFactoryProvider.overrideWithValue((_) => api),
           ],
           child: CupertinoApp.router(routerConfig: router),
@@ -141,7 +185,11 @@ void main() {
     }
 
     testWidgets('渲染：分区 Tab + 内容 + 相对修改时间', (tester) async {
-      final mtime = DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch / 1000;
+      final mtime =
+          DateTime.now()
+              .subtract(const Duration(hours: 2))
+              .millisecondsSinceEpoch /
+          1000;
       final api = FakeMemoryApi(
         response: MemoryResponse(
           memory: '记住用户偏好',
@@ -240,7 +288,9 @@ void main() {
     });
 
     testWidgets('错误态：加载失败展示错误信息，重试恢复', (tester) async {
-      final api = FakeMemoryApi(response: const MemoryResponse(memory: '恢复的记忆'));
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: '恢复的记忆'),
+      );
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
       await pumpMemoryPage(tester, api);
 
@@ -267,57 +317,70 @@ void main() {
       expect(api.fetchCount, 2);
     });
 
-    testWidgets('短内容 → 无展开按钮，字数统计显示', (tester) async {
-      final api = FakeMemoryApi(response: const MemoryResponse(memory: '记住用户偏好'));
+    testWidgets('短内容 → 紧凑展示不高胀，无折叠展开按钮', (tester) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: '记住用户偏好'),
+      );
       await pumpMemoryPage(tester, api);
 
       expect(find.text('记住用户偏好'), findsOneWidget);
       expect(find.textContaining('展开'), findsNothing);
+      expect(find.textContaining('收起'), findsNothing);
       expect(find.text('6 字'), findsOneWidget);
+
+      // 验证短内容卡片内滚动容器高度不高胀（紧凑贴合内容高）
+      final scrollableSize = tester.getSize(
+        find.byType(SingleChildScrollView).first,
+      );
+      expect(scrollableSize.height, lessThan(100));
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('长内容 → 折叠显示「展开全文」，点击展开/收起', (tester) async {
-      final longText = List.filled(40, '这是一段很长的记忆内容。').join();
+    testWidgets('长内容 → 视口高度自适应限制且卡片内部滚动不折叠', (tester) async {
+      final longText = List.filled(50, '这是一段很长的记忆内容。\n').join();
       final api = FakeMemoryApi(
         response: MemoryResponse(memory: longText, soul: '短'),
       );
       await pumpMemoryPage(tester, api);
 
-      // 折叠态：有展开按钮，无收起按钮
-      expect(find.byKey(const ValueKey('memory-expand-memory')), findsOneWidget);
-      expect(find.text('展开全文'), findsOneWidget);
-      expect(find.text('收起'), findsNothing);
+      // 无折叠与展开/收起按钮
+      expect(find.textContaining('展开'), findsNothing);
+      expect(find.textContaining('收起'), findsNothing);
 
-      // 点击展开 → 变「收起」
-      await tester.tap(find.byKey(const ValueKey('memory-expand-memory')));
-      await tester.pump();
-      expect(find.text('收起'), findsOneWidget);
-      expect(find.text('展开全文'), findsNothing);
+      // 验证存在卡片内部滚动视图，且高度受限于视口（默认测试视口 600 高度下 maxHeight 约为 380）
+      final scrollables = find.byType(SingleChildScrollView);
+      expect(scrollables, findsOneWidget);
+      final scrollableSize = tester.getSize(scrollables.first);
+      expect(scrollableSize.height, lessThanOrEqualTo(380));
 
-      // 再点收起 → 回到折叠态
-      await tester.tap(find.byKey(const ValueKey('memory-expand-memory')));
+      // 验证可正常内部滑动且无溢出异常
+      await tester.drag(scrollables.first, const Offset(0, -200));
       await tester.pump();
-      expect(find.text('展开全文'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('项目上下文长文同样折叠', (tester) async {
-      final longText = List.filled(40, '项目上下文内容。').join();
-      final api = FakeMemoryApi(response: MemoryResponse(projectContext: longText));
+    testWidgets('项目上下文与 Markdown 长内容同样支持卡片内滚动自适应', (tester) async {
+      final longMarkdown = List.filled(40, '- 项目上下文长列表条目\n').join();
+      final api = FakeMemoryApi(
+        response: MemoryResponse(projectContext: longMarkdown),
+      );
       await pumpMemoryPage(tester, api);
 
       await tester.tap(find.byKey(const ValueKey('memory-tab-project')));
       await tester.pump();
 
-      expect(find.byKey(const ValueKey('memory-expand-project')), findsOneWidget);
-      expect(find.text('展开全文'), findsOneWidget);
+      expect(find.textContaining('展开'), findsNothing);
+      expect(find.textContaining('收起'), findsNothing);
+      expect(find.byType(MarkdownBody), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('memory-expand-project')));
-      await tester.pump();
-      expect(find.text('收起'), findsOneWidget);
+      final scrollables = find.byType(SingleChildScrollView);
+      expect(scrollables, findsOneWidget);
+      final scrollableSize = tester.getSize(scrollables.first);
+      expect(scrollableSize.height, lessThanOrEqualTo(380));
 
-      await tester.tap(find.byKey(const ValueKey('memory-expand-project')));
+      await tester.drag(scrollables.first, const Offset(0, -200));
       await tester.pump();
-      expect(find.text('展开全文'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('宽屏（≥700）→ 单一 Tab 卡片且 maxWidth 720 居中不双列', (tester) async {
@@ -327,7 +390,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final api = FakeMemoryApi(
-        response: const MemoryResponse(memory: 'm', user: 'u', soul: 's', projectContext: 'pc'),
+        response: const MemoryResponse(
+          memory: 'm',
+          user: 'u',
+          soul: 's',
+          projectContext: 'pc',
+        ),
       );
       await pumpMemoryPage(tester, api);
 
@@ -339,7 +407,9 @@ void main() {
 
       // 验证 ConstrainedBox 限制 maxWidth 为 720
       final constrainedBox = tester.widget<ConstrainedBox>(
-        find.byWidgetPredicate((w) => w is ConstrainedBox && w.constraints.maxWidth == 720),
+        find.byWidgetPredicate(
+          (w) => w is ConstrainedBox && w.constraints.maxWidth == 720,
+        ),
       );
       expect(constrainedBox.constraints.maxWidth, 720);
     });
@@ -375,7 +445,10 @@ void main() {
 
     testWidgets('智能体灵魂与项目上下文支持 Markdown 渲染', (tester) async {
       final api = FakeMemoryApi(
-        response: const MemoryResponse(soul: '# 灵魂标题\n- 规则一\n- 规则二', projectContext: '**粗体项目说明**'),
+        response: const MemoryResponse(
+          soul: '# 灵魂标题\n- 规则一\n- 规则二',
+          projectContext: '**粗体项目说明**',
+        ),
       );
       await pumpMemoryPage(tester, api);
 
