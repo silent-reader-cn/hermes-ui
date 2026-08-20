@@ -51,7 +51,7 @@ String taskStatusLabel(CronJob job, [BuildContext? context]) {
 ///
 /// 返回 [CupertinoDynamicColor]：圆点与文字共用，浅色/深色均满足 WCAG AA
 /// （浅色用深变体、深色用亮变体，见 theme/status_colors.dart）。
-Color taskStatusColor(CronJob job) {
+CupertinoDynamicColor taskStatusColor(CronJob job) {
   if (job.state == 'running') return statusGreenText;
   switch (job.status) {
     case CronJobStatus.active:
@@ -61,7 +61,7 @@ Color taskStatusColor(CronJob job) {
     case CronJobStatus.off:
       return statusGreyText;
     case CronJobStatus.error:
-      return CupertinoColors.systemRed;
+      return statusRedText;
     case CronJobStatus.needsAttention:
       return CupertinoColors.systemYellow;
   }
@@ -86,15 +86,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     final async = ref.watch(tasksControllerProvider);
     final state = async.valueOrNull;
 
-    ref.listen<AsyncValue<TasksState>>(
-      tasksControllerProvider,
-      (previous, next) {
-        final error = next.valueOrNull?.actionError;
-        if (error != null && error != previous?.valueOrNull?.actionError) {
-          unawaited(_showActionError(context, error));
-        }
-      },
-    );
+    ref.listen<AsyncValue<TasksState>>(tasksControllerProvider, (previous, next) {
+      final error = next.valueOrNull?.actionError;
+      if (error != null && error != previous?.valueOrNull?.actionError) {
+        unawaited(_showActionError(context, error));
+      }
+    });
 
     return CupertinoPageScaffold(
       child: CustomScrollView(
@@ -124,10 +121,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   // 内容 slivers：加载 / 错误 / 空态 / 任务列表
   // -------------------------------------------------------------------------
 
-  List<Widget> _buildContentSlivers(
-    AsyncValue<TasksState> async,
-    TasksState? state,
-  ) {
+  List<Widget> _buildContentSlivers(AsyncValue<TasksState> async, TasksState? state) {
     final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
@@ -155,6 +149,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 key: ValueKey('tasks-row-${job.jobId ?? job.id}'),
                 job: job,
                 busy: state.isBusy(job.jobId ?? ''),
+                onTap: () => unawaited(_showOutput(context, job)),
                 onActions: () => _showRowActions(context, job),
               ),
           ],
@@ -172,10 +167,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -186,10 +181,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -212,19 +204,19 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.clock,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(l10n.noTasks, style: const TextStyle(fontSize: 17)),
             const SizedBox(height: 6),
             Text(
               l10n.createTaskPrompt,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
             const SizedBox(height: 20),
@@ -243,13 +235,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   // 交互：刷新 / 行菜单 / 输出 / 删除 / 表单
   // -------------------------------------------------------------------------
 
-  Future<void> _onRefresh() =>
-      ref.read(tasksControllerProvider.notifier).refresh();
+  Future<void> _onRefresh() => ref.read(tasksControllerProvider.notifier).refresh();
 
   void _openEditor(BuildContext context, {CronJob? job}) {
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)),
-    );
+    Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
   }
 
   void _showRowActions(BuildContext context, CronJob job) {
@@ -389,88 +378,101 @@ class _TaskRow extends StatelessWidget {
     super.key,
     required this.job,
     required this.busy,
+    required this.onTap,
     required this.onActions,
   });
 
   final CronJob job;
   final bool busy;
+  final VoidCallback onTap;
   final VoidCallback onActions;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final subtitle = _subtitle(context, job);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: taskStatusColor(job),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    final statusColor = taskStatusColor(job).resolveFrom(context);
+
+    return Semantics(
+      button: true,
+      label: '${job.displayName}, ${l10n.viewOutput}',
+      hint: l10n.viewOutput,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          unawaited(selectionHaptic());
+          onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        job.displayName,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            job.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 17,
+                              color: CupertinoColors.label.resolveFrom(context),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          taskStatusLabel(job, context),
+                          style: TextStyle(fontSize: 12, color: statusColor),
+                        ),
+                      ],
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 17),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      taskStatusLabel(job, context),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: taskStatusColor(job),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (busy)
-            const Padding(
-              padding: EdgeInsets.all(10),
-              child: CupertinoActivityIndicator(radius: 9),
-            )
-          else
-            AccessibleButton(
-              key: ValueKey('tasks-actions-${job.jobId ?? job.id}'),
-              label: l10n.taskActions,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(36, 36),
-              onPressed: onActions,
-              child: const Icon(
-                CupertinoIcons.ellipsis,
-                size: 20,
-                color: CupertinoColors.systemGrey,
               ),
-            ),
-        ],
+              if (busy)
+                const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: CupertinoActivityIndicator(radius: 9),
+                )
+              else
+                AccessibleButton(
+                  key: ValueKey('tasks-actions-${job.jobId ?? job.id}'),
+                  label: l10n.taskActions,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 36),
+                  onPressed: onActions,
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    size: 20,
+                    color: CupertinoColors.systemGrey.resolveFrom(context),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -478,8 +480,7 @@ class _TaskRow extends StatelessWidget {
   static String? _subtitle(BuildContext context, CronJob job) {
     final l10n = AppLocalizations.of(context);
     final parts = <String>[
-      if (job.scheduleText != null && job.scheduleText!.isNotEmpty)
-        job.scheduleText!,
+      if (job.scheduleText != null && job.scheduleText!.isNotEmpty) job.scheduleText!,
       if (job.lastRunAt != null) l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
     ];
     return parts.isEmpty ? null : parts.join(' · ');
@@ -501,14 +502,19 @@ class _TaskOutputSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final sheetBg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
+    final cardBg = CupertinoColors.tertiarySystemBackground.resolveFrom(context);
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+    final secondaryLabelColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final tertiaryLabelColor = CupertinoColors.tertiaryLabel.resolveFrom(context);
+    final separatorColor = CupertinoColors.separator.resolveFrom(context);
+
     return SafeArea(
       child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.6,
-        ),
+        key: const ValueKey('tasks-output-sheet'),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.65),
         decoration: BoxDecoration(
-          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成白色面板。
-          color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
+          color: sheetBg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
@@ -516,15 +522,16 @@ class _TaskOutputSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       l10n.taskOutput,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
+                        color: labelColor,
                       ),
                     ),
                   ),
@@ -534,63 +541,92 @@ class _TaskOutputSheet extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(36, 36),
                     onPressed: () => Navigator.pop(context),
-                    child: const Icon(CupertinoIcons.xmark_circle_fill),
+                    child: Icon(
+                      CupertinoIcons.xmark_circle_fill,
+                      size: 22,
+                      color: tertiaryLabelColor,
+                    ),
                   ),
                 ],
               ),
             ),
+            Container(height: 0.5, color: separatorColor),
             Flexible(
               child: FutureBuilder<CronOutputResponse?>(
                 future: outputFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(
-                        child: CupertinoActivityIndicator(radius: 12),
-                      ),
+                      padding: EdgeInsets.all(36),
+                      child: Center(child: CupertinoActivityIndicator(radius: 12)),
                     );
                   }
-                  final outputs =
-                      snapshot.data?.outputs ?? const <CronOutputItem>[];
+                  final outputs = snapshot.data?.outputs ?? const <CronOutputItem>[];
                   if (outputs.isEmpty) {
                     return Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(child: Text(l10n.noOutput)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.doc_text, size: 40, color: tertiaryLabelColor),
+                            const SizedBox(height: 12),
+                            Text(
+                              l10n.noOutput,
+                              style: TextStyle(fontSize: 15, color: secondaryLabelColor),
+                            ),
+                          ],
+                        ),
+                      ),
                     );
                   }
                   return ListView.separated(
                     shrinkWrap: true,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     itemCount: outputs.length,
                     separatorBuilder: (_, _) => Container(
-                      height: 1,
-                      color: CupertinoColors.separator,
+                      height: 0.5,
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      color: separatorColor,
                     ),
                     itemBuilder: (context, index) {
                       final item = outputs[index];
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              item.filename ?? l10n.outputItemTitle(index + 1),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            Row(
+                              children: [
+                                Icon(CupertinoIcons.doc, size: 16, color: secondaryLabelColor),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    item.filename ?? l10n.outputItemTitle(index + 1),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: labelColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            if (item.content != null &&
-                                item.content!.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                item.content!,
-                                maxLines: 8,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: CupertinoColors.secondaryLabel,
+                            if (item.content != null && item.content!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: separatorColor, width: 0.5),
+                                ),
+                                child: Text(
+                                  item.content!,
+                                  maxLines: 10,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13, height: 1.4, color: labelColor),
                                 ),
                               ),
                             ],
@@ -642,9 +678,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     super.initState();
     final job = widget.job;
     _nameController = TextEditingController(text: job?.name ?? '');
-    _scheduleController = TextEditingController(
-      text: job?.editableScheduleText ?? '',
-    );
+    _scheduleController = TextEditingController(text: job?.editableScheduleText ?? '');
     _promptController = TextEditingController(text: job?.prompt ?? '');
     _toastNotifications = job?.toastNotifications ?? true;
   }
@@ -720,9 +754,9 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
-            color: CupertinoColors.secondaryLabel,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
           ),
         ),
         const SizedBox(height: 6),
