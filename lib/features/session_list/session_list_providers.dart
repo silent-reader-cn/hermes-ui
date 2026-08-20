@@ -224,25 +224,38 @@ class SessionListState {
   }
 
   /// 当前展示的会话（搜索模式 = 搜索命中；否则按筛选模式取对应子集）。
+  ///
+  /// 自动过滤空占位会话（`shouldAppearInSessionList`：无消息且无 sidebar 状态的
+  /// Untitled 会话不展示，对齐 Hermex 蓝本与后端 `#1171` 规范）。
   List<SessionSummary> get displaySessions {
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
-      return searchResults ?? const [];
+      return (searchResults ?? const [])
+          .where((s) => s.shouldAppearInSessionList)
+          .toList();
     }
+    final List<SessionSummary> base;
     switch (filterMode) {
       case SessionListFilterMode.archived:
-        return archivedSessions;
+        base = archivedSessions;
       case SessionListFilterMode.source:
         final label = filterValue;
-        if (label == null || label.isEmpty) return sessions;
-        return sessions.where((s) => s.sourceLabel?.trim() == label).toList();
+        if (label == null || label.isEmpty) {
+          base = sessions;
+        } else {
+          base = sessions.where((s) => s.sourceLabel?.trim() == label).toList();
+        }
       case SessionListFilterMode.project:
         final projectId = filterValue;
-        if (projectId == null || projectId.isEmpty) return sessions;
-        return sessions.where((s) => s.projectId == projectId).toList();
+        if (projectId == null || projectId.isEmpty) {
+          base = sessions;
+        } else {
+          base = sessions.where((s) => s.projectId == projectId).toList();
+        }
       case SessionListFilterMode.all:
-        return sessions;
+        base = sessions;
     }
+    return base.where((s) => s.shouldAppearInSessionList).toList();
   }
 
   /// 是否还有更多可分页内容。

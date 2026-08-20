@@ -141,16 +141,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(stream: state.stream.copyWith(isCancelling: true));
     final gen = _generation;
     try {
-      final raw = await _api!.cancelChat(streamId);
+      final response = await _api!.cancelChat(streamId);
       if (_disposed || gen != _generation) return false;
-      final map = _asStringMap(raw);
-      if (map['ok'] == true) {
+      if (response.ok == true || response.cancelled == true) {
         _finishStream(endPhase: ChatPhase.cancelled);
         return true;
       }
       state = state.copyWith(
         stream: state.stream.copyWith(isCancelling: false),
-        sendErrorMessage: '服务器未能停止当前响应。',
+        sendErrorMessage: response.error ?? '服务器未能停止当前响应。',
       );
       return false;
     } on ApiException catch (error) {
@@ -192,11 +191,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       return false;
     }
     try {
-      final raw = await _api!.renameSession(
+      final response = await _api!.renameSession(
         sessionId: state.sessionId,
         title: trimmed,
       );
-      final response = SessionMutationResponse.fromJson(_asStringMap(raw));
       if (response.ok == false) {
         _setSendError(response.error ?? '重命名会话失败。');
         return false;
@@ -222,14 +220,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   );
 
   Future<bool> _mutateSession(
-    Future<Object?> Function() request, {
+    Future<SessionMutationResponse> Function() request, {
     required String failure,
   }) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
-      final response = SessionMutationResponse.fromJson(
-        _asStringMap(await request()),
-      );
+      final response = await request();
       if (response.ok == false) {
         _setSendError(response.error ?? failure);
         return false;
@@ -245,9 +241,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> deleteSession() async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
-      final response = SessionMutationResponse.fromJson(
-        _asStringMap(await _api!.deleteSession(state.sessionId)),
-      );
+      final response = await _api!.deleteSession(state.sessionId);
       if (response.ok == false) {
         _setSendError(response.error ?? '删除会话失败。');
         return false;
@@ -265,11 +259,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<String?> branchSession({int? keepCount}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return null;
     try {
-      final raw = await _api!.branchSession(
+      final response = await _api!.branchSession(
         state.sessionId,
         keepCount: keepCount,
       );
-      final response = SessionBranchResponse.fromJson(_asStringMap(raw));
       if (response.sessionId == null) {
         _setSendError(response.error ?? '创建会话分支失败。');
       }
@@ -292,13 +285,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     final trimmedTopic = focusTopic?.trim();
     try {
-      final raw = await _api!.compressSession(
+      final response = await _api!.compressSession(
         sessionId: state.sessionId,
         focusTopic: (trimmedTopic == null || trimmedTopic.isEmpty)
             ? null
             : trimmedTopic,
       );
-      final response = SessionCompressResponse.fromJson(_asStringMap(raw));
       if (response.ok == false) {
         _setSendError(response.error ?? '压缩会话失败。');
         return false;
@@ -321,13 +313,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (messageIndex < 0 || messageIndex >= messages.length) return false;
     final keepCount = messageIndex + 1;
     try {
-      final raw = await _api!.truncateSession(
+      final response = await _api!.truncateSession(
         sessionId: state.sessionId,
         keepCount: keepCount,
       );
-      final json = _asStringMap(raw);
-      if (json['ok'] != true) {
-        _setSendError(json['error'] as String? ?? '截断会话失败。');
+      if (response.session == null) {
+        _setSendError('截断会话失败。');
         return false;
       }
       await loadMessages();
@@ -348,8 +339,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> undoLastTurn() async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
-      final raw = await _api!.undoSession(state.sessionId);
-      final response = SessionUndoResponse.fromJson(_asStringMap(raw));
+      final response = await _api!.undoSession(state.sessionId);
       if (response.ok == false) {
         _setSendError(response.error ?? '撤销上一轮失败。');
         return false;
@@ -369,8 +359,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<String?> retryLastTurn() async {
     if (state.sessionId.isEmpty || state.isReadOnly) return null;
     try {
-      final raw = await _api!.retrySession(state.sessionId);
-      final response = SessionRetryResponse.fromJson(_asStringMap(raw));
+      final response = await _api!.retrySession(state.sessionId);
       final lastText = response.lastUserText;
       if (response.ok == false || lastText == null || lastText.isEmpty) {
         _setSendError(response.error ?? '重试上一轮失败。');
@@ -394,7 +383,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final trimmedWorkspace = workspace?.trim();
     final trimmedModel = model?.trim();
     try {
-      final raw = await _api!.updateSession(
+      final response = await _api!.updateSession(
         sessionId: state.sessionId,
         workspace: (trimmedWorkspace == null || trimmedWorkspace.isEmpty)
             ? null
@@ -403,11 +392,6 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             ? null
             : trimmedModel,
       );
-      final response = SessionMutationResponse.fromJson(_asStringMap(raw));
-      if (response.ok == false) {
-        _setSendError(response.error ?? '保存会话设置失败。');
-        return false;
-      }
       final updated = response.session;
       state = state.copyWith(
         workspace: updated?.workspace ?? trimmedWorkspace ?? state.workspace,
@@ -426,18 +410,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> toggleYolo(bool enabled) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
-      final raw = await _api!.setYolo(
+      final response = await _api!.setYolo(
         sessionId: state.sessionId,
         enabled: enabled,
       );
-      final map = _asStringMap(raw);
-      if (map['ok'] == false) {
+      if (response.ok == false) {
         _setSendError('YOLO 状态更新失败。');
         return false;
       }
-      final yoloEnabled = map['yolo_enabled'] ?? map['yoloEnabled'];
       state = state.copyWith(
-        yoloEnabled: yoloEnabled is bool ? yoloEnabled : enabled,
+        yoloEnabled: response.yoloEnabled ?? enabled,
       );
       return true;
     } on ApiException catch (error) {
@@ -452,13 +434,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _yoloLoaded = true;
     final gen = _generation;
     try {
-      final raw = await _api!.getYolo(state.sessionId);
+      final response = await _api!.getYolo(state.sessionId);
       if (_disposed || gen != _generation) return;
-      final map = _asStringMap(raw);
-      final enabled =
-          map['yolo_enabled'] ?? map['yoloEnabled'] ?? map['enabled'];
-      if (enabled is bool) {
-        state = state.copyWith(yoloEnabled: enabled);
+      if (response.yoloEnabled != null) {
+        state = state.copyWith(yoloEnabled: response.yoloEnabled);
       }
     } on ApiException {
       // YOLO 状态拉取失败静默（保持关闭默认值）。
@@ -480,7 +459,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (api == null) return;
     final gen = _generation;
     try {
-      final raw = await api.session(
+      final response = await api.session(
         sessionId: sessionId,
         includeMessages: true,
         messageLimit: 50,
@@ -488,12 +467,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         expandRenderable: messageBefore == null,
       );
       if (_disposed || gen != _generation) return;
-      final envelope = _asStringMap(raw);
-      final rawSession = envelope['session'];
-      if (rawSession is! Map) return;
-      final detail = SessionDetail.fromJson(
-        Map<String, Object?>.from(rawSession),
-      );
+      final detail = response.session;
+      if (detail == null) return;
       final loaded = detail.messages ?? const <ChatMessage>[];
       if (messageBefore != null) {
         final existingIds = state.messages
@@ -602,10 +577,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     final gen = _generation;
     try {
-      final raw = await _api!.chatStreamStatus(streamId);
+      final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
-      final map = _asStringMap(raw);
-      if (map['active'] == true) return; // 仍在流中，稍后再试
+      if (status.active == true) return; // 仍在流中，稍后再试
       await loadMessages();
       if (_disposed || gen != _generation) return;
       state = state.copyWith(responseCompletionNeedsTranscriptRefresh: false);
@@ -673,7 +647,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     final gen = ++_generation;
     try {
-      final raw = await api.startChat(
+      final response = await api.startChat(
         sessionId: state.sessionId,
         message: text,
         workspace: state.workspace,
@@ -683,51 +657,17 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         explicitModelPick: state.explicitModelPick,
       );
       if (_disposed || gen != _generation) return false;
-      final map = _asStringMap(raw);
-      // 兼容后端 stream_id 的多种形态：snake/camel/data包裹/id
-      String? pickStreamId(Map<String, Object?> m) {
-        final data = m['data'];
-        Map<String, Object?>? dm;
-        if (data is Map) {
-          try {
-            dm = Map<String, Object?>.from(data);
-          } catch (_) {}
-        }
-        String? pick(Map<String, Object?> x, String k) {
-          final v = x[k];
-          if (v is String && v.trim().isNotEmpty) return v;
-          return null;
-        }
-        return pick(m, 'stream_id') ??
-            pick(m, 'streamId') ??
-            pick(m, 'id') ??
-            (dm != null ? pick(dm, 'stream_id') : null) ??
-            (dm != null ? pick(dm, 'streamId') : null) ??
-            (dm != null ? pick(dm, 'id') : null);
-      }
-
-      final streamId = pickStreamId(map);
-      final sessionId = map['session_id'] ??
-          map['sessionId'] ??
-          (() {
-            final d = map['data'];
-            if (d is Map) {
-              try {
-                final dm = Map<String, Object?>.from(d);
-                return dm['session_id'] ?? dm['sessionId'];
-              } catch (_) {}
-            }
-            return null;
-          })();
+      final streamId = response.streamId;
+      final sessionId = response.sessionId;
       if (streamId == null || streamId.isEmpty) {
         _rollbackOptimisticMessage(messageId);
         state = state.copyWith(
           phase: ChatPhase.idle,
-          sendErrorMessage: '服务器未返回流 ID，发送失败。',
+          sendErrorMessage: response.error ?? '服务器未返回流 ID，发送失败。',
         );
         return false;
       }
-      if (sessionId is String &&
+      if (sessionId != null &&
           sessionId.isNotEmpty &&
           state.sessionId.isEmpty) {
         state = state.copyWith(sessionId: sessionId);
@@ -784,10 +724,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> _steer(String text) async {
     final gen = _generation;
     try {
-      final raw = await _api!.steerChat(sessionId: state.sessionId, text: text);
+      final response = await _api!.steerChat(sessionId: state.sessionId, text: text);
       if (_disposed || gen != _generation) return false;
-      final map = _asStringMap(raw);
-      if (map['accepted'] == true) {
+      if (response.accepted == true) {
         _markProgress();
         state = state.copyWith(phase: ChatPhase.steered);
         return true;
@@ -1746,18 +1685,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (sessionId.isEmpty) return;
     final gen = _generation;
     try {
-      final raw = await _api!.session(
+      final response = await _api!.session(
         sessionId: sessionId,
         includeMessages: false,
       );
       if (_disposed || gen != _generation) return;
-      final envelope = _asStringMap(raw);
-      final rawSession = envelope['session'];
-      if (rawSession is! Map) return;
-      final detail = SessionDetail.fromJson(
-        Map<String, Object?>.from(rawSession),
-      );
-      final title = detail.title?.trim();
+      final title = response.session?.title?.trim();
       if (title != null && title.isNotEmpty) {
         state = state.copyWith(displayTitle: title);
       }
@@ -1795,15 +1728,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (streamId == null) return;
     final gen = _generation;
     try {
-      final raw = await _api!.chatStreamStatus(streamId);
+      final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
-      final map = _asStringMap(raw);
-      if (map['active'] == true) {
+      if (status.active == true) {
         // 全量重连：loadMessages 后恢复（带 replay 若快照有 lastEventID）。
         await _loadMessagesAndResume(streamId);
         return;
       }
-      if (map['replay_available'] == true) {
+      if (status.replayAvailable == true) {
         final afterSeq = _replayAfterSeq(state.stream.lastEventId);
         state = state.copyWith(
           stream: state.stream.copyWith(
@@ -1976,12 +1908,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (streamId == null) return;
     final gen = _generation;
     try {
-      final raw = await _api!.chatStreamStatus(streamId);
+      final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
-      final map = _asStringMap(raw);
-      if (map['active'] == true) {
+      if (status.active == true) {
         await _loadMessagesAndResume(streamId);
-      } else if (map['replay_available'] == true) {
+      } else if (status.replayAvailable == true) {
         final afterSeq = _replayAfterSeq(state.stream.lastEventId);
         state = state.copyWith(
           stream: state.stream.copyWith(
@@ -2145,12 +2076,6 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final title = detail.title?.trim();
     if (title == null || title.isEmpty) return 'Untitled Session';
     return title;
-  }
-
-  static Map<String, Object?> _asStringMap(Object? raw) {
-    if (raw is Map<String, Object?>) return raw;
-    if (raw is Map) return Map<String, Object?>.from(raw);
-    return const <String, Object?>{};
   }
 
   // -------------------------------------------------------------------------
