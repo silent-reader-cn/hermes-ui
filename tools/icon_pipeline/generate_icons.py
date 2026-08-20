@@ -67,6 +67,13 @@ MACOS_SIZES: Dict[str, int] = {
     "app_icon_1024.png": 1024,
 }
 
+# Tray icon destination paths
+BRANDING_DIR = REPO_ROOT / "assets" / "branding"
+TRAY_ICO_SIZES: List[Tuple[int, int]] = [
+    (16, 16),
+    (32, 32),
+]
+
 
 def load_source_image(source_path: Path) -> Image.Image:
     """Load and validate the single source icon."""
@@ -176,6 +183,35 @@ def generate_macos_icons(source_img: Image.Image) -> List[Path]:
     return generated
 
 
+def generate_tray_icons(source_img: Image.Image) -> List[Path]:
+    """Generate dedicated tray icon assets (16x16 PNG, 32x32 PNG, and multi-size ICO)."""
+    generated: List[Path] = []
+    BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 1. 32x32 PNG
+    tray_32 = BRANDING_DIR / "tray_icon_32.png"
+    resized_32 = source_img.resize((32, 32), Image.Resampling.LANCZOS)
+    resized_32.save(tray_32, format="PNG", optimize=True)
+    generated.append(tray_32)
+
+    # 2. 16x16 PNG
+    tray_16 = BRANDING_DIR / "tray_icon_16.png"
+    resized_16 = source_img.resize((16, 16), Image.Resampling.LANCZOS)
+    resized_16.save(tray_16, format="PNG", optimize=True)
+    generated.append(tray_16)
+
+    # 3. Multi-size ICO (16x16, 32x32)
+    tray_ico = BRANDING_DIR / "tray_icon.ico"
+    source_img.save(
+        tray_ico,
+        format="ICO",
+        sizes=TRAY_ICO_SIZES,
+    )
+    generated.append(tray_ico)
+
+    return generated
+
+
 def verify_generated_artifacts() -> bool:
     """Verify all expected icon artifacts exist, are non-empty, and match dimensions."""
     print("\n--- Verifying Generated Artifacts ---")
@@ -266,6 +302,45 @@ def verify_generated_artifacts() -> bool:
                 else:
                     print(f"[PASS] macOS: {filename} ({expected_size}x{expected_size}, {path.stat().st_size} bytes)")
 
+    # 5. Verify Tray icons
+    tray_32 = BRANDING_DIR / "tray_icon_32.png"
+    if tray_32.exists() and tray_32.stat().st_size > 0:
+        with Image.open(tray_32) as img:
+            if img.size == (32, 32):
+                print(f"[PASS] Tray icon 32: {tray_32.relative_to(REPO_ROOT)} ({tray_32.stat().st_size} bytes)")
+            else:
+                print(f"[FAIL] Tray icon 32 size mismatch: expected 32x32, got {img.size}")
+                all_ok = False
+    else:
+        print(f"[FAIL] Missing or empty {tray_32}")
+        all_ok = False
+
+    tray_16 = BRANDING_DIR / "tray_icon_16.png"
+    if tray_16.exists() and tray_16.stat().st_size > 0:
+        with Image.open(tray_16) as img:
+            if img.size == (16, 16):
+                print(f"[PASS] Tray icon 16: {tray_16.relative_to(REPO_ROOT)} ({tray_16.stat().st_size} bytes)")
+            else:
+                print(f"[FAIL] Tray icon 16 size mismatch: expected 16x16, got {img.size}")
+                all_ok = False
+    else:
+        print(f"[FAIL] Missing or empty {tray_16}")
+        all_ok = False
+
+    tray_ico = BRANDING_DIR / "tray_icon.ico"
+    if tray_ico.exists() and tray_ico.stat().st_size > 0:
+        with open(tray_ico, "rb") as f:
+            data = f.read()
+        reserved, ico_type, count = struct.unpack("<HHH", data[:6])
+        if ico_type == 1 and count >= len(TRAY_ICO_SIZES):
+            print(f"[PASS] Tray ICO: {tray_ico.relative_to(REPO_ROOT)} ({count} frames, {len(data)} bytes)")
+        else:
+            print(f"[FAIL] Invalid Tray ICO header or frame count in {tray_ico}")
+            all_ok = False
+    else:
+        print(f"[FAIL] Missing or empty {tray_ico}")
+        all_ok = False
+
     return all_ok
 
 
@@ -299,6 +374,11 @@ def main() -> None:
     print("\n4. Generating macOS AppIcon Set...")
     macos_icons = generate_macos_icons(source_img)
     for p in macos_icons:
+        print(f"   -> {p.relative_to(REPO_ROOT)}")
+
+    print("\n5. Generating Tray Icons...")
+    tray_icons = generate_tray_icons(source_img)
+    for p in tray_icons:
         print(f"   -> {p.relative_to(REPO_ROOT)}")
 
     ok = verify_generated_artifacts()
