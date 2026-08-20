@@ -183,6 +183,194 @@ void main() {
     });
   });
 
+  group('AdaptiveShell 侧栏拖拽调整宽度与持久化测试', () {
+    testWidgets('默认无存储记录时侧栏宽度为 320，渲染拖拽手柄与调整光标', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final handleFinder = find.byType(SidebarResizeHandle);
+      expect(handleFinder, findsOneWidget);
+
+      final mouseRegion = tester.widget<MouseRegion>(
+        find.descendant(
+          of: handleFinder,
+          matching: find.byType(MouseRegion),
+        ),
+      );
+      expect(mouseRegion.cursor, SystemMouseCursors.resizeLeftRight);
+
+      final sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, kAdaptiveSidebarDefaultWidth);
+    });
+
+    testWidgets('拖拽手柄 +40：侧栏宽度变为 360 且持久化到 SharedPreferences', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final handleFinder = find.byKey(const ValueKey('adaptive-shell-resize-handle'));
+      expect(handleFinder, findsOneWidget);
+
+      // 水平向右拖动 +40 像素
+      await tester.drag(handleFinder, const Offset(40, 0));
+      await tester.pumpAndSettle();
+
+      final sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, 360.0);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), 360.0);
+    });
+
+    testWidgets('拖拽边界 clamp 验证：拖动 +500 限制在 420，拖动 -500 限制在 280', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final handleFinder = find.byKey(const ValueKey('adaptive-shell-resize-handle'));
+
+      // 超出上限拖拽 +500
+      await tester.drag(handleFinder, const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      var sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, kAdaptiveSidebarMaxWidth);
+      var prefs = await SharedPreferences.getInstance();
+      expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), kAdaptiveSidebarMaxWidth);
+
+      // 超出下限拖拽 -500
+      await tester.drag(handleFinder, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, kAdaptiveSidebarMinWidth);
+      prefs = await SharedPreferences.getInstance();
+      expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), kAdaptiveSidebarMinWidth);
+    });
+
+    testWidgets('冷启恢复：SharedPreferences 预置 360 时 pump 后侧栏恢复 360 宽度', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        kAdaptiveSidebarWidthStorageKey: 360.0,
+      });
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, 360.0);
+    });
+
+    testWidgets('冷启容错恢复：SharedPreferences 预置异常值时安全 clamp 到有效范围', (tester) async {
+      // 预置超大异常值 999
+      SharedPreferences.setMockInitialValues({
+        kAdaptiveSidebarWidthStorageKey: 999.0,
+      });
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      var sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, kAdaptiveSidebarMaxWidth);
+
+      // 预置过小异常值 50
+      SharedPreferences.setMockInitialValues({
+        kAdaptiveSidebarWidthStorageKey: 50.0,
+      });
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      sidebarBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('adaptive-shell-sidebar-container')),
+      );
+      expect(sidebarBox.width, kAdaptiveSidebarMinWidth);
+    });
+
+    testWidgets('窄屏视口下不渲染拖拽手柄，保持单栈体验', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/tasks',
+          size: const Size(390, 844),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SidebarResizeHandle), findsNothing);
+      expect(find.byKey(const ValueKey('adaptive-shell-resize-handle')), findsNothing);
+    });
+  });
+
   group('SidebarUtilityToolbar 与 EmptyDetailPane 交互测试', () {
     testWidgets('侧栏工具条包含全部 6 个工具入口且对应 Key 准确', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
