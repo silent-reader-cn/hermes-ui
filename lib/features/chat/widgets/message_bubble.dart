@@ -35,34 +35,43 @@ class ChatMessageBubble extends StatelessWidget {
     final role = message.role;
     if (role == 'local_notice') return _NoticeCard(message: message);
     final isUser = role == 'user';
-    final bubble = Container(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        // 动态色必须显式 resolve：BoxDecoration paint 不做主题解析，
-        // 直塞 CupertinoColors.* 在暗黑模式下会画成 light 值（白/亮块）。
-        color: isUser
-            ? CupertinoColors.activeBlue.resolveFrom(context)
-            : CupertinoColors.systemGrey6.resolveFrom(context),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: isUser
-          ? _UserContent(message: message)
-          : _AssistantContent(
-              message: message,
-              toolGroups: toolGroups,
-              reasoningGroups: reasoningGroups,
-            ),
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [bubble],
-      ),
+    // 双栏外壳下 MediaQuery.width 是整个窗口宽，而气泡实际可用宽度是
+    // 「窗口宽 − 侧栏宽」。用 LayoutBuilder 取真实槽位宽，避免 0.78 比例
+    // 在电脑端双栏里超出屏幕（right overflow）。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bubble = Container(
+          key: const ValueKey('chat-message-bubble'),
+          constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            // 动态色必须显式 resolve：BoxDecoration paint 不做主题解析，
+            // 直塞 CupertinoColors.* 在暗黑模式下会画成 light 值（白/亮块）。
+            color: isUser
+                ? CupertinoColors.activeBlue.resolveFrom(context)
+                : CupertinoColors.systemGrey6.resolveFrom(context),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: isUser
+              ? _UserContent(message: message)
+              : _AssistantContent(
+                  message: message,
+                  toolGroups: toolGroups,
+                  reasoningGroups: reasoningGroups,
+                ),
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: Row(
+            mainAxisAlignment: isUser
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
+            // Flexible 确保气泡被限制在行内（非 flex 子项在 unbounded
+            // 链上会忽略自身 maxWidth，导致长文气泡顶出右侧）。
+            children: [Flexible(child: bubble)],
+          ),
+        );
+      },
     );
   }
 }
@@ -74,8 +83,7 @@ class _UserContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content =
-        message.content == null ? '' : message.content!.trim();
+    final content = message.content == null ? '' : message.content!.trim();
     final display = content.isEmpty
         ? ''
         : MessageAttachment.contentWithoutAttachedFilesMarker(content);
@@ -150,27 +158,26 @@ class _AssistantContent extends StatelessWidget {
   static MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
-    return MarkdownStyleSheet.fromCupertinoTheme(
-      CupertinoTheme.of(context),
-    ).copyWith(
-      p: TextStyle(fontSize: 15, height: 1.4, color: label),
-      listBullet: TextStyle(fontSize: 15, color: label),
-      code: TextStyle(
-        fontSize: 13,
-        fontFamily: 'monospace',
-        color: label,
-        backgroundColor: grey5,
-      ),
-      codeblockDecoration: BoxDecoration(
-        color: grey5,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: grey5,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      blockquotePadding: const EdgeInsets.all(8),
-    );
+    return MarkdownStyleSheet.fromCupertinoTheme(CupertinoTheme.of(context))
+        .copyWith(
+          p: TextStyle(fontSize: 15, height: 1.4, color: label),
+          listBullet: TextStyle(fontSize: 15, color: label),
+          code: TextStyle(
+            fontSize: 13,
+            fontFamily: 'monospace',
+            color: label,
+            backgroundColor: grey5,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: grey5,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: grey5,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          blockquotePadding: const EdgeInsets.all(8),
+        );
   }
 }
 
@@ -205,7 +212,10 @@ class _AttachmentChip extends StatelessWidget {
             child: Text(
               name,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: CupertinoColors.white),
+              style: const TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.white,
+              ),
             ),
           ),
         ],
@@ -269,7 +279,9 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
     final text = widget.group.text.trim();
     if (text.isEmpty) return const SizedBox.shrink();
     final summary = text.replaceAll(RegExp(r'\s+'), ' ');
-    final preview = summary.length > 80 ? '${summary.substring(0, 80)}…' : summary;
+    final preview = summary.length > 80
+        ? '${summary.substring(0, 80)}…'
+        : summary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: GestureDetector(
