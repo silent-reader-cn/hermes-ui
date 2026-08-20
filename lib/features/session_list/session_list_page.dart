@@ -16,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
 import 'scheduled_session_disclosure.dart';
+import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
 
@@ -25,7 +26,11 @@ import 'session_list_utility_rows.dart';
 /// 会话分区（置顶/今天/昨天/更早）+ 行快捷操作（pin/archive/branch/delete 弹
 /// 菜单）+ 悬浮新建会话按钮。会话点击 → `/chat/:sessionId`。
 class SessionListPage extends ConsumerStatefulWidget {
-  const SessionListPage({super.key, this.showUtilityRows = true});
+  const SessionListPage({
+    super.key,
+    this.showUtilityRows = true,
+    this.showSettingsTrailing = true,
+  });
 
   /// 是否渲染顶部工具行入口（任务/看板/技能/记忆/统计）。
   ///
@@ -33,6 +38,12 @@ class SessionListPage extends ConsumerStatefulWidget {
   /// （含设置与激活高亮），故侧栏内复用的会话列表传 `false` 避免双层
   /// 入口重叠；手机单栈（窄屏）保持默认 `true`。
   final bool showUtilityRows;
+
+  /// 是否渲染头部右侧的设置入口（齿轮）。
+  ///
+  /// 宽屏侧栏顶部 [SidebarUtilityToolbar] 已有设置图标，为避免桌面端双
+  /// 入口，侧栏内复用的会话列表传 `false`；手机单栈保持默认 `true`。
+  final bool showSettingsTrailing;
 
   @override
   ConsumerState<SessionListPage> createState() => _SessionListPageState();
@@ -86,31 +97,39 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              CupertinoSliverNavigationBar(
-                largeTitle: Text(l10n.sessions),
-                trailing: AccessibleButton(
-                  key: state?.isSelectionMode == true
-                      ? const ValueKey('session-list-selection-done')
-                      : const ValueKey('session-list-settings'),
-                  label: state?.isSelectionMode == true
-                      ? l10n.doneSelecting
-                      : l10n.settings,
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    final controller = ref.read(
-                      sessionListControllerProvider.notifier,
-                    );
-                    if (state?.isSelectionMode == true) {
-                      controller.clearSelection();
-                    } else {
-                      context.go('/settings');
-                    }
-                  },
-                  child: Icon(
-                    state?.isSelectionMode == true
-                        ? CupertinoIcons.xmark
-                        : CupertinoIcons.gear_alt,
-                  ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: SessionListHeaderDelegate(
+                  title: l10n.sessions,
+                  topPadding: MediaQuery.paddingOf(context).top,
+                  trailing: widget.showSettingsTrailing
+                      ? AccessibleButton(
+                          key: state?.isSelectionMode == true
+                              ? const ValueKey('session-list-selection-done')
+                              : const ValueKey('session-list-settings'),
+                          label: state?.isSelectionMode == true
+                              ? l10n.doneSelecting
+                              : l10n.settings,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(44, 44),
+                          onPressed: () {
+                            final controller = ref.read(
+                              sessionListControllerProvider.notifier,
+                            );
+                            if (state?.isSelectionMode == true) {
+                              controller.clearSelection();
+                            } else {
+                              context.go('/settings');
+                            }
+                          },
+                          child: Icon(
+                            state?.isSelectionMode == true
+                                ? CupertinoIcons.xmark
+                                : CupertinoIcons.gear_alt,
+                            size: 22,
+                          ),
+                        )
+                      : null,
                 ),
               ),
               // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
@@ -452,8 +471,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       ),
                       onTap: () => state.isSelectionMode
                           ? ref
-                              .read(sessionListControllerProvider.notifier)
-                              .toggleSelection(session.sessionId ?? session.id)
+                                .read(sessionListControllerProvider.notifier)
+                                .toggleSelection(
+                                  session.sessionId ?? session.id,
+                                )
                           : _openSession(context, session),
                       onLongPress: () => ref
                           .read(sessionListControllerProvider.notifier)
@@ -485,8 +506,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       ),
                       onTap: () => state.isSelectionMode
                           ? ref
-                              .read(sessionListControllerProvider.notifier)
-                              .toggleSelection(session.sessionId ?? session.id)
+                                .read(sessionListControllerProvider.notifier)
+                                .toggleSelection(
+                                  session.sessionId ?? session.id,
+                                )
                           : _openSession(context, session),
                       onLongPress: () => ref
                           .read(sessionListControllerProvider.notifier)
