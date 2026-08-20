@@ -217,6 +217,12 @@ class AppLocalizations {
   String queuedBannerMessage(int count) => isEnglish
       ? '已排队 $count 条消息，将在当前回复结束后自动发送'
       : '已排队 $count 条消息，将在当前回复结束后自动发送';
+  String get offlineCacheBanner => isEnglish
+      ? 'Offline cache mode. Content may not be up to date.'
+      : '离线缓存模式，部分内容可能不是最新';
+  String get dismissOfflineBanner => isEnglish
+      ? 'Dismiss offline cache notice'
+      : '关闭离线提示';
   String get pendingUserMessageBanner => isEnglish
       ? '(This session has a pending message…)'
       : '（该会话有一条待处理消息…）';
