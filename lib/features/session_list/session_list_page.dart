@@ -173,11 +173,18 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     );
   }
 
-  /// 筛选栏：全部 / 已归档(count) / 来源标签（横向滚动 chips）/ 项目 chips。
+  /// 筛选栏：全部 / 已归档(count) / 来源标签 + 项目 chips（横向滚动）。
   Widget _buildFilterBar(SessionListState state) {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     final mode = state.filterMode;
+    final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final hasSourceChips =
+        state.sourceLabels.isNotEmpty ||
+        mode == SessionListFilterMode.archived ||
+        (state.filterMode != SessionListFilterMode.all &&
+            state.filterMode != SessionListFilterMode.archived);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -248,44 +255,26 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   ),
                 ),
               ],
+              if (projects.isNotEmpty && hasSourceChips)
+                const SizedBox(width: 8),
+              for (final project in projects)
+                _filterChip(
+                  key: ValueKey('project-chip-${project.id}'),
+                  label: project.name ?? l10n.untitledProject,
+                  selected:
+                      mode == SessionListFilterMode.project &&
+                      state.filterValue == project.id,
+                  onTap: () => unawaited(
+                    controller.setFilter(
+                      SessionListFilterMode.project,
+                      value: project.id,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-        _buildProjectFilterRow(state),
       ],
-    );
-  }
-
-  /// 项目筛选 chips（有项目才显示）。
-  Widget _buildProjectFilterRow(SessionListState state) {
-    final l10n = AppLocalizations.of(context);
-    final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
-    if (projects.isEmpty) return const SizedBox.shrink();
-    final controller = ref.read(sessionListControllerProvider.notifier);
-    final mode = state.filterMode;
-    return SizedBox(
-      height: 34,
-      child: ListView(
-        key: const ValueKey('session-list-project-chips'),
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          for (final project in projects)
-            _filterChip(
-              key: ValueKey('project-chip-${project.id}'),
-              label: project.name ?? l10n.untitledProject,
-              selected:
-                  mode == SessionListFilterMode.project &&
-                  state.filterValue == project.id,
-              onTap: () => unawaited(
-                controller.setFilter(
-                  SessionListFilterMode.project,
-                  value: project.id,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 
