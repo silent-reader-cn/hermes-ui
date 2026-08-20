@@ -13,6 +13,12 @@ import '../../core/models/skills.dart';
 abstract interface class SkillsApi {
   /// GET /api/skills → 技能列表。
   Future<SkillsResponse> fetchSkills();
+
+  /// POST /api/skills/toggle → 切换技能启用/禁用。
+  Future<ToggleSkillResponse> toggleSkill({
+    required String name,
+    required bool enabled,
+  });
 }
 
 /// [SkillsApi] 的生产实现：包 [ApiClient]，把 `Object?` JSON 解码为模型。
@@ -24,6 +30,14 @@ class SkillsApiClient implements SkillsApi {
   @override
   Future<SkillsResponse> fetchSkills() async {
     return _client.skills();
+  }
+
+  @override
+  Future<ToggleSkillResponse> toggleSkill({
+    required String name,
+    required bool enabled,
+  }) async {
+    return _client.toggleSkill(name: name, enabled: enabled);
   }
 }
 

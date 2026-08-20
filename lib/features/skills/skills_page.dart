@@ -43,6 +43,16 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
     final groups = ref.watch(skillsGroupsProvider);
     final isSearchMode = state?.searchQuery?.isNotEmpty == true;
 
+    ref.listen<AsyncValue<SkillsState>>(skillsControllerProvider, (
+      previous,
+      next,
+    ) {
+      final error = next.valueOrNull?.actionError;
+      if (error != null && error != previous?.valueOrNull?.actionError) {
+        unawaited(_showActionError(context, error));
+      }
+    });
+
     return CupertinoPageScaffold(
       child: CustomScrollView(
         key: const ValueKey('skills-scroll'),
@@ -154,9 +164,9 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: statusRedText,
+                color: statusRedText.resolveFrom(context),
               ),
             ),
             const SizedBox(height: 20),
@@ -194,10 +204,12 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              isSearchMode ? l10n.tryAnotherKeyword : l10n.serverSkillsWillShowHere,
-              style: const TextStyle(
+              isSearchMode
+                  ? l10n.tryAnotherKeyword
+                  : l10n.serverSkillsWillShowHere,
+              style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
           ],
@@ -217,6 +229,24 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         _expandedNames.add(name);
       }
     });
+  }
+
+  Future<void> _showActionError(BuildContext context, String message) async {
+    final l10n = AppLocalizations.of(context);
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(l10n.actionFailed),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+    await ref.read(skillsControllerProvider.notifier).clearActionError();
   }
 
   String _errorMessage(Object? error) {
@@ -242,8 +272,8 @@ String _skillsGroupTitle(BuildContext context, String rawTitle) {
 }
 
 /// 单行技能（自绘行，对齐 Hermex SkillRow：名称 / 描述 / 标签 / 已禁用
-/// 徽标 + 展开箭头；点击展开详情）。
-class _SkillRow extends StatelessWidget {
+/// 徽标 + 展开箭头 + 启用/禁用开关；点击展开详情）。
+class _SkillRow extends ConsumerWidget {
   const _SkillRow({
     super.key,
     required this.skill,
@@ -256,88 +286,120 @@ class _SkillRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final description = _trimmedOrNull(skill.description);
     final tags = (skill.tags ?? const <String>[])
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
         .toList();
     final disabled = skill.disabled == true;
+    final isBusy =
+        ref
+            .watch(skillsControllerProvider)
+            .valueOrNull
+            ?.isBusy(skill.name ?? '') ??
+        false;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Opacity(
-          opacity: disabled ? 0.55 : 1,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          skillDisplayName(skill),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              skillDisplayName(skill),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: disabled
+                                    ? CupertinoColors.secondaryLabel
+                                          .resolveFrom(context)
+                                    : CupertinoColors.label.resolveFrom(
+                                        context,
+                                      ),
+                              ),
+                            ),
                           ),
-                        ),
-                        if (description != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            description,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: CupertinoColors.secondaryLabel,
+                          const SizedBox(width: 6),
+                          Icon(
+                            expanded
+                                ? CupertinoIcons.chevron_down
+                                : CupertinoIcons.chevron_right,
+                            size: 14,
+                            color: CupertinoColors.tertiaryLabel.resolveFrom(
+                              context,
                             ),
                           ),
                         ],
-                        if (disabled || tags.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              if (disabled)
-                                _Badge(text: AppLocalizations.of(context).skillDisabledBadge, highlighted: false),
-                              for (final tag in tags)
-                                _Badge(text: tag, highlighted: true),
-                            ],
+                      ),
+                      if (description != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          description,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
+                      if (disabled || tags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (disabled)
+                              _Badge(
+                                text: AppLocalizations.of(context)
+                                    .skillDisabledBadge,
+                                highlighted: false,
+                              ),
+                            for (final tag in tags)
+                              _Badge(text: tag, highlighted: true),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Icon(
-                      expanded
-                          ? CupertinoIcons.chevron_down
-                          : CupertinoIcons.chevron_right,
-                      size: 14,
-                      color: CupertinoColors.tertiaryLabel,
-                    ),
-                  ),
-                ],
-              ),
-              if (expanded)
-                _SkillDetail(
-                  key: ValueKey('skills-detail-${skillDisplayName(skill)}'),
-                  skill: skill,
                 ),
-            ],
-          ),
+                const SizedBox(width: 12),
+                CupertinoSwitch(
+                  key: ValueKey('skills-toggle-${skillDisplayName(skill)}'),
+                  value: !disabled,
+                  onChanged: isBusy
+                      ? null
+                      : (value) => unawaited(
+                          ref
+                              .read(skillsControllerProvider.notifier)
+                              .toggleSkill(skill, enabled: value),
+                        ),
+                ),
+              ],
+            ),
+            if (expanded)
+              _SkillDetail(
+                key: ValueKey('skills-detail-${skillDisplayName(skill)}'),
+                skill: skill,
+              ),
+          ],
         ),
       ),
     );
@@ -370,7 +432,10 @@ class _SkillDetail extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           l10n.noMoreDetailsForSkill,
-          style: const TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
         ),
       );
     }
@@ -385,7 +450,10 @@ class _SkillDetail extends StatelessWidget {
             const SizedBox(height: 4),
           ],
           if (related.isNotEmpty)
-            _DetailLine(label: l10n.relatedSkillsLabel, value: related.join('、')),
+            _DetailLine(
+              label: l10n.relatedSkillsLabel,
+              value: related.join('、'),
+            ),
         ],
       ),
     );
@@ -406,9 +474,14 @@ class _DetailLine extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label：',
-            style: const TextStyle(color: CupertinoColors.secondaryLabel),
+            style: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
           ),
-          TextSpan(text: value),
+          TextSpan(
+            text: value,
+            style: TextStyle(color: CupertinoColors.label.resolveFrom(context)),
+          ),
         ],
       ),
       style: const TextStyle(fontSize: 13),
@@ -428,7 +501,6 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色底。
         color: highlighted
             ? CupertinoColors.secondarySystemFill.resolveFrom(context)
             : CupertinoColors.tertiarySystemFill.resolveFrom(context),
@@ -436,12 +508,10 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          // 徽章小字用全强度 label：secondaryLabel 60% 透明度在浅灰底上
-          // 只有 ~1.7:1（局部背景追踪暴露的真问题），label 深浅色都 ≥15:1。
-          color: CupertinoColors.label,
+          color: CupertinoColors.label.resolveFrom(context),
         ),
       ),
     );
