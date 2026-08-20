@@ -11,11 +11,16 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
 
+/// 宽屏断点：布局宽度 ≥ 此值时记忆分区排两列（桌面 / 平板横屏）。
+const double kMemoryWideBreakpoint = 700;
+
 /// 记忆查看页（对齐 Hermex MemoryView 的只读浏览形态）。
 ///
 /// Cupertino 风格：大标题 + 刷新按钮 + 下拉刷新；按 [MemoryResponse] 的
 /// 分区结构展示（我的笔记 / 用户画像 / 智能体灵魂 / 项目上下文），
 /// 分区空内容显示占位文案，项目上下文带只读锁与覆盖警告；
+/// 长文本默认折叠 5 行 + 展开全文；宽屏（≥ [kMemoryWideBreakpoint]）
+/// 分区排成两列，避免大文本框纵向堆叠。
 /// 含加载 / 错误 / 空态。
 class MemoryPage extends ConsumerWidget {
   const MemoryPage({super.key});
@@ -81,40 +86,47 @@ class MemoryPage extends ConsumerWidget {
     }
 
     return [
-      for (final section in MemorySection.values)
-        SliverToBoxAdapter(
-          child: CupertinoListSection.insetGrouped(
-            header: _MemorySectionHeader(
-              section: section,
-              mtime: _sectionMtime(response, section),
-            ),
-            children: [
-              _MemorySectionBody(
-                section: section,
-                content: _sectionContent(response, section),
-              ),
-            ],
-          ),
-        ),
-      if (showsProjectContext(response))
-        SliverToBoxAdapter(
-          child: CupertinoListSection.insetGrouped(
-            header: _ProjectContextHeader(mtime: response.projectContextMtime),
-            footer: _ProjectContextFooter(
-              detail: memoryProjectContextDetail(response),
-              shadowed: response.projectContextShadowed == true,
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  response.projectContext!.trim(),
-                  style: const TextStyle(fontSize: 15, height: 1.4),
+      SliverToBoxAdapter(
+        child: _MemorySectionGrid(
+          cards: [
+            for (final section in MemorySection.values)
+              CupertinoListSection.insetGrouped(
+                header: _MemorySectionHeader(
+                  section: section,
+                  mtime: _sectionMtime(response, section),
+                  charCount: _sectionContent(response, section).trim().length,
                 ),
+                children: [
+                  _MemorySectionBody(
+                    section: section,
+                    content: _sectionContent(response, section),
+                  ),
+                ],
               ),
-            ],
-          ),
+            if (showsProjectContext(response))
+              CupertinoListSection.insetGrouped(
+                header: _ProjectContextHeader(
+                  mtime: response.projectContextMtime,
+                  charCount: response.projectContext!.trim().length,
+                ),
+                footer: _ProjectContextFooter(
+                  detail: memoryProjectContextDetail(response),
+                  shadowed: response.projectContextShadowed == true,
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: _CollapsibleBodyText(
+                      text: response.projectContext!.trim(),
+                      style: const TextStyle(fontSize: 15, height: 1.4),
+                      toggleKey: const ValueKey('memory-expand-project'),
+                    ),
+                  ),
+                ],
+              ),
+          ],
         ),
+      ),
     ];
   }
 
@@ -141,10 +153,7 @@ class MemoryPage extends ConsumerWidget {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -218,6 +227,43 @@ class MemoryPage extends ConsumerWidget {
   }
 }
 
+/// 记忆分区卡片容器：窄屏单列堆叠；宽屏（≥ [kMemoryWideBreakpoint]）
+/// 两列等宽流式排布，卡片高度自适应。
+class _MemorySectionGrid extends StatelessWidget {
+  const _MemorySectionGrid({required this.cards});
+
+  final List<Widget> cards;
+
+  static const double _gap = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < kMemoryWideBreakpoint) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: _gap),
+                cards[i],
+              ],
+            ],
+          );
+        }
+        final itemWidth = (constraints.maxWidth - _gap) / 2;
+        return Wrap(
+          spacing: _gap,
+          runSpacing: _gap,
+          children: [
+            for (final card in cards) SizedBox(width: itemWidth, child: card),
+          ],
+        );
+      },
+    );
+  }
+}
+
 String _memorySectionTitle(BuildContext context, MemorySection section) {
   final l10n = AppLocalizations.of(context);
   switch (section) {
@@ -242,15 +288,21 @@ String _memorySectionEmptyMessage(BuildContext context, MemorySection section) {
   }
 }
 
-/// 记忆分区头：图标 + 标题 + 相对修改时间。
+/// 记忆分区头：图标 + 标题 + 字数 + 相对修改时间。
 class _MemorySectionHeader extends StatelessWidget {
-  const _MemorySectionHeader({required this.section, required this.mtime});
+  const _MemorySectionHeader({
+    required this.section,
+    required this.mtime,
+    required this.charCount,
+  });
 
   final MemorySection section;
   final double? mtime;
+  final int charCount;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -267,7 +319,16 @@ class _MemorySectionHeader extends StatelessWidget {
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
-          if (modified != null)
+          if (charCount > 0)
+            Text(
+              '$charCount ${l10n.memoryCharUnit}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          if (modified != null) ...[
+            const SizedBox(width: 6),
             Text(
               modified,
               style: const TextStyle(
@@ -275,6 +336,7 @@ class _MemorySectionHeader extends StatelessWidget {
                 color: CupertinoColors.secondaryLabel,
               ),
             ),
+          ],
         ],
       ),
     );
@@ -292,7 +354,7 @@ class _MemorySectionHeader extends StatelessWidget {
   }
 }
 
-/// 分区内容：非空 → 正文；空 → 斜体占位文案。
+/// 分区内容：非空 → 正文（长文折叠）；空 → 斜体占位文案。
 class _MemorySectionBody extends StatelessWidget {
   const _MemorySectionBody({required this.section, required this.content});
 
@@ -315,18 +377,115 @@ class _MemorySectionBody extends StatelessWidget {
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text(trimmed, style: const TextStyle(fontSize: 15, height: 1.4)),
+    return _CollapsibleBodyText(
+      text: trimmed,
+      style: const TextStyle(fontSize: 15, height: 1.4),
+      toggleKey: ValueKey('memory-expand-${section.name}'),
     );
   }
 }
 
-/// 项目上下文分区头：图标 + 标题 + 修改时间 + 只读锁。
+/// 正文折叠块：超出 [kCollapsedLines] 行显示「展开全文」，点击展开/收起；
+/// 短文本不显示切换按钮，保持全量展示。
+class _CollapsibleBodyText extends StatefulWidget {
+  const _CollapsibleBodyText({
+    required this.text,
+    required this.style,
+    this.toggleKey,
+  });
+
+  final String text;
+  final TextStyle style;
+  final Key? toggleKey;
+
+  @override
+  State<_CollapsibleBodyText> createState() => _CollapsibleBodyTextState();
+}
+
+class _CollapsibleBodyTextState extends State<_CollapsibleBodyText> {
+  static const int kCollapsedLines = 5;
+
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final foldable = _isFoldable(
+          context,
+          widget.text,
+          widget.style,
+          constraints.maxWidth,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                widget.text,
+                style: widget.style,
+                maxLines: _expanded ? null : kCollapsedLines,
+                overflow: _expanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+              ),
+            ),
+            if (foldable)
+              AccessibleButton(
+                key: widget.toggleKey,
+                label: _expanded ? l10n.collapseText : l10n.expandText,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _expanded ? l10n.collapseText : l10n.expandText,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: statusBlueText,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      _expanded
+                          ? CupertinoIcons.chevron_up
+                          : CupertinoIcons.chevron_down,
+                      size: 12,
+                      color: statusBlueText,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _isFoldable(
+    BuildContext context,
+    String text,
+    TextStyle style,
+    double maxWidth,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: kCollapsedLines,
+      textDirection: Directionality.of(context),
+    )..layout(maxWidth: maxWidth);
+    return painter.didExceedMaxLines;
+  }
+}
+
+/// 项目上下文分区头：图标 + 标题 + 字数 + 修改时间 + 只读锁。
 class _ProjectContextHeader extends StatelessWidget {
-  const _ProjectContextHeader({required this.mtime});
+  const _ProjectContextHeader({required this.mtime, required this.charCount});
 
   final double? mtime;
+  final int charCount;
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +506,16 @@ class _ProjectContextHeader extends StatelessWidget {
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
+          if (charCount > 0)
+            Text(
+              '$charCount ${l10n.memoryCharUnit}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
           if (modified != null) ...[
+            const SizedBox(width: 6),
             Text(
               modified,
               style: const TextStyle(

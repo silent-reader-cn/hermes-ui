@@ -289,5 +289,103 @@ void main() {
       await tester.pump();
       expect(api.fetchCount, 2);
     });
+
+    testWidgets('短内容 → 无展开按钮，字数统计显示', (tester) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: '记住用户偏好'),
+      );
+      await pumpMemoryPage(tester, api);
+
+      expect(find.text('记住用户偏好'), findsOneWidget);
+      expect(find.textContaining('展开'), findsNothing);
+      expect(find.text('6 字'), findsOneWidget);
+    });
+
+    testWidgets('长内容 → 折叠显示「展开全文」，点击展开/收起', (tester) async {
+      final longText = List.filled(40, '这是一段很长的记忆内容。').join();
+      final api = FakeMemoryApi(
+        response: MemoryResponse(memory: longText, soul: '短'),
+      );
+      await pumpMemoryPage(tester, api);
+
+      // 折叠态：有展开按钮，无收起按钮
+      expect(
+        find.byKey(const ValueKey('memory-expand-memory')),
+        findsOneWidget,
+      );
+      expect(find.text('展开全文'), findsOneWidget);
+      expect(find.text('收起'), findsNothing);
+
+      // 点击展开 → 变「收起」
+      await tester.tap(find.byKey(const ValueKey('memory-expand-memory')));
+      await tester.pump();
+      expect(find.text('收起'), findsOneWidget);
+      expect(find.text('展开全文'), findsNothing);
+
+      // 再点收起 → 回到折叠态
+      await tester.tap(find.byKey(const ValueKey('memory-expand-memory')));
+      await tester.pump();
+      expect(find.text('展开全文'), findsOneWidget);
+    });
+
+    testWidgets('项目上下文长文同样折叠', (tester) async {
+      final longText = List.filled(40, '项目上下文内容。').join();
+      final api = FakeMemoryApi(
+        response: MemoryResponse(projectContext: longText),
+      );
+      await pumpMemoryPage(tester, api);
+
+      expect(
+        find.byKey(const ValueKey('memory-expand-project')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('memory-expand-project')));
+      await tester.pump();
+      expect(find.text('收起'), findsOneWidget);
+    });
+
+    testWidgets('宽屏（≥700）→ 分区卡片两列并排', (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: 'm',
+          user: 'u',
+          soul: 's',
+          projectContext: 'pc',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      final y1 = tester.getTopLeft(find.text('我的笔记')).dy;
+      final y2 = tester.getTopLeft(find.text('用户画像')).dy;
+      final y3 = tester.getTopLeft(find.text('智能体灵魂')).dy;
+      final y4 = tester.getTopLeft(find.text('项目上下文')).dy;
+      expect(y1, closeTo(y2, 0.5), reason: '第一行两列并排');
+      expect(y3, closeTo(y4, 0.5), reason: '第二行两列并排');
+      expect(y3, greaterThan(y1), reason: '第二行在第一行下方');
+    });
+
+    testWidgets('窄屏（<700）→ 分区卡片单列堆叠', (tester) async {
+      tester.view.physicalSize = const Size(400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: 'm', user: 'u', soul: 's'),
+      );
+      await pumpMemoryPage(tester, api);
+
+      final y1 = tester.getTopLeft(find.text('我的笔记')).dy;
+      final y2 = tester.getTopLeft(find.text('用户画像')).dy;
+      final y3 = tester.getTopLeft(find.text('智能体灵魂')).dy;
+      expect(y2, greaterThan(y1), reason: '单列依次向下');
+      expect(y3, greaterThan(y2));
+    });
   });
 }
