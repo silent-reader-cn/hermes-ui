@@ -171,6 +171,7 @@ class AppLocalizations {
   String get untitledSession => isEnglish ? 'Untitled session' : '未命名会话';
   String messageCountLabel(int count) =>
       isEnglish ? '$count messages' : '$count 条消息';
+  String get scheduledSection => isEnglish ? 'Scheduled' : '定时';
   String get pinnedSection => isEnglish ? 'Pinned' : '置顶';
   String get todaySection => isEnglish ? 'Today' : '今天';
   String get yesterdaySection => isEnglish ? 'Yesterday' : '昨天';

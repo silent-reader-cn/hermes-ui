@@ -15,6 +15,7 @@ import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
+import 'scheduled_session_disclosure.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
 
@@ -430,38 +431,73 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty)
-          SliverToBoxAdapter(
-            child: CupertinoListSection.insetGrouped(
-              header: Text(_sectionTitle(context, section.title)),
-              children: [
-                for (final session in section.sessions)
-                  _SessionRow(
-                    key: ValueKey(
-                      'session-row-${session.sessionId ?? session.id}',
-                    ),
-                    session: session,
-                    highlightQuery: isSearchMode
-                        ? state.searchQuery?.trim()
-                        : null,
-                    selectionMode: state.isSelectionMode,
-                    selected: state.selectedSessionIds.contains(
-                      session.sessionId ?? session.id,
-                    ),
-                    onTap: () => state.isSelectionMode
-                        ? ref
+          if (section.title == '定时')
+            SliverToBoxAdapter(
+              child: ScheduledSessionDisclosure(
+                title: _sectionTitle(context, section.title),
+                count: section.sessions.length,
+                children: [
+                  for (final session in section.sessions)
+                    _SessionRow(
+                      key: ValueKey(
+                        'session-row-${session.sessionId ?? session.id}',
+                      ),
+                      session: session,
+                      highlightQuery: isSearchMode
+                          ? state.searchQuery?.trim()
+                          : null,
+                      selectionMode: state.isSelectionMode,
+                      selected: state.selectedSessionIds.contains(
+                        session.sessionId ?? session.id,
+                      ),
+                      onTap: () => state.isSelectionMode
+                          ? ref
                               .read(sessionListControllerProvider.notifier)
                               .toggleSelection(session.sessionId ?? session.id)
-                        : _openSession(context, session),
-                    onLongPress: () => ref
-                        .read(sessionListControllerProvider.notifier)
-                        .toggleSelection(session.sessionId ?? session.id),
-                    onActions: state.isSelectionMode
-                        ? null
-                        : () => _showRowActions(context, session),
-                  ),
-              ],
+                          : _openSession(context, session),
+                      onLongPress: () => ref
+                          .read(sessionListControllerProvider.notifier)
+                          .toggleSelection(session.sessionId ?? session.id),
+                      onActions: state.isSelectionMode
+                          ? null
+                          : () => _showRowActions(context, session),
+                    ),
+                ],
+              ),
+            )
+          else
+            SliverToBoxAdapter(
+              child: CupertinoListSection.insetGrouped(
+                header: Text(_sectionTitle(context, section.title)),
+                children: [
+                  for (final session in section.sessions)
+                    _SessionRow(
+                      key: ValueKey(
+                        'session-row-${session.sessionId ?? session.id}',
+                      ),
+                      session: session,
+                      highlightQuery: isSearchMode
+                          ? state.searchQuery?.trim()
+                          : null,
+                      selectionMode: state.isSelectionMode,
+                      selected: state.selectedSessionIds.contains(
+                        session.sessionId ?? session.id,
+                      ),
+                      onTap: () => state.isSelectionMode
+                          ? ref
+                              .read(sessionListControllerProvider.notifier)
+                              .toggleSelection(session.sessionId ?? session.id)
+                          : _openSession(context, session),
+                      onLongPress: () => ref
+                          .read(sessionListControllerProvider.notifier)
+                          .toggleSelection(session.sessionId ?? session.id),
+                      onActions: state.isSelectionMode
+                          ? null
+                          : () => _showRowActions(context, session),
+                    ),
+                ],
+              ),
             ),
-          ),
       if (state.hasMore)
         const SliverToBoxAdapter(
           child: Padding(
@@ -956,6 +992,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 String _sectionTitle(BuildContext context, String rawTitle) {
   final l10n = AppLocalizations.of(context);
   switch (rawTitle) {
+    case '定时':
+      return l10n.scheduledSection;
     case '置顶':
       return l10n.pinnedSection;
     case '今天':
