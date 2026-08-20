@@ -1,0 +1,353 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hermex_flutter/app/app.dart';
+import 'package:hermex_flutter/app/shell/adaptive_shell.dart';
+import 'package:hermex_flutter/app/shell/empty_detail_pane.dart';
+import 'package:hermex_flutter/app/shell/sidebar_utility_toolbar.dart';
+import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:hermex_flutter/features/onboarding/onboarding_page.dart';
+import 'package:hermex_flutter/features/session_list/session_list_page.dart';
+import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/tasks/tasks_page.dart';
+import 'package:hermex_flutter/features/tasks/tasks_providers.dart';
+import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../helpers/fake_session_list_api.dart';
+import '../helpers/fake_tasks_api.dart';
+import '../helpers/in_memory_secure_storage.dart';
+
+void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  const List<LocalizationsDelegate<dynamic>> testDelegates = [
+    AppLocalizationsDelegate(),
+    DefaultCupertinoLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
+
+  ServerConnection buildConn(String id) {
+    return ServerConnection(
+      id: id,
+      name: 'Home',
+      baseUrl: 'http://hermes.local:30002',
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+  }
+
+  Widget buildShellTestApp({
+    required String initialLocation,
+    required Size size,
+    FakeSessionListApi? sessionApi,
+  }) {
+    final router = GoRouter(
+      initialLocation: initialLocation,
+      routes: [
+        ShellRoute(
+          builder: (context, state, child) => AdaptiveShell(
+            state: state,
+            child: child,
+          ),
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, state) => const SessionListPage(),
+            ),
+            GoRoute(
+              path: '/tasks',
+              builder: (context, state) =>
+                  const Text('Tasks Content', key: ValueKey('tasks-child')),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    return ProviderScope(
+      overrides: [
+        if (sessionApi != null)
+          sessionListApiFactoryProvider.overrideWithValue((_) => sessionApi),
+      ],
+      child: MediaQuery(
+        data: MediaQueryData(size: size),
+        child: CupertinoApp.router(
+          routerConfig: router,
+          locale: const Locale('zh'),
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          localizationsDelegates: testDelegates,
+        ),
+      ),
+    );
+  }
+
+  group('AdaptiveShell Widget 单元与视口测试', () {
+    testWidgets('窄视口（390×844）：直接渲染 child，不渲染双栏和侧栏', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/tasks',
+          size: const Size(390, 844),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('tasks-child')), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+      expect(find.byType(EmptyDetailPane), findsNothing);
+    });
+
+    testWidgets('宽视口（1280×800）处于根路径 `/`：渲染双栏，左侧常驻侧栏，右侧 EmptyDetailPane', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(find.byType(SidebarUtilityToolbar), findsOneWidget);
+      expect(find.byType(EmptyDetailPane), findsOneWidget);
+      expect(find.byType(SessionListPage), findsOneWidget);
+    });
+
+    testWidgets('宽视口（1280×800）处于二级子路径 `/tasks`：左侧侧栏可见，右侧展示 child', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/tasks',
+          size: const Size(1280, 800),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tasks-child')), findsOneWidget);
+      expect(find.byType(EmptyDetailPane), findsNothing);
+    });
+
+    testWidgets('断点边界值验证：899 窄屏 vs 900 宽屏', (tester) async {
+      tester.view.physicalSize = const Size(899, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // 899.0 宽 → 窄屏
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/tasks',
+          size: const Size(899, 600),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
+
+      // 900.0 宽 → 宽屏
+      tester.view.physicalSize = const Size(900, 600);
+      await tester.pumpWidget(
+        buildShellTestApp(
+          initialLocation: '/tasks',
+          size: const Size(900, 600),
+          sessionApi: FakeSessionListApi(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
+    });
+  });
+
+  group('SidebarUtilityToolbar 与 EmptyDetailPane 交互测试', () {
+    testWidgets('侧栏工具条包含全部 6 个工具入口且对应 Key 准确', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MediaQuery(
+            data: MediaQueryData(size: Size(1280, 800)),
+            child: CupertinoApp(
+              locale: Locale('zh'),
+              supportedLocales: [Locale('zh'), Locale('en')],
+              localizationsDelegates: testDelegates,
+              home: CupertinoPageScaffold(
+                child: SizedBox(
+                  width: 320,
+                  child: SidebarUtilityToolbar(currentLocation: '/tasks'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-utility-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-utility-skills')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-utility-memory')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-utility-insights')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsOneWidget);
+    });
+
+    testWidgets('EmptyDetailPane 展示图标、说明与新建按钮', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionListApiFactoryProvider.overrideWithValue((_) => FakeSessionListApi()),
+          ],
+          child: const MediaQuery(
+            data: MediaQueryData(size: Size(1280, 800)),
+            child: CupertinoApp(
+              locale: Locale('zh'),
+              supportedLocales: [Locale('zh'), Locale('en')],
+              localizationsDelegates: testDelegates,
+              home: EmptyDetailPane(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择会话'), findsOneWidget);
+      expect(find.text('从左侧选择会话或新建聊天'), findsOneWidget);
+      expect(find.byKey(const ValueKey('empty-detail-new-chat-button')), findsOneWidget);
+    });
+  });
+
+  group('HermexApp 全局路由与外壳集成测试', () {
+    testWidgets('未连接服务器时进入 /onboarding：无论是宽屏还是窄屏均无侧栏外壳', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final storage = InMemorySecureStorage();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            connectionStoreProvider.overrideWithValue(
+              ConnectionStore(storage: storage),
+            ),
+          ],
+          child: const HermexApp(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(OnboardingPage), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+    });
+
+    testWidgets('已激活连接在窄屏（390×844）：展示单栈 SessionListPage，无侧栏', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final storage = InMemorySecureStorage();
+      final store = ConnectionStore(storage: storage);
+      final conn = buildConn('c1');
+      await store.save(conn);
+      await store.setActive(conn.id);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            connectionStoreProvider.overrideWithValue(store),
+            sessionListApiFactoryProvider.overrideWithValue(
+              (_) => FakeSessionListApi(),
+            ),
+          ],
+          child: const HermexApp(),
+        ),
+      );
+
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      expect(find.byType(SessionListPage), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+    });
+
+    testWidgets('已激活连接在宽屏（1280×800）：展示双栏外壳（左侧侧栏 + 右侧 EmptyDetailPane）', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final storage = InMemorySecureStorage();
+      final store = ConnectionStore(storage: storage);
+      final conn = buildConn('c1');
+      await store.save(conn);
+      await store.setActive(conn.id);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            connectionStoreProvider.overrideWithValue(store),
+            sessionListApiFactoryProvider.overrideWithValue(
+              (_) => FakeSessionListApi(),
+            ),
+            tasksApiFactoryProvider.overrideWithValue((_) => FakeTasksApi()),
+          ],
+          child: const HermexApp(),
+        ),
+      );
+
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(find.byType(EmptyDetailPane), findsOneWidget);
+      expect(find.byType(SessionListPage), findsOneWidget);
+
+      // 点击侧栏任务工具按钮 → 切换到 /tasks 页面
+      final tasksButton = find.byKey(const ValueKey('sidebar-utility-tasks'));
+      expect(tasksButton, findsOneWidget);
+      await tester.tap(tasksButton);
+
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(find.byType(TasksPage), findsOneWidget);
+      expect(find.byType(EmptyDetailPane), findsNothing);
+      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+    });
+  });
+}

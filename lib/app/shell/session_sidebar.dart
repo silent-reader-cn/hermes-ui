@@ -1,0 +1,31 @@
+import 'package:flutter/cupertino.dart';
+
+import '../../features/session_list/session_list_page.dart';
+import 'sidebar_utility_toolbar.dart';
+
+/// 宽屏自适应外壳的左侧常驻侧栏（TASK W2）。
+///
+/// 包含顶部工具入口行（任务/看板/技能/记忆/统计/设置）与下方完整的会话列表。
+class SessionSidebar extends StatelessWidget {
+  const SessionSidebar({
+    super.key,
+    required this.currentLocation,
+  });
+
+  /// 当前激活的路由路径。
+  final String currentLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('adaptive-session-sidebar'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SidebarUtilityToolbar(currentLocation: currentLocation),
+        const Expanded(
+          child: SessionListPage(),
+        ),
+      ],
+    );
+  }
+}
