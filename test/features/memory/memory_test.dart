@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -19,9 +20,7 @@ import '../../helpers/fake_memory_api.dart';
 ProviderContainer makeContainer(FakeMemoryApi api) {
   final container = ProviderContainer(
     overrides: [
-      apiClientProvider.overrideWithValue(
-        ApiClient(baseUrl: 'http://test.local:30002'),
-      ),
+      apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
       memoryApiFactoryProvider.overrideWithValue((_) => api),
     ],
   );
@@ -33,42 +32,25 @@ void main() {
   group('记忆辅助函数', () {
     test('showsProjectContext：仅非空（trim 后）文档展示', () {
       expect(showsProjectContext(const MemoryResponse()), isFalse);
-      expect(
-        showsProjectContext(const MemoryResponse(projectContext: '   ')),
-        isFalse,
-      );
-      expect(
-        showsProjectContext(const MemoryResponse(projectContext: 'x')),
-        isTrue,
-      );
+      expect(showsProjectContext(const MemoryResponse(projectContext: '   ')), isFalse);
+      expect(showsProjectContext(const MemoryResponse(projectContext: 'x')), isTrue);
     });
 
     test('memoryProjectContextDetail：「名称 — 工作区」，空 → null', () {
       expect(memoryProjectContextDetail(const MemoryResponse()), isNull);
       expect(
         memoryProjectContextDetail(
-          const MemoryResponse(
-            projectContextName: '  ',
-            projectContextWorkspace: '',
-          ),
+          const MemoryResponse(projectContextName: '  ', projectContextWorkspace: ''),
         ),
         isNull,
       );
       expect(
         memoryProjectContextDetail(
-          const MemoryResponse(
-            projectContextName: 'p',
-            projectContextWorkspace: 'w',
-          ),
+          const MemoryResponse(projectContextName: 'p', projectContextWorkspace: 'w'),
         ),
         'p — w',
       );
-      expect(
-        memoryProjectContextDetail(
-          const MemoryResponse(projectContextName: 'p'),
-        ),
-        'p',
-      );
+      expect(memoryProjectContextDetail(const MemoryResponse(projectContextName: 'p')), 'p');
     });
 
     test('memoryHasContent：全空 false，任一分区/项目上下文非空 true', () {
@@ -76,10 +58,7 @@ void main() {
       expect(memoryHasContent(const MemoryResponse(memory: 'm')), isTrue);
       expect(memoryHasContent(const MemoryResponse(user: '  ')), isFalse);
       expect(memoryHasContent(const MemoryResponse(soul: 's')), isTrue);
-      expect(
-        memoryHasContent(const MemoryResponse(projectContext: 'pc')),
-        isTrue,
-      );
+      expect(memoryHasContent(const MemoryResponse(projectContext: 'pc')), isTrue);
     });
 
     test('formatMemoryMtime：相对时间中文描述；null/非法 → null', () {
@@ -88,26 +67,11 @@ void main() {
 
       expect(formatMemoryMtime(null), isNull);
       expect(formatMemoryMtime(double.nan), isNull);
-      expect(
-        formatMemoryMtime(secs(const Duration(seconds: 30)), now: now),
-        '刚刚更新',
-      );
-      expect(
-        formatMemoryMtime(secs(const Duration(minutes: 5)), now: now),
-        '5 分钟前更新',
-      );
-      expect(
-        formatMemoryMtime(secs(const Duration(hours: 3)), now: now),
-        '3 小时前更新',
-      );
-      expect(
-        formatMemoryMtime(secs(const Duration(days: 10)), now: now),
-        '10 天前更新',
-      );
-      expect(
-        formatMemoryMtime(secs(const Duration(days: 40)), now: now),
-        '更新于 2026-07-07',
-      );
+      expect(formatMemoryMtime(secs(const Duration(seconds: 30)), now: now), '刚刚更新');
+      expect(formatMemoryMtime(secs(const Duration(minutes: 5)), now: now), '5 分钟前更新');
+      expect(formatMemoryMtime(secs(const Duration(hours: 3)), now: now), '3 小时前更新');
+      expect(formatMemoryMtime(secs(const Duration(days: 10)), now: now), '10 天前更新');
+      expect(formatMemoryMtime(secs(const Duration(days: 40)), now: now), '更新于 2026-07-07');
     });
   });
 
@@ -128,9 +92,7 @@ void main() {
     });
 
     test('初始加载失败 → AsyncError；refresh 重试成功', () async {
-      final api = FakeMemoryApi(
-        response: const MemoryResponse(memory: '恢复的记忆'),
-      );
+      final api = FakeMemoryApi(response: const MemoryResponse(memory: '恢复的记忆'));
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
       final container = makeContainer(api);
 
@@ -144,10 +106,7 @@ void main() {
       api.fetchError = null;
       await container.read(memoryControllerProvider.notifier).refresh();
 
-      expect(
-        container.read(memoryControllerProvider).valueOrNull!.memory,
-        '恢复的记忆',
-      );
+      expect(container.read(memoryControllerProvider).valueOrNull!.memory, '恢复的记忆');
     });
 
     test('refresh 重新拉取', () async {
@@ -170,9 +129,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(
-              ApiClient(baseUrl: 'http://test.local:30002'),
-            ),
+            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
             memoryApiFactoryProvider.overrideWithValue((_) => api),
           ],
           child: CupertinoApp.router(routerConfig: router),
@@ -183,12 +140,8 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('渲染：三个分区标题 + 内容 + 相对修改时间', (tester) async {
-      final mtime =
-          DateTime.now()
-              .subtract(const Duration(hours: 2))
-              .millisecondsSinceEpoch /
-          1000;
+    testWidgets('渲染：分区 Tab + 内容 + 相对修改时间', (tester) async {
+      final mtime = DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch / 1000;
       final api = FakeMemoryApi(
         response: MemoryResponse(
           memory: '记住用户偏好',
@@ -201,21 +154,43 @@ void main() {
       );
       await pumpMemoryPage(tester, api);
 
-      expect(find.text('我的笔记'), findsOneWidget);
-      expect(find.text('用户画像'), findsOneWidget);
-      expect(find.text('智能体灵魂'), findsOneWidget);
+      // 验证 Tab 切换器渲染
+      expect(find.byKey(const ValueKey('memory-tab-memory')), findsOneWidget);
+      expect(find.byKey(const ValueKey('memory-tab-user')), findsOneWidget);
+      expect(find.byKey(const ValueKey('memory-tab-soul')), findsOneWidget);
+
+      // 默认「我的笔记」tab
       expect(find.text('记住用户偏好'), findsOneWidget);
+      expect(find.text('2 小时前更新'), findsOneWidget);
+
+      // 切换到「用户画像」tab
+      await tester.tap(find.byKey(const ValueKey('memory-tab-user')));
+      await tester.pump();
       expect(find.text('资深开发者'), findsOneWidget);
+      expect(find.text('2 小时前更新'), findsOneWidget);
+
+      // 切换到「智能体灵魂」tab
+      await tester.tap(find.byKey(const ValueKey('memory-tab-soul')));
+      await tester.pump();
       expect(find.text('乐于助人'), findsOneWidget);
-      expect(find.text('2 小时前更新'), findsNWidgets(3));
+      expect(find.text('2 小时前更新'), findsOneWidget);
     });
 
     testWidgets('分区空内容 → 斜体占位文案', (tester) async {
       final api = FakeMemoryApi(response: const MemoryResponse(user: '有内容'));
       await pumpMemoryPage(tester, api);
 
+      // 默认「我的笔记」为空
       expect(find.text('暂无笔记'), findsOneWidget);
+
+      // 切换到「用户画像」
+      await tester.tap(find.byKey(const ValueKey('memory-tab-user')));
+      await tester.pump();
       expect(find.text('有内容'), findsOneWidget);
+
+      // 切换到「智能体灵魂」为空
+      await tester.tap(find.byKey(const ValueKey('memory-tab-soul')));
+      await tester.pump();
       expect(find.text('暂无灵魂设定'), findsOneWidget);
     });
 
@@ -230,7 +205,11 @@ void main() {
       );
       await pumpMemoryPage(tester, api);
 
-      expect(find.text('项目上下文'), findsOneWidget);
+      // 切换到项目上下文 tab
+      expect(find.byKey(const ValueKey('memory-tab-project')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('memory-tab-project')));
+      await tester.pump();
+
       expect(find.text('这是项目上下文'), findsOneWidget);
       expect(find.text('demo — /workspace/demo'), findsOneWidget);
       expect(find.textContaining('覆盖'), findsOneWidget);
@@ -256,14 +235,12 @@ void main() {
 
       expect(find.text('暂无记忆'), findsOneWidget);
       expect(find.text('还没有任何记忆内容'), findsOneWidget);
-      // 全空时不再渲染分区标题
-      expect(find.text('我的笔记'), findsNothing);
+      // 全空时不再渲染分区标题与 tab 切换器
+      expect(find.byKey(const ValueKey('memory-tab-memory')), findsNothing);
     });
 
     testWidgets('错误态：加载失败展示错误信息，重试恢复', (tester) async {
-      final api = FakeMemoryApi(
-        response: const MemoryResponse(memory: '恢复的记忆'),
-      );
+      final api = FakeMemoryApi(response: const MemoryResponse(memory: '恢复的记忆'));
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
       await pumpMemoryPage(tester, api);
 
@@ -291,9 +268,7 @@ void main() {
     });
 
     testWidgets('短内容 → 无展开按钮，字数统计显示', (tester) async {
-      final api = FakeMemoryApi(
-        response: const MemoryResponse(memory: '记住用户偏好'),
-      );
+      final api = FakeMemoryApi(response: const MemoryResponse(memory: '记住用户偏好'));
       await pumpMemoryPage(tester, api);
 
       expect(find.text('记住用户偏好'), findsOneWidget);
@@ -309,10 +284,7 @@ void main() {
       await pumpMemoryPage(tester, api);
 
       // 折叠态：有展开按钮，无收起按钮
-      expect(
-        find.byKey(const ValueKey('memory-expand-memory')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('memory-expand-memory')), findsOneWidget);
       expect(find.text('展开全文'), findsOneWidget);
       expect(find.text('收起'), findsNothing);
 
@@ -330,62 +302,95 @@ void main() {
 
     testWidgets('项目上下文长文同样折叠', (tester) async {
       final longText = List.filled(40, '项目上下文内容。').join();
-      final api = FakeMemoryApi(
-        response: MemoryResponse(projectContext: longText),
-      );
+      final api = FakeMemoryApi(response: MemoryResponse(projectContext: longText));
       await pumpMemoryPage(tester, api);
 
-      expect(
-        find.byKey(const ValueKey('memory-expand-project')),
-        findsOneWidget,
-      );
+      await tester.tap(find.byKey(const ValueKey('memory-tab-project')));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('memory-expand-project')), findsOneWidget);
+      expect(find.text('展开全文'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('memory-expand-project')));
       await tester.pump();
       expect(find.text('收起'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('memory-expand-project')));
+      await tester.pump();
+      expect(find.text('展开全文'), findsOneWidget);
     });
 
-    testWidgets('宽屏（≥700）→ 分区卡片两列并排', (tester) async {
+    testWidgets('宽屏（≥700）→ 单一 Tab 卡片且 maxWidth 720 居中不双列', (tester) async {
       tester.view.physicalSize = const Size(900, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final api = FakeMemoryApi(
+        response: const MemoryResponse(memory: 'm', user: 'u', soul: 's', projectContext: 'pc'),
+      );
+      await pumpMemoryPage(tester, api);
+
+      // 宽屏下只展示当前 tab 的单一卡片，不双列并排
+      expect(find.text('m'), findsOneWidget);
+      expect(find.text('u'), findsNothing);
+      expect(find.text('s'), findsNothing);
+      expect(find.text('pc'), findsNothing);
+
+      // 验证 ConstrainedBox 限制 maxWidth 为 720
+      final constrainedBox = tester.widget<ConstrainedBox>(
+        find.byWidgetPredicate((w) => w is ConstrainedBox && w.constraints.maxWidth == 720),
+      );
+      expect(constrainedBox.constraints.maxWidth, 720);
+    });
+
+    testWidgets('Tab 切换：点击各 Tab 正确切换卡片展示', (tester) async {
+      final api = FakeMemoryApi(
         response: const MemoryResponse(
-          memory: 'm',
-          user: 'u',
-          soul: 's',
-          projectContext: 'pc',
+          memory: '笔记内容',
+          user: '用户画像内容',
+          soul: '智能体灵魂内容',
+          projectContext: '项目上下文内容',
         ),
       );
       await pumpMemoryPage(tester, api);
 
-      final y1 = tester.getTopLeft(find.text('我的笔记')).dy;
-      final y2 = tester.getTopLeft(find.text('用户画像')).dy;
-      final y3 = tester.getTopLeft(find.text('智能体灵魂')).dy;
-      final y4 = tester.getTopLeft(find.text('项目上下文')).dy;
-      expect(y1, closeTo(y2, 0.5), reason: '第一行两列并排');
-      expect(y3, closeTo(y4, 0.5), reason: '第二行两列并排');
-      expect(y3, greaterThan(y1), reason: '第二行在第一行下方');
+      expect(find.text('笔记内容'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-user')));
+      await tester.pump();
+      expect(find.text('用户画像内容'), findsOneWidget);
+      expect(find.text('笔记内容'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-soul')));
+      await tester.pump();
+      expect(find.text('智能体灵魂内容'), findsOneWidget);
+      expect(find.text('用户画像内容'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-project')));
+      await tester.pump();
+      expect(find.text('项目上下文内容'), findsOneWidget);
+      expect(find.text('智能体灵魂内容'), findsNothing);
     });
 
-    testWidgets('窄屏（<700）→ 分区卡片单列堆叠', (tester) async {
-      tester.view.physicalSize = const Size(400, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
+    testWidgets('智能体灵魂与项目上下文支持 Markdown 渲染', (tester) async {
       final api = FakeMemoryApi(
-        response: const MemoryResponse(memory: 'm', user: 'u', soul: 's'),
+        response: const MemoryResponse(soul: '# 灵魂标题\n- 规则一\n- 规则二', projectContext: '**粗体项目说明**'),
       );
       await pumpMemoryPage(tester, api);
 
-      final y1 = tester.getTopLeft(find.text('我的笔记')).dy;
-      final y2 = tester.getTopLeft(find.text('用户画像')).dy;
-      final y3 = tester.getTopLeft(find.text('智能体灵魂')).dy;
-      expect(y2, greaterThan(y1), reason: '单列依次向下');
-      expect(y3, greaterThan(y2));
+      // 切到智能体灵魂 tab
+      await tester.tap(find.byKey(const ValueKey('memory-tab-soul')));
+      await tester.pump();
+      expect(find.byType(MarkdownBody), findsOneWidget);
+      expect(find.text('灵魂标题'), findsOneWidget);
+      expect(find.text('规则一'), findsOneWidget);
+
+      // 切到项目上下文 tab
+      await tester.tap(find.byKey(const ValueKey('memory-tab-project')));
+      await tester.pump();
+      expect(find.byType(MarkdownBody), findsOneWidget);
+      expect(find.text('粗体项目说明'), findsOneWidget);
     });
   });
 }
