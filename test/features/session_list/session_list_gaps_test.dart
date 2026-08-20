@@ -154,6 +154,47 @@ void main() {
       await tester.tap(find.text('取消'));
       await tester.pump(const Duration(milliseconds: 300));
     });
+
+    testWidgets('合并横向滚动行：同时展示来源 chips 与项目 chips，无独立 project-chips 容器', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '会话一', sourceLabel: 'telegram', projectId: 'p1'),
+          session('s2', '会话二', sourceLabel: 'qq', projectId: 'p2'),
+        ],
+      );
+      final projectApi = _FakeProjectApi(
+        projects: [
+          const ProjectSummary(projectId: 'p1', name: '项目一'),
+          const ProjectSummary(projectId: 'p2', name: '项目二'),
+        ],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
+
+      expect(
+        find.byKey(const ValueKey('session-list-filter-chips')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-project-chips')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('filter-chip-telegram')), findsOneWidget);
+      expect(find.byKey(const ValueKey('filter-chip-qq')), findsOneWidget);
+      expect(find.byKey(const ValueKey('project-chip-p1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('project-chip-p2')), findsOneWidget);
+
+      // 点击项目 chip 筛选
+      await tester.tap(find.byKey(const ValueKey('project-chip-p1')));
+      await tester.pump();
+      expect(find.text('会话一'), findsOneWidget);
+      expect(find.text('会话二'), findsNothing);
+      expect(find.byKey(const ValueKey('filter-chip-clear')), findsOneWidget);
+
+      // 清除筛选
+      await tester.tap(find.byKey(const ValueKey('filter-chip-clear')));
+      await tester.pump();
+      expect(find.text('会话二'), findsOneWidget);
+    });
   });
 
   group('多选批量', () {
