@@ -582,14 +582,33 @@ class _CollapsibleMarkdownBodyState extends State<_CollapsibleMarkdownBody> {
 
 /// Markdown 样式：以 Cupertino 主题为基底，显式配置正文语义色 label。
 MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
+  final theme = CupertinoTheme.of(context);
   final label = CupertinoColors.label.resolveFrom(context);
   final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
-  return MarkdownStyleSheet.fromCupertinoTheme(CupertinoTheme.of(context)).copyWith(
-    p: TextStyle(fontSize: 15, height: 1.4, color: label),
-    listBullet: TextStyle(fontSize: 15, color: label),
-    code: TextStyle(fontSize: 13, fontFamily: 'monospace', color: label, backgroundColor: grey5),
-    codeblockDecoration: BoxDecoration(color: grey5, borderRadius: BorderRadius.circular(6)),
-    blockquoteDecoration: BoxDecoration(color: grey5, borderRadius: BorderRadius.circular(6)),
+  return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
+    p: theme.textTheme.textStyle.copyWith(
+      fontSize: 15,
+      height: 1.4,
+      color: label,
+    ),
+    listBullet: theme.textTheme.textStyle.copyWith(
+      fontSize: 15,
+      color: label,
+    ),
+    code: TextStyle(
+      fontSize: 13,
+      fontFamily: 'monospace',
+      color: label,
+      backgroundColor: grey5,
+    ),
+    codeblockDecoration: BoxDecoration(
+      color: grey5,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    blockquoteDecoration: BoxDecoration(
+      color: grey5,
+      borderRadius: BorderRadius.circular(6),
+    ),
     blockquotePadding: const EdgeInsets.all(8),
   );
 }

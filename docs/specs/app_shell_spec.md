@@ -45,7 +45,7 @@ void main() {
 - **深色模式**：`CupertinoThemeData(brightness: Brightness.dark, primaryColor: ..., scaffoldBackgroundColor: Color(0xFF000000))`
 - **浅色模式**：`scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground`
 - 跟随系统：`MediaQuery.platformBrightnessOf(context)`
-- 主题 Provider：`app/theme/theme_provider.dart`（Notifier：light/dark/system 三态，持久化到 shared_preferences）
+- 全局字体：选用 MiSans（`assets/fonts/`，包含 Regular 400 + Medium 500/600/700），兼顾中文美感与西文/数字协调度
 - 全局文字样式：正文 17pt（iOS 默认）、大标题 34pt Bold、代码块用 monospace
 
 ## 5. 连接管理（core/connections/）

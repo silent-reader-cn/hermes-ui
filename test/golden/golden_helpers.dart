@@ -37,6 +37,13 @@ Future<void> loadHermexGoldenFonts() async {
     'CupertinoSystemDisplay',
     r'C:\Windows\Fonts\simhei.ttf',
   );
+  // 注册全局字体 MiSans（保证无论环境是否加载 asset bundle，字族都完整注册）
+  await _registerFontFile('MiSans', 'assets/fonts/MiSans-Regular.ttf');
+  await _registerFontFile('MiSans', 'assets/fonts/MiSans-Medium.ttf');
+  // 注册等宽字体 monospace（用于代码块、git diff 等）
+  await _registerFontFile('monospace', r'C:\Windows\Fonts\consola.ttf');
+  await _registerFontFile('monospace', r'C:\Windows\Fonts\cour.ttf');
+  await _registerFontFile('monospace', 'assets/fonts/MiSans-Regular.ttf');
 }
 
 /// 把某字体文件注册进 [family]（文件不存在时静默跳过）。
@@ -69,14 +76,7 @@ Future<void> pumpHermexPage(
       overrides: overrides,
       child: CupertinoApp(
         theme: buildCupertinoTheme(brightness),
-        // 应用主题把 textTheme 覆写为无 fontFamily 的样式 → 引擎默认字族
-        // 在测试里是 Ahem 方块。这里包一层 DefaultTextStyle 显式指定
-        // CupertinoSystemText（已注册 simhei，Latin+CJK 全覆盖），
-        // 页面内未显式指定字族的 Text 都会继承它。
-        home: DefaultTextStyle(
-          style: const TextStyle(fontFamily: 'CupertinoSystemText'),
-          child: page,
-        ),
+        home: page,
       ),
     ),
   );
