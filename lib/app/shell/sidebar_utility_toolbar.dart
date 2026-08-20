@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 侧栏顶部工具条项配置。
@@ -21,7 +23,8 @@ class _UtilityItem {
 /// 侧栏常驻工具入口行（TASK W2 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
 ///
 /// 宽屏下展示在会话列表顶部，提供任务、看板、技能、记忆、统计、设置的快捷跳转与激活高亮。
-class SidebarUtilityToolbar extends StatelessWidget {
+/// 受 [sessionEntryVisibilityProvider] 控制功能入口显隐；5 个功能入口全关时整条工具条返回 `SizedBox.shrink()`。
+class SidebarUtilityToolbar extends ConsumerWidget {
   const SidebarUtilityToolbar({
     super.key,
     required this.currentLocation,
@@ -70,11 +73,21 @@ class SidebarUtilityToolbar extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visibility = ref.watch(sessionEntryVisibilityProvider);
+    if (!visibility.showsAny) {
+      return const SizedBox.shrink();
+    }
+
     final l10n = AppLocalizations.of(context);
     final theme = CupertinoTheme.of(context);
     final primaryColor = theme.primaryColor;
     final inactiveColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+
+    final visibleItems = _items.where((item) {
+      if (item.id == 'settings') return true;
+      return visibility.isVisible(item.id);
+    }).toList(growable: false);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -83,7 +96,7 @@ class SidebarUtilityToolbar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _items.map((item) {
+            children: visibleItems.map((item) {
               final isSelected = currentLocation == item.path ||
                   currentLocation.startsWith('${item.path}/');
               final title = item.getTitle(l10n);

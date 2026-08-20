@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
+import 'session_entry_visibility.dart';
 
 /// 会话列表顶部工具行入口组件（对齐 Hermex SessionSidebarUtilityRows）。
 ///
@@ -16,7 +18,7 @@ import '../../l10n/app_localizations.dart';
 /// 5. 统计 (Insights) → /insights (CupertinoIcons.chart_bar_square, 对齐 LucideChartColumnIncreasing)
 ///
 /// 视觉采用纯 Cupertino 风格，支持深浅色自适应及 VoiceOver 语义与触觉反馈。
-class SessionListUtilityRows extends StatelessWidget {
+class SessionListUtilityRows extends ConsumerWidget {
   const SessionListUtilityRows({
     super.key,
     this.onTapTasks,
@@ -42,8 +44,62 @@ class SessionListUtilityRows extends StatelessWidget {
   final VoidCallback? onTapInsights;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visibility = ref.watch(sessionEntryVisibilityProvider);
+    if (!visibility.showsAny) {
+      return const SizedBox.shrink();
+    }
+
     final l10n = AppLocalizations.of(context);
+    final items = <Widget>[
+      if (visibility.tasks)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-tasks'),
+          icon: CupertinoIcons.clock,
+          label: l10n.tasks,
+          route: '/tasks',
+          customCallback: onTapTasks,
+        ),
+      if (visibility.kanban)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-kanban'),
+          icon: CupertinoIcons.square_list,
+          label: l10n.kanban,
+          route: '/kanban',
+          customCallback: onTapKanban,
+        ),
+      if (visibility.skills)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-skills'),
+          icon: CupertinoIcons.hammer,
+          label: l10n.skills,
+          route: '/skills',
+          customCallback: onTapSkills,
+        ),
+      if (visibility.memory)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-memory'),
+          // 蓝本 LucideBrain 在 CupertinoIcons 中无直接对应字形，选用 sparkles 表现 AI 记忆/智能
+          icon: CupertinoIcons.sparkles,
+          label: l10n.memory,
+          route: '/memory',
+          customCallback: onTapMemory,
+        ),
+      if (visibility.insights)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-insights'),
+          icon: CupertinoIcons.chart_bar_square,
+          label: l10n.insights,
+          route: '/insights',
+          customCallback: onTapInsights,
+        ),
+    ];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Container(
@@ -57,49 +113,7 @@ class SessionListUtilityRows extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildUtilityItem(
-              context,
-              key: const ValueKey('session-list-utility-tasks'),
-              icon: CupertinoIcons.clock,
-              label: l10n.tasks,
-              route: '/tasks',
-              customCallback: onTapTasks,
-            ),
-            _buildUtilityItem(
-              context,
-              key: const ValueKey('session-list-utility-kanban'),
-              icon: CupertinoIcons.square_list,
-              label: l10n.kanban,
-              route: '/kanban',
-              customCallback: onTapKanban,
-            ),
-            _buildUtilityItem(
-              context,
-              key: const ValueKey('session-list-utility-skills'),
-              icon: CupertinoIcons.hammer,
-              label: l10n.skills,
-              route: '/skills',
-              customCallback: onTapSkills,
-            ),
-            _buildUtilityItem(
-              context,
-              key: const ValueKey('session-list-utility-memory'),
-              // 蓝本 LucideBrain 在 CupertinoIcons 中无直接对应字形，选用 sparkles 表现 AI 记忆/智能
-              icon: CupertinoIcons.sparkles,
-              label: l10n.memory,
-              route: '/memory',
-              customCallback: onTapMemory,
-            ),
-            _buildUtilityItem(
-              context,
-              key: const ValueKey('session-list-utility-insights'),
-              icon: CupertinoIcons.chart_bar_square,
-              label: l10n.insights,
-              route: '/insights',
-              customCallback: onTapInsights,
-            ),
-          ],
+          children: items,
         ),
       ),
     );
