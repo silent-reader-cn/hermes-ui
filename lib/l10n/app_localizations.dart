@@ -20,6 +20,9 @@ class AppLocalizations {
   String get delete => isEnglish ? 'Delete' : '删除';
   String get edit => isEnglish ? 'Edit' : '编辑';
   String get close => isEnglish ? 'Close' : '关闭';
+  String get filterSessions => isEnglish ? 'Filter sessions' : '筛选会话';
+  String get channels => isEnglish ? 'Channels' : '渠道';
+  String get projects => isEnglish ? 'Projects' : '项目';
   String get retry => isEnglish ? 'Retry' : '重试';
   String get loading => isEnglish ? 'Loading…' : '加载中…';
   String get loadingEllipsis => isEnglish ? 'Loading…' : '加载中…';

@@ -77,18 +77,33 @@ void main() {
     );
   }
 
-  group('筛选栏', () {
-    testWidgets('渲染：全部/已归档 segmented + 来源 chips', (tester) async {
+  group('筛选弹层', () {
+    testWidgets('点击「会话」右侧箭头 → 弹层展示 全部/已归档 + 来源/项目 chips', (tester) async {
       final api = FakeSessionListApi(
         sessions: [
-          session('s1', '会话一', sourceLabel: 'telegram'),
+          session('s1', '会话一', sourceLabel: 'telegram', projectId: 'p1'),
           session('s2', '会话二', sourceLabel: 'qq'),
         ],
       );
-      await pumpList(tester, api);
+      final projectApi = _FakeProjectApi(
+        projects: [const ProjectSummary(projectId: 'p1', name: '项目一')],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
 
+      // 主界面不再常驻筛选栏（已收进弹层）
       expect(
         find.byKey(const ValueKey('session-list-filter-mode')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('filter-chip-telegram')), findsNothing);
+
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('session-filter-sheet')),
         findsOneWidget,
       );
       expect(find.text('全部'), findsOneWidget);
@@ -98,9 +113,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('filter-chip-qq')), findsOneWidget);
+      expect(find.byKey(const ValueKey('project-chip-p1')), findsOneWidget);
     });
 
-    testWidgets('来源 chip 点击 → 只显示匹配会话 + 清除筛选 chip 出现', (tester) async {
+    testWidgets('弹层内点来源 chip → 只显示匹配会话并关闭弹层；可再打开清除', (tester) async {
       final api = FakeSessionListApi(
         sessions: [
           session('s1', '会话一', sourceLabel: 'telegram'),
@@ -109,20 +125,33 @@ void main() {
       );
       await pumpList(tester, api);
 
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('filter-chip-telegram')));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
+      // 弹层关闭 + 列表被过滤
+      expect(find.byKey(const ValueKey('session-filter-sheet')), findsNothing);
       expect(find.text('会话一'), findsOneWidget);
       expect(find.text('会话二'), findsNothing);
-      expect(find.byKey(const ValueKey('filter-chip-clear')), findsOneWidget);
 
-      // 清除筛选恢复
-      await tester.tap(find.byKey(const ValueKey('filter-chip-clear')));
-      await tester.pump();
+      // 重新打开 → 出现清除筛选项 → 点击恢复
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('sheet-filter-clear')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('sheet-filter-clear')));
+      await tester.pumpAndSettle();
       expect(find.text('会话二'), findsOneWidget);
     });
 
-    testWidgets('归档模式：segmented 切换 → 拉取归档并展示归档会话 + 恢复归档菜单', (tester) async {
+    testWidgets('弹层内切「已归档」→ 拉取归档并展示；行菜单含「恢复归档」', (tester) async {
       final api = FakeSessionListApi(
         sessions: [
           session('s1', '普通会话'),
@@ -132,7 +161,11 @@ void main() {
       );
       await pumpList(tester, api);
 
-      await tester.tap(find.textContaining('已归档'));
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('sheet-filter-archived')));
       await tester.pump();
       await tester.pump();
 
@@ -143,8 +176,7 @@ void main() {
 
       // 归档行菜单含「恢复归档」
       await tester.tap(find.byKey(const ValueKey('session-actions-a1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('session-action-unarchive')),
         findsOneWidget,
@@ -155,11 +187,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     });
 
-    testWidgets('合并横向滚动行：同时展示来源 chips 与项目 chips，无独立 project-chips 容器', (tester) async {
+    testWidgets('弹层内点项目 chip → 项目筛选生效', (tester) async {
       final api = FakeSessionListApi(
         sessions: [
           session('s1', '会话一', sourceLabel: 'telegram', projectId: 'p1'),
-          session('s2', '会话二', sourceLabel: 'qq', projectId: 'p2'),
+          session('s2', '会话二', projectId: 'p2'),
         ],
       );
       final projectApi = _FakeProjectApi(
@@ -170,30 +202,19 @@ void main() {
       );
       await pumpList(tester, api, projectApi: projectApi);
 
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
       expect(
-        find.byKey(const ValueKey('session-list-filter-chips')),
+        find.byKey(const ValueKey('project-chip-p1')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('session-list-project-chips')),
-        findsNothing,
-      );
-      expect(find.byKey(const ValueKey('filter-chip-telegram')), findsOneWidget);
-      expect(find.byKey(const ValueKey('filter-chip-qq')), findsOneWidget);
-      expect(find.byKey(const ValueKey('project-chip-p1')), findsOneWidget);
-      expect(find.byKey(const ValueKey('project-chip-p2')), findsOneWidget);
-
-      // 点击项目 chip 筛选
       await tester.tap(find.byKey(const ValueKey('project-chip-p1')));
-      await tester.pump();
+      await tester.pumpAndSettle();
+
       expect(find.text('会话一'), findsOneWidget);
       expect(find.text('会话二'), findsNothing);
-      expect(find.byKey(const ValueKey('filter-chip-clear')), findsOneWidget);
-
-      // 清除筛选
-      await tester.tap(find.byKey(const ValueKey('filter-chip-clear')));
-      await tester.pump();
-      expect(find.text('会话二'), findsOneWidget);
     });
   });
 
@@ -220,15 +241,13 @@ void main() {
 
       // 批量归档确认
       await tester.tap(find.byKey(const ValueKey('batch-archive')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('batch-archive-dialog')),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const ValueKey('batch-archive-confirm')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(api.archiveCalls.where((c) => c.endsWith(':true')), hasLength(2));
       // 多选模式退出（清空勾选）
@@ -248,13 +267,11 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.byKey(const ValueKey('batch-delete')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(find.textContaining('2 个会话'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('batch-delete-confirm')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(api.deleteCalls, hasLength(2));
       expect(api.deleteCalls.toSet(), {'s1', 's2'});
     });
@@ -291,19 +308,16 @@ void main() {
       await pumpList(tester, api, projectApi: projectApi);
 
       await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('session-action-move-project')),
       );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('project-picker-p1')), findsOneWidget);
       expect(find.text('游戏'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('project-picker-p1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(api.moveCalls, ['s1:p1']);
     });
@@ -326,11 +340,9 @@ void main() {
       await tester.longPress(find.byKey(const ValueKey('session-row-s1')));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('batch-move')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-picker-p1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(api.moveCalls, ['s1:p1']);
     });
@@ -429,9 +441,14 @@ void main() {
       );
       await pumpList(tester, api, projectApi: projectApi);
 
+      // 项目筛选已收进弹层：打开 → 断言项目 chip → 点击生效
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('project-chip-p1')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('project-chip-p1')));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('session-row-s1')), findsOneWidget);
     });
 
@@ -443,32 +460,27 @@ void main() {
       await pumpList(tester, api, projectApi: projectApi);
 
       await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('session-action-move-project')),
       );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       // 长按项目行 → 管理菜单 → 重命名 → 输入新名 → 保存
       await tester.longPress(find.byKey(const ValueKey('project-picker-p1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('project-action-rename')),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const ValueKey('project-action-rename')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('project-create-name')),
         '新名',
       );
       await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(projectApi.renamedName, '新名');
     });
@@ -481,27 +493,22 @@ void main() {
       await pumpList(tester, api, projectApi: projectApi);
 
       await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('session-action-move-project')),
       );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       await tester.longPress(find.byKey(const ValueKey('project-picker-p1')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-action-delete')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('project-delete-confirm')),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const ValueKey('project-delete-confirm')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(projectApi.deletedIds, ['p1']);
     });
@@ -517,6 +524,12 @@ void main() {
         ],
       );
       await pumpList(tester, api);
+      // 角标在筛选弹层的「已归档」选项上
+      expect(find.textContaining('已归档 (2)'), findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
       expect(find.textContaining('已归档 (2)'), findsOneWidget);
     });
   });

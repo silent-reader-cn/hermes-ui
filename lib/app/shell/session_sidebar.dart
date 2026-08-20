@@ -26,6 +26,7 @@ class SessionSidebar extends StatelessWidget {
           child: SessionListPage(
             showUtilityRows: false,
             showSettingsTrailing: false,
+            showFab: false,
           ),
         ),
       ],

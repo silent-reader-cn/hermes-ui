@@ -10,7 +10,7 @@ class SessionEntryVisibility {
   /// 创建会话列表入口显隐状态，缺省全为 true。
   const SessionEntryVisibility({
     this.tasks = true,
-    this.kanban = true,
+    this.kanban = false,
     this.skills = true,
     this.memory = true,
     this.insights = true,
@@ -96,11 +96,12 @@ class SessionEntryVisibility {
 /// 会话列表功能入口显隐状态 Provider（持久化到 shared_preferences）。
 final sessionEntryVisibilityProvider =
     NotifierProvider<SessionEntryVisibilityController, SessionEntryVisibility>(
-  SessionEntryVisibilityController.new,
-);
+      SessionEntryVisibilityController.new,
+    );
 
 /// 控制会话列表功能入口显隐及本地持久化的 Notifier。
-class SessionEntryVisibilityController extends Notifier<SessionEntryVisibility> {
+class SessionEntryVisibilityController
+    extends Notifier<SessionEntryVisibility> {
   /// SharedPreferences key 前缀。
   static const String prefix = 'session_entry_visibility_';
 

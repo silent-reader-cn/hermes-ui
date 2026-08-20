@@ -7,10 +7,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SessionEntryVisibility 模型单测', () {
-    test('默认配置全为 true', () {
+    test('默认配置：任务/技能/记忆/统计开，看板关（使用率低默认隐藏）', () {
       const visibility = SessionEntryVisibility();
       expect(visibility.tasks, isTrue);
-      expect(visibility.kanban, isTrue);
+      expect(visibility.kanban, isFalse);
       expect(visibility.skills, isTrue);
       expect(visibility.memory, isTrue);
       expect(visibility.insights, isTrue);
@@ -75,7 +75,7 @@ void main() {
       final modified = original.copyWith(tasks: false, memory: false);
 
       expect(modified.tasks, isFalse);
-      expect(modified.kanban, isTrue);
+      expect(modified.kanban, isFalse);
       expect(modified.skills, isTrue);
       expect(modified.memory, isFalse);
       expect(modified.insights, isTrue);
@@ -98,13 +98,13 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('初始状态从 SharedPreferences 读取（无记录时默认全开）', () async {
+    test('初始状态从 SharedPreferences 读取（无记录时默认：看板关其余开）', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       final state = container.read(sessionEntryVisibilityProvider);
       expect(state.tasks, isTrue);
-      expect(state.kanban, isTrue);
+      expect(state.kanban, isFalse);
       expect(state.skills, isTrue);
       expect(state.memory, isTrue);
       expect(state.insights, isTrue);

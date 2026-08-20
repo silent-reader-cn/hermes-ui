@@ -26,6 +26,19 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
   }
 }
 
+class _AllVisibleVisibilityNotifier extends SessionEntryVisibilityController {
+  @override
+  SessionEntryVisibility build() {
+    return const SessionEntryVisibility(
+      tasks: true,
+      kanban: true,
+      skills: true,
+      memory: true,
+      insights: true,
+    );
+  }
+}
+
 class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
   @override
   SessionEntryVisibility build() {
@@ -78,7 +91,7 @@ class _DestinationStub extends StatelessWidget {
 
 void main() {
   group('SessionListUtilityRows 独立组件测试', () {
-    testWidgets('渲染 5 个入口：任务、看板、技能、记忆、统计与对应图标', (tester) async {
+        testWidgets('默认渲染 4 个入口（看板默认隐藏——使用率低）', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: CupertinoApp(
@@ -89,26 +102,57 @@ void main() {
         ),
       );
 
-      // 5 个入口文本
+      // 默认 4 个入口文本（看板默认关闭）
       expect(find.text('任务'), findsOneWidget);
-      expect(find.text('看板'), findsOneWidget);
+      expect(find.text('看板'), findsNothing);
       expect(find.text('技能'), findsOneWidget);
       expect(find.text('记忆'), findsOneWidget);
       expect(find.text('统计'), findsOneWidget);
 
-      // 5 个入口 Key
-      expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('session-list-utility-kanban')), findsOneWidget);
-      expect(find.byKey(const ValueKey('session-list-utility-skills')), findsOneWidget);
-      expect(find.byKey(const ValueKey('session-list-utility-memory')), findsOneWidget);
-      expect(find.byKey(const ValueKey('session-list-utility-insights')), findsOneWidget);
+      // 入口 Key
+      expect(
+        find.byKey(const ValueKey('session-list-utility-tasks')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-kanban')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-skills')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-memory')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-insights')),
+        findsOneWidget,
+      );
+    });
 
-      // 5 个图标断言（对齐蓝本语义）
-      expect(find.byIcon(CupertinoIcons.clock), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.square_list), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.hammer), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.sparkles), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chart_bar_square), findsOneWidget);
+    testWidgets('显式全开时渲染 5 个入口（含看板）', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionEntryVisibilityProvider.overrideWith(
+              _AllVisibleVisibilityNotifier.new,
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: SessionListUtilityRows(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('看板'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('session-list-utility-kanban')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('自定义回调可正常触发', (tester) async {
@@ -120,6 +164,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            sessionEntryVisibilityProvider.overrideWith(
+              _AllVisibleVisibilityNotifier.new,
+            ),
+          ],
           child: CupertinoApp(
             home: CupertinoPageScaffold(
               child: SessionListUtilityRows(
@@ -157,8 +206,13 @@ void main() {
 
     testWidgets('可访问性语义：每个按钮具备 Semantics 标签', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: CupertinoApp(
+        ProviderScope(
+          overrides: [
+            sessionEntryVisibilityProvider.overrideWith(
+              _AllVisibleVisibilityNotifier.new,
+            ),
+          ],
+          child: const CupertinoApp(
             home: CupertinoPageScaffold(
               child: SessionListUtilityRows(),
             ),
@@ -340,12 +394,12 @@ void main() {
       return router;
     }
 
-    testWidgets('会话列表页正常加载时，5 个工具行入口均可见', (tester) async {
+    testWidgets('会话列表页正常加载时，默认 4 个工具行入口可见（看板默认隐藏）', (tester) async {
       await pumpSessionListPage(tester);
 
       expect(find.byKey(const ValueKey('session-list-utility-rows')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('session-list-utility-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-kanban')), findsNothing);
       expect(find.byKey(const ValueKey('session-list-utility-skills')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-list-utility-memory')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-list-utility-insights')), findsOneWidget);
@@ -361,7 +415,12 @@ void main() {
     });
 
     testWidgets('点击看板入口 → 跳转 /kanban', (tester) async {
-      await pumpSessionListPage(tester);
+      await pumpSessionListPage(
+        tester,
+        visibilityOverride: sessionEntryVisibilityProvider.overrideWith(
+          _AllVisibleVisibilityNotifier.new,
+        ),
+      );
 
       await tester.tap(find.byKey(const ValueKey('session-list-utility-kanban')));
       await tester.pumpAndSettle();
