@@ -16,6 +16,7 @@ Future<void> main() async {
   if (isDesktopPlatform()) {
     try {
       await windowManager.ensureInitialized();
+      await windowManager.setTitle('Hermex');
     } catch (e, st) {
       developer.log(
         'windowManager.ensureInitialized failed',
@@ -27,7 +28,9 @@ Future<void> main() async {
   }
   // 启动时恢复持久化的登录 cookie，避免 App 重启后登录态丢失（401）。
   // 未登录/无 cookie 时静默跳过；失败静默（会话列表会走自动重登兜底）。
-  CookieStore.shared = CookieStore(storage: const FlutterSecureStorageAdapter());
+  CookieStore.shared = CookieStore(
+    storage: const FlutterSecureStorageAdapter(),
+  );
   await CookieStore.shared.restore();
   runApp(
     ProviderScope(

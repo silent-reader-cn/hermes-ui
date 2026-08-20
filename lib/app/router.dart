@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -37,7 +38,9 @@ import '../features/workspace/workspace_page.dart';
 /// 路由守卫（§2.1 初始化顺序 + §3 守卫）：未配置服务器 → 一律重定向
 /// `/onboarding`；已有激活连接 → `/onboarding` 重定向 `/`（配置完成后自动
 /// 进入 SessionList）。激活连接变化（首次加载完成 / 切换 / 清除）经
-/// [refreshListenable] 触发重算。
+/// 全局根导航 Key。
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNavigator');
+
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier(0);
   ref.onDispose(refresh.dispose);
@@ -46,6 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: resolveInitialRoute(
       PlatformDispatcher.instance.defaultRouteName,
     ),
@@ -63,10 +67,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const OnboardingPage(),
       ),
       ShellRoute(
-        builder: (context, state, child) => AdaptiveShell(
-          state: state,
-          child: child,
-        ),
+        builder: (context, state, child) =>
+            AdaptiveShell(state: state, child: child),
         routes: [
           GoRoute(
             path: '/',
@@ -121,9 +123,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/git/:sessionId',
-            builder: (context, state) => GitPage(
-              sessionId: state.pathParameters['sessionId'] ?? '',
-            ),
+            builder: (context, state) =>
+                GitPage(sessionId: state.pathParameters['sessionId'] ?? ''),
           ),
           GoRoute(
             path: '/insights',
