@@ -136,11 +136,11 @@ final sessionListApiFactoryProvider = Provider<SessionListApiFactory>(
   (ref) => SessionListApiClient.new,
 );
 
-/// 会话列表分区（对齐 Hermex `SessionListSection.Kind`：pinned/today/yesterday/earlier）。
+/// 会话列表分区（对齐 Hermex `SessionListSection.Kind`：scheduled/pinned/today/yesterday/earlier）。
 class SessionListSection {
   const SessionListSection({required this.title, required this.sessions});
 
-  /// 分区标题（置顶 / 今天 / 昨天 / 更早；搜索模式为「搜索结果」）。
+  /// 分区标题（定时 / 置顶 / 今天 / 昨天 / 更早；搜索模式为「搜索结果」）。
   final String title;
 
   /// 分区内的会话（已按时间倒序）。
@@ -951,7 +951,7 @@ final sessionListVisibleSessionsProvider = Provider<List<SessionSummary>>((
   return all.sublist(0, end);
 });
 
-/// 会话分区（置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
+/// 会话分区（定时 / 置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
 final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   final visible = ref.watch(sessionListVisibleSessionsProvider);
   final query = ref
@@ -965,8 +965,14 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   return buildSessionSections(visible);
 });
 
-/// 按时间把会话分组为 置顶 / 今天 / 昨天 / 更早（对齐 Hermex
+/// 按类型与时间把会话分组为 定时 / 置顶 / 今天 / 昨天 / 更早（对齐 Hermex
 /// `SessionListViewModel.sections`），组内时间倒序；空组剔除。
+///
+/// 分组规则：
+/// 1. 定时优先：`session.isCronSession == true` 抽离为独立的「定时」分区；
+///    即使 `pinned == true` 亦归入「定时」（蓝本中 cron 会话与置顶互斥语义，置顶专属于普通交互会话）。
+/// 2. 置顶：非 cron 且 `pinned == true` 进入「置顶」分区。
+/// 3. 时间分区：非 cron 且非置顶按时间归入「今天」/「昨天」/「更早」。
 ///
 /// [now] 仅供测试注入固定参考时间；生产使用 [DateTime.now]。
 List<SessionListSection> buildSessionSections(
@@ -976,11 +982,17 @@ List<SessionListSection> buildSessionSections(
   final reference = now ?? DateTime.now();
   final sorted = [...sessions]
     ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
+  final scheduled = <SessionSummary>[];
   final pinned = <SessionSummary>[];
   final today = <SessionSummary>[];
   final yesterday = <SessionSummary>[];
   final earlier = <SessionSummary>[];
   for (final session in sorted) {
+    // 定时会话优先独立归区：即使 pinned == true 也归入「定时」（蓝本中 cron 会话与置顶互斥语义）。
+    if (session.isCronSession) {
+      scheduled.add(session);
+      continue;
+    }
     if (session.pinned == true) {
       pinned.add(session);
       continue;
@@ -1002,6 +1014,8 @@ List<SessionListSection> buildSessionSections(
     }
   }
   return [
+    if (scheduled.isNotEmpty)
+      SessionListSection(title: '定时', sessions: scheduled),
     if (pinned.isNotEmpty) SessionListSection(title: '置顶', sessions: pinned),
     if (today.isNotEmpty) SessionListSection(title: '今天', sessions: today),
     if (yesterday.isNotEmpty)
