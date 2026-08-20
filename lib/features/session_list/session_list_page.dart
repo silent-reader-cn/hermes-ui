@@ -665,6 +665,30 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               },
               child: Text(l10n.moveToProject),
             ),
+            CupertinoActionSheetAction(
+              key: const ValueKey('session-action-workspace'),
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                if (context.mounted) {
+                  // 蓝本对应 SF Symbol: folder (CupertinoIcons.folder)
+                  // push 保留 Navigator 栈，返回时保留滚动/搜索状态
+                  unawaited(context.push('/workspace/${session.id}'));
+                }
+              },
+              child: Text(l10n.workspace),
+            ),
+            CupertinoActionSheetAction(
+              key: const ValueKey('session-action-git'),
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                if (context.mounted) {
+                  // 蓝本对应 SF Symbol: arrow.triangle.branch (CupertinoIcons.arrow_branch)
+                  // push 保留 Navigator 栈，返回时保留滚动/搜索状态
+                  unawaited(context.push('/git/${session.id}'));
+                }
+              },
+              child: Text(l10n.git),
+            ),
             if (session.archived == true)
               CupertinoActionSheetAction(
                 key: const ValueKey('session-action-unarchive'),

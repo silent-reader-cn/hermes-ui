@@ -414,6 +414,7 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // 7. Workspace (Files)
   // ---------------------------------------------------------------------------
+  String get workspace => isEnglish ? 'Workspace' : '工作区';
   String get files => isEnglish ? 'Files' : '文件';
   String get workspaceFilesTitle => isEnglish ? 'Workspace Files' : '工作区文件';
   String get refreshFileList =>
@@ -578,6 +579,7 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // 10. Git
   // ---------------------------------------------------------------------------
+  String get git => isEnglish ? 'Git' : 'Git';
   String get gitPanel => isEnglish ? 'Git Panel' : 'Git 面板';
   String get gitPanelTitle => isEnglish ? 'Git Panel' : 'Git 面板';
   String get refreshGitStatus =>
