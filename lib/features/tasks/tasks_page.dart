@@ -224,7 +224,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               l10n.createTaskPrompt,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
             const SizedBox(height: 20),
@@ -445,7 +445,7 @@ class _TaskRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ],
@@ -590,7 +590,7 @@ class _TaskOutputSheet extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 13,
-                                  color: CupertinoColors.secondaryLabel,
+                                  color: secondaryText,
                                 ),
                               ),
                             ],
@@ -722,7 +722,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
           label,
           style: const TextStyle(
             fontSize: 13,
-            color: CupertinoColors.secondaryLabel,
+            color: secondaryText,
           ),
         ),
         const SizedBox(height: 6),

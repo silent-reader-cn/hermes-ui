@@ -538,7 +538,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 l10n.noMore,
                 style: const TextStyle(
                   fontSize: 13,
-                  color: CupertinoColors.secondaryLabel,
+                  color: secondaryText,
                 ),
               ),
             ),
@@ -614,7 +614,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   : l10n.tapButtonToStartNewChat,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
             if (!isSearchMode) ...[
@@ -1151,7 +1151,7 @@ class _SessionRow extends StatelessWidget {
                       metadata,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
+                        color: secondaryText,
                       ),
                     ),
                   ],

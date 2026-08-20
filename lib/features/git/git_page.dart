@@ -151,7 +151,7 @@ class _GitPageState extends ConsumerState<GitPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ),
@@ -396,7 +396,7 @@ class _GitPageState extends ConsumerState<GitPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -662,7 +662,7 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
             l10n.noPendingChanges,
             style: const TextStyle(
               fontSize: 13,
-              color: CupertinoColors.secondaryLabel,
+              color: secondaryText,
             ),
           ),
         ],

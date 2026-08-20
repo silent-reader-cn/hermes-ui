@@ -197,7 +197,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               isSearchMode ? l10n.tryAnotherKeyword : l10n.serverSkillsWillShowHere,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -298,7 +298,7 @@ class _SkillRow extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 13,
-                              color: CupertinoColors.secondaryLabel,
+                              color: secondaryText,
                             ),
                           ),
                         ],
@@ -370,7 +370,7 @@ class _SkillDetail extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           l10n.noMoreDetailsForSkill,
-          style: const TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
+          style: const TextStyle(fontSize: 13, color: secondaryText),
         ),
       );
     }
@@ -406,7 +406,7 @@ class _DetailLine extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label：',
-            style: const TextStyle(color: CupertinoColors.secondaryLabel),
+            style: const TextStyle(color: secondaryText),
           ),
           TextSpan(text: value),
         ],

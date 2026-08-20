@@ -190,7 +190,7 @@ class MemoryPage extends ConsumerWidget {
               l10n.noMemoryContentYet,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -324,7 +324,7 @@ class _MemorySectionHeader extends StatelessWidget {
               '$charCount ${l10n.memoryCharUnit}',
               style: const TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           if (modified != null) ...[
@@ -333,7 +333,7 @@ class _MemorySectionHeader extends StatelessWidget {
               modified,
               style: const TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -372,7 +372,7 @@ class _MemorySectionBody extends StatelessWidget {
           style: const TextStyle(
             fontSize: 15,
             fontStyle: FontStyle.italic,
-            color: CupertinoColors.secondaryLabel,
+            color: secondaryText,
           ),
         ),
       );
@@ -511,7 +511,7 @@ class _ProjectContextHeader extends StatelessWidget {
               '$charCount ${l10n.memoryCharUnit}',
               style: const TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           if (modified != null) ...[
@@ -520,7 +520,7 @@ class _ProjectContextHeader extends StatelessWidget {
               modified,
               style: const TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
             const SizedBox(width: 8),
@@ -555,7 +555,7 @@ class _ProjectContextFooter extends StatelessWidget {
             detail!,
             style: const TextStyle(
               fontSize: 12,
-              color: CupertinoColors.secondaryLabel,
+              color: secondaryText,
             ),
           ),
         if (shadowed) ...[
@@ -564,7 +564,7 @@ class _ProjectContextFooter extends StatelessWidget {
             l10n.projectContextShadowedWarning,
             style: const TextStyle(
               fontSize: 12,
-              color: CupertinoColors.secondaryLabel,
+              color: secondaryText,
             ),
           ),
         ],

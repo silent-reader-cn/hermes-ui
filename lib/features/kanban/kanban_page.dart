@@ -78,7 +78,7 @@ Color kanbanStatusColor(String? rawValue) {
     case 'done':
       return statusGreenText;
     case 'archived':
-      return CupertinoColors.secondaryLabel;
+      return secondaryText;
     default:
       return CupertinoColors.systemPurple;
   }
@@ -268,7 +268,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               l10n.clickPlusToCreateFirstCard,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -298,7 +298,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               l10n.createBoardOnServerPrompt,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -433,7 +433,7 @@ class _KanbanColumnView extends StatelessWidget {
                   '${cards.length}',
                   style: const TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: secondaryText,
                   ),
                 ),
               ],
@@ -447,11 +447,9 @@ class _KanbanColumnView extends StatelessWidget {
                   ? Center(
                     child: Text(
                       l10n.noCards,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel.withValues(
-                          alpha: 0.7,
-                        ),
+                        color: secondaryText,
                       ),
                     ),
                   )
@@ -503,7 +501,7 @@ class _KanbanCardTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色亮卡。
+          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色卡。
           color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
@@ -538,7 +536,7 @@ class _KanbanCardTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ),
@@ -695,7 +693,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             style: TextStyle(
               fontSize: 15,
               color: (card.body ?? '').trim().isEmpty
-                  ? CupertinoColors.secondaryLabel
+                  ? secondaryText
                   : CupertinoColors.label,
             ),
           ),
@@ -736,7 +734,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               label,
               style: const TextStyle(
                 fontSize: 14,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ),
@@ -799,7 +797,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               l10n.noComments,
               style: const TextStyle(
                 fontSize: 14,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           )
@@ -820,7 +818,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                     _commentMeta(comment),
                     style: const TextStyle(
                       fontSize: 12,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ],
@@ -1019,7 +1017,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
               l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
             const SizedBox(height: 12),
@@ -1050,7 +1048,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
             l10n.initialStatus,
             style: const TextStyle(
               fontSize: 13,
-              color: CupertinoColors.secondaryLabel,
+              color: secondaryText,
             ),
           ),
           const SizedBox(height: 8),
@@ -1085,7 +1083,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           label,
           style: const TextStyle(
             fontSize: 13,
-            color: CupertinoColors.secondaryLabel,
+            color: secondaryText,
           ),
         ),
         const SizedBox(height: 6),

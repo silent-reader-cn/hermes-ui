@@ -195,7 +195,7 @@ class InsightsPage extends ConsumerWidget {
                     ),
                     style: const TextStyle(
                       fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ),
@@ -209,7 +209,7 @@ class InsightsPage extends ConsumerWidget {
                     ),
                     style: const TextStyle(
                       fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText,
                     ),
                   ),
                 ),
@@ -223,7 +223,7 @@ class InsightsPage extends ConsumerWidget {
             l10n.insightsSourceFooter(response.periodDays ?? timeframe.serverDays),
             style: const TextStyle(
               fontSize: 12,
-              color: CupertinoColors.secondaryLabel,
+              color: secondaryText,
             ),
           ),
         ),
@@ -298,7 +298,7 @@ class InsightsPage extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: secondaryText,
               ),
             ),
           ],
@@ -508,7 +508,7 @@ class _DailyTokensBarChart extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         _shortDate(date),
-        style: const TextStyle(fontSize: 10, color: CupertinoColors.secondaryLabel),
+        style: const TextStyle(fontSize: 10, color: secondaryText),
       ),
     );
   }
