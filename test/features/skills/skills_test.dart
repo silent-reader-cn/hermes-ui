@@ -185,6 +185,151 @@ void main() {
       );
       expect(container.read(skillsGroupsProvider).single.skills, hasLength(2));
     });
+
+    test('toggleSkill：开启原本已禁用的技能（disabled: true -> false）', () async {
+      final api = FakeSkillsApi(
+        skills: [buildSkill('my-skill', disabled: true)],
+      );
+      final container = makeContainer(api);
+      await container.read(skillsControllerProvider.future);
+      final controller = container.read(skillsControllerProvider.notifier);
+
+      final skill = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      final result = await controller.toggleSkill(skill);
+
+      expect(result, isTrue);
+      expect(api.toggleCalls, hasLength(1));
+      expect(api.toggleCalls.single.name, 'my-skill');
+      expect(api.toggleCalls.single.enabled, isTrue);
+
+      final updated = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      expect(updated.disabled, isFalse);
+    });
+
+    test('toggleSkill：关闭原本已启用的技能（disabled: false -> true）', () async {
+      final api = FakeSkillsApi(
+        skills: [buildSkill('my-skill', disabled: false)],
+      );
+      final container = makeContainer(api);
+      await container.read(skillsControllerProvider.future);
+      final controller = container.read(skillsControllerProvider.notifier);
+
+      final skill = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      final result = await controller.toggleSkill(skill);
+
+      expect(result, isTrue);
+      expect(api.toggleCalls, hasLength(1));
+      expect(api.toggleCalls.single.name, 'my-skill');
+      expect(api.toggleCalls.single.enabled, isFalse);
+
+      final updated = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      expect(updated.disabled, isTrue);
+    });
+
+    test('toggleSkill：服务端返回 ok: false → 回滚并设置 actionError', () async {
+      final customApi = _FailingToggleSkillsApi(
+        skills: [buildSkill('failing-skill', disabled: false)],
+      );
+      final customContainer = makeContainer(customApi);
+      await customContainer.read(skillsControllerProvider.future);
+      final customController = customContainer.read(
+        skillsControllerProvider.notifier,
+      );
+
+      final skill = customContainer
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      final result = await customController.toggleSkill(skill);
+
+      expect(result, isFalse);
+      final state = customContainer.read(skillsControllerProvider).valueOrNull!;
+      expect(state.skills.single.disabled, isFalse); // 回滚为启用
+      expect(state.actionError, '切换失败，服务器未确认');
+    });
+
+    test('toggleSkill：接口抛异常（ApiException） → 回滚并暴露 error.message', () async {
+      final api = FakeSkillsApi(
+        skills: [buildSkill('err-skill', disabled: false)],
+      );
+      api.toggleError = NetworkException(NetworkExceptionKind.cannotConnect);
+      final container = makeContainer(api);
+      await container.read(skillsControllerProvider.future);
+      final controller = container.read(skillsControllerProvider.notifier);
+
+      final skill = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      final result = await controller.toggleSkill(skill);
+
+      expect(result, isFalse);
+      final state = container.read(skillsControllerProvider).valueOrNull!;
+      expect(state.skills.single.disabled, isFalse); // 回滚
+      expect(state.actionError, contains('无法连接'));
+    });
+
+    test('toggleSkill：空技能名 → 设置 actionError 并返回 false', () async {
+      final api = FakeSkillsApi(skills: [buildSkill('')]);
+      final container = makeContainer(api);
+      await container.read(skillsControllerProvider.future);
+      final controller = container.read(skillsControllerProvider.notifier);
+
+      final skill = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      final result = await controller.toggleSkill(skill);
+
+      expect(result, isFalse);
+      expect(
+        container.read(skillsControllerProvider).valueOrNull!.actionError,
+        contains('技能名称为空'),
+      );
+    });
+
+    test('clearActionError：清除操作错误标记', () async {
+      final api = FakeSkillsApi(skills: [buildSkill('')]);
+      final container = makeContainer(api);
+      await container.read(skillsControllerProvider.future);
+      final controller = container.read(skillsControllerProvider.notifier);
+
+      final skill = container
+          .read(skillsControllerProvider)
+          .valueOrNull!
+          .skills
+          .single;
+      await controller.toggleSkill(skill);
+      expect(
+        container.read(skillsControllerProvider).valueOrNull!.actionError,
+        isNotNull,
+      );
+
+      await controller.clearActionError();
+      expect(
+        container.read(skillsControllerProvider).valueOrNull!.actionError,
+        isNull,
+      );
+    });
   });
 
   group('SkillsPage widget', () {
@@ -209,7 +354,7 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('渲染：分类标题 + 技能行（名称/描述/标签/已禁用徽标）', (tester) async {
+    testWidgets('渲染：分类标题 + 技能行（名称/描述/标签/已禁用徽标 + 开关）', (tester) async {
       final api = FakeSkillsApi(
         skills: [
           buildSkill(
@@ -231,6 +376,98 @@ void main() {
       expect(find.text('已禁用'), findsOneWidget);
       expect(find.text('writer'), findsOneWidget);
       expect(find.text('写文档'), findsOneWidget);
+
+      final bugSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('skills-toggle-bug-finder')),
+      );
+      expect(bugSwitch.value, isFalse);
+
+      final writerSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('skills-toggle-writer')),
+      );
+      expect(writerSwitch.value, isTrue);
+    });
+
+    testWidgets('点击开关：切换启停状态且不展开描述详情', (tester) async {
+      final api = FakeSkillsApi(
+        skills: [
+          buildSkill(
+            'writer',
+            category: '工具',
+            description: '写文档',
+            path: '/skills/writer',
+            disabled: false,
+          ),
+        ],
+      );
+      await pumpSkillsPage(tester, api);
+
+      // 初始：开关为开，详情未展开
+      final switchFinder = find.byKey(const ValueKey('skills-toggle-writer'));
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
+      expect(find.textContaining('路径'), findsNothing);
+
+      // 点击开关
+      await tester.tap(switchFinder);
+      await tester.pump();
+      await tester.pump();
+
+      // 开关变为关，调用 toggleSkill 成功，且详情依然未展开
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+      expect(api.toggleCalls, hasLength(1));
+      expect(api.toggleCalls.single.enabled, isFalse);
+      expect(find.textContaining('路径'), findsNothing);
+    });
+
+    testWidgets('点击行（非开关）：展开/收起描述详情', (tester) async {
+      final api = FakeSkillsApi(
+        skills: [
+          buildSkill(
+            'writer',
+            category: '工具',
+            description: '写文档',
+            path: '/skills/writer',
+            relatedSkills: ['reader'],
+          ),
+        ],
+      );
+      await pumpSkillsPage(tester, api);
+      expect(find.textContaining('路径'), findsNothing);
+
+      // 点击行展开
+      await tester.tap(find.byKey(const ValueKey('skills-row-writer')));
+      await tester.pump();
+      expect(find.text('路径：/skills/writer'), findsOneWidget);
+      expect(find.text('相关技能：reader'), findsOneWidget);
+
+      // 再次点击行收起
+      await tester.tap(find.byKey(const ValueKey('skills-row-writer')));
+      await tester.pump();
+      expect(find.textContaining('路径'), findsNothing);
+    });
+
+    testWidgets('开关操作失败：弹窗展示错误信息，点击好关闭弹窗并清除错误', (tester) async {
+      final api = FakeSkillsApi(
+        skills: [buildSkill('writer', disabled: false)],
+      );
+      api.toggleError = NetworkException(NetworkExceptionKind.cannotConnect);
+      await pumpSkillsPage(tester, api);
+
+      // 点击开关触发失败
+      await tester.tap(find.byKey(const ValueKey('skills-toggle-writer')));
+      await tester.pump();
+      await tester.pump();
+
+      // 弹窗提示
+      expect(find.text('操作失败'), findsOneWidget);
+      expect(find.textContaining('无法连接'), findsOneWidget);
+
+      // 点击好关闭弹窗
+      await tester.tap(find.text('好'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('操作失败'), findsNothing);
     });
 
     testWidgets('加载态：数据到达前显示 ActivityIndicator，到达后渲染列表', (tester) async {
@@ -306,30 +543,6 @@ void main() {
       expect(find.text('未找到相关技能'), findsOneWidget);
     });
 
-    testWidgets('点击行展开详情（路径/相关技能），再点收起', (tester) async {
-      final api = FakeSkillsApi(
-        skills: [
-          buildSkill(
-            'bug-finder',
-            description: '修复 bug',
-            path: '/skills/bug-finder',
-            relatedSkills: ['writer'],
-          ),
-        ],
-      );
-      await pumpSkillsPage(tester, api);
-      expect(find.textContaining('路径'), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('skills-row-bug-finder')));
-      await tester.pump();
-      expect(find.text('路径：/skills/bug-finder'), findsOneWidget);
-      expect(find.text('相关技能：writer'), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('skills-row-bug-finder')));
-      await tester.pump();
-      expect(find.textContaining('路径'), findsNothing);
-    });
-
     testWidgets('无详情技能展开：显示占位文案', (tester) async {
       final api = FakeSkillsApi(skills: [buildSkill('plain')]);
       await pumpSkillsPage(tester, api);
@@ -350,4 +563,16 @@ void main() {
       expect(api.fetchCount, 2);
     });
   });
+}
+
+class _FailingToggleSkillsApi extends FakeSkillsApi {
+  _FailingToggleSkillsApi({super.skills});
+
+  @override
+  Future<ToggleSkillResponse> toggleSkill({
+    required String name,
+    required bool enabled,
+  }) async {
+    return const ToggleSkillResponse(ok: false, name: null, enabled: null);
+  }
 }

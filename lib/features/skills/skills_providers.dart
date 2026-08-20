@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/skills.dart';
 import 'skills_api.dart';
@@ -9,7 +10,12 @@ import 'skills_api.dart';
 /// 搜索为客户端本地过滤（对齐 Hermex `filteredGroupedSkills`），
 /// [searchQuery] 非空即过滤模式；空串视为退出过滤。
 class SkillsState {
-  const SkillsState({this.skills = const [], this.searchQuery});
+  const SkillsState({
+    this.skills = const [],
+    this.searchQuery,
+    this.busySkillNames = const {},
+    this.actionError,
+  });
 
   /// 全部已加载技能（服务端顺序）。
   final List<SkillSummary> skills;
@@ -17,25 +23,39 @@ class SkillsState {
   /// 非空 = 搜索过滤模式（trim 后的关键词）。
   final String? searchQuery;
 
+  /// 正在切换启停状态的技能名称（UI 期间禁用开关，避免并发连点）。
+  final Set<String> busySkillNames;
+
+  /// 最近一次操作错误信息（UI 弹窗展示后清除）。
+  final String? actionError;
+
+  /// 指定技能是否正在执行变更。
+  bool isBusy(String name) => busySkillNames.contains(name);
+
   SkillsState copyWith({
     List<SkillSummary>? skills,
     String? Function()? searchQuery,
+    Set<String>? busySkillNames,
+    String? Function()? actionError,
   }) {
     return SkillsState(
       skills: skills ?? this.skills,
       searchQuery: searchQuery != null ? searchQuery() : this.searchQuery,
+      busySkillNames: busySkillNames ?? this.busySkillNames,
+      actionError: actionError != null ? actionError() : this.actionError,
     );
   }
 
   @override
   String toString() =>
-      'SkillsState(skills: ${skills.length}, searchQuery: $searchQuery)';
+      'SkillsState(skills: ${skills.length}, searchQuery: $searchQuery, '
+      'busy: ${busySkillNames.length}, actionError: $actionError)';
 }
 
-/// 技能控制器：加载 / 刷新 / 本地搜索过滤。
+/// 技能控制器：加载 / 刷新 / 本地搜索过滤 / 技能启停切换。
 ///
 /// AsyncValue 语义：初始加载与刷新失败 → `AsyncError`（UI 展示错误态 +
-/// 重试）；搜索为同步本地过滤，不产生网络错误。
+/// 重试）；搜索为同步本地过滤，不产生网络错误；启停操作采用乐观更新与回滚。
 final skillsControllerProvider =
     AsyncNotifierProvider<SkillsController, SkillsState>(SkillsController.new);
 
@@ -78,6 +98,93 @@ class SkillsController extends AsyncNotifier<SkillsState> {
     final trimmed = query.trim();
     state = AsyncData(
       current.copyWith(searchQuery: () => trimmed.isEmpty ? null : trimmed),
+    );
+  }
+
+  /// 切换技能启用 / 禁用状态。
+  ///
+  /// 乐观更新：先在本地翻转技能的 `disabled` 状态；若后端返回失败或抛出异常，
+  /// 则回滚到之前的值并设置 [SkillsState.actionError] 供页面展示。
+  Future<bool> toggleSkill(SkillSummary skill, {bool? enabled}) async {
+    final name = skill.name;
+    if (name == null || name.isEmpty) {
+      await _setActionError('技能名称为空，无法切换');
+      return false;
+    }
+
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    if (current.isBusy(name)) return false;
+
+    final oldDisabled = skill.disabled ?? false;
+    final targetEnabled = enabled ?? oldDisabled;
+    final newDisabled = !targetEnabled;
+
+    await _setBusy(name, true);
+    _replaceSkill(name, skill.copyWith(disabled: newDisabled));
+
+    try {
+      final response = await _api.toggleSkill(
+        name: name,
+        enabled: targetEnabled,
+      );
+      if (response.ok == false) {
+        _replaceSkill(name, skill);
+        await _setActionError('切换失败，服务器未确认');
+        return false;
+      }
+      if (response.enabled != null) {
+        _replaceSkill(name, skill.copyWith(disabled: !response.enabled!));
+      }
+      return true;
+    } on ApiException catch (error) {
+      _replaceSkill(name, skill);
+      await _setActionError(error.message);
+      return false;
+    } on Exception catch (error) {
+      _replaceSkill(name, skill);
+      await _setActionError(error.toString());
+      return false;
+    } finally {
+      await _setBusy(name, false);
+    }
+  }
+
+  /// 清除操作错误标记（UI 弹窗展示完后调用）。
+  Future<void> clearActionError() async {
+    final current = state.valueOrNull;
+    if (current == null || current.actionError == null) return;
+    state = AsyncData(current.copyWith(actionError: () => null));
+  }
+
+  Future<void> _setBusy(String skillName, bool busy) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final next = Set<String>.of(current.busySkillNames);
+    if (busy) {
+      next.add(skillName);
+    } else {
+      next.remove(skillName);
+    }
+    state = AsyncData(current.copyWith(busySkillNames: next));
+  }
+
+  Future<void> _setActionError(String message) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(actionError: () => message));
+  }
+
+  void _replaceSkill(String name, SkillSummary replacement) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        skills: [
+          for (final item in current.skills)
+            (item.name == name) ? replacement : item,
+        ],
+      ),
     );
   }
 }

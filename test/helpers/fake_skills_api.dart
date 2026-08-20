@@ -22,6 +22,12 @@ class FakeSkillsApi implements SkillsApi {
   /// `fetchSkills` 调用次数。
   int fetchCount = 0;
 
+  /// `toggleSkill` 抛出的异常。
+  Object? toggleError;
+
+  /// `toggleSkill` 记录的调用历史：`[(name, enabled), ...]`。
+  final List<({String name, bool enabled})> toggleCalls = [];
+
   @override
   Future<SkillsResponse> fetchSkills() async {
     fetchCount++;
@@ -30,5 +36,20 @@ class FakeSkillsApi implements SkillsApi {
     final gate = fetchGate;
     if (gate != null) await gate.future;
     return SkillsResponse(skills: skills);
+  }
+
+  @override
+  Future<ToggleSkillResponse> toggleSkill({
+    required String name,
+    required bool enabled,
+  }) async {
+    toggleCalls.add((name: name, enabled: enabled));
+    final error = toggleError;
+    if (error != null) throw error;
+    final index = skills.indexWhere((s) => s.name == name);
+    if (index != -1) {
+      skills[index] = skills[index].copyWith(disabled: !enabled);
+    }
+    return ToggleSkillResponse(ok: true, name: name, enabled: enabled);
   }
 }

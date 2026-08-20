@@ -60,6 +60,26 @@ class SkillSummary {
 
   String get id => name ?? uuidV4();
 
+  SkillSummary copyWith({
+    String? name,
+    String? category,
+    String? description,
+    String? path,
+    bool? disabled,
+    List<String>? tags,
+    List<String>? relatedSkills,
+  }) {
+    return SkillSummary(
+      name: name ?? this.name,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      path: path ?? this.path,
+      disabled: disabled ?? this.disabled,
+      tags: tags ?? this.tags,
+      relatedSkills: relatedSkills ?? this.relatedSkills,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     return other is SkillSummary &&
@@ -74,14 +94,14 @@ class SkillSummary {
 
   @override
   int get hashCode => Object.hash(
-        name,
-        category,
-        description,
-        path,
-        disabled,
-        Object.hashAll(tags ?? const []),
-        Object.hashAll(relatedSkills ?? const []),
-      );
+    name,
+    category,
+    description,
+    path,
+    disabled,
+    Object.hashAll(tags ?? const []),
+    Object.hashAll(relatedSkills ?? const []),
+  );
 
   @override
   String toString() => 'SkillSummary(name: $name, category: $category)';
