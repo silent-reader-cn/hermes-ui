@@ -16,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
 import 'session_list_providers.dart';
+import 'session_list_utility_rows.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -109,6 +110,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               // 指示器拿不到负 overlap 而无法触发）。
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
               SliverToBoxAdapter(child: _buildSearchBar()),
+              if (!isSearchMode)
+                const SliverToBoxAdapter(child: SessionListUtilityRows()),
               if (state != null && !isSearchMode)
                 SliverToBoxAdapter(child: _buildFilterBar(state)),
               ..._buildContentSlivers(async, state, sections, isSearchMode),
