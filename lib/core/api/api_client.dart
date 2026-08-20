@@ -10,6 +10,9 @@ import 'custom_header.dart';
 import 'endpoints.dart';
 import '../models/server_info.dart';
 
+/// 401 时的自动重登回调：返回 true 表示已用保存的凭证重登成功。
+typedef AutoReauthHandler = Future<bool> Function();
+
 /// sendDataReturningResponse 的返回类型：原始字节 + 响应头 + 状态码。
 typedef ApiByteResponse = ({Uint8List data, Headers headers, int statusCode});
 
@@ -28,7 +31,9 @@ class ApiClient {
     CookieStore? cookieStore,
     this.defaultTimeout = const Duration(seconds: 60),
     this.maxRedirects = 5,
-  }) : _baseUrl = _normalizeBaseUrl(baseUrl) {
+    this.autoReauth,
+    this.allowAutoReauth = true,
+  })  : _baseUrl = _normalizeBaseUrl(baseUrl) {
     _baseUri = Uri.parse(_baseUrl);
     final scheme = _baseUri.scheme.toLowerCase();
     if (!_baseUri.hasAuthority || (scheme != 'http' && scheme != 'https')) {
@@ -45,6 +50,15 @@ class ApiClient {
 
   final String _baseUrl;
   late final Uri _baseUri;
+
+  /// 401 自动重登处理器；null 表示不启用自动重登。
+  final AutoReauthHandler? autoReauth;
+
+  /// 当前客户端实例是否启用自动重登（默认 true）。
+  final bool allowAutoReauth;
+
+  /// 防止并发重登的互斥标记。
+  bool _reauthInFlight = false;
 
   /// 默认请求超时（git commit-message 两个端点单独传 120s）。
   final Duration defaultTimeout;
@@ -73,6 +87,12 @@ class ApiClient {
 
   CustomHeaderStore get headerStore => _headerStore;
 
+  /// 是否启用了自动重登。
+  bool get autoReauthEnabled => allowAutoReauth;
+
+  /// 是否有自动重登正在进行中（测试与监控用）。
+  bool get isReauthInFlight => _reauthInFlight;
+
   static String _normalizeBaseUrl(String baseUrl) {
     var url = baseUrl.trim();
     while (url.endsWith('/')) {
@@ -98,6 +118,31 @@ class ApiClient {
   // 请求原语
   // -------------------------------------------------------------------------
 
+  /// 执行请求；收到 401 且启用自动重登时，触发一次重登并重放原请求。
+  /// 重登或重试仍 401 → 抛 UnauthorizedException（不递归，防死循环）。
+  Future<Response<Uint8List>> _fetchWithAutoReauth(
+    Future<Response<Uint8List>> Function() perform, {
+    bool allowAutoReauth = true,
+  }) async {
+    var response = await perform();
+    final reauth = autoReauth;
+    if (response.statusCode == 401 &&
+        this.allowAutoReauth &&
+        allowAutoReauth &&
+        reauth != null &&
+        !_reauthInFlight) {
+      _reauthInFlight = true;
+      try {
+        if (await reauth()) {
+          response = await perform();
+        }
+      } finally {
+        _reauthInFlight = false;
+      }
+    }
+    return response;
+  }
+
   /// 发送请求并返回解码后的 JSON（Map / List / 原始值；空响应体返回 null）。
   ///
   /// 非 2xx 抛 [ApiException]（401 → [UnauthorizedException]，其余 →
@@ -108,14 +153,18 @@ class ApiClient {
     Map<String, Object?>? body,
     Duration? timeout,
     String accept = 'application/json',
+    bool allowAutoReauth = true,
   }) async {
-    final response = await _fetchWithRedirects(
-      endpoint.url(_baseUrl),
-      method: method,
-      data: body == null ? null : jsonEncode(body),
-      contentType: body == null ? null : 'application/json',
-      timeout: timeout,
-      accept: accept,
+    final response = await _fetchWithAutoReauth(
+      () => _fetchWithRedirects(
+        endpoint.url(_baseUrl),
+        method: method,
+        data: body == null ? null : jsonEncode(body),
+        contentType: body == null ? null : 'application/json',
+        timeout: timeout,
+        accept: accept,
+      ),
+      allowAutoReauth: allowAutoReauth,
     );
     _throwUnless2xx(response);
     final text = _bodyText(response.data);
@@ -134,14 +183,18 @@ class ApiClient {
     Map<String, Object?>? body,
     Duration? timeout,
     String accept = 'application/json',
+    bool allowAutoReauth = true,
   }) async {
-    final response = await _fetchWithRedirects(
-      endpoint.url(_baseUrl),
-      method: method,
-      data: body == null ? null : jsonEncode(body),
-      contentType: body == null ? null : 'application/json',
-      timeout: timeout,
-      accept: accept,
+    final response = await _fetchWithAutoReauth(
+      () => _fetchWithRedirects(
+        endpoint.url(_baseUrl),
+        method: method,
+        data: body == null ? null : jsonEncode(body),
+        contentType: body == null ? null : 'application/json',
+        timeout: timeout,
+        accept: accept,
+      ),
+      allowAutoReauth: allowAutoReauth,
     );
     _throwUnless2xx(response);
     return response.data ?? Uint8List(0);
@@ -155,14 +208,18 @@ class ApiClient {
     Map<String, Object?>? body,
     Duration? timeout,
     String accept = 'application/json',
+    bool allowAutoReauth = true,
   }) async {
-    final response = await _fetchWithRedirects(
-      endpoint.url(_baseUrl),
-      method: method,
-      data: body == null ? null : jsonEncode(body),
-      contentType: body == null ? null : 'application/json',
-      timeout: timeout,
-      accept: accept,
+    final response = await _fetchWithAutoReauth(
+      () => _fetchWithRedirects(
+        endpoint.url(_baseUrl),
+        method: method,
+        data: body == null ? null : jsonEncode(body),
+        contentType: body == null ? null : 'application/json',
+        timeout: timeout,
+        accept: accept,
+      ),
+      allowAutoReauth: allowAutoReauth,
     );
     _throwUnless2xx(response);
     return (
@@ -180,14 +237,18 @@ class ApiClient {
     String? contentType,
     Duration? timeout,
     String accept = 'application/json',
+    bool allowAutoReauth = true,
   }) async {
-    final response = await _fetchWithRedirects(
-      endpoint.url(_baseUrl),
-      method: method,
-      data: data,
-      contentType: contentType,
-      timeout: timeout,
-      accept: accept,
+    final response = await _fetchWithAutoReauth(
+      () => _fetchWithRedirects(
+        endpoint.url(_baseUrl),
+        method: method,
+        data: data,
+        contentType: contentType,
+        timeout: timeout,
+        accept: accept,
+      ),
+      allowAutoReauth: allowAutoReauth,
     );
     return (
       data: response.data ?? Uint8List(0),
@@ -203,14 +264,19 @@ class ApiClient {
   Future<Uint8List> downloadData(
     Uri url, {
     bool mapsUnauthorized = false,
+    bool allowAutoReauth = true,
   }) async {
-    final response = await _fetchWithRedirects(
-      url,
-      method: 'GET',
-      data: null,
-      contentType: null,
-      timeout: null,
-      accept: '*/*',
+    final sameOrigin = isSameOriginUri(url, _baseUri);
+    final response = await _fetchWithAutoReauth(
+      () => _fetchWithRedirects(
+        url,
+        method: 'GET',
+        data: null,
+        contentType: null,
+        timeout: null,
+        accept: '*/*',
+      ),
+      allowAutoReauth: allowAutoReauth && sameOrigin,
     );
     final status = response.statusCode ?? -1;
     if (mapsUnauthorized && status == 401) {
@@ -447,6 +513,7 @@ extension ApiClientServer on ApiClient {
       Endpoint.login,
       method: 'POST',
       body: {'password': password},
+      allowAutoReauth: false,
     );
     return LoginResponse.fromJson(_asMap(json));
   }

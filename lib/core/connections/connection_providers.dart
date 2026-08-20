@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/onboarding/onboarding_providers.dart';
 import '../api/api_client.dart';
 import '../api/custom_header.dart';
 import 'connection_store.dart';
@@ -140,5 +141,21 @@ final apiClientProvider = Provider<ApiClient>((ref) {
       for (final entry in active.customHeaders.entries)
         CustomHeader(name: entry.key, value: entry.value),
     ],
+    autoReauth: () async {
+      final conn = ref.read(activeConnectionProvider);
+      final password = conn?.password;
+      if (password == null || password.isEmpty) return false;
+      final factory = ref.read(onboardingApiFactoryProvider);
+      final api = factory(conn!.baseUrl, [
+        for (final entry in conn.customHeaders.entries)
+          CustomHeader(name: entry.key, value: entry.value),
+      ]);
+      try {
+        await api.login(password);
+        return true;
+      } on Exception {
+        return false;
+      }
+    },
   );
 });

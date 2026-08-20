@@ -5,9 +5,31 @@ import 'package:hermex_flutter/app/theme/theme_provider.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:hermex_flutter/core/models/server_info.dart';
+import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';
+
+/// 记录 login 的 onboarding fake（测试 autoReauth 是否用保存密码重登）。
+class _FakeOnboardingApi implements OnboardingServerApi {
+  int loginCalls = 0;
+  String? lastPassword;
+
+  @override
+  Future<HealthResponse> health() async => const HealthResponse();
+
+  @override
+  Future<AuthStatusResponse> authStatus() async =>
+      const AuthStatusResponse();
+
+  @override
+  Future<LoginResponse> login(String password) async {
+    loginCalls++;
+    lastPassword = password;
+    return const LoginResponse(ok: true);
+  }
+}
 
 void main() {
   setUp(() {
@@ -121,6 +143,72 @@ void main() {
         () => container.read(apiClientProvider),
         throwsStateError,
       );
+    });
+
+    test('apiClientProvider.autoReauth 用保存密码重登', () async {
+      final loginApi = _FakeOnboardingApi();
+      final storage = InMemorySecureStorage();
+      final store = ConnectionStore(storage: storage);
+      await store.save(ServerConnection(
+        id: 'c1',
+        name: 'C1',
+        baseUrl: 'http://c1.local',
+        password: 'secret-pw',
+        createdAt: DateTime.utc(2026, 1, 1),
+      ));
+      await store.setActive('c1');
+
+      final container = ProviderContainer(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(store),
+          onboardingApiFactoryProvider.overrideWithValue(
+            (baseUrl, headers) => loginApi,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(activeConnectionProvider, (_, _) {});
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final client = container.read(apiClientProvider);
+      expect(client.autoReauthEnabled, isTrue);
+      final reauth = client.autoReauth;
+      expect(reauth, isNotNull);
+      final ok = await reauth!();
+      expect(ok, isTrue);
+      expect(loginApi.loginCalls, 1);
+      expect(loginApi.lastPassword, 'secret-pw');
+    });
+
+    test('apiClientProvider.autoReauth 无保存密码 → 返回 false（不重登）', () async {
+      final loginApi = _FakeOnboardingApi();
+      final storage = InMemorySecureStorage();
+      final store = ConnectionStore(storage: storage);
+      await store.save(ServerConnection(
+        id: 'c2',
+        name: 'C2',
+        baseUrl: 'http://c2.local',
+        // 无 password
+        createdAt: DateTime.utc(2026, 1, 1),
+      ));
+      await store.setActive('c2');
+
+      final container = ProviderContainer(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(store),
+          onboardingApiFactoryProvider.overrideWithValue(
+            (baseUrl, headers) => loginApi,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(activeConnectionProvider, (_, _) {});
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final client = container.read(apiClientProvider);
+      final ok = await client.autoReauth!();
+      expect(ok, isFalse);
+      expect(loginApi.loginCalls, 0);
     });
   });
 

@@ -16,6 +16,7 @@ void main() {
   ApiClient buildClient(
     _RecordingAdapter adapter, {
     List<CustomHeader> headers = const [],
+    AutoReauthHandler? autoReauth,
   }) {
     final dio = Dio(
       BaseOptions(validateStatus: (_) => true, followRedirects: false),
@@ -30,8 +31,145 @@ void main() {
       dio: dio,
       publicMediaDio: publicDio,
       initialHeaders: headers,
+      autoReauth: autoReauth,
     );
   }
+
+  group('自动重登（AutoReauth）', () {
+    test('401 + autoReauth 成功 → 重放一次 → 返回数据（请求 2 次/重登 1 次）',
+        () async {
+      var first = true;
+      final adapter = _RecordingAdapter(
+        responder: (_) {
+          if (first) {
+            first = false;
+            return ResponseBody.fromString('{"error":"no"}', 401);
+          }
+          return ResponseBody.fromString('{"ok":true}', 200);
+        },
+      );
+      var reauthCalls = 0;
+      final client = buildClient(
+        adapter,
+        autoReauth: () async {
+          reauthCalls++;
+          return true;
+        },
+      );
+      final json = await client.sendJson(Endpoint.health);
+      expect(reauthCalls, 1);
+      expect(adapter.requests.length, 2);
+      expect(json, {'ok': true});
+      expect(client.isReauthInFlight, isFalse);
+    });
+
+    test('401 + autoReauth 失败（返回 false）→ 抛 UnauthorizedException，只请求 1 次',
+        () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
+      );
+      var reauthCalls = 0;
+      final client = buildClient(
+        adapter,
+        autoReauth: () async {
+          reauthCalls++;
+          return false;
+        },
+      );
+      await expectLater(
+        client.sendJson(Endpoint.health),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(reauthCalls, 1);
+      expect(adapter.requests.length, 1);
+      expect(client.isReauthInFlight, isFalse);
+    });
+
+    test('401 + 未注入 autoReauth → 抛 UnauthorizedException，不重试', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
+      );
+      final client = buildClient(adapter); // 不传 autoReauth
+      await expectLater(
+        client.sendJson(Endpoint.health),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(adapter.requests.length, 1);
+    });
+
+    test('401 + allowAutoReauth:false（login 场景）→ 不重登，直接抛', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
+      );
+      var reauthCalls = 0;
+      final client = buildClient(
+        adapter,
+        autoReauth: () async {
+          reauthCalls++;
+          return true;
+        },
+      );
+      await expectLater(
+        client.sendJson(
+          Endpoint.health,
+          allowAutoReauth: false,
+        ),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(reauthCalls, 0);
+      expect(adapter.requests.length, 1);
+    });
+
+    test('401 + 重放仍 401 → 抛 UnauthorizedException（不递归，共 2 次/重登 1 次）',
+        () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
+      );
+      var reauthCalls = 0;
+      final client = buildClient(
+        adapter,
+        autoReauth: () async {
+          reauthCalls++;
+          return true;
+        },
+      );
+      await expectLater(
+        client.sendJson(Endpoint.health),
+        throwsA(isA<UnauthorizedException>()),
+      );
+      expect(reauthCalls, 1);
+      expect(adapter.requests.length, 2);
+      expect(client.isReauthInFlight, isFalse);
+    });
+
+    test('并发 401 → 互斥只触发一次重登', () async {
+      var calls = 0;
+      final adapter = _RecordingAdapter(
+        responder: (_) {
+          calls++;
+          if (calls <= 2) return ResponseBody.fromString('{"error":"no"}', 401);
+          return ResponseBody.fromString('{"ok":true}', 200);
+        },
+      );
+      var reauthCalls = 0;
+      final client = buildClient(
+        adapter,
+        autoReauth: () async {
+          reauthCalls++;
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          return true;
+        },
+      );
+      final results = await Future.wait([
+        client.sendJson(Endpoint.health).catchError((e) => 'ERR:$e'),
+        client.sendJson(Endpoint.health).catchError((e) => 'ERR:$e'),
+      ]);
+      // 第一个触发重登成功返回，第二个在并发窗口内被互斥跳过重登 → 保持 401 报错
+      expect(reauthCalls, lessThanOrEqualTo(2));
+      expect(client.isReauthInFlight, isFalse);
+      expect(results, hasLength(2));
+    });
+  });
 
   group('错误归一化（APIError → ApiException）', () {
     test('401 → UnauthorizedException', () async {
