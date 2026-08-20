@@ -41,8 +41,8 @@ class SettingsPage extends ConsumerWidget {
           ProfileSection(),
           _ModelSection(),
           _DesktopSection(),
-          _AboutSection(),
           _SessionListEntriesSection(),
+          _AboutSection(),
         ],
       ),
     );

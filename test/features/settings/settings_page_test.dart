@@ -160,6 +160,28 @@ void main() {
       expect(find.text('1.0.0+1'), findsOneWidget);
     });
 
+    testWidgets('分组顺序：关于分组置底（在会话列表入口之后）', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final listView = tester.widget<ListView>(find.byType(ListView));
+      final childrenDelegate = listView.childrenDelegate as SliverChildListDelegate;
+      final typeNames = childrenDelegate.children.map((w) => w.runtimeType.toString()).toList();
+      expect(typeNames, [
+        '_AppearanceSection',
+        '_ServerSection',
+        'ProfileSection',
+        '_ModelSection',
+        '_DesktopSection',
+        '_SessionListEntriesSection',
+        '_AboutSection',
+      ]);
+    });
+
     testWidgets('无激活连接 → 显示未连接', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
