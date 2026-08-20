@@ -86,7 +86,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     final async = ref.watch(tasksControllerProvider);
     final state = async.valueOrNull;
 
-    ref.listen<AsyncValue<TasksState>>(tasksControllerProvider, (previous, next) {
+    ref.listen<AsyncValue<TasksState>>(tasksControllerProvider, (
+      previous,
+      next,
+    ) {
       final error = next.valueOrNull?.actionError;
       if (error != null && error != previous?.valueOrNull?.actionError) {
         unawaited(_showActionError(context, error));
@@ -121,7 +124,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   // 内容 slivers：加载 / 错误 / 空态 / 任务列表
   // -------------------------------------------------------------------------
 
-  List<Widget> _buildContentSlivers(AsyncValue<TasksState> async, TasksState? state) {
+  List<Widget> _buildContentSlivers(
+    AsyncValue<TasksState> async,
+    TasksState? state,
+  ) {
     final l10n = AppLocalizations.of(context);
     if (state == null) {
       if (async.isLoading) {
@@ -181,7 +187,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -214,10 +223,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             const SizedBox(height: 6),
             Text(
               l10n.createTaskPrompt,
-              style: TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -235,10 +241,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   // 交互：刷新 / 行菜单 / 输出 / 删除 / 表单
   // -------------------------------------------------------------------------
 
-  Future<void> _onRefresh() => ref.read(tasksControllerProvider.notifier).refresh();
+  Future<void> _onRefresh() =>
+      ref.read(tasksControllerProvider.notifier).refresh();
 
   void _openEditor(BuildContext context, {CronJob? job}) {
-    Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
+    Navigator.of(
+      context,
+    ).push(CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
   }
 
   void _showRowActions(BuildContext context, CronJob job) {
@@ -410,7 +419,10 @@ class _TaskRow extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -443,7 +455,7 @@ class _TaskRow extends StatelessWidget {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 13,
                           color: secondaryText,
                         ),
@@ -480,8 +492,10 @@ class _TaskRow extends StatelessWidget {
   static String? _subtitle(BuildContext context, CronJob job) {
     final l10n = AppLocalizations.of(context);
     final parts = <String>[
-      if (job.scheduleText != null && job.scheduleText!.isNotEmpty) job.scheduleText!,
-      if (job.lastRunAt != null) l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
+      if (job.scheduleText != null && job.scheduleText!.isNotEmpty)
+        job.scheduleText!,
+      if (job.lastRunAt != null)
+        l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -502,17 +516,25 @@ class _TaskOutputSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final sheetBg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
-    final cardBg = CupertinoColors.tertiarySystemBackground.resolveFrom(context);
+    final sheetBg = CupertinoColors.secondarySystemBackground.resolveFrom(
+      context,
+    );
+    final cardBg = CupertinoColors.tertiarySystemBackground.resolveFrom(
+      context,
+    );
     final labelColor = CupertinoColors.label.resolveFrom(context);
     final secondaryLabelColor = secondaryText.resolveFrom(context);
-    final tertiaryLabelColor = CupertinoColors.tertiaryLabel.resolveFrom(context);
+    final tertiaryLabelColor = CupertinoColors.tertiaryLabel.resolveFrom(
+      context,
+    );
     final separatorColor = CupertinoColors.separator.resolveFrom(context);
 
     return SafeArea(
       child: Container(
         key: const ValueKey('tasks-output-sheet'),
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.65),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.65,
+        ),
         decoration: BoxDecoration(
           color: sheetBg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -558,22 +580,35 @@ class _TaskOutputSheet extends StatelessWidget {
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const Padding(
                       padding: EdgeInsets.all(36),
-                      child: Center(child: CupertinoActivityIndicator(radius: 12)),
+                      child: Center(
+                        child: CupertinoActivityIndicator(radius: 12),
+                      ),
                     );
                   }
-                  final outputs = snapshot.data?.outputs ?? const <CronOutputItem>[];
+                  final outputs =
+                      snapshot.data?.outputs ?? const <CronOutputItem>[];
                   if (outputs.isEmpty) {
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 36,
+                      ),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(CupertinoIcons.doc_text, size: 40, color: tertiaryLabelColor),
+                            Icon(
+                              CupertinoIcons.doc_text,
+                              size: 40,
+                              color: tertiaryLabelColor,
+                            ),
                             const SizedBox(height: 12),
                             Text(
                               l10n.noOutput,
-                              style: TextStyle(fontSize: 15, color: secondaryLabelColor),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: secondaryLabelColor,
+                              ),
                             ),
                           ],
                         ),
@@ -598,11 +633,16 @@ class _TaskOutputSheet extends StatelessWidget {
                           children: [
                             Row(
                               children: [
-                                Icon(CupertinoIcons.doc, size: 16, color: secondaryLabelColor),
+                                Icon(
+                                  CupertinoIcons.doc,
+                                  size: 16,
+                                  color: secondaryLabelColor,
+                                ),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    item.filename ?? l10n.outputItemTitle(index + 1),
+                                    item.filename ??
+                                        l10n.outputItemTitle(index + 1),
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -612,7 +652,8 @@ class _TaskOutputSheet extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            if (item.content != null && item.content!.isNotEmpty) ...[
+                            if (item.content != null &&
+                                item.content!.isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Container(
                                 width: double.infinity,
@@ -620,13 +661,20 @@ class _TaskOutputSheet extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: cardBg,
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: separatorColor, width: 0.5),
+                                  border: Border.all(
+                                    color: separatorColor,
+                                    width: 0.5,
+                                  ),
                                 ),
                                 child: Text(
                                   item.content!,
                                   maxLines: 10,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 13, height: 1.4, color: labelColor),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.4,
+                                    color: labelColor,
+                                  ),
                                 ),
                               ),
                             ],
@@ -678,7 +726,9 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     super.initState();
     final job = widget.job;
     _nameController = TextEditingController(text: job?.name ?? '');
-    _scheduleController = TextEditingController(text: job?.editableScheduleText ?? '');
+    _scheduleController = TextEditingController(
+      text: job?.editableScheduleText ?? '',
+    );
     _promptController = TextEditingController(text: job?.prompt ?? '');
     _toastNotifications = job?.toastNotifications ?? true;
   }
@@ -752,13 +802,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: secondaryText,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 13, color: secondaryText)),
         const SizedBox(height: 6),
         CupertinoTextField(
           key: fieldKey,

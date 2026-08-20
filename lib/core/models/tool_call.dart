@@ -18,9 +18,8 @@ class ToolCall {
     this.isError,
     this.isCompleted = false,
     double? startedAt,
-  })  : id = id ?? 'live-tool-${uuidV4()}',
-        startedAt = startedAt ??
-            DateTime.now().millisecondsSinceEpoch / 1000;
+  }) : id = id ?? 'live-tool-${uuidV4()}',
+       startedAt = startedAt ?? DateTime.now().millisecondsSinceEpoch / 1000;
 
   final String id;
   String? name;
@@ -92,7 +91,10 @@ class PersistedToolCall {
       name: lossyString(json, 'name'),
       snippet: lossyString(json, 'snippet'),
       tid: lossyString(json, 'tid'),
-      assistantMsgIdx: firstKey(json, ['assistant_msg_idx', 'assistantMsgIdx'], lossyInt),
+      assistantMsgIdx: firstKey(json, [
+        'assistant_msg_idx',
+        'assistantMsgIdx',
+      ], lossyInt),
       args: argsValue is JsonObject ? argsValue.value : null,
     );
   }
@@ -151,11 +153,8 @@ class PersistedToolCall {
 
 /// 工具调用组（Swift: ToolCall.swift `ToolCallGroup`）。纯客户端模型，无 JSON。
 class ToolCallGroup {
-  ToolCallGroup({
-    String? id,
-    this.anchorMessageID,
-    required this.toolCalls,
-  }) : id = id ?? uuidV4();
+  ToolCallGroup({String? id, this.anchorMessageID, required this.toolCalls})
+    : id = id ?? uuidV4();
 
   final String id;
   final String? anchorMessageID;
@@ -202,7 +201,11 @@ class ToolCallGroup {
   }) {
     final derivedGroups = _groupsFromMessageMetadata(messages, messageOffset);
     if (persistedToolCalls.isEmpty) {
-      return coalescingByAssistantTurn(derivedGroups, messages: messages, messageOffset: messageOffset);
+      return coalescingByAssistantTurn(
+        derivedGroups,
+        messages: messages,
+        messageOffset: messageOffset,
+      );
     }
     return coalescingByAssistantTurn(
       merging(
@@ -232,7 +235,9 @@ class ToolCallGroup {
 
     for (final fallbackGroup in fallbackGroups) {
       final anchorMessageID = fallbackGroup.anchorMessageID;
-      final groupIndex = anchorMessageID == null ? null : groupIndexesByAnchor[anchorMessageID];
+      final groupIndex = anchorMessageID == null
+          ? null
+          : groupIndexesByAnchor[anchorMessageID];
       if (groupIndex == null) {
         if (anchorMessageID != null) {
           groupIndexesByAnchor[anchorMessageID] = merged.length;
@@ -273,13 +278,17 @@ class ToolCallGroup {
     final messageIndexesByID = <String, int>{};
     for (var i = 0; i < messages.length; i++) {
       messageIndexesByID[TranscriptTurnClassifier.anchorID(
-        messages[i],
-        at: i,
-        messageOffset: messageOffset,
-      )] = i;
+            messages[i],
+            at: i,
+            messageOffset: messageOffset,
+          )] =
+          i;
     }
-    final turnKeysByAssistantMessageID = TranscriptTurnClassifier
-        .assistantTurnKeysByAnchorID(messages, messageOffset: messageOffset);
+    final turnKeysByAssistantMessageID =
+        TranscriptTurnClassifier.assistantTurnKeysByAnchorID(
+          messages,
+          messageOffset: messageOffset,
+        );
 
     final mergedGroups = <_TurnGroupBuilder>[];
     final builderIndexesByTurnKey = <String, int>{};
@@ -288,21 +297,25 @@ class ToolCallGroup {
       final group = groups[groupOrder];
       final anchorIndex = group.anchorMessageID == null
           ? (1 << 62) - groupOrder
-          : (messageIndexesByID[group.anchorMessageID] ?? (1 << 62) - groupOrder);
+          : (messageIndexesByID[group.anchorMessageID] ??
+                (1 << 62) - groupOrder);
       final turnKey = group.anchorMessageID == null
           ? 'group:${group.id}'
-          : (turnKeysByAssistantMessageID[group.anchorMessageID] ?? 'group:${group.id}');
+          : (turnKeysByAssistantMessageID[group.anchorMessageID] ??
+                'group:${group.id}');
 
       final builderIndex = builderIndexesByTurnKey[turnKey];
       if (builderIndex != null) {
         mergedGroups[builderIndex].append(group, anchorIndex: anchorIndex);
       } else {
         builderIndexesByTurnKey[turnKey] = mergedGroups.length;
-        mergedGroups.add(_TurnGroupBuilder(
-          turnKey: turnKey,
-          group: group,
-          anchorIndex: anchorIndex,
-        ));
+        mergedGroups.add(
+          _TurnGroupBuilder(
+            turnKey: turnKey,
+            group: group,
+            anchorIndex: anchorIndex,
+          ),
+        );
       }
     }
 
@@ -333,13 +346,19 @@ class ToolCallGroup {
     final groups = <ToolCallGroup>[];
     final groupIndexesByAnchor = <String, int>{};
 
-    for (var toolIndex = 0; toolIndex < persistedToolCalls.length; toolIndex++) {
+    for (
+      var toolIndex = 0;
+      toolIndex < persistedToolCalls.length;
+      toolIndex++
+    ) {
       final persistedToolCall = persistedToolCalls[toolIndex];
       final assistantMsgIdx = persistedToolCall.assistantMsgIdx;
       if (assistantMsgIdx == null) continue;
 
       final loadedMessageIndex = assistantMsgIdx - offset;
-      if (loadedMessageIndex < 0 || loadedMessageIndex >= messages.length) continue;
+      if (loadedMessageIndex < 0 || loadedMessageIndex >= messages.length) {
+        continue;
+      }
 
       final anchorMessageID = TranscriptTurnClassifier.assistantAnchorID(
         loadedMessageIndex,
@@ -359,11 +378,13 @@ class ToolCallGroup {
         );
       } else {
         groupIndexesByAnchor[anchorMessageID] = groups.length;
-        groups.add(ToolCallGroup(
-          id: 'persisted-tools-$anchorMessageID',
-          anchorMessageID: anchorMessageID,
-          toolCalls: [toolCall],
-        ));
+        groups.add(
+          ToolCallGroup(
+            id: 'persisted-tools-$anchorMessageID',
+            anchorMessageID: anchorMessageID,
+            toolCalls: [toolCall],
+          ),
+        );
       }
     }
     return groups;
@@ -383,11 +404,13 @@ class ToolCallGroup {
         currentAnchorMessageID = null;
         return;
       }
-      groups.add(ToolCallGroup(
-        id: 'persisted-tools-${currentAnchorMessageID ?? 'unanchored-${groups.length}'}',
-        anchorMessageID: currentAnchorMessageID,
-        toolCalls: _uniqueToolCalls(currentToolCalls),
-      ));
+      groups.add(
+        ToolCallGroup(
+          id: 'persisted-tools-${currentAnchorMessageID ?? 'unanchored-${groups.length}'}',
+          anchorMessageID: currentAnchorMessageID,
+          toolCalls: _uniqueToolCalls(currentToolCalls),
+        ),
+      );
       currentAnchorMessageID = null;
       currentToolCalls = [];
     }
@@ -400,15 +423,17 @@ class ToolCallGroup {
       }
       if (message.role != 'assistant') continue;
 
-      final toolCalls = _openAIToolCalls(
-        message,
-        messageIndex: messageIndex,
-        resultsByToolID: resultsByToolID,
-      ) + _anthropicToolCalls(
-        message,
-        messageIndex: messageIndex,
-        resultsByToolID: resultsByToolID,
-      );
+      final toolCalls =
+          _openAIToolCalls(
+            message,
+            messageIndex: messageIndex,
+            resultsByToolID: resultsByToolID,
+          ) +
+          _anthropicToolCalls(
+            message,
+            messageIndex: messageIndex,
+            resultsByToolID: resultsByToolID,
+          );
       if (toolCalls.isEmpty) continue;
 
       currentAnchorMessageID ??= TranscriptTurnClassifier.anchorID(
@@ -423,11 +448,14 @@ class ToolCallGroup {
     return groups;
   }
 
-  static Map<String, String> _toolResultSnippetsByID(List<ChatMessage> messages) {
+  static Map<String, String> _toolResultSnippetsByID(
+    List<ChatMessage> messages,
+  ) {
     final result = <String, String>{};
     for (final message in messages) {
       if (message.role == 'tool') {
-        final toolCallID = _nonEmpty(message.toolCallId) ?? _nonEmpty(message.toolUseId);
+        final toolCallID =
+            _nonEmpty(message.toolCallId) ?? _nonEmpty(message.toolUseId);
         final content = _nonEmpty(message.content);
         if (toolCallID != null && content != null) {
           result[toolCallID] = content;
@@ -472,18 +500,22 @@ class ToolCallGroup {
     final object = fromOpenAIToolCall.value;
 
     final function = object['function']?.objectValue;
-    final name = _nonEmpty(function?['name']?.stringValue) ??
+    final name =
+        _nonEmpty(function?['name']?.stringValue) ??
         _nonEmpty(object['name']?.stringValue) ??
         'tool';
-    final toolID = _nonEmpty(object['id']?.stringValue) ??
+    final toolID =
+        _nonEmpty(object['id']?.stringValue) ??
         _nonEmpty(object['call_id']?.stringValue) ??
         _nonEmpty(object['tool_call_id']?.stringValue) ??
         'message-tool-$messageIndex-$toolIndex';
-    final argumentValue = function?['arguments'] ??
+    final argumentValue =
+        function?['arguments'] ??
         object['arguments'] ??
         object['args'] ??
         object['input'];
-    final preview = _nonEmpty(resultsByToolID[toolID]) ??
+    final preview =
+        _nonEmpty(resultsByToolID[toolID]) ??
         _nonEmpty(object['snippet']?.stringValue) ??
         _nonEmpty(object['preview']?.stringValue);
 
@@ -510,19 +542,24 @@ class ToolCallGroup {
       if (object['type']?.stringValue != 'tool_use') continue;
 
       final name = _nonEmpty(object['name']?.stringValue) ?? 'tool';
-      final toolID = _nonEmpty(object['id']?.stringValue) ??
+      final toolID =
+          _nonEmpty(object['id']?.stringValue) ??
           'message-tool-$messageIndex-$toolIndex';
-      final argumentValue = object['input'] ?? object['arguments'] ?? object['args'];
+      final argumentValue =
+          object['input'] ?? object['arguments'] ?? object['args'];
 
-      result.add(ToolCall(
-        id: toolID,
-        name: name,
-        preview: _nonEmpty(resultsByToolID[toolID]) ??
-            _nonEmpty(object['snippet']?.stringValue) ??
-            _nonEmpty(object['preview']?.stringValue),
-        args: _arguments(argumentValue),
-        isCompleted: true,
-      ));
+      result.add(
+        ToolCall(
+          id: toolID,
+          name: name,
+          preview:
+              _nonEmpty(resultsByToolID[toolID]) ??
+              _nonEmpty(object['snippet']?.stringValue) ??
+              _nonEmpty(object['preview']?.stringValue),
+          args: _arguments(argumentValue),
+          isCompleted: true,
+        ),
+      );
     }
     return result;
   }
@@ -531,7 +568,8 @@ class ToolCallGroup {
     if (from is! JsonObject) return null;
     final object = from.value;
     if (object['type']?.stringValue != 'tool_result') return null;
-    final id = _nonEmpty(object['tool_use_id']?.stringValue) ??
+    final id =
+        _nonEmpty(object['tool_use_id']?.stringValue) ??
         _nonEmpty(object['tool_call_id']?.stringValue) ??
         _nonEmpty(object['id']?.stringValue);
     final content = _resultContent(object['content']);
@@ -545,14 +583,17 @@ class ToolCallGroup {
       case JsonString(:final value):
         return _nonEmpty(value);
       case JsonArray(:final value):
-        final text = value.map((item) {
-          if (item is JsonString) return item.value;
-          if (item is JsonObject) {
-            return item.value['text']?.stringValue ??
-                item.value['content']?.stringValue;
-          }
-          return null;
-        }).whereType<String>().join();
+        final text = value
+            .map((item) {
+              if (item is JsonString) return item.value;
+              if (item is JsonObject) {
+                return item.value['text']?.stringValue ??
+                    item.value['content']?.stringValue;
+              }
+              return null;
+            })
+            .whereType<String>()
+            .join();
         return _nonEmpty(text);
       case JsonObject() || JsonNumber() || JsonBool() || JsonNull():
         return _nonEmpty(value.compactJsonString);
@@ -572,7 +613,9 @@ class ToolCallGroup {
       final fingerprintIndex = fingerprintIndexes[fingerprint];
       final resolvedFingerprintIndex = fingerprintIndex == null
           ? null
-          : (isGenerated || isGeneratedByIndex[fingerprintIndex] ? fingerprintIndex : null);
+          : (isGenerated || isGeneratedByIndex[fingerprintIndex]
+                ? fingerprintIndex
+                : null);
 
       final existingIndex = stableIDIndex ?? resolvedFingerprintIndex;
       if (existingIndex != null) {
@@ -580,7 +623,9 @@ class ToolCallGroup {
           uniqueToolCalls[existingIndex],
           fallbackCall: toolCall,
         );
-        isGeneratedByIndex[existingIndex] = _isGeneratedToolID(uniqueToolCalls[existingIndex].id);
+        isGeneratedByIndex[existingIndex] = _isGeneratedToolID(
+          uniqueToolCalls[existingIndex].id,
+        );
         if (!isGenerated) {
           stableIDIndexes[toolCall.id] = existingIndex;
         }
@@ -638,7 +683,8 @@ class ToolCallGroup {
     if (!fallbackIsGenerated) {
       for (var i = 0; i < toolCalls.length; i++) {
         final toolCall = toolCalls[i];
-        if (!_isGeneratedToolID(toolCall.id) && toolCall.id == fallbackToolCall.id) {
+        if (!_isGeneratedToolID(toolCall.id) &&
+            toolCall.id == fallbackToolCall.id) {
           return i;
         }
       }
@@ -683,7 +729,8 @@ class ToolCallGroup {
     return null;
   }
 
-  static String _toolCallNameKey(ToolCall toolCall) => toolCall.displayName.trim();
+  static String _toolCallNameKey(ToolCall toolCall) =>
+      toolCall.displayName.trim();
 
   static String _argumentsKey(Map<String, JsonValue>? args) {
     if (args == null || args.isEmpty) return '';
@@ -695,8 +742,11 @@ class ToolCallGroup {
   }
 
   static String _toolCallFingerprint(ToolCall toolCall) {
-    return ['fallback', toolCall.displayName, _argumentsKey(toolCall.args)]
-        .join(':');
+    return [
+      'fallback',
+      toolCall.displayName,
+      _argumentsKey(toolCall.args),
+    ].join(':');
   }
 
   static bool _isGeneratedToolID(String id) {
@@ -709,7 +759,8 @@ class ToolCallGroup {
     ToolCall existing, {
     required ToolCall fallbackCall,
   }) {
-    final id = _isGeneratedToolID(existing.id) && !_isGeneratedToolID(fallbackCall.id)
+    final id =
+        _isGeneratedToolID(existing.id) && !_isGeneratedToolID(fallbackCall.id)
         ? fallbackCall.id
         : existing.id;
     return ToolCall(
@@ -797,9 +848,9 @@ class _TurnGroupBuilder {
     required this.turnKey,
     required ToolCallGroup group,
     required this.anchorIndex,
-  })  : id = group.id,
-        anchorMessageID = group.anchorMessageID,
-        toolCalls = List<ToolCall>.from(group.toolCalls);
+  }) : id = group.id,
+       anchorMessageID = group.anchorMessageID,
+       toolCalls = List<ToolCall>.from(group.toolCalls);
 
   final String turnKey;
   String id;

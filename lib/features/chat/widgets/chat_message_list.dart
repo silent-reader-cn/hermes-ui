@@ -258,7 +258,11 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       case MessageAction.copyMd:
         // 先提示，再异步写剪贴板（立即反馈，不阻塞菜单关闭）。
         unawaited(copyMessageText(message));
-        if (mounted) controller.setNotice(AppLocalizations.of(context).copiedToClipboardNotice);
+        if (mounted) {
+          controller.setNotice(
+            AppLocalizations.of(context).copiedToClipboardNotice,
+          );
+        }
       case MessageAction.edit:
         final text = message.content;
         if (text != null && text.isNotEmpty) {

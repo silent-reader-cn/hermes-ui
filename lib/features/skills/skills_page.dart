@@ -207,10 +207,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               isSearchMode
                   ? l10n.tryAnotherKeyword
                   : l10n.serverSkillsWillShowHere,
-              style: TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -326,8 +323,7 @@ class _SkillRow extends ConsumerWidget {
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
                                 color: disabled
-                                    ? secondaryText
-                                          .resolveFrom(context)
+                                    ? secondaryText.resolveFrom(context)
                                     : CupertinoColors.label.resolveFrom(
                                         context,
                                       ),
@@ -352,11 +348,9 @@ class _SkillRow extends ConsumerWidget {
                           description,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
-                            color: secondaryText
-                              context,
-                            ),
+                            color: secondaryText,
                           ),
                         ),
                       ],
@@ -432,10 +426,7 @@ class _SkillDetail extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           l10n.noMoreDetailsForSkill,
-          style: TextStyle(
-            fontSize: 13,
-            color: secondaryText,
-          ),
+          style: const TextStyle(fontSize: 13, color: secondaryText),
         ),
       );
     }
@@ -474,9 +465,7 @@ class _DetailLine extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label：',
-            style: TextStyle(
-              color: secondaryText,
-            ),
+            style: const TextStyle(color: secondaryText),
           ),
           TextSpan(
             text: value,

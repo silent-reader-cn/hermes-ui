@@ -66,14 +66,14 @@ class KanbanConfiguration {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(columns ?? const []),
-        Object.hashAll(assignees ?? const []),
-        defaultTenant,
-        laneByProfile,
-        includeArchivedByDefault,
-        renderMarkdown,
-        readOnly,
-      );
+    Object.hashAll(columns ?? const []),
+    Object.hashAll(assignees ?? const []),
+    defaultTenant,
+    laneByProfile,
+    includeArchivedByDefault,
+    renderMarkdown,
+    readOnly,
+  );
 
   @override
   String toString() => 'KanbanConfiguration(columns: $columns)';
@@ -166,8 +166,10 @@ class KanbanBoard {
         final value = entry.value;
         if (value is int) {
           result[entry.key.toString()] = value;
-        } else if (value is double && value.isFinite &&
-            value >= -9223372036854775808.0 && value < 9223372036854775808.0) {
+        } else if (value is double &&
+            value.isFinite &&
+            value >= -9223372036854775808.0 &&
+            value < 9223372036854775808.0) {
           result[entry.key.toString()] = value.truncate().toInt();
         } else {
           return null;
@@ -195,16 +197,16 @@ class KanbanBoard {
 
   @override
   int get hashCode => Object.hash(
-        slug,
-        name,
-        description,
-        icon,
-        color,
-        isCurrent,
-        total,
-        deepHash(counts),
-        readOnly,
-      );
+    slug,
+    name,
+    description,
+    icon,
+    color,
+    isCurrent,
+    total,
+    deepHash(counts),
+    readOnly,
+  );
 
   @override
   String toString() => 'KanbanBoard(slug: $slug, name: $name)';
@@ -291,14 +293,14 @@ class KanbanBoardSnapshot {
 
   @override
   int get hashCode => Object.hash(
-        deepHash(columns),
-        Object.hashAll(tenants ?? const []),
-        Object.hashAll(assignees ?? const []),
-        filters,
-        changed,
-        latestEventID,
-        readOnly,
-      );
+    deepHash(columns),
+    Object.hashAll(tenants ?? const []),
+    Object.hashAll(assignees ?? const []),
+    filters,
+    changed,
+    latestEventID,
+    readOnly,
+  );
 
   @override
   String toString() => 'KanbanBoardSnapshot(changed: $changed)';
@@ -386,14 +388,14 @@ class KanbanStatus {
   final String rawValue;
 
   bool get isSupported => const {
-        'triage',
-        'todo',
-        'blocked',
-        'ready',
-        'running',
-        'done',
-        'archived',
-      }.contains(rawValue.toLowerCase());
+    'triage',
+    'todo',
+    'blocked',
+    'ready',
+    'running',
+    'done',
+    'archived',
+  }.contains(rawValue.toLowerCase());
 
   @override
   bool operator ==(Object other) =>
@@ -492,16 +494,16 @@ class KanbanCard {
         return age >= 3600
             ? KanbanStaleness.critical
             : age >= 600
-                ? KanbanStaleness.warning
-                : KanbanStaleness.none;
+            ? KanbanStaleness.warning
+            : KanbanStaleness.none;
       case 'ready':
         return age >= 3600 ? KanbanStaleness.warning : KanbanStaleness.none;
       case 'blocked':
         return age >= 86400
             ? KanbanStaleness.critical
             : age >= 3600
-                ? KanbanStaleness.warning
-                : KanbanStaleness.none;
+            ? KanbanStaleness.warning
+            : KanbanStaleness.none;
       default:
         return KanbanStaleness.none;
     }
@@ -560,27 +562,27 @@ class KanbanCard {
 
   @override
   int get hashCode => Object.hash(
-        cardID,
-        title,
-        status,
-        assignee,
-        body,
-        tenant,
-        priority,
-        commentCount,
-        linkCounts,
-        ageSeconds,
-        createdAt,
-        updatedAt,
-        workspaceKind,
-        workspacePath,
-        Object.hashAll(skills ?? const []),
-        maxRuntimeSeconds,
-        currentRunID,
-        claimLock,
-        claimExpires,
-        workerID,
-      );
+    cardID,
+    title,
+    status,
+    assignee,
+    body,
+    tenant,
+    priority,
+    commentCount,
+    linkCounts,
+    ageSeconds,
+    createdAt,
+    updatedAt,
+    workspaceKind,
+    workspacePath,
+    Object.hashAll(skills ?? const []),
+    maxRuntimeSeconds,
+    currentRunID,
+    claimLock,
+    claimExpires,
+    workerID,
+  );
 
   @override
   String toString() => 'KanbanCard(cardID: $cardID, title: $title)';
@@ -632,13 +634,13 @@ class KanbanCardDetailEnvelope {
 
   @override
   int get hashCode => Object.hash(
-        card,
-        deepHash(comments),
-        deepHash(events),
-        links,
-        deepHash(runs),
-        readOnly,
-      );
+    card,
+    deepHash(comments),
+    deepHash(events),
+    links,
+    deepHash(runs),
+    readOnly,
+  );
 
   @override
   String toString() => 'KanbanCardDetailEnvelope(card: $card)';
@@ -770,7 +772,8 @@ class KanbanDetailEvent {
   }
 
   @override
-  int get hashCode => Object.hash(eventID, cardID, runID, kind, createdAt, payload);
+  int get hashCode =>
+      Object.hash(eventID, cardID, runID, kind, createdAt, payload);
 
   @override
   String toString() => 'KanbanDetailEvent(eventID: $eventID, kind: $kind)';
@@ -839,9 +842,9 @@ class KanbanDependencyLinks {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(prerequisites ?? const []),
-        Object.hashAll(dependents ?? const []),
-      );
+    Object.hashAll(prerequisites ?? const []),
+    Object.hashAll(dependents ?? const []),
+  );
 
   @override
   String toString() => 'KanbanDependencyLinks(prerequisites: $prerequisites)';
@@ -889,7 +892,12 @@ class KanbanDispatchRun {
   String get presentationID {
     final id = runID;
     if (id != null) return id;
-    return [status, outcome, startedAt, finishedAt].whereType<String>().join('|');
+    return [
+      status,
+      outcome,
+      startedAt,
+      finishedAt,
+    ].whereType<String>().join('|');
   }
 
   @override
@@ -908,16 +916,16 @@ class KanbanDispatchRun {
 
   @override
   int get hashCode => Object.hash(
-        runID,
-        status,
-        outcome,
-        summary,
-        error,
-        startedAt,
-        finishedAt,
-        workerID,
-        logTail,
-      );
+    runID,
+    status,
+    outcome,
+    summary,
+    error,
+    startedAt,
+    finishedAt,
+    workerID,
+    logTail,
+  );
 
   @override
   String toString() => 'KanbanDispatchRun(runID: $runID, status: $status)';
@@ -960,7 +968,8 @@ class KanbanWorkerLog {
   }
 
   @override
-  int get hashCode => Object.hash(cardID, exists, sizeBytes, content, truncated);
+  int get hashCode =>
+      Object.hash(cardID, exists, sizeBytes, content, truncated);
 
   @override
   String toString() => 'KanbanWorkerLog(cardID: $cardID)';
@@ -1021,7 +1030,8 @@ class KanbanLinkCounts {
   int get hashCode => Object.hash(parents, children);
 
   @override
-  String toString() => 'KanbanLinkCounts(parents: $parents, children: $children)';
+  String toString() =>
+      'KanbanLinkCounts(parents: $parents, children: $children)';
 }
 
 /// 看板统计（Swift: KanbanStats）。
@@ -1049,7 +1059,8 @@ class KanbanStats {
   }
 
   @override
-  int get hashCode => Object.hash(total, deepHash(byStatus), deepHash(byAssignee));
+  int get hashCode =>
+      Object.hash(total, deepHash(byStatus), deepHash(byAssignee));
 
   @override
   String toString() => 'KanbanStats(total: $total)';
@@ -1135,18 +1146,19 @@ class KanbanEvent {
   factory KanbanEvent.fromJson(Map<String, Object?> json) {
     return KanbanEvent(
       eventID: firstKey(json, ['id', 'eventId', 'event_id'], lossyInt),
-      cardID: firstKey(
-        json,
-        ['taskId', 'task_id', 'cardId', 'card_id'],
-        lossyString,
-      ),
+      cardID: firstKey(json, [
+        'taskId',
+        'task_id',
+        'cardId',
+        'card_id',
+      ], lossyString),
       runID: firstKey(json, ['runId', 'run_id'], lossyString),
       kind: lossyString(json, 'kind'),
-      createdAt: firstKey(
-        json,
-        ['created_at', 'createdAt', 'timestamp'],
-        lossyInt,
-      ),
+      createdAt: firstKey(json, [
+        'created_at',
+        'createdAt',
+        'timestamp',
+      ], lossyInt),
     );
   }
 
@@ -1372,15 +1384,15 @@ class KanbanDispatchResult {
 
   @override
   int get hashCode => Object.hash(
-        spawned,
-        promoted,
-        reclaimed,
-        skippedUnassigned,
-        skippedNonspawnable,
-        autoBlocked,
-        timedOut,
-        crashed,
-      );
+    spawned,
+    promoted,
+    reclaimed,
+    skippedUnassigned,
+    skippedNonspawnable,
+    autoBlocked,
+    timedOut,
+    crashed,
+  );
 
   @override
   String toString() {
@@ -1414,7 +1426,9 @@ class KanbanBoardRequest {
   Map<String, String> get queryParameters {
     final result = <String, String>{'board': board};
     if (tenant != null && tenant!.isNotEmpty) result['tenant'] = tenant!;
-    if (assignee != null && assignee!.isNotEmpty) result['assignee'] = assignee!;
+    if (assignee != null && assignee!.isNotEmpty) {
+      result['assignee'] = assignee!;
+    }
     if (includeArchived) result['include_archived'] = 'true';
     if (onlyMine) result['only_mine'] = 'true';
     if (since != null) result['since'] = '$since';
@@ -1442,7 +1456,11 @@ class KanbanBoardRequest {
 
 /// 事件请求（Swift: KanbanEventsRequest）。limit clamp 1..200。
 class KanbanEventsRequest {
-  const KanbanEventsRequest({required this.board, required this.since, this.limit = 200});
+  const KanbanEventsRequest({
+    required this.board,
+    required this.since,
+    this.limit = 200,
+  });
 
   final String board;
   final int since;
@@ -1478,10 +1496,7 @@ class KanbanEventsStreamRequest {
   final int since;
 
   Map<String, String> get queryParameters {
-    return {
-      'board': board,
-      'since': '${since < 0 ? 0 : since}',
-    };
+    return {'board': board, 'since': '${since < 0 ? 0 : since}'};
   }
 
   @override
@@ -1510,10 +1525,7 @@ class KanbanWorkerLogRequest {
   final int tailBytes;
 
   Map<String, String> get queryParameters {
-    return {
-      'board': board,
-      'tail': '${tailBytes.clamp(1, 2000000)}',
-    };
+    return {'board': board, 'tail': '${tailBytes.clamp(1, 2000000)}'};
   }
 
   @override
@@ -1632,20 +1644,20 @@ class KanbanCreateCardRequest {
 
   @override
   int get hashCode => Object.hash(
-        board,
-        title,
-        body,
-        status,
-        priority,
-        assignee,
-        tenant,
-        workspaceKind,
-        workspacePath,
-        Object.hashAll(skills ?? const []),
-        maxRuntimeSeconds,
-        prerequisiteID,
-        idempotencyKey,
-      );
+    board,
+    title,
+    body,
+    status,
+    priority,
+    assignee,
+    tenant,
+    workspaceKind,
+    workspacePath,
+    Object.hashAll(skills ?? const []),
+    maxRuntimeSeconds,
+    prerequisiteID,
+    idempotencyKey,
+  );
 
   @override
   String toString() => 'KanbanCreateCardRequest(title: $title)';
@@ -1701,15 +1713,15 @@ class KanbanEditCardRequest {
 
   @override
   int get hashCode => Object.hash(
-        cardID,
-        board,
-        title,
-        body,
-        tenant,
-        priority,
-        assignee,
-        status,
-      );
+    cardID,
+    board,
+    title,
+    body,
+    tenant,
+    priority,
+    assignee,
+    status,
+  );
 
   @override
   String toString() => 'KanbanEditCardRequest(cardID: $cardID)';
@@ -1748,7 +1760,11 @@ class KanbanCardStatusRequest {
 
 /// 卡片动作请求（Swift: KanbanCardActionRequest）。
 class KanbanCardActionRequest {
-  const KanbanCardActionRequest({required this.cardID, required this.board, this.reason});
+  const KanbanCardActionRequest({
+    required this.cardID,
+    required this.board,
+    this.reason,
+  });
 
   final String cardID;
   final String board;
@@ -2025,8 +2041,7 @@ class KanbanBulkActionRequest {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(board, Object.hashAll(cardIDs), action);
+  int get hashCode => Object.hash(board, Object.hashAll(cardIDs), action);
 
   @override
   String toString() => 'KanbanBulkActionRequest(board: $board)';
