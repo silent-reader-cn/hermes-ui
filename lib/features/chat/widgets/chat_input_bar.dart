@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/api/api_client_server_panels.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
@@ -139,7 +140,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         title: Text(title),
         content: Text(
           message,
-          style: const TextStyle(color: CupertinoColors.systemRed),
+          style: const TextStyle(color: statusRedText),
         ),
         actions: [
           CupertinoDialogAction(
