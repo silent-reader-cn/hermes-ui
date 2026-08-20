@@ -86,13 +86,55 @@ class SessionSearchResponse {
 }
 
 /// 单个会话响应信封（Swift: SessionResponse）。
+///
+/// 兼容后端多种返回形态（实机验证：服务端可能返回平坦 `session_id` / `data` 包裹）：
+/// 1) `{session: {...}}` 标准嵌套；2) 平坦 `{session_id/id, title, ...}`；
+/// 3) `{data: {session: {...}}}` 或 `{data: {session_id, ...}}` 包裹。
 class SessionResponse {
   const SessionResponse({this.session});
 
   factory SessionResponse.fromJson(Map<String, Object?> json) {
-    return SessionResponse(
-      session: optModel(json, 'session', SessionDetail.fromJson),
-    );
+    final nested = optModel(json, 'session', SessionDetail.fromJson);
+    if (nested != null) return SessionResponse(session: nested);
+    final flatId =
+        lossyString(json, 'session_id') ??
+        lossyString(json, 'id') ??
+        lossyString(json, 'sessionId');
+    if (flatId != null && flatId.trim().isNotEmpty) {
+      try {
+        return SessionResponse(session: SessionDetail.fromJson(json));
+      } catch (_) {
+        return SessionResponse(
+          session: SessionDetail(
+            sessionId: flatId,
+            title: lossyString(json, 'title'),
+          ),
+        );
+      }
+    }
+    final data = json['data'];
+    if (data is Map) {
+      final m = Map<String, Object?>.from(data);
+      final dNested = optModel(m, 'session', SessionDetail.fromJson);
+      if (dNested != null) return SessionResponse(session: dNested);
+      final dFlat =
+          lossyString(m, 'session_id') ??
+          lossyString(m, 'id') ??
+          lossyString(m, 'sessionId');
+      if (dFlat != null && dFlat.trim().isNotEmpty) {
+        try {
+          return SessionResponse(session: SessionDetail.fromJson(m));
+        } catch (_) {
+          return SessionResponse(
+            session: SessionDetail(
+              sessionId: dFlat,
+              title: lossyString(m, 'title'),
+            ),
+          );
+        }
+      }
+    }
+    return const SessionResponse(session: null);
   }
 
   final SessionDetail? session;

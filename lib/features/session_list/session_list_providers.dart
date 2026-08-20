@@ -80,8 +80,36 @@ class SessionListApiClient implements SessionListApi {
 
   @override
   Future<SessionSummary> createSession() async {
-    final json = await _client.createSession();
-    final response = SessionResponse.fromJson(_asMap(json));
+    final raw = await _client.createSession();
+    final map = _asMap(raw);
+    // 先按平坦 SessionDetail 试解（服务端常见 {session_id/id} 形态），
+    // 失败再走兼容多形态的 SessionResponse。
+    try {
+      final flat = SessionDetail.fromJson(map);
+      if (flat.sessionId != null && flat.sessionId!.trim().isNotEmpty) {
+        return SessionSummary.fromDetail(flat);
+      }
+    } catch (_) {}
+    try {
+      final data = map['data'];
+      if (data is Map) {
+        final m = Map<String, Object?>.from(data);
+        final inner = m['session'];
+        if (inner is Map) {
+          final d = SessionDetail.fromJson(Map<String, Object?>.from(inner));
+          if (d.sessionId != null && d.sessionId!.trim().isNotEmpty) {
+            return SessionSummary.fromDetail(d);
+          }
+        }
+        try {
+          final d2 = SessionDetail.fromJson(m);
+          if (d2.sessionId != null && d2.sessionId!.trim().isNotEmpty) {
+            return SessionSummary.fromDetail(d2);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+    final response = SessionResponse.fromJson(map);
     final detail = response.session;
     return detail == null
         ? const SessionSummary()
