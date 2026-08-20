@@ -272,6 +272,12 @@ class AppLocalizations {
   String get runningStatus => isEnglish ? 'Running' : '运行中';
   String get toolFailedStatus => isEnglish ? 'Failed' : '失败';
   String get toolRunningStatus => isEnglish ? 'Running' : '运行中';
+  String get imageLoadFailed => isEnglish ? 'Failed to load image' : '图片加载失败';
+  String get mediaDownload => isEnglish ? 'Download' : '下载';
+  String get mediaAudio => isEnglish ? 'Audio' : '音频';
+  String get mediaVideo => isEnglish ? 'Video' : '视频';
+  String get mediaDocument => isEnglish ? 'Document' : '文档';
+  String get mediaImage => isEnglish ? 'Image' : '图片';
 
   // ---------------------------------------------------------------------------
   // 4. Tasks (Cron)

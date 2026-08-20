@@ -1,17 +1,21 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
+import 'chat_media_parser.dart';
+import 'chat_media_view.dart';
 import 'tool_call_card.dart';
 
 /// 单条消息气泡（chat_spec.md §6.3 渲染分支）。
 ///
 /// - user：右对齐蓝色气泡，content 去 `[Attached files: …]` 标记，附件条渲染；
-/// - assistant：左对齐，Markdown 渲染 + 工具卡片（锚定本消息）+ reasoning 折叠块 + tps 徽标；
+/// - assistant：左对齐，Markdown 渲染（支持 MEDIA: 与内联媒体）+ 工具卡片（锚定本消息）+ reasoning 折叠块 + tps 徽标；
 /// - local_notice：notice 卡片；
 /// - local_assistant：普通 assistant 气泡。
 class ChatMessageBubble extends StatelessWidget {
@@ -20,6 +24,9 @@ class ChatMessageBubble extends StatelessWidget {
     required this.message,
     this.toolGroups = const [],
     this.reasoningGroups = const [],
+    this.baseUrl,
+    this.sessionId,
+    this.customHeaders,
   });
 
   final ChatMessage message;
@@ -30,11 +37,34 @@ class ChatMessageBubble extends StatelessWidget {
   /// 锚定本消息的推理段。
   final List<ReasoningGroup> reasoningGroups;
 
+  /// 可选服务端 baseUrl（未传时从 ProviderScope 读取激活连接）。
+  final String? baseUrl;
+
+  /// 可选会话 ID。
+  final String? sessionId;
+
+  /// 可选请求头。
+  final Map<String, String>? customHeaders;
+
   @override
   Widget build(BuildContext context) {
     final role = message.role;
     if (role == 'local_notice') return _NoticeCard(message: message);
     final isUser = role == 'user';
+
+    String? effectiveBaseUrl = baseUrl;
+    Map<String, String>? effectiveHeaders = customHeaders;
+    if (effectiveBaseUrl == null) {
+      try {
+        final container = ProviderScope.containerOf(context, listen: false);
+        final conn = container.read(activeConnectionProvider);
+        effectiveBaseUrl = conn?.baseUrl;
+        effectiveHeaders ??= conn?.customHeaders;
+      } catch (_) {
+        // 无 ProviderScope 环境（如独立轻量测试），静默使用 null
+      }
+    }
+
     // 双栏外壳下 MediaQuery.width 是整个窗口宽，而气泡实际可用宽度是
     // 「窗口宽 − 侧栏宽」。用 LayoutBuilder 取真实槽位宽，避免 0.78 比例
     // 在电脑端双栏里超出屏幕（right overflow）。
@@ -53,11 +83,19 @@ class ChatMessageBubble extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: isUser
-              ? _UserContent(message: message)
+              ? _UserContent(
+                  message: message,
+                  baseUrl: effectiveBaseUrl,
+                  sessionId: sessionId,
+                  customHeaders: effectiveHeaders,
+                )
               : _AssistantContent(
                   message: message,
                   toolGroups: toolGroups,
                   reasoningGroups: reasoningGroups,
+                  baseUrl: effectiveBaseUrl,
+                  sessionId: sessionId,
+                  customHeaders: effectiveHeaders,
                 ),
         );
         return Padding(
@@ -77,9 +115,17 @@ class ChatMessageBubble extends StatelessWidget {
 }
 
 class _UserContent extends StatelessWidget {
-  const _UserContent({required this.message});
+  const _UserContent({
+    required this.message,
+    this.baseUrl,
+    this.sessionId,
+    this.customHeaders,
+  });
 
   final ChatMessage message;
+  final String? baseUrl;
+  final String? sessionId;
+  final Map<String, String>? customHeaders;
 
   @override
   Widget build(BuildContext context) {
@@ -87,25 +133,75 @@ class _UserContent extends StatelessWidget {
     final display = content.isEmpty
         ? ''
         : MessageAttachment.contentWithoutAttachedFilesMarker(content);
+
+    final hasMediaMarker =
+        display.contains('MEDIA:') || display.contains('file://');
+    final parsedDisplay =
+        hasMediaMarker ? ChatMediaParser.parseMediaMarkers(display) : display;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (display.isNotEmpty)
-          Text(
-            display,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.4,
-              color: CupertinoColors.white,
+        if (parsedDisplay.isNotEmpty)
+          if (hasMediaMarker)
+            MarkdownBody(
+              data: parsedDisplay,
+              selectable: true,
+              styleSheet: _buildUserMarkdownStyleSheet(context),
+              // ignore: deprecated_member_use
+              imageBuilder: (uri, title, alt) {
+                return ChatInlineMediaWidget(
+                  rawUri: uri.toString(),
+                  title: title,
+                  alt: alt,
+                  baseUrl: baseUrl,
+                  sessionId: sessionId,
+                  customHeaders: customHeaders,
+                );
+              },
+            )
+          else
+            Text(
+              parsedDisplay,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                color: CupertinoColors.white,
+              ),
             ),
-          ),
         if (message.attachments?.isNotEmpty == true) ...[
-          if (display.isNotEmpty) const SizedBox(height: 6),
+          if (parsedDisplay.isNotEmpty) const SizedBox(height: 6),
           for (final attachment in message.attachments!)
-            _AttachmentChip(attachment: attachment),
+            _AttachmentChip(
+              attachment: attachment,
+              baseUrl: baseUrl,
+              sessionId: sessionId,
+              customHeaders: customHeaders,
+            ),
         ],
       ],
     );
+  }
+
+  static MarkdownStyleSheet _buildUserMarkdownStyleSheet(BuildContext context) {
+    return MarkdownStyleSheet.fromCupertinoTheme(CupertinoTheme.of(context))
+        .copyWith(
+          p: const TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            color: CupertinoColors.white,
+          ),
+          listBullet: const TextStyle(
+            fontSize: 15,
+            color: CupertinoColors.white,
+          ),
+          code: TextStyle(
+            fontSize: 13,
+            fontFamily: 'monospace',
+            color: CupertinoColors.white,
+            backgroundColor: CupertinoColors.white.withValues(alpha: 0.22),
+          ),
+        );
   }
 }
 
@@ -114,24 +210,43 @@ class _AssistantContent extends StatelessWidget {
     required this.message,
     required this.toolGroups,
     required this.reasoningGroups,
+    this.baseUrl,
+    this.sessionId,
+    this.customHeaders,
   });
 
   final ChatMessage message;
   final List<ToolCallGroup> toolGroups;
   final List<ReasoningGroup> reasoningGroups;
+  final String? baseUrl;
+  final String? sessionId;
+  final Map<String, String>? customHeaders;
 
   @override
   Widget build(BuildContext context) {
     final content = message.content ?? '';
+    final parsedContent = ChatMediaParser.parseMediaMarkers(content);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final group in reasoningGroups) _ReasoningBlock(group: group),
-        if (content.isNotEmpty)
+        if (parsedContent.isNotEmpty)
           MarkdownBody(
-            data: content,
+            data: parsedContent,
             selectable: true,
             styleSheet: _buildMarkdownStyleSheet(context),
+            // ignore: deprecated_member_use
+            imageBuilder: (uri, title, alt) {
+              return ChatInlineMediaWidget(
+                rawUri: uri.toString(),
+                title: title,
+                alt: alt,
+                baseUrl: baseUrl,
+                sessionId: sessionId,
+                customHeaders: customHeaders,
+              );
+            },
           ),
         for (final group in toolGroups) ToolCallGroupCard(group: group),
         if (message.turnTps != null)
@@ -183,43 +298,26 @@ class _AssistantContent extends StatelessWidget {
 
 /// 附件条（图片/文件芯片）。
 class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({required this.attachment});
+  const _AttachmentChip({
+    required this.attachment,
+    this.baseUrl,
+    this.sessionId,
+    this.customHeaders,
+  });
 
   final MessageAttachment attachment;
+  final String? baseUrl;
+  final String? sessionId;
+  final Map<String, String>? customHeaders;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final name = attachment.name ?? attachment.path ?? l10n.attachmentFallback;
-    final isImage = attachment.isImage == true;
-    return Container(
-      margin: const EdgeInsets.only(top: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: CupertinoColors.white.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isImage ? CupertinoIcons.photo : CupertinoIcons.doc,
-            size: 12,
-            color: CupertinoColors.white,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              name,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                color: CupertinoColors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return ChatAttachmentChipView(
+      attachment: attachment,
+      baseUrl: baseUrl,
+      sessionId: sessionId,
+      customHeaders: customHeaders,
+      isUserMessage: true,
     );
   }
 }

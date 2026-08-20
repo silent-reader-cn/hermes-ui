@@ -121,8 +121,9 @@ class MessageAttachment {
     return prefix;
   }
 
-  /// 扩展名 ∈ {jpg,jpeg,png,gif,webp,heic,heif,bmp,tiff,tif}。
+  /// 扩展名 ∈ {jpg,jpeg,png,gif,webp,heic,heif,bmp,tiff,tif,svg,ico,avif} 或 data:image/。
   static bool isImageReference(String reference) {
+    if (reference.trim().toLowerCase().startsWith('data:image/')) return true;
     final ext = _extensionOf(reference);
     return const {
       'jpg',
@@ -135,7 +136,74 @@ class MessageAttachment {
       'bmp',
       'tiff',
       'tif',
+      'svg',
+      'ico',
+      'avif',
     }.contains(ext);
+  }
+
+  /// 扩展名 ∈ {mp3,ogg,wav,m4a,aac,flac,wma,opus,oga,webm}。
+  static bool isAudioReference(String reference) {
+    final ext = _extensionOf(reference);
+    return const {
+      'mp3',
+      'ogg',
+      'wav',
+      'm4a',
+      'aac',
+      'flac',
+      'wma',
+      'opus',
+      'oga',
+    }.contains(ext);
+  }
+
+  /// 扩展名 ∈ {mp4,webm,mkv,mov,avi,ogv,m4v}。
+  static bool isVideoReference(String reference) {
+    final ext = _extensionOf(reference);
+    return const {
+      'mp4',
+      'webm',
+      'mkv',
+      'mov',
+      'avi',
+      'ogv',
+      'm4v',
+    }.contains(ext);
+  }
+
+  /// 文档类扩展名（pdf, txt, md, json, csv, etc.）。
+  static bool isDocumentReference(String reference) {
+    final ext = _extensionOf(reference);
+    return const {
+      'pdf',
+      'doc',
+      'docx',
+      'xls',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'txt',
+      'md',
+      'csv',
+      'json',
+      'yaml',
+      'yml',
+      'html',
+      'htm',
+      'diff',
+      'patch',
+      'excalidraw',
+    }.contains(ext);
+  }
+
+  /// 获取媒体类别。
+  static MessageMediaKind mediaKindForName(String reference) {
+    if (isImageReference(reference)) return MessageMediaKind.image;
+    if (isAudioReference(reference)) return MessageMediaKind.audio;
+    if (isVideoReference(reference)) return MessageMediaKind.video;
+    if (isDocumentReference(reference)) return MessageMediaKind.document;
+    return MessageMediaKind.file;
   }
 
   /// 拼接 `[Attached files: …]` 后缀（聊天发送用，对应 Swift `chatMessageText`）。
@@ -161,23 +229,28 @@ class MessageAttachment {
   }
 
   static String _lastPathComponent(String raw) {
-    var s = raw;
-    while (s.endsWith('/')) {
+    var s = raw.split('?').first.split('#').first;
+    while (s.endsWith('/') || s.endsWith(r'\')) {
       s = s.substring(0, s.length - 1);
     }
     if (s.isEmpty) return raw;
-    final idx = s.lastIndexOf('/');
+    final forwardSlash = s.lastIndexOf('/');
+    final backSlash = s.lastIndexOf(r'\');
+    final idx = forwardSlash > backSlash ? forwardSlash : backSlash;
     return idx == -1 ? s : s.substring(idx + 1);
   }
 
   static String _extensionOf(String reference) {
-    final last = _lastPathComponent(reference);
+    var clean = reference.split('?').first.split('#').first;
+    clean = clean.replaceAll(RegExp(r'[.,;:!?]+$'), '');
+    final last = _lastPathComponent(clean);
     final dot = last.lastIndexOf('.');
     if (dot == -1 || dot == last.length - 1) return '';
     return last.substring(dot + 1).toLowerCase();
   }
 
   static String _displayName(String reference) {
+    if (reference.trim().toLowerCase().startsWith('data:image/')) return 'image';
     final last = _lastPathComponent(reference);
     return last.isEmpty ? reference : last;
   }
@@ -248,3 +321,13 @@ class MessageAttachment {
         'size: $size, isImage: $isImage)';
   }
 }
+
+/// 媒体类型分类。
+enum MessageMediaKind {
+  image,
+  audio,
+  video,
+  document,
+  file,
+}
+
