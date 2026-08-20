@@ -239,7 +239,23 @@ void main() {
           ],
         },
       };
-      return [chatApiProvider.overrideWithValue(api)];
+      // 媒体内联组件会读取激活连接的 baseUrl → 需注入内存连接，避免
+      // flutter_secure_storage 插件在测试环境不存在而抛 MissingPluginException。
+      final storage = InMemorySecureStorage();
+      final store = ConnectionStore(storage: storage);
+      await store.save(
+        ServerConnection(
+          id: 'c1',
+          name: 'Home 服务器',
+          baseUrl: 'http://hermes.local:30002',
+          createdAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await store.setActive('c1');
+      return [
+        chatApiProvider.overrideWithValue(api),
+        connectionStoreProvider.overrideWithValue(store),
+      ];
     },
   );
 
