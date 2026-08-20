@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/app/theme/status_colors.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
@@ -12,16 +13,29 @@ import 'package:hermex_flutter/features/tasks/tasks_providers.dart';
 
 import '../../helpers/fake_tasks_api.dart';
 
-/// 构造测试任务（jobId 必填；state/enabled/lastStatus 可配）。
-CronJob buildJob(String id, {String? name, String? state, bool? enabled, String? lastStatus}) {
+/// 构造测试任务（jobId 必填；state/enabled/lastStatus/lastRunAt 可配）。
+CronJob buildJob(
+  String id, {
+  String? name,
+  String? state,
+  bool? enabled,
+  String? lastStatus,
+  CronDateValue? lastRunAt,
+  CronSchedule? schedule,
+  CronRepeat? repeatInfo,
+  CronDateValue? nextRunAt,
+}) {
   return CronJob(
     jobId: id,
     name: name ?? '任务 $id',
     prompt: '提示词 $id',
-    schedule: const CronSchedule(expression: '0 9 * * *'),
+    schedule: schedule ?? const CronSchedule(expression: '0 9 * * *'),
     state: state,
     enabled: enabled,
     lastStatus: lastStatus,
+    lastRunAt: lastRunAt,
+    repeatInfo: repeatInfo,
+    nextRunAt: nextRunAt,
   );
 }
 
@@ -34,7 +48,9 @@ Future<void> pumpTasksPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+        apiClientProvider.overrideWithValue(
+          ApiClient(baseUrl: 'http://test.local:30002'),
+        ),
         tasksApiFactoryProvider.overrideWithValue((_) => api),
       ],
       child: CupertinoApp(
@@ -49,37 +65,71 @@ Future<void> pumpTasksPage(
 }
 
 void main() {
-  group('taskStatusLabel 状态文案', () {
-    test('运行中 / 已暂停 / 正常 / 已停用 / 出错', () {
-      expect(taskStatusLabel(buildJob('a', state: 'running')), '运行中');
-      expect(taskStatusLabel(buildJob('b', state: 'paused')), '已暂停');
-      expect(taskStatusLabel(buildJob('c')), '正常');
-      expect(taskStatusLabel(buildJob('d', enabled: false)), '已停用');
-      expect(taskStatusLabel(buildJob('e', lastStatus: 'error')), '出错');
+  group('taskStatusLabel 与 taskStatusColor 状态与配色', () {
+    test('运行中 / 已暂停 / 正常 / 已停用 / 出错 / 需关注', () {
+      final runningJob = buildJob('a', state: 'running');
+      final pausedJob = buildJob('b', state: 'paused');
+      final normalJob = buildJob('c');
+      final offJob = buildJob('d', enabled: false);
+      final errorJob = buildJob('e', lastStatus: 'error');
+      final needsAttentionJob = buildJob(
+        'f',
+        schedule: const CronSchedule(kind: 'cron', expression: '0 9 * * *'),
+        enabled: false,
+        state: 'completed',
+      );
+
+      expect(taskStatusLabel(runningJob), '运行中');
+      expect(taskStatusLabel(pausedJob), '已暂停');
+      expect(taskStatusLabel(normalJob), '正常');
+      expect(taskStatusLabel(offJob), '已停用');
+      expect(taskStatusLabel(errorJob), '出错');
+      expect(taskStatusLabel(needsAttentionJob), '需关注');
+
+      expect(taskStatusColor(runningJob), statusGreenText);
+      expect(taskStatusColor(normalJob), statusBlueText);
+      expect(taskStatusColor(pausedJob), statusOrangeText);
+      expect(taskStatusColor(offJob), statusGreyText);
+      expect(taskStatusColor(errorJob), statusRedText);
+      expect(taskStatusColor(needsAttentionJob), statusOrangeText);
     });
   });
 
   group('TasksPage widget', () {
-    testWidgets('列表渲染：任务名 + 状态标签 + 调度文本 + 新建按钮', (tester) async {
+    testWidgets('列表渲染：任务名 + 状态标签 + 调度文本与上次运行副标 + 新建按钮', (tester) async {
       final api = FakeTasksApi(
         jobs: [
           buildJob('j1', name: '运行中的任务', state: 'running'),
           buildJob('j2', name: '暂停的任务', state: 'paused'),
-          buildJob('j3', name: '正常的任务'),
+          buildJob(
+            'j3',
+            name: '正常的任务',
+            lastRunAt: CronDateValue(DateTime(2026, 8, 20, 9, 30)),
+          ),
+          buildJob('j4', name: '已停用任务', enabled: false),
         ],
       );
-      await pumpTasksPage(tester, api);
+      await pumpTasksPage(tester, api, brightness: Brightness.dark);
 
       expect(find.text('定时任务'), findsOneWidget);
       expect(find.text('运行中的任务'), findsOneWidget);
       expect(find.text('暂停的任务'), findsOneWidget);
       expect(find.text('正常的任务'), findsOneWidget);
+      expect(find.text('已停用任务'), findsOneWidget);
       expect(find.text('运行中'), findsOneWidget);
       expect(find.text('已暂停'), findsOneWidget);
       expect(find.text('正常'), findsOneWidget);
+      expect(find.text('已停用'), findsOneWidget);
       expect(find.text('0 9 * * *'), findsNWidgets(3));
-      expect(find.text('共 3 个任务'), findsOneWidget);
+      expect(find.text('0 9 * * * · 上次运行 09:30'), findsOneWidget);
+      expect(find.text('共 4 个任务'), findsOneWidget);
       expect(find.byKey(const ValueKey('tasks-create')), findsOneWidget);
+
+      // 验证副标使用 secondaryText 颜色
+      final subtitleWidget = tester.widget<Text>(
+        find.text('0 9 * * * · 上次运行 09:30'),
+      );
+      expect(subtitleWidget.style?.color, secondaryText);
     });
 
     testWidgets('加载态：数据到达前显示 ActivityIndicator，到达后渲染列表', (tester) async {
@@ -313,7 +363,9 @@ void main() {
       final api = FakeTasksApi(jobs: [buildJob('j1', name: '暗色任务')]);
       api.outputResponse = const CronOutputResponse(
         jobId: 'j1',
-        outputs: [CronOutputItem(filename: 'dark.log', content: 'Dark mode test')],
+        outputs: [
+          CronOutputItem(filename: 'dark.log', content: 'Dark mode test'),
+        ],
       );
       await pumpTasksPage(tester, api, brightness: Brightness.dark);
 
@@ -346,9 +398,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('新建任务'), findsOneWidget);
 
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-name')), '每日总结');
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-schedule')), '0 9 * * *');
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-prompt')), '总结今天的工作');
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-name')),
+        '每日总结',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-schedule')),
+        '0 9 * * *',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-prompt')),
+        '总结今天的工作',
+      );
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tasks-form-save')));
       await tester.pumpAndSettle();
@@ -365,15 +426,22 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tasks-create')));
       await tester.pumpAndSettle();
 
-      CupertinoButton saveButton() =>
-          tester.widget<CupertinoButton>(find.byKey(const ValueKey('tasks-form-save')));
+      CupertinoButton saveButton() => tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('tasks-form-save')),
+      );
       expect(saveButton().onPressed, isNull);
 
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-schedule')), '0 9 * * *');
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-schedule')),
+        '0 9 * * *',
+      );
       await tester.pump();
       expect(saveButton().onPressed, isNull); // 提示词仍为空
 
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-prompt')), '提示词');
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-prompt')),
+        '提示词',
+      );
       await tester.pump();
       expect(saveButton().onPressed, isNotNull);
     });
@@ -399,27 +467,36 @@ void main() {
       // 预填校验
       expect(
         tester
-            .widget<CupertinoTextField>(find.byKey(const ValueKey('tasks-form-name')))
+            .widget<CupertinoTextField>(
+              find.byKey(const ValueKey('tasks-form-name')),
+            )
             .controller!
             .text,
         '旧名字',
       );
       expect(
         tester
-            .widget<CupertinoTextField>(find.byKey(const ValueKey('tasks-form-schedule')))
+            .widget<CupertinoTextField>(
+              find.byKey(const ValueKey('tasks-form-schedule')),
+            )
             .controller!
             .text,
         '0 9 * * *',
       );
       expect(
         tester
-            .widget<CupertinoTextField>(find.byKey(const ValueKey('tasks-form-prompt')))
+            .widget<CupertinoTextField>(
+              find.byKey(const ValueKey('tasks-form-prompt')),
+            )
             .controller!
             .text,
         '提示词 j1',
       );
 
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-name')), '新名字');
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-name')),
+        '新名字',
+      );
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tasks-form-save')));
       await tester.pumpAndSettle();
@@ -437,8 +514,14 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('tasks-create')));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-schedule')), '0 9 * * *');
-      await tester.enterText(find.byKey(const ValueKey('tasks-form-prompt')), '提示词');
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-schedule')),
+        '0 9 * * *',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('tasks-form-prompt')),
+        '提示词',
+      );
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tasks-form-save')));
       await tester.pumpAndSettle();
