@@ -1,0 +1,340 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hermex_flutter/core/api/api_client.dart';
+import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/models/session.dart';
+import 'package:hermex_flutter/features/projects/project_providers.dart';
+import 'package:hermex_flutter/features/session_list/session_list_page.dart';
+import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/session_list/session_list_utility_rows.dart';
+
+import '../../helpers/fake_session_list_api.dart';
+
+class _StubProjectApi implements ProjectApi {
+  @override
+  Future<ProjectsResponse> fetchProjects() async =>
+      const ProjectsResponse(projects: []);
+
+  @override
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
+}
+
+class _DestinationStub extends StatelessWidget {
+  const _DestinationStub({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(middle: Text('nav-$title')),
+      child: Center(child: Text('body-$title')),
+    );
+  }
+}
+
+void main() {
+  group('SessionListUtilityRows 独立组件测试', () {
+    testWidgets('渲染 5 个入口：任务、看板、技能、记忆、统计与对应图标', (tester) async {
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: SessionListUtilityRows(),
+          ),
+        ),
+      );
+
+      // 5 个入口文本
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text('看板'), findsOneWidget);
+      expect(find.text('技能'), findsOneWidget);
+      expect(find.text('记忆'), findsOneWidget);
+      expect(find.text('统计'), findsOneWidget);
+
+      // 5 个入口 Key
+      expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-skills')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-memory')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-insights')), findsOneWidget);
+
+      // 5 个图标断言（对齐蓝本语义）
+      expect(find.byIcon(CupertinoIcons.clock), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.square_list), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.hammer), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.sparkles), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.chart_bar_square), findsOneWidget);
+    });
+
+    testWidgets('自定义回调可正常触发', (tester) async {
+      var tasksCalled = false;
+      var kanbanCalled = false;
+      var skillsCalled = false;
+      var memoryCalled = false;
+      var insightsCalled = false;
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: SessionListUtilityRows(
+              onTapTasks: () => tasksCalled = true,
+              onTapKanban: () => kanbanCalled = true,
+              onTapSkills: () => skillsCalled = true,
+              onTapMemory: () => memoryCalled = true,
+              onTapInsights: () => insightsCalled = true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-tasks')));
+      await tester.pump();
+      expect(tasksCalled, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-kanban')));
+      await tester.pump();
+      expect(kanbanCalled, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-skills')));
+      await tester.pump();
+      expect(skillsCalled, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-memory')));
+      await tester.pump();
+      expect(memoryCalled, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-insights')));
+      await tester.pump();
+      expect(insightsCalled, isTrue);
+    });
+
+    testWidgets('可访问性语义：每个按钮具备 Semantics 标签', (tester) async {
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: SessionListUtilityRows(),
+          ),
+        ),
+      );
+
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '任务',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '看板',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '技能',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '记忆',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '统计',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('SessionListPage 工具行集成测试与路由跳转', () {
+    Future<GoRouter> pumpSessionListPage(
+      WidgetTester tester, {
+      FakeSessionListApi? api,
+    }) async {
+      final fakeApi = api ??
+          FakeSessionListApi(
+            sessions: [
+              SessionSummary(
+                sessionId: 's-test-1',
+                title: '测试会话 1',
+                lastMessageAt: DateTime.now().millisecondsSinceEpoch / 1000,
+              ),
+            ],
+          );
+
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const SessionListPage()),
+          GoRoute(
+            path: '/tasks',
+            builder: (_, _) => const _DestinationStub(title: 'TasksDestination'),
+          ),
+          GoRoute(
+            path: '/kanban',
+            builder: (_, _) => const _DestinationStub(title: 'KanbanDestination'),
+          ),
+          GoRoute(
+            path: '/skills',
+            builder: (_, _) => const _DestinationStub(title: 'SkillsDestination'),
+          ),
+          GoRoute(
+            path: '/memory',
+            builder: (_, _) => const _DestinationStub(title: 'MemoryDestination'),
+          ),
+          GoRoute(
+            path: '/insights',
+            builder: (_, _) => const _DestinationStub(title: 'InsightsDestination'),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, _) => const _DestinationStub(title: 'SettingsDestination'),
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (_, _) => const _DestinationStub(title: 'ChatNew'),
+          ),
+          GoRoute(
+            path: '/chat/:sessionId',
+            builder: (_, state) => const _DestinationStub(
+              title: 'Chat_',
+            ),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue((_) => fakeApi),
+            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
+          ],
+          child: CupertinoApp.router(routerConfig: router),
+        ),
+      );
+
+      // 加载完成
+      await tester.pump();
+      await tester.pump();
+      return router;
+    }
+
+    testWidgets('会话列表页正常加载时，5 个工具行入口均可见', (tester) async {
+      await pumpSessionListPage(tester);
+
+      expect(find.byKey(const ValueKey('session-list-utility-rows')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-skills')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-memory')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-insights')), findsOneWidget);
+    });
+
+    testWidgets('点击任务入口 → 跳转 /tasks', (tester) async {
+      await pumpSessionListPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-tasks')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-TasksDestination'), findsOneWidget);
+    });
+
+    testWidgets('点击看板入口 → 跳转 /kanban', (tester) async {
+      await pumpSessionListPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-kanban')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-KanbanDestination'), findsOneWidget);
+    });
+
+    testWidgets('点击技能入口 → 跳转 /skills', (tester) async {
+      await pumpSessionListPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-skills')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-SkillsDestination'), findsOneWidget);
+    });
+
+    testWidgets('点击记忆入口 → 跳转 /memory', (tester) async {
+      await pumpSessionListPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-memory')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-MemoryDestination'), findsOneWidget);
+    });
+
+    testWidgets('点击统计入口 → 跳转 /insights', (tester) async {
+      await pumpSessionListPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('session-list-utility-insights')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-InsightsDestination'), findsOneWidget);
+    });
+
+    testWidgets('搜索模式下工具行隐藏，清空搜索后重新显示', (tester) async {
+      await pumpSessionListPage(tester);
+
+      expect(find.byKey(const ValueKey('session-list-utility-rows')), findsOneWidget);
+
+      // 输入搜索内容进入搜索模式
+      await tester.enterText(find.byKey(const ValueKey('session-list-search')), '测试');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+
+      // 搜索模式下工具行应该隐藏
+      expect(find.byKey(const ValueKey('session-list-utility-rows')), findsNothing);
+      expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsNothing);
+
+      // 清空搜索内容退出搜索模式
+      await tester.enterText(find.byKey(const ValueKey('session-list-search')), '');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+
+      // 工具行恢复显示
+      expect(find.byKey(const ValueKey('session-list-utility-rows')), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-list-utility-tasks')), findsOneWidget);
+    });
+  });
+}

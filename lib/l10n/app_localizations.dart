@@ -283,6 +283,7 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // 4. Tasks (Cron)
   // ---------------------------------------------------------------------------
+  String get tasks => isEnglish ? 'Tasks' : '任务';
   String get cronTasks => isEnglish ? 'Scheduled Tasks' : '定时任务';
   String get tasksTitle => isEnglish ? 'Scheduled Tasks' : '定时任务';
   String get newScheduledTask =>
@@ -524,6 +525,7 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // 9. Insights
   // ---------------------------------------------------------------------------
+  String get insights => isEnglish ? 'Insights' : '统计';
   String get insightsTitle => isEnglish ? 'Usage Insights' : '用量统计';
   String get refreshInsights =>
       isEnglish ? 'Refresh Usage Insights' : '刷新用量统计';
