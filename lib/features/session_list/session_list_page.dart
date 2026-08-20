@@ -24,7 +24,14 @@ import 'session_list_utility_rows.dart';
 /// 会话分区（置顶/今天/昨天/更早）+ 行快捷操作（pin/archive/branch/delete 弹
 /// 菜单）+ 悬浮新建会话按钮。会话点击 → `/chat/:sessionId`。
 class SessionListPage extends ConsumerStatefulWidget {
-  const SessionListPage({super.key});
+  const SessionListPage({super.key, this.showUtilityRows = true});
+
+  /// 是否渲染顶部工具行入口（任务/看板/技能/记忆/统计）。
+  ///
+  /// 宽屏双栏外壳的侧栏顶部已有 [SidebarUtilityToolbar] 承担工具入口
+  /// （含设置与激活高亮），故侧栏内复用的会话列表传 `false` 避免双层
+  /// 入口重叠；手机单栈（窄屏）保持默认 `true`。
+  final bool showUtilityRows;
 
   @override
   ConsumerState<SessionListPage> createState() => _SessionListPageState();
@@ -110,7 +117,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               // 指示器拿不到负 overlap 而无法触发）。
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
               SliverToBoxAdapter(child: _buildSearchBar()),
-              if (!isSearchMode)
+              if (widget.showUtilityRows && !isSearchMode)
                 const SliverToBoxAdapter(child: SessionListUtilityRows()),
               if (state != null && !isSearchMode)
                 SliverToBoxAdapter(child: _buildFilterBar(state)),
@@ -313,7 +320,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 key: const ValueKey('batch-select-all'),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 onPressed: controller.selectAllInSection,
-                child: Text(l10n.selectAll, style: const TextStyle(fontSize: 14)),
+                child: Text(
+                  l10n.selectAll,
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
               CupertinoButton(
                 key: const ValueKey('batch-archive'),
@@ -343,7 +353,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 onPressed: count == 0
                     ? null
                     : () => unawaited(_batchMoveToProject(context)),
-                child: Text(l10n.batchMoveProject, style: const TextStyle(fontSize: 14)),
+                child: Text(
+                  l10n.batchMoveProject,
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
             ],
           ),
@@ -532,9 +545,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              isSearchMode
-                  ? l10n.noMatchingSessionsFound
-                  : l10n.noSessions,
+              isSearchMode ? l10n.noMatchingSessionsFound : l10n.noSessions,
               style: const TextStyle(fontSize: 17),
             ),
             const SizedBox(height: 6),
@@ -788,7 +799,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
         title: Text(l10n.deleteSession),
-        content: Text(l10n.confirmDeleteSession(_displayTitle(context, session))),
+        content: Text(
+          l10n.confirmDeleteSession(_displayTitle(context, session)),
+        ),
         actions: [
           CupertinoDialogAction(
             key: const ValueKey('session-delete-cancel'),

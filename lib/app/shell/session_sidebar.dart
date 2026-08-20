@@ -7,10 +7,7 @@ import 'sidebar_utility_toolbar.dart';
 ///
 /// 包含顶部工具入口行（任务/看板/技能/记忆/统计/设置）与下方完整的会话列表。
 class SessionSidebar extends StatelessWidget {
-  const SessionSidebar({
-    super.key,
-    required this.currentLocation,
-  });
+  const SessionSidebar({super.key, required this.currentLocation});
 
   /// 当前激活的路由路径。
   final String currentLocation;
@@ -22,9 +19,9 @@ class SessionSidebar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SidebarUtilityToolbar(currentLocation: currentLocation),
-        const Expanded(
-          child: SessionListPage(),
-        ),
+        // 侧栏顶部已有 SidebarUtilityToolbar 提供工具入口，内部会话
+        // 列表不再重复渲染工具行，避免宽屏双层入口重叠。
+        const Expanded(child: SessionListPage(showUtilityRows: false)),
       ],
     );
   }
