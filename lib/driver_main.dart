@@ -28,6 +28,7 @@ Future<void> main() async {
   if (isDesktopPlatform()) {
     try {
       await windowManager.ensureInitialized();
+      await windowManager.setMinimumSize(const Size(720, 480));
     } catch (e, st) {
       developer.log(
         'windowManager.ensureInitialized failed',

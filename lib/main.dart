@@ -21,6 +21,9 @@ Future<void> main() async {
     try {
       await windowManager.ensureInitialized();
       await windowManager.setTitle('Hermex');
+      // 兜底最小窗口：避免拖到 0 宽/过窄时 Windows EGL 上下文丢失
+      // （gpu_surface_gl_impeller.cc Context Lost 循环刷屏）。
+      await windowManager.setMinimumSize(const Size(720, 480));
     } catch (e, st) {
       developer.log(
         'windowManager.ensureInitialized failed',
