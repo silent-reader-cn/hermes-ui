@@ -452,6 +452,40 @@ void main() {
       expect(sessions.first.title, '分支副本');
     });
 
+    test('分支无返回标题：本地兜底 "原标题 (fork)"，即时插入且时间戳兜底',
+        () async {
+      final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
+      api.branchResponse = const SessionBranchResponse(sessionId: 'b1');
+      final container = makeContainer(api);
+      await container.read(sessionListControllerProvider.future);
+      final controller = container.read(sessionListControllerProvider.notifier);
+      final before = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
+
+      final id = await controller.branch(
+        container
+            .read(sessionListControllerProvider)
+            .valueOrNull!
+            .sessions
+            .single,
+      );
+      expect(id, 'b1');
+      final sessions = container
+          .read(sessionListControllerProvider)
+          .valueOrNull!
+          .sessions;
+      final inserted = sessions.first;
+      expect(inserted.sessionId, 'b1');
+      // 服务端未返回标题 → 本地对齐 hermes-webui 命名 "<原标题> (fork)"
+      expect(inserted.title, 'A (fork)');
+      // 时间戳兜底：缺失 createdAt 时填充 now，新会话立即归「今天」分区
+      // 顶部（否则落「更早」末尾，列表看不到，需手动下拉刷新才出现）。
+      expect(inserted.createdAt, isNotNull);
+      expect(inserted.createdAt!, greaterThanOrEqualTo(before - 5));
+      final sections = buildSessionSections(sessions);
+      expect(sections.first.title, '今天');
+      expect(sections.first.sessions.first.sessionId, 'b1');
+    });
+
     test('分支失败（服务器未返回 ID）：actionError，列表不变', () async {
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       api.branchResponse = const SessionBranchResponse();

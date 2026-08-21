@@ -101,10 +101,7 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     required bool archived,
   }) async {
-    return _client.archiveSession(
-      sessionId: sessionId,
-      archived: archived,
-    );
+    return _client.archiveSession(sessionId: sessionId, archived: archived);
   }
 
   @override
@@ -122,10 +119,7 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     String? projectId,
   }) async {
-    return _client.moveSession(
-      sessionId: sessionId,
-      projectId: projectId,
-    );
+    return _client.moveSession(sessionId: sessionId, projectId: projectId);
   }
 }
 
@@ -751,10 +745,17 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       }
       final hasTitle =
           response.title != null && response.title!.trim().isNotEmpty;
+      // 服务端未返回标题时本地兜底加 fork 后缀（对齐 hermes-webui
+      // 默认命名 "<original title> (fork)"，避免刷新前后标题跳变）。
+      final baseTitle = session.title == null || session.title!.trim().isEmpty
+          ? null
+          : session.title!.trim();
       await _insertSession(
         SessionSummary(
           sessionId: newId,
-          title: hasTitle ? response.title : session.title,
+          title: hasTitle
+              ? response.title
+              : (baseTitle == null ? null : '$baseTitle (fork)'),
         ),
       );
       return newId;
@@ -895,9 +896,16 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   Future<void> _insertSession(SessionSummary session) async {
     final current = state.valueOrNull;
     if (current == null) return;
+    // 服务端新建/分支响应通常不带时间戳；缺失时兜底为“现在”，
+    // 否则新会话落入「更早」分区最底部（排序 0），列表里看不到，
+    // 要等手动下拉刷新（服务端带真时间戳）才出现在「今天」顶部。
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
+    final withStamp = session.createdAt == null
+        ? session.copyWith(createdAt: now)
+        : session;
     state = AsyncData(
       current.copyWith(
-        sessions: [session, ...current.sessions],
+        sessions: [withStamp, ...current.sessions],
         visibleCount: current.visibleCount + 1,
       ),
     );
