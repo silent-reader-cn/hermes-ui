@@ -22,8 +22,9 @@ class _UtilityItem {
 
 /// 侧栏常驻工具入口行（TASK W2 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
 ///
-/// 宽屏下展示在会话列表顶部，提供任务、看板、技能、统计、设置的快捷跳转与激活高亮（记忆入口已移至设置页）。
-/// 受 [sessionEntryVisibilityProvider] 控制功能入口显隐；4 个功能入口全关时整条工具条返回 `SizedBox.shrink()`。
+/// 宽屏下展示在会话列表顶部，提供任务、看板、工作区、技能、统计、设置的快捷跳转与激活高亮
+/// （记忆入口已移至设置页）。受 [sessionEntryVisibilityProvider] 控制功能入口显隐；
+/// 5 个功能入口全关时整条工具条仅保留设置图标。
 class SidebarUtilityToolbar extends ConsumerWidget {
   const SidebarUtilityToolbar({super.key, required this.currentLocation});
 
@@ -42,6 +43,12 @@ class SidebarUtilityToolbar extends ConsumerWidget {
       path: '/kanban',
       icon: CupertinoIcons.square_split_2x2,
       getTitle: (l10n) => l10n.kanbanTitle,
+    ),
+    _UtilityItem(
+      id: 'workspaces',
+      path: '/workspaces',
+      icon: CupertinoIcons.folder,
+      getTitle: (l10n) => l10n.workspacesTitle,
     ),
     _UtilityItem(
       id: 'skills',

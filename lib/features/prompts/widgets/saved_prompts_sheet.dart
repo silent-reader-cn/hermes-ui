@@ -1,0 +1,260 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/theme/status_colors.dart';
+import '../../../core/models/saved_prompt.dart';
+import '../../../l10n/app_localizations.dart';
+import '../prompts_providers.dart';
+
+/// 收藏提示词底部 Sheet（Cupertino 风格）。
+///
+/// - 内部用 [savedPromptsControllerProvider] 驱动列表
+/// - 行点击回调 [onInsert] 并关闭 Sheet
+/// - 底部「收藏当前输入」需外部传入当前输入（[currentInput] 或 [getCurrentInput]）
+class SavedPromptsSheet extends ConsumerStatefulWidget {
+  const SavedPromptsSheet({
+    super.key,
+    required this.onInsert,
+    this.currentInput,
+    this.getCurrentInput,
+  });
+
+  /// 选中某条收藏后的插入回调（由调用方负责写入输入框）。
+  final ValueChanged<String> onInsert;
+
+  /// 当前输入快照（静态值）。
+  final String? currentInput;
+
+  /// 当前输入回调（动态读取，优先于 [currentInput]）。
+  final String Function()? getCurrentInput;
+
+  @override
+  ConsumerState<SavedPromptsSheet> createState() => _SavedPromptsSheetState();
+}
+
+class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
+  bool _saving = false;
+  final Set<String> _deletingIds = <String>{};
+
+  String _resolveCurrentInput() {
+    if (widget.getCurrentInput != null) return widget.getCurrentInput!.call();
+    return widget.currentInput ?? '';
+  }
+
+  Future<void> _handleSaveCurrent() async {
+    final l10n = AppLocalizations.of(context);
+    final raw = _resolveCurrentInput();
+    final text = raw.trim();
+    if (text.isEmpty) {
+      await _showAlert(l10n.notice, l10n.savedPromptsEmptyInput);
+      return;
+    }
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final prompt = await ref.read(savedPromptsControllerProvider.notifier).create(text: text);
+      if (!mounted) return;
+      if (prompt != null) {
+        await _showAlert(l10n.promptSaved, l10n.promptSaved);
+      } else {
+        await _showAlert(l10n.savePromptFailed, l10n.savePromptFailed, isError: true);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      await _showAlert(l10n.savePromptFailed, error.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _handleDelete(String id) async {
+    if (id.isEmpty || _deletingIds.contains(id)) return;
+    setState(() => _deletingIds.add(id));
+    final l10n = AppLocalizations.of(context);
+    try {
+      await ref.read(savedPromptsControllerProvider.notifier).remove(id);
+    } catch (error) {
+      if (!mounted) return;
+      await _showAlert(l10n.deletePromptFailed, error.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _deletingIds.remove(id));
+    }
+  }
+
+  Future<void> _showAlert(String title, String message, {bool isError = false}) {
+    final l10n = AppLocalizations.of(context);
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message, style: isError ? const TextStyle(color: statusRedText) : null),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final async = ref.watch(savedPromptsControllerProvider);
+    final bg = CupertinoColors.systemGrey6.resolveFrom(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGrey3.resolveFrom(context),
+                borderRadius: BorderRadius.circular(2.5),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.savedPromptsTitle,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Container(height: 0.5, color: CupertinoColors.separator.resolveFrom(context)),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 380),
+                child: _buildBody(context, async),
+              ),
+            ),
+            Container(height: 0.5, color: CupertinoColors.separator.resolveFrom(context)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  key: const ValueKey('saved-prompts-save-current'),
+                  onPressed: _saving ? null : _handleSaveCurrent,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: _saving
+                      ? const CupertinoActivityIndicator(color: CupertinoColors.white)
+                      : Text(l10n.saveCurrentInput),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, AsyncValue<List<SavedPrompt>> async) {
+    final l10n = AppLocalizations.of(context);
+    return async.when(
+      data: (prompts) {
+        if (prompts.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Text(
+                l10n.savedPromptsEmpty,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: CupertinoColors.secondaryLabel.resolveFrom(context)),
+              ),
+            ),
+          );
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          itemCount: prompts.length,
+          separatorBuilder: (_, _) => Container(
+            height: 0.5,
+            color: CupertinoColors.separator.resolveFrom(context),
+            margin: const EdgeInsets.only(left: 16),
+          ),
+          itemBuilder: (context, index) {
+            final prompt = prompts[index];
+            final id = prompt.id;
+            final displayLabel = savedPromptDisplayLabel(prompt);
+            final rawLabel = prompt.label?.trim();
+            final title = (rawLabel != null && rawLabel.isNotEmpty)
+                ? rawLabel
+                : (displayLabel.isEmpty ? (prompt.text ?? '') : displayLabel);
+            final subtitleText = prompt.text ?? '';
+            final isDeleting = id != null && _deletingIds.contains(id);
+            return CupertinoListTile(
+              key: ValueKey('saved-prompt-$id-$index'),
+              title: Text(
+                title.isEmpty ? l10n.unnamed : title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                subtitleText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  fontSize: 13,
+                ),
+              ),
+              trailing: CupertinoButton(
+                key: ValueKey('saved-prompt-delete-$id'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 44),
+                onPressed: (id == null || id.isEmpty || isDeleting)
+                    ? null
+                    : () => _handleDelete(id),
+                child: isDeleting
+                    ? const CupertinoActivityIndicator(radius: 10)
+                    : const Icon(CupertinoIcons.delete, size: 20, color: statusRedText),
+              ),
+              onTap: () {
+                final insertText = prompt.text ?? '';
+                widget.onInsert(insertText);
+                Navigator.of(context).pop();
+              },
+            );
+          },
+        );
+      },
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 32),
+          child: CupertinoActivityIndicator(),
+        ),
+      ),
+      error: (error, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                error.toString(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: statusRedText),
+              ),
+              const SizedBox(height: 12),
+              CupertinoButton(
+                key: const ValueKey('saved-prompts-retry'),
+                onPressed: () => ref.read(savedPromptsControllerProvider.notifier).refresh(),
+                child: Text(l10n.retry),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

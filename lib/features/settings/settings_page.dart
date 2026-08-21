@@ -136,6 +136,16 @@ class _SessionListEntriesSection extends ConsumerWidget {
           ),
         ),
         CupertinoListTile(
+          title: Text(l10n.workspacesTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-workspaces'),
+            value: visibility.workspaces,
+            onChanged: (value) {
+              unawaited(controller.setVisible('workspaces', value));
+            },
+          ),
+        ),
+        CupertinoListTile(
           title: Text(l10n.skillsTitle),
           trailing: CupertinoSwitch(
             key: const ValueKey('settings-visibility-skills'),

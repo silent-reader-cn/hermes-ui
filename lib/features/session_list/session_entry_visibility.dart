@@ -5,18 +5,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 会话列表功能入口显隐配置模型（TASK W5 / 蓝本 SidebarSectionVisibility）。
 ///
-/// 包含 4 个功能入口的显隐状态，默认全部开启（true）；记忆入口不在
-/// 其中——记忆页入口已移至设置页（2026-08，主人指示）。
+/// 包含 5 个功能入口的显隐状态；工作区（workspaces）2026-08-21 新增并默认开启
+/// （用户高频入口：进工作区看文件）。记忆入口不在其中——记忆页入口已移至设置页
+/// （2026-08，主人指示）。
 class SessionEntryVisibility {
-  /// 创建会话列表入口显隐状态，缺省全为 true。
+  /// 创建会话列表入口显隐状态，缺省 tasks/skills/insights/workspaces 开、kanban 关。
   const SessionEntryVisibility({
     this.tasks = true,
     this.kanban = false,
     this.skills = true,
     this.insights = true,
+    this.workspaces = true,
   });
 
-  /// 默认全开配置。
+  /// 默认全开配置（看板默认隐藏）。
   static const SessionEntryVisibility defaults = SessionEntryVisibility();
 
   /// 任务 (Tasks) 入口显隐。
@@ -31,12 +33,16 @@ class SessionEntryVisibility {
   /// 统计 (Insights) 入口显隐。
   final bool insights;
 
+  /// 工作区 (Workspaces) 入口显隐。
+  final bool workspaces;
+
   /// 是否有任何一个功能入口处于开启状态（对齐蓝本 `showsAnyUtilityLink` 语义）。
-  bool get showsAny => tasks || kanban || skills || insights;
+  bool get showsAny =>
+      tasks || kanban || skills || insights || workspaces;
 
   /// 检查指定标识的功能入口是否可见。
   ///
-  /// 支持的标识：`tasks`, `kanban`, `skills`, `insights`。未知标识默认返回 true。
+  /// 支持的标识：`tasks`, `kanban`, `skills`, `insights`, `workspaces`。未知标识默认返回 true。
   bool isVisible(String entry) {
     switch (entry) {
       case 'tasks':
@@ -47,6 +53,8 @@ class SessionEntryVisibility {
         return skills;
       case 'insights':
         return insights;
+      case 'workspaces':
+        return workspaces;
       default:
         return true;
     }
@@ -58,12 +66,14 @@ class SessionEntryVisibility {
     bool? kanban,
     bool? skills,
     bool? insights,
+    bool? workspaces,
   }) {
     return SessionEntryVisibility(
       tasks: tasks ?? this.tasks,
       kanban: kanban ?? this.kanban,
       skills: skills ?? this.skills,
       insights: insights ?? this.insights,
+      workspaces: workspaces ?? this.workspaces,
     );
   }
 
@@ -75,14 +85,16 @@ class SessionEntryVisibility {
           tasks == other.tasks &&
           kanban == other.kanban &&
           skills == other.skills &&
-          insights == other.insights;
+          insights == other.insights &&
+          workspaces == other.workspaces;
 
   @override
-  int get hashCode => Object.hash(tasks, kanban, skills, insights);
+  int get hashCode =>
+      Object.hash(tasks, kanban, skills, insights, workspaces);
 
   @override
   String toString() =>
-      'SessionEntryVisibility(tasks: $tasks, kanban: $kanban, skills: $skills, insights: $insights)';
+      'SessionEntryVisibility(tasks: $tasks, kanban: $kanban, skills: $skills, insights: $insights, workspaces: $workspaces)';
 }
 
 /// 会话列表功能入口显隐状态 Provider（持久化到 shared_preferences）。
@@ -109,6 +121,9 @@ class SessionEntryVisibilityController
   /// 统计入口持久化 key。
   static const String keyInsights = 'session_entry_visibility_insights';
 
+  /// 工作区入口持久化 key。
+  static const String keyWorkspaces = 'session_entry_visibility_workspaces';
+
   @override
   SessionEntryVisibility build() {
     unawaited(_load());
@@ -121,12 +136,14 @@ class SessionEntryVisibilityController
     final kanban = prefs.getBool(keyKanban) ?? true;
     final skills = prefs.getBool(keySkills) ?? true;
     final insights = prefs.getBool(keyInsights) ?? true;
+    final workspaces = prefs.getBool(keyWorkspaces) ?? true;
 
     state = SessionEntryVisibility(
       tasks: tasks,
       kanban: kanban,
       skills: skills,
       insights: insights,
+      workspaces: workspaces,
     );
   }
 
@@ -144,6 +161,9 @@ class SessionEntryVisibilityController
         break;
       case 'insights':
         state = state.copyWith(insights: value);
+        break;
+      case 'workspaces':
+        state = state.copyWith(workspaces: value);
         break;
       default:
         return;

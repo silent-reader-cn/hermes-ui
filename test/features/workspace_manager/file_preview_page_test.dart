@@ -122,6 +122,8 @@ void main() {
       expect(workspaceFileKindOf(entry('noext')), WorkspaceFileKind.other);
       expect(workspaceFileIsPreviewable(entry('a.dart')), isTrue);
       expect(workspaceFileIsPreviewable(entry('pic.png')), isTrue);
+      expect(workspaceFileIsPreviewable(entry('movie.mp4')), isTrue);
+      expect(workspaceFileIsPreviewable(entry('song.mp3')), isTrue);
       expect(workspaceFileIsPreviewable(entry('app.zip')), isFalse);
     });
   });
@@ -223,6 +225,13 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('preview-dialog-ok')));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('音视频预览：video/audio 进入可预览分支（非兜底）', (tester) async {
+      final api = FakeWorkspaceApi()..downloadBytes = kPngBytes;
+      await pumpPreview(tester, api, entry('movie.mp4'));
+      expect(find.byKey(const ValueKey('preview-scroll')), findsOneWidget);
+      expect(find.text('无法预览该文件'), findsNothing);
     });
 
     testWidgets('下载失败：操作失败弹窗', (tester) async {
