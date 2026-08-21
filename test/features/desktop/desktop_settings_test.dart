@@ -179,6 +179,9 @@ void main() {
           find.byKey(const ValueKey('settings-desktop-remember-window'));
 
       await tester.scrollUntilVisible(minTrayFinder, 50);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 100));
+      await tester.pumpAndSettle();
 
       // 验证桌面分组标题与开关
       expect(find.text('桌面'), findsOneWidget);

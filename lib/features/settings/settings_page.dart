@@ -18,13 +18,17 @@ import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_entry_visibility.dart';
 import '../session_list/session_row_subtitle_settings.dart';
 import '../shared/app_back_button.dart';
+import 'auxiliary_models_section.dart';
+import 'extensions_section.dart';
+import 'mcp_section.dart';
 import 'profile_section.dart';
 import 'settings_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
 /// 分组：外观（主题三态）、会话列表入口（功能入口显隐）、桌面（平台能力开关）、
-/// 服务器（当前服务器 + 列表增删改切换）、模型（默认模型选择 + 推理强度）、关于（版本号）。
+/// 服务器（当前服务器 + 列表增删改切换）、模型（默认模型选择 + 推理强度）、
+/// 辅助模型（11 槽位模型绑定）、MCP 服务器管理、扩展生态（已安装/安装/Sidecar）、关于（版本号）。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -42,6 +46,9 @@ class SettingsPage extends ConsumerWidget {
           _ServerSection(),
           ProfileSection(),
           _ModelSection(),
+          AuxiliaryModelsSection(),
+          McpSection(),
+          ExtensionsSection(),
           _DesktopSection(),
           _SessionListEntriesSection(),
           _SessionRowSubtitleSection(),

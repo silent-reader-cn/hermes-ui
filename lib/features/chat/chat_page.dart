@@ -738,17 +738,40 @@ class _PendingUserMessageBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
     return Container(
       key: const ValueKey('chat-pending-banner'),
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey5.resolveFrom(context),
-        borderRadius: BorderRadius.circular(8),
+        color: isDark
+            ? const Color(0xFF2C2C2E)
+            : CupertinoColors.systemGrey6.resolveFrom(context),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.separator.resolveFrom(context),
+          width: 0.5,
+        ),
       ),
-      child: Text(
-        l10n.pendingUserMessageBanner,
-        style: const TextStyle(fontSize: 12, color: secondaryText),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.clock,
+            size: 14,
+            color: secondaryText.resolveFrom(context),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.pendingUserMessageBanner,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: secondaryText.resolveFrom(context),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

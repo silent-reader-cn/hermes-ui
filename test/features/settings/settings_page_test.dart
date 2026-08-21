@@ -7,6 +7,9 @@ import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:hermex_flutter/core/models/auxiliary_model.dart';
+import 'package:hermex_flutter/core/models/extensions.dart';
+import 'package:hermex_flutter/core/models/mcp.dart';
 import 'package:hermex_flutter/core/models/server_catalog.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/settings/settings_page.dart';
@@ -63,6 +66,71 @@ FakeSettingsApi buildApi() {
     supportedEfforts: ['low', 'medium', 'high'],
     supportsReasoningEffort: true,
   );
+  api.extensionsStatusResponse = const ExtensionsStatusResponse(
+    enabled: true,
+    extensions: [
+      ExtensionInfo(
+        id: 'ext-web-search',
+        name: 'Web Search',
+        enabled: true,
+        sidecarActive: true,
+        sidecarProxyConsent: true,
+      ),
+    ],
+  );
+  api.extensionsRegistryResponse = const ExtensionsRegistryResponse(
+    registry: [
+      ExtensionRegistryItem(
+        id: 'ext-calculator',
+        name: 'Calculator',
+        version: '1.0.0',
+        downloadUrl: 'https://example.com/calc.zip',
+        sha256: 'hash_calc',
+      ),
+    ],
+  );
+  api.mcpServersResponse = const McpServersResponse(
+    servers: [
+      McpServer(
+        name: 'fetch-server',
+        command: 'uvx',
+        args: ['mcp-fetch'],
+        enabled: true,
+        status: 'connected',
+      ),
+    ],
+  );
+  api.mcpToolsResponse = const McpToolsResponse(
+    tools: [
+      McpTool(
+        name: 'fetch_url',
+        server: 'fetch-server',
+        description: 'Fetch webpage',
+      ),
+    ],
+  );
+  api.auxiliaryModelsResponse = const AuxiliaryModelsResponse(
+    tasks: [
+      AuxiliaryTaskRow(
+        task: 'vision',
+        provider: 'openai',
+        model: 'gpt-4o',
+        apiKeySet: true,
+        label: 'Vision Understanding',
+      ),
+      AuxiliaryTaskRow(
+        task: 'compression',
+        provider: 'auto',
+        model: '',
+        apiKeySet: false,
+        label: 'Context Compression',
+      ),
+    ],
+    main: AuxMainModel(
+      provider: 'openai',
+      model: 'gpt-4o',
+    ),
+  );
   return api;
 }
 
@@ -118,7 +186,7 @@ void main() {
   }
 
   group('分组渲染', () {
-    testWidgets('五组标题 + 当前服务器 + 默认模型 + 推理强度 + 版本号', (tester) async {
+    testWidgets('分组标题 + 当前服务器 + 默认模型 + 推理强度 + 版本号', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
@@ -130,7 +198,6 @@ void main() {
       expect(find.text('外观'), findsOneWidget);
       expect(find.text('服务器'), findsOneWidget);
       expect(find.text('模型'), findsOneWidget);
-      expect(find.text('桌面'), findsOneWidget);
 
       // 列表行渲染 name + url（激活标识在行内勾选图标）
       final rowC1 = find.byKey(const ValueKey('server-row-c1'));
@@ -153,6 +220,10 @@ void main() {
       expect(find.text('推理强度'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);
 
+      // 桌面分组
+      await tester.scrollUntilVisible(find.text('桌面'), 50);
+      expect(find.text('桌面'), findsOneWidget);
+
       // 关于：版本号
       await tester.scrollUntilVisible(find.text('版本'), 50);
       expect(find.text('关于'), findsOneWidget);
@@ -160,7 +231,7 @@ void main() {
       expect(find.text('1.0.0+1'), findsOneWidget);
     });
 
-    testWidgets('分组顺序：关于分组置底（在会话列表入口之后）', (tester) async {
+    testWidgets('分组顺序：关于分组置底（三新板块在模型之后）', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
@@ -169,20 +240,26 @@ void main() {
       await pumpPage(tester, container);
 
       final listView = tester.widget<ListView>(find.byType(ListView));
-      final childrenDelegate = listView.childrenDelegate as SliverChildListDelegate;
-      final typeNames = childrenDelegate.children.map((w) => w.runtimeType.toString()).toList();
+      final childrenDelegate =
+          listView.childrenDelegate as SliverChildListDelegate;
+      final typeNames = childrenDelegate.children
+          .map((w) => w.runtimeType.toString())
+          .toList();
       expect(typeNames, [
-              '_AppearanceSection',
-              '_ServerSection',
-              'ProfileSection',
-              '_ModelSection',
-              '_DesktopSection',
-              '_SessionListEntriesSection',
-              '_SessionRowSubtitleSection',
-              '_MemoryEntrySection',
-              '_WorkspacesEntrySection',
-              '_AboutSection',
-            ]);
+        '_AppearanceSection',
+        '_ServerSection',
+        'ProfileSection',
+        '_ModelSection',
+        'AuxiliaryModelsSection',
+        'McpSection',
+        'ExtensionsSection',
+        '_DesktopSection',
+        '_SessionListEntriesSection',
+        '_SessionRowSubtitleSection',
+        '_MemoryEntrySection',
+        '_WorkspacesEntrySection',
+        '_AboutSection',
+      ]);
     });
 
     testWidgets('无激活连接 → 显示未连接', (tester) async {
@@ -494,7 +571,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(api.defaultModelCalls, ['o3']);
-      // 返回设置页后默认模型显示更新（id 不在目录 → 回退显示 id）
+      // 返回设置页后默认模型显示更新
       expect(find.byKey(const ValueKey('model-option-o3')), findsNothing);
       expect(find.text('o3'), findsOneWidget);
     });
@@ -508,7 +585,8 @@ void main() {
       );
       await pumpPage(tester, container);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
       await tester.tap(find.byKey(const ValueKey('settings-reasoning')));
       await tester.pumpAndSettle();
 
@@ -519,4 +597,304 @@ void main() {
       expect(api.reasoningEffortCalls, ['high']);
     });
   });
+
+/// 滚动至指定 widget 并稍微向下拖动避开导航栏
+Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(finder, 50);
+  await tester.pumpAndSettle();
+  await tester.drag(find.byType(ListView), const Offset(0, 100));
+  await tester.pumpAndSettle();
 }
+
+  group('Extensions 操作', () {
+    testWidgets('渲染已安装扩展 + 启停切换', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final toggle =
+          find.byKey(const ValueKey('extension-toggle-ext-web-search'));
+      await scrollToAndCenter(tester, toggle);
+
+      expect(find.text('Web Search'), findsOneWidget);
+      expect(find.textContaining('ext-web-search'), findsOneWidget);
+      expect(toggle, findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(api.toggleExtensionCalls, [('ext-web-search', false)]);
+    });
+
+    testWidgets('扩展详情 sheet：sidecar 授权 + 卸载确认', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final rowFinder =
+          find.byKey(const ValueKey('extension-row-ext-web-search'));
+      await scrollToAndCenter(tester, rowFinder);
+      await tester.tap(rowFinder);
+      await tester.pumpAndSettle();
+
+      // Sidecar consent
+      expect(
+        find.byKey(const ValueKey('extension-sidecar-ext-web-search')),
+        findsOneWidget,
+      );
+      await tester
+          .tap(find.byKey(const ValueKey('extension-sidecar-ext-web-search')));
+      await tester.pumpAndSettle();
+      expect(api.setSidecarConsentCalls, [('ext-web-search', false)]);
+
+      // Uninstall
+      await tester.tap(rowFinder);
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const ValueKey('extension-uninstall-ext-web-search')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('卸载扩展'), findsOneWidget);
+      await tester
+          .tap(find.byKey(const ValueKey('extension-uninstall-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(api.uninstallExtensionCalls, ['ext-web-search']);
+    });
+
+    testWidgets('安装扩展：从注册表预填并提交', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final installTile =
+          find.byKey(const ValueKey('settings-extension-install'));
+      await scrollToAndCenter(tester, installTile);
+      await tester.tap(installTile);
+      await tester.pumpAndSettle();
+
+      // 点击注册表项预填
+      expect(
+        find.byKey(const ValueKey('registry-item-ext-calculator')),
+        findsOneWidget,
+      );
+      await tester
+          .tap(find.byKey(const ValueKey('registry-item-ext-calculator')));
+      await tester.pump();
+
+      final idField = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('extension-install-id')),
+      );
+      expect(idField.controller!.text, 'ext-calculator');
+
+      // 提交安装
+      await tester.tap(find.byKey(const ValueKey('extension-install-submit')));
+      await tester.pumpAndSettle();
+
+      expect(api.installExtensionCalls, [
+        (
+          id: 'ext-calculator',
+          downloadUrl: 'https://example.com/calc.zip',
+          sha256: 'hash_calc',
+        ),
+      ]);
+    });
+  });
+
+  group('MCP 服务器操作', () {
+    testWidgets('渲染 MCP 服务器 + 启停切换', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final toggle = find.byKey(const ValueKey('mcp-toggle-fetch-server'));
+      await scrollToAndCenter(tester, toggle);
+      expect(find.text('fetch-server'), findsOneWidget);
+      expect(toggle, findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(api.toggleMcpServerCalls, [('fetch-server', false)]);
+    });
+
+    testWidgets('MCP 菜单：查看工具 + 删除服务器确认', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final rowFinder =
+          find.byKey(const ValueKey('mcp-server-row-fetch-server'));
+      await scrollToAndCenter(tester, rowFinder);
+      await tester.tap(rowFinder);
+      await tester.pumpAndSettle();
+
+      // 查看工具
+      expect(
+        find.byKey(const ValueKey('mcp-tools-fetch-server')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('mcp-tools-fetch-server')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('fetch_url'), findsOneWidget);
+      expect(find.text('Fetch webpage'), findsOneWidget);
+
+      // 返回
+      await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+      await tester.pumpAndSettle();
+
+      // 删除确认
+      await scrollToAndCenter(tester, rowFinder);
+      await tester.tap(rowFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mcp-delete-fetch-server')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('删除 MCP 服务器'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('mcp-delete-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(api.deleteMcpServerCalls, ['fetch-server']);
+    });
+
+    testWidgets('添加 MCP 服务器：填写并保存', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final addFinder = find.byKey(const ValueKey('settings-mcp-add'));
+      await scrollToAndCenter(tester, addFinder);
+      await tester.tap(addFinder);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('mcp-editor-name')),
+        'new-mcp',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('mcp-editor-command')),
+        'node',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('mcp-editor-args')),
+        'server.js\n--port\n3000',
+      );
+      await tester.tap(find.byKey(const ValueKey('mcp-editor-save')));
+      await tester.pumpAndSettle();
+
+      expect(api.saveMcpServerCalls, hasLength(1));
+      final call = api.saveMcpServerCalls.single;
+      expect(call.name, 'new-mcp');
+      expect(call.command, 'node');
+      expect(call.args, ['server.js', '--port', '3000']);
+      expect(call.env, isNull);
+      expect(call.enabled, isTrue);
+    });
+  });
+
+  group('辅助模型操作', () {
+    testWidgets('渲染任务行 + 钥匙标记 + 选择模型', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final taskRowFinder = find.byKey(const ValueKey('aux-task-vision'));
+      await scrollToAndCenter(tester, taskRowFinder);
+
+      expect(find.text('Vision Understanding'), findsOneWidget);
+      expect(find.text('🔑'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: taskRowFinder,
+          matching: find.text('openai / gpt-4o'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(taskRowFinder);
+      await tester.pumpAndSettle();
+
+      // 选择模型页
+      expect(
+        find.byKey(const ValueKey('aux-model-option-auto')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('aux-model-option-claude-sonnet-4')),
+        findsOneWidget,
+      );
+
+      await tester
+          .tap(find.byKey(const ValueKey('aux-model-option-claude-sonnet-4')));
+      await tester.pumpAndSettle();
+
+      expect(api.setAuxiliaryModelCalls, [
+        (
+          task: 'vision',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4',
+          advanced: null,
+        ),
+      ]);
+    });
+
+    testWidgets('全部重置为自动确认', (tester) async {
+      final api = buildApi();
+      final container = await makeContainer(
+        api: api,
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      final resetFinder = find.byKey(const ValueKey('settings-aux-reset'));
+      await scrollToAndCenter(tester, resetFinder);
+      await tester.tap(resetFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('全部重置为自动'), findsWidgets);
+      await tester
+          .tap(find.byKey(const ValueKey('settings-aux-reset-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(api.setAuxiliaryModelCalls, [
+        (
+          task: '__reset__',
+          provider: 'auto',
+          model: '',
+          advanced: null,
+        ),
+      ]);
+    });
+  });
+}
+

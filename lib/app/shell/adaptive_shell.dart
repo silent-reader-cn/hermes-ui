@@ -77,15 +77,17 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
+    // 高频拖拽：只做布局更新，不做磁盘 I/O，避免每帧 SharedPreferences
+    // 写入阻塞 UI 线程并放大窗口重绘压力（Windows EGL Context Lost）。
     final nextWidth = (_sidebarWidth + details.delta.dx).clamp(
       kAdaptiveSidebarMinWidth,
       kAdaptiveSidebarMaxWidth,
     );
+    if ((nextWidth - _sidebarWidth).abs() < 0.5) return;
     if (nextWidth != _sidebarWidth) {
       setState(() {
         _sidebarWidth = nextWidth;
       });
-      unawaited(_persistWidth(nextWidth));
     }
   }
 

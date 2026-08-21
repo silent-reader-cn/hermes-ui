@@ -702,6 +702,72 @@ class AppLocalizations {
   String get savePromptFailed => isEnglish ? 'Failed to save prompt' : '收藏失败';
   String get deletePromptFailed => isEnglish ? 'Failed to delete prompt' : '删除失败';
 
+  // ---------------------------------------------------------------------------
+  // 14. Settings · Extensions/MCP/Auxiliary
+  // ---------------------------------------------------------------------------
+  String get extensionsSection => isEnglish ? 'Extensions' : '扩展 (Extensions)';
+  String get extensionsTitle => isEnglish ? 'Extensions' : '扩展';
+  String get installedExtensions => isEnglish ? 'Installed Extensions' : '已安装扩展';
+  String get noExtensions => isEnglish ? 'No extensions installed' : '暂无已安装扩展';
+  String get installExtension => isEnglish ? 'Install Extension' : '安装扩展';
+  String get extensionId => isEnglish ? 'Extension ID' : '扩展 ID';
+  String get extensionDownloadUrl => isEnglish ? 'Download URL' : '下载地址';
+  String get extensionSha256 => isEnglish ? 'SHA256 Checksum' : 'SHA256 校验和';
+  String get extensionSidecarConsent => isEnglish ? 'Sidecar Proxy Consent' : 'Sidecar 代理授权';
+  String get extensionSidecarActive => isEnglish ? 'Sidecar Active' : 'Sidecar 运行中';
+  String get extensionSidecarInactive => isEnglish ? 'Sidecar Inactive' : 'Sidecar 未运行';
+  String get uninstall => isEnglish ? 'Uninstall' : '卸载';
+  String get uninstallExtension => isEnglish ? 'Uninstall Extension' : '卸载扩展';
+  String confirmUninstallExtension(String name) =>
+      isEnglish ? 'Are you sure you want to uninstall "$name"?' : '确定卸载「$name」扩展吗？';
+  String get extensionDetails => isEnglish ? 'Extension Details' : '扩展详情';
+  String get extensionRegistry => isEnglish ? 'Extension Registry' : '扩展源';
+  String get selectFromRegistry => isEnglish ? 'Select from Registry' : '从扩展源选择';
+  String get loadingExtensions => isEnglish ? 'Loading extensions…' : '正在加载扩展…';
+  String get extensionsLoadFailed => isEnglish ? 'Failed to load extensions' : '扩展加载失败';
+
+  String get mcpSection => isEnglish ? 'MCP Servers' : 'MCP 服务器';
+  String get mcpServersTitle => isEnglish ? 'MCP Servers' : 'MCP 服务器';
+  String get noMcpServers => isEnglish ? 'No MCP servers configured' : '暂无已配置的 MCP 服务器';
+  String get addMcpServer => isEnglish ? 'Add MCP Server' : '添加 MCP 服务器';
+  String get editMcpServer => isEnglish ? 'Edit MCP Server' : '编辑 MCP 服务器';
+  String get deleteMcpServer => isEnglish ? 'Delete MCP Server' : '删除 MCP 服务器';
+  String confirmDeleteMcpServer(String name) =>
+      isEnglish ? 'Are you sure you want to delete "$name"?' : '确定删除 MCP 服务器「$name」吗？';
+  String get mcpServerName => isEnglish ? 'Server Name' : '服务器名称';
+  String get mcpCommand => isEnglish ? 'Command' : '执行命令';
+  String get mcpArgs => isEnglish ? 'Arguments' : '参数';
+  String get mcpArgsPlaceholder =>
+      isEnglish ? 'Arguments (one per line or space separated)' : '命令参数（每行一个）';
+  String get mcpEnv => isEnglish ? 'Environment Variables (JSON)' : '环境变量（JSON）';
+  String get mcpServerEnabled => isEnglish ? 'Enabled' : '启用';
+  String get mcpTools => isEnglish ? 'MCP Tools' : 'MCP 工具';
+  String mcpToolsCount(int count) => isEnglish ? '$count tools' : '$count 个工具';
+  String get viewMcpTools => isEnglish ? 'View Tools' : '查看工具';
+  String get noMcpTools => isEnglish ? 'No tools available' : '暂无可用的 MCP 工具';
+  String get mcpStatusConnected => isEnglish ? 'Connected' : '已连接';
+  String get mcpStatusDisconnected => isEnglish ? 'Disconnected' : '未连接';
+  String get mcpServerDetails => isEnglish ? 'MCP Server Details' : 'MCP 服务器详情';
+  String get loadingMcpServers => isEnglish ? 'Loading MCP servers…' : '正在加载 MCP 服务器…';
+  String get mcpServersLoadFailed => isEnglish ? 'Failed to load MCP servers' : 'MCP 服务器加载失败';
+  String get mcpServerNameRequired => isEnglish ? 'Server name is required' : '请输入服务器名称';
+  String get mcpCommandRequired => isEnglish ? 'Command is required' : '请输入执行命令';
+  String get mcpEnvInvalidJson => isEnglish ? 'Environment must be valid JSON' : '环境变量必须是合法的 JSON 对象';
+
+  String get auxiliaryModelsSection => isEnglish ? 'Auxiliary Models' : '辅助模型';
+  String get auxiliaryModelsTitle => isEnglish ? 'Auxiliary Models' : '辅助模型';
+  String get resetAuxiliary => isEnglish ? 'Reset All to Auto' : '全部重置为自动';
+  String get confirmResetAuxiliary =>
+      isEnglish ? 'Reset all auxiliary model tasks to automatic?' : '确定将所有辅助模型任务重置为自动吗？';
+  String get auto => isEnglish ? 'Auto' : '自动';
+  String get apiKeyConfigured => isEnglish ? 'API Key Configured' : '已配置 API Key';
+  String get apiKeyNotConfigured => isEnglish ? 'No API Key' : '未配置 API Key';
+  String get auxTaskPickerTitle => isEnglish ? 'Select Auxiliary Model' : '选择辅助模型';
+  String get auxMainModel => isEnglish ? 'Main Model' : '主模型';
+  String get auxTasks => isEnglish ? 'Task Bindings' : '任务绑定';
+  String get loadingAuxiliaryModels => isEnglish ? 'Loading auxiliary models…' : '正在加载辅助模型…';
+  String get auxiliaryModelsLoadFailed => isEnglish ? 'Failed to load auxiliary models' : '辅助模型加载失败';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));

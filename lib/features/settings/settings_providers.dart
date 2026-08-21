@@ -1,15 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/api_client_extensions.dart';
+import '../../core/api/api_client_mcp.dart';
 import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
+import '../../core/models/auxiliary_model.dart';
+import '../../core/models/extensions.dart';
+import '../../core/models/mcp.dart';
 import '../../core/models/server_catalog.dart';
 
 /// 应用版本号（与 pubspec.yaml `version` 保持同步）。
 const String appVersion = '1.0.0+1';
 
-/// 设置页所需的最小服务器 API 面（models 域 4 个端点 + reasoning 双方法）。
+/// 设置页所需的最小服务器 API 面。
 ///
 /// 生产实现 [SettingsApiClient] 包 [ApiClient]（模型在客户端解码）；测试注入
 /// 纯 Dart fake，彻底绕开网络/事件循环（对齐 session_list / onboarding 的
@@ -26,14 +31,83 @@ abstract interface class SettingsApi {
 
   /// POST /api/reasoning {effort}。
   Future<ReasoningStatusResponse> saveReasoningEffort(String effort);
+
+  // ---------------------------------------------------------------------------
+  // Extensions 生态（6 个方法）
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/extensions/status → 获取已安装扩展状态。
+  Future<ExtensionsStatusResponse> extensionsStatus();
+
+  /// GET /api/extensions/registry → 获取可安装扩展源清单。
+  Future<ExtensionsRegistryResponse> extensionsRegistry();
+
+  /// POST /api/extensions/toggle {id, enabled} → 启用/停用指定扩展。
+  Future<ExtensionToggleResponse> toggleExtension(String id, bool enabled);
+
+  /// POST /api/extensions/install {id, download_url, sha256} → 安装扩展。
+  Future<ExtensionInstallResponse> installExtension({
+    required String id,
+    required String downloadUrl,
+    required String sha256,
+  });
+
+  /// POST /api/extensions/uninstall {id} → 卸载指定扩展。
+  Future<ExtensionUninstallResponse> uninstallExtension(String id);
+
+  /// POST /api/extensions/sidecar-proxy-consent {id, approved} → Sidecar 代理授权。
+  Future<ExtensionConsentResponse> setExtensionSidecarConsent(
+    String id,
+    bool approved,
+  );
+
+  // ---------------------------------------------------------------------------
+  // MCP 服务器管理（5 个方法）
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/mcp/servers → 获取已配置 MCP 服务器列表。
+  Future<McpServersResponse> mcpServers();
+
+  /// GET /api/mcp/tools → 获取 MCP 服务器提供的工具清单。
+  Future<McpToolsResponse> mcpTools();
+
+  /// PUT /api/mcp/servers/{name} → 新增或更新 MCP 服务器。
+  Future<McpServerWriteResponse> saveMcpServer(
+    String name, {
+    required String command,
+    required List<String> args,
+    Map<String, String>? env,
+    bool enabled = true,
+  });
+
+  /// PATCH /api/mcp/servers/{name} {enabled} → 启用/停用指定 MCP 服务器。
+  Future<McpServerToggleResponse> toggleMcpServer(String name, bool enabled);
+
+  /// DELETE /api/mcp/servers/{name} → 删除指定 MCP 服务器。
+  Future<McpServerDeleteResponse> deleteMcpServer(String name);
+
+  // ---------------------------------------------------------------------------
+  // 辅助模型（2 个方法）
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/model/auxiliary → 获取 11 个 canonical tasks 绑定及主模型。
+  Future<AuxiliaryModelsResponse> auxiliaryModels();
+
+  /// POST /api/model/set {scope: 'auxiliary', task, provider, model, advanced} → 设置辅助模型。
+  Future<ModelSetResponse> setAuxiliaryModel({
+    required String task,
+    required String provider,
+    required String model,
+    Map<String, dynamic>? advanced,
+  });
 }
 
 /// [SettingsApi] 的生产实现：包 [ApiClient]。
 ///
 /// ⚠️ 方法一律**透传** [ApiClient] 的 typed 结果：`ApiClientServerPanels`
-/// 扩展（models / saveDefaultModel / reasoning）已把 raw JSON 解码为模型，
-/// 这里若再 `fromJson(_asMap(...))` 二次解析会把已解码对象兜底成空 map，
-/// groups / default_model 全部丢失（2026-08 实锤：默认模型列表永远为空）。
+/// 扩展（models / saveDefaultModel / reasoning / auxiliaryModels 等）及扩展/MCP 扩展
+/// 已把 raw JSON 解码为模型，这里严禁 `fromJson(_asMap(...))` 二次解析
+/// （2026-08 实锤 bug：二次解析会把已解码对象兜底成空 map 导致字段全失）。
 class SettingsApiClient implements SettingsApi {
   SettingsApiClient(this._client);
 
@@ -56,6 +130,89 @@ class SettingsApiClient implements SettingsApi {
   @override
   Future<ReasoningStatusResponse> saveReasoningEffort(String effort) =>
       _client.saveReasoningEffort(effort);
+
+  @override
+  Future<ExtensionsStatusResponse> extensionsStatus() =>
+      _client.extensionsStatus();
+
+  @override
+  Future<ExtensionsRegistryResponse> extensionsRegistry() =>
+      _client.extensionsRegistry();
+
+  @override
+  Future<ExtensionToggleResponse> toggleExtension(String id, bool enabled) =>
+      _client.toggleExtension(id, enabled);
+
+  @override
+  Future<ExtensionInstallResponse> installExtension({
+    required String id,
+    required String downloadUrl,
+    required String sha256,
+  }) =>
+      _client.installExtension(
+        id: id,
+        downloadUrl: downloadUrl,
+        sha256: sha256,
+      );
+
+  @override
+  Future<ExtensionUninstallResponse> uninstallExtension(String id) =>
+      _client.uninstallExtension(id);
+
+  @override
+  Future<ExtensionConsentResponse> setExtensionSidecarConsent(
+    String id,
+    bool approved,
+  ) =>
+      _client.setExtensionSidecarConsent(id, approved);
+
+  @override
+  Future<McpServersResponse> mcpServers() => _client.mcpServers();
+
+  @override
+  Future<McpToolsResponse> mcpTools() => _client.mcpTools();
+
+  @override
+  Future<McpServerWriteResponse> saveMcpServer(
+    String name, {
+    required String command,
+    required List<String> args,
+    Map<String, String>? env,
+    bool enabled = true,
+  }) =>
+      _client.saveMcpServer(
+        name,
+        command: command,
+        args: args,
+        env: env,
+        enabled: enabled,
+      );
+
+  @override
+  Future<McpServerToggleResponse> toggleMcpServer(String name, bool enabled) =>
+      _client.toggleMcpServer(name, enabled);
+
+  @override
+  Future<McpServerDeleteResponse> deleteMcpServer(String name) =>
+      _client.deleteMcpServer(name);
+
+  @override
+  Future<AuxiliaryModelsResponse> auxiliaryModels() =>
+      _client.auxiliaryModels();
+
+  @override
+  Future<ModelSetResponse> setAuxiliaryModel({
+    required String task,
+    required String provider,
+    required String model,
+    Map<String, dynamic>? advanced,
+  }) =>
+      _client.setAuxiliaryModel(
+        task: task,
+        provider: provider,
+        model: model,
+        advanced: advanced,
+      );
 }
 
 /// 构建 [SettingsApi] 的工厂（测试可 override 注入 fake）。
@@ -265,3 +422,435 @@ final settingsModelOptionsProvider = Provider<List<ModelCatalogOption>>((ref) {
   if (state == null) return const [];
   return state.allModels;
 });
+
+// -----------------------------------------------------------------------------
+// Extensions 控制器与状态
+// -----------------------------------------------------------------------------
+
+/// 扩展生态状态（AsyncNotifier 载荷）。
+class ExtensionsState {
+  const ExtensionsState({
+    this.systemEnabled = false,
+    this.extensions = const [],
+    this.registry = const [],
+    this.actionError,
+  });
+
+  /// 系统扩展总开关（只读展示）。
+  final bool systemEnabled;
+
+  /// 已安装扩展列表。
+  final List<ExtensionInfo> extensions;
+
+  /// 可安装扩展清单（注册表）。
+  final List<ExtensionRegistryItem> registry;
+
+  /// 最近一次操作错误。
+  final String? actionError;
+
+  ExtensionsState copyWith({
+    bool? systemEnabled,
+    List<ExtensionInfo>? extensions,
+    List<ExtensionRegistryItem>? registry,
+    String? Function()? actionError,
+  }) {
+    return ExtensionsState(
+      systemEnabled: systemEnabled ?? this.systemEnabled,
+      extensions: extensions ?? this.extensions,
+      registry: registry ?? this.registry,
+      actionError: actionError != null ? actionError() : this.actionError,
+    );
+  }
+
+  @override
+  String toString() =>
+      'ExtensionsState(systemEnabled: $systemEnabled, extensions: ${extensions.length}, '
+      'registry: ${registry.length}, actionError: $actionError)';
+}
+
+/// 扩展控制器 Provider。
+final extensionsControllerProvider =
+    AsyncNotifierProvider<ExtensionsController, ExtensionsState>(
+  ExtensionsController.new,
+);
+
+class ExtensionsController extends AsyncNotifier<ExtensionsState> {
+  SettingsApi get _api =>
+      ref.read(settingsApiFactoryProvider)(ref.read(apiClientProvider));
+
+  @override
+  Future<ExtensionsState> build() async {
+    final api = ref.watch(settingsApiFactoryProvider)(
+      ref.watch(apiClientProvider),
+    );
+    return _load(api);
+  }
+
+  Future<ExtensionsState> _load(SettingsApi api) async {
+    final status = await api.extensionsStatus();
+    final registry = await _tryLoadRegistry(api);
+    return ExtensionsState(
+      systemEnabled: status.enabled,
+      extensions: status.extensions,
+      registry: registry ?? const [],
+    );
+  }
+
+  Future<List<ExtensionRegistryItem>?> _tryLoadRegistry(SettingsApi api) async {
+    try {
+      final res = await api.extensionsRegistry();
+      return res.registry;
+    } on ApiException {
+      return null;
+    }
+  }
+
+  /// 刷新扩展状态与注册表。
+  Future<void> refresh() async {
+    try {
+      state = AsyncData(await _load(_api));
+    } on Exception catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+    }
+  }
+
+  /// 启用/停用指定扩展。
+  Future<bool> toggleExtension(String id, bool enabled) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.toggleExtension(id, enabled);
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 安装扩展。
+  Future<bool> installExtension({
+    required String id,
+    required String downloadUrl,
+    required String sha256,
+  }) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.installExtension(
+        id: id,
+        downloadUrl: downloadUrl,
+        sha256: sha256,
+      );
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 卸载指定扩展。
+  Future<bool> uninstallExtension(String id) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.uninstallExtension(id);
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 设置指定扩展的 Sidecar 代理授权。
+  Future<bool> setSidecarConsent(String id, bool approved) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.setExtensionSidecarConsent(id, approved);
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 清除操作错误标记。
+  Future<void> clearActionError() async {
+    final current = state.valueOrNull;
+    if (current == null || current.actionError == null) return;
+    state = AsyncData(current.copyWith(actionError: () => null));
+  }
+}
+
+// -----------------------------------------------------------------------------
+// MCP 控制器与状态
+// -----------------------------------------------------------------------------
+
+/// MCP 服务器管理状态（AsyncNotifier 载荷）。
+class McpState {
+  const McpState({
+    this.servers = const [],
+    this.tools = const [],
+    this.actionError,
+  });
+
+  /// 已配置 MCP 服务器列表。
+  final List<McpServer> servers;
+
+  /// 全部 MCP 工具清单。
+  final List<McpTool> tools;
+
+  /// 最近一次操作错误。
+  final String? actionError;
+
+  McpState copyWith({
+    List<McpServer>? servers,
+    List<McpTool>? tools,
+    String? Function()? actionError,
+  }) {
+    return McpState(
+      servers: servers ?? this.servers,
+      tools: tools ?? this.tools,
+      actionError: actionError != null ? actionError() : this.actionError,
+    );
+  }
+
+  @override
+  String toString() =>
+      'McpState(servers: ${servers.length}, tools: ${tools.length}, actionError: $actionError)';
+}
+
+/// MCP 控制器 Provider。
+final mcpControllerProvider =
+    AsyncNotifierProvider<McpController, McpState>(
+  McpController.new,
+);
+
+class McpController extends AsyncNotifier<McpState> {
+  SettingsApi get _api =>
+      ref.read(settingsApiFactoryProvider)(ref.read(apiClientProvider));
+
+  @override
+  Future<McpState> build() async {
+    final api = ref.watch(settingsApiFactoryProvider)(
+      ref.watch(apiClientProvider),
+    );
+    return _load(api);
+  }
+
+  Future<McpState> _load(SettingsApi api) async {
+    final serversResponse = await api.mcpServers();
+    final tools = await _tryLoadTools(api);
+    return McpState(
+      servers: serversResponse.servers,
+      tools: tools ?? const [],
+    );
+  }
+
+  Future<List<McpTool>?> _tryLoadTools(SettingsApi api) async {
+    try {
+      final res = await api.mcpTools();
+      return res.tools;
+    } on ApiException {
+      return null;
+    }
+  }
+
+  /// 刷新 MCP 服务器与工具列表。
+  Future<void> refresh() async {
+    try {
+      state = AsyncData(await _load(_api));
+    } on Exception catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+    }
+  }
+
+  /// 启用/停用指定 MCP 服务器。
+  Future<bool> toggleServer(String name, bool enabled) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.toggleMcpServer(name, enabled);
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 保存（新增/更新）MCP 服务器。
+  Future<bool> saveServer(
+    String name, {
+    required String command,
+    required List<String> args,
+    Map<String, String>? env,
+    bool enabled = true,
+  }) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.saveMcpServer(
+        name,
+        command: command,
+        args: args,
+        env: env,
+        enabled: enabled,
+      );
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 删除指定 MCP 服务器。
+  Future<bool> deleteServer(String name) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.deleteMcpServer(name);
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 清除操作错误标记。
+  Future<void> clearActionError() async {
+    final current = state.valueOrNull;
+    if (current == null || current.actionError == null) return;
+    state = AsyncData(current.copyWith(actionError: () => null));
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 辅助模型控制器与状态
+// -----------------------------------------------------------------------------
+
+/// 辅助模型状态（AsyncNotifier 载荷）。
+class AuxiliaryModelsState {
+  const AuxiliaryModelsState({
+    this.tasks = const [],
+    this.main = const AuxMainModel(),
+    this.actionError,
+  });
+
+  /// 11 个 canonical tasks 绑定槽位行。
+  final List<AuxiliaryTaskRow> tasks;
+
+  /// 主模型信息。
+  final AuxMainModel main;
+
+  /// 最近一次操作错误。
+  final String? actionError;
+
+  AuxiliaryModelsState copyWith({
+    List<AuxiliaryTaskRow>? tasks,
+    AuxMainModel? main,
+    String? Function()? actionError,
+  }) {
+    return AuxiliaryModelsState(
+      tasks: tasks ?? this.tasks,
+      main: main ?? this.main,
+      actionError: actionError != null ? actionError() : this.actionError,
+    );
+  }
+
+  @override
+  String toString() =>
+      'AuxiliaryModelsState(tasks: ${tasks.length}, main: ${main.model}, actionError: $actionError)';
+}
+
+/// 辅助模型控制器 Provider。
+final auxiliaryModelsControllerProvider =
+    AsyncNotifierProvider<AuxiliaryModelsController, AuxiliaryModelsState>(
+  AuxiliaryModelsController.new,
+);
+
+class AuxiliaryModelsController extends AsyncNotifier<AuxiliaryModelsState> {
+  SettingsApi get _api =>
+      ref.read(settingsApiFactoryProvider)(ref.read(apiClientProvider));
+
+  @override
+  Future<AuxiliaryModelsState> build() async {
+    final api = ref.watch(settingsApiFactoryProvider)(
+      ref.watch(apiClientProvider),
+    );
+    return _load(api);
+  }
+
+  Future<AuxiliaryModelsState> _load(SettingsApi api) async {
+    final response = await api.auxiliaryModels();
+    return AuxiliaryModelsState(
+      tasks: response.tasks,
+      main: response.main,
+    );
+  }
+
+  /// 刷新辅助模型配置。
+  Future<void> refresh() async {
+    try {
+      state = AsyncData(await _load(_api));
+    } on Exception catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+    }
+  }
+
+  /// 设置指定 task 的辅助模型绑定。
+  Future<bool> setAuxiliaryModel({
+    required String task,
+    required String provider,
+    required String model,
+    Map<String, dynamic>? advanced,
+  }) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.setAuxiliaryModel(
+        task: task,
+        provider: provider,
+        model: model,
+        advanced: advanced,
+      );
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 全部任务重置为自动。
+  Future<bool> resetAllToAuto() async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    try {
+      await _api.setAuxiliaryModel(
+        task: '__reset__',
+        provider: 'auto',
+        model: '',
+      );
+      await refresh();
+      return true;
+    } on ApiException catch (error) {
+      state = AsyncData(current.copyWith(actionError: () => error.message));
+      return false;
+    }
+  }
+
+  /// 清除操作错误标记。
+  Future<void> clearActionError() async {
+    final current = state.valueOrNull;
+    if (current == null || current.actionError == null) return;
+    state = AsyncData(current.copyWith(actionError: () => null));
+  }
+}
+
