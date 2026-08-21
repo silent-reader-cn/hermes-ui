@@ -10,12 +10,16 @@ const String kAppFontFamily = 'MiSans';
 /// 全局文字绑定 [kAppFontFamily]（MiSans），提供清晰美观的中文与英文/数字排版体验。
 CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
+  final scaffold = isDark
+      ? const Color(0xFF000000)
+      : CupertinoColors.systemGroupedBackground;
   return CupertinoThemeData(
     brightness: brightness,
     primaryColor: const Color(0xFF007AFF),
-    scaffoldBackgroundColor: isDark
-        ? const Color(0xFF000000)
-        : CupertinoColors.systemGroupedBackground,
+    scaffoldBackgroundColor: scaffold,
+    // 固定不透明导航栏底色（跟随 scaffold，避免展开黑/收起灰的过渡）。
+    // 深色=纯黑，浅色=分组背景，随主题自适应；不再使用默认半透明毛玻璃色。
+    barBackgroundColor: scaffold,
     // CupertinoApp 的默认 TextStyle 在自定义 textTheme 下不会自动补齐
     // 前景色。显式绑定语义 label 与全局 fontFamily，保证全应用文字统一。
     textTheme: const CupertinoTextThemeData(

@@ -12,7 +12,7 @@ import 'package:flutter/cupertino.dart';
 ///   与顶部间距完全对齐，手机端不再贴顶）；操作按钮与大标题同行
 ///   （垂直中心对齐大标题文字行盒中心）。
 /// - **滚动收起**：平滑过渡到导航栏高度（状态栏 + 44），大标题上移淡出、
-///   中标题淡入、背景从透明过渡为 bar 底色。
+///   中标题淡入、背景固定为主题 bar 底色（不随滚动变透明/变灰）。
 /// - **多操作支持**：[actions] 为右侧按钮列表（设置 / 筛选 / 新建等），
 ///   由调用方按端与场景组合。
 ///
@@ -148,16 +148,13 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
       key: const ValueKey('session-list-header'),
       fit: StackFit.expand,
       children: [
-        // 背景：展开透明 → 收起渐显导航栏底色 + 底部分隔线。
-        ColoredBox(color: barColor.withValues(alpha: collapsed)),
+        // 背景：固定不透明主题 bar 底色（不随滚动变灰/透明）。
+        ColoredBox(color: barColor),
         Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          child: Opacity(
-            opacity: collapsed,
-            child: Container(height: 0.5, color: separator),
-          ),
+          child: Container(height: 0.5, color: separator),
         ),
         // 收起态中标题（左对齐）。
         Positioned(
