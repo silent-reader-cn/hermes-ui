@@ -1,4 +1,3 @@
-import '../../../core/api/cookie_store.dart';
 import '../../../core/models/message_attachment.dart';
 
 /// 聊天媒体标记解析器与 URL 解析工具。
@@ -197,45 +196,5 @@ class ChatMediaResolver {
       base = base.substring(0, base.length - 1);
     }
     return base;
-  }
-}
-
-/// 媒体网络请求的认证头合并工具。
-///
-/// 修复「会话中内联图片 /api/media 401」：`Image.network` 是裸 HTTP 请求，
-/// 不会像 [ApiClient] 那样自动携带登录种下的会话 cookie，只有用户配置的
-/// 自定义头（反向代理头）被传入；而 hermes-webui 的 `/api/media` 在开启
-/// 认证时只认会话 cookie（`routes.py _handle_media`），缺 cookie 直接 401。
-///
-/// 合并规则对齐 [ApiClient] 拦截器（`api_client.dart _installInterceptors`）：
-/// - 自定义头照单全收；
-/// - 会话 cookie 按 URL host 自动匹配（`CookieStore.cookieHeaderFor`），
-///   跨域 URL 不会把本服务器 cookie 泄漏给第三方 CDN；
-/// - 已显式设置的 `Cookie` 头恒胜，不被覆盖（内置头优先）。
-class ChatMediaHeaders {
-  const ChatMediaHeaders._();
-
-  /// 合并自定义头与会话 cookie 为网络图片请求头。
-  ///
-  /// [cookieStore] 缺省用 [CookieStore.shared]（登录后与 [ApiClient] 共享的
-  /// 进程级存储）；返回 null 表示无需附加任何头（调用方可不传 headers）。
-  static Map<String, String>? headersFor(
-    String url,
-    Map<String, String>? customHeaders, {
-    CookieStore? cookieStore,
-  }) {
-    final headers = <String, String>{...?customHeaders};
-    final cookie = (cookieStore ?? CookieStore.shared).cookieHeaderFor(
-      Uri.parse(url),
-    );
-    if (cookie != null && !_containsHeader(headers, 'Cookie')) {
-      headers['Cookie'] = cookie;
-    }
-    return headers.isEmpty ? null : headers;
-  }
-
-  static bool _containsHeader(Map<String, String> headers, String name) {
-    final lower = name.toLowerCase();
-    return headers.keys.any((key) => key.toLowerCase() == lower);
   }
 }

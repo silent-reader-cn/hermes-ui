@@ -6,6 +6,8 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
 import 'core/api/cookie_store.dart';
+import 'core/cache/app_database.dart';
+import 'core/cache/cache_providers.dart';
 import 'core/connections/connection_store.dart';
 import 'features/chat/chat_providers.dart';
 import 'features/desktop/desktop_settings.dart';
@@ -39,6 +41,15 @@ Future<void> main() async {
         // 收尾处调用；前台不发、后台发，见 notifications feature）。
         chatTurnCompletedCallbackProvider.overrideWith(
           (ref) => ref.watch(turnNotificationHookProvider),
+        ),
+        // 启用生产持久缓存数据库：会话列表 / 消息 /（未来）媒体的离线缓存
+        // 真正落盘（默认 appDatabaseProvider 为内存库，重启即清空）。
+        appDatabaseProvider.overrideWith(
+          (ref) {
+            final database = AppDatabase.production();
+            ref.onDispose(database.close);
+            return database;
+          },
         ),
       ],
       child: const HermexApp(),

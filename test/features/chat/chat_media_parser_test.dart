@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/cookie_store.dart';
 import 'package:hermex_flutter/core/models/message_attachment.dart';
 import 'package:hermex_flutter/features/chat/widgets/chat_media_parser.dart';
 
@@ -186,70 +185,6 @@ void main() {
         MessageAttachment.mediaKindForName('a.unknown_binary'),
         MessageMediaKind.file,
       );
-    });
-  });
-
-  group('ChatMediaHeaders 认证头合并单元测试', () {
-    test('会话 cookie 按 host 匹配自动注入（401 修复核心）', () {
-      final store = CookieStore()
-        ..setCookies(Uri.parse('http://localhost:30002'), [
-          'hermes_session=abc123; Path=/',
-        ]);
-      final headers = ChatMediaHeaders.headersFor(
-        'http://localhost:30002/api/media?path=%2Ftmp%2Fx.png',
-        null,
-        cookieStore: store,
-      );
-      expect(headers, {'Cookie': 'hermes_session=abc123'});
-    });
-
-    test('自定义头与会话 cookie 同时附加', () {
-      final store = CookieStore()
-        ..setCookies(Uri.parse('http://localhost:30002'), [
-          'hermes_session=abc123; Path=/',
-        ]);
-      final headers = ChatMediaHeaders.headersFor(
-        'http://localhost:30002/api/media?path=x',
-        {'Authorization': 'Bearer token123'},
-        cookieStore: store,
-      );
-      expect(headers?['Authorization'], 'Bearer token123');
-      expect(headers?['Cookie'], 'hermes_session=abc123');
-    });
-
-    test('已显式设置的 Cookie 头不被覆盖（内置头恒胜）', () {
-      final store = CookieStore()
-        ..setCookies(Uri.parse('http://localhost:30002'), [
-          'hermes_session=abc123; Path=/',
-        ]);
-      final headers = ChatMediaHeaders.headersFor(
-        'http://localhost:30002/api/media?path=x',
-        {'Cookie': 'explicit_session=1'},
-        cookieStore: store,
-      );
-      expect(headers, {'Cookie': 'explicit_session=1'});
-    });
-
-    test('跨域 URL 不泄漏本服务器会话 cookie', () {
-      final store = CookieStore()
-        ..setCookies(Uri.parse('http://localhost:30002'), [
-          'hermes_session=abc123; Path=/',
-        ]);
-      final headers = ChatMediaHeaders.headersFor(
-        'https://cdn.example.com/banner.png',
-        null,
-        cookieStore: store,
-      );
-      expect(headers, isNull);
-    });
-
-    test('无 cookie 且无自定义头时返回 null（不附加空头）', () {
-      final headers = ChatMediaHeaders.headersFor(
-        'http://localhost:30002/api/media?path=x',
-        null,
-        cookieStore: CookieStore(),
-      );
-      expect(headers, isNull);
     });
   });
 }

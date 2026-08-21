@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/api_client.dart';
+import '../connections/connection_providers.dart';
 import '../models/session.dart';
 import 'app_database.dart';
 import 'cache_service.dart';
+import 'media_cache_service.dart';
 
 /// 生产离线缓存数据库。
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -26,6 +29,16 @@ final cacheServiceProvider = Provider<CacheService>((ref) {
 });
 
 final offlineCacheEnabledProvider = Provider<bool>((ref) => true);
+
+/// 媒体本地缓存服务（依赖激活连接 ApiClient + 与现有缓存同库）。
+///
+/// 经 [ApiClient.downloadData] 下载（dio 带 cookie + 自定义头 + autoReauth），
+/// 文件落盘 + drift `cached_media` 索引，渲染改用 Image.file（P2）。
+final mediaCacheServiceProvider = Provider<MediaCacheService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final client = ref.watch(apiClientProvider);
+  return MediaCacheService(database: db, client: client);
+});
 
 class CachedSessionData {
   const CachedSessionData(this.sessions);

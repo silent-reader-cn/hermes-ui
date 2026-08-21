@@ -40,3 +40,5 @@ web/favicon.png
 # 系统
 .DS_Store
 Thumbs.db
+# Flutter / Dart tooling
+devtools_options.yaml
