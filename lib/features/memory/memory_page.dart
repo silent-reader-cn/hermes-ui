@@ -320,7 +320,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             const SizedBox(height: 6),
             Text(
               l10n.noMemoryContentYet,
-              style: const TextStyle(color: secondaryText),
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
             ),
           ],
         ),
@@ -392,11 +392,14 @@ class _MemorySectionHeader extends StatelessWidget {
           if (charCount > 0)
             Text(
               '$charCount ${l10n.memoryCharUnit}',
-              style: const TextStyle(color: secondaryText),
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
             ),
           if (modified != null) ...[
             const SizedBox(width: 6),
-            Text(modified, style: const TextStyle(color: secondaryText)),
+            Text(
+              modified,
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            ),
           ],
         ],
       ),
@@ -428,10 +431,10 @@ class _MemorySectionBody extends StatelessWidget {
     if (trimmed.isEmpty) {
       return Text(
         _memorySectionEmptyMessage(context, section),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText,
+          color: secondaryText.resolveFrom(context),
         ),
       );
     }
@@ -457,10 +460,10 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
     if (trimmed.isEmpty) {
       return Text(
         _memorySectionEmptyMessage(context, section),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText,
+          color: secondaryText.resolveFrom(context),
         ),
       );
     }
@@ -558,11 +561,14 @@ class _ProjectContextHeader extends StatelessWidget {
           if (charCount > 0)
             Text(
               '$charCount ${l10n.memoryCharUnit}',
-              style: const TextStyle(color: secondaryText),
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
             ),
           if (modified != null) ...[
             const SizedBox(width: 6),
-            Text(modified, style: const TextStyle(color: secondaryText)),
+            Text(
+              modified,
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            ),
             const SizedBox(width: 8),
           ],
           const Icon(
@@ -591,12 +597,15 @@ class _ProjectContextFooter extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (detail != null)
-          Text(detail!, style: const TextStyle(color: secondaryText)),
+          Text(
+            detail!,
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
+          ),
         if (shadowed) ...[
           const SizedBox(height: 4),
           Text(
             l10n.projectContextShadowedWarning,
-            style: const TextStyle(color: secondaryText),
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
         ],
       ],

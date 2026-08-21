@@ -445,7 +445,7 @@ class McpToolsPage extends StatelessWidget {
             ? Center(
                 child: Text(
                   l10n.noMcpTools,
-                  style: const TextStyle(color: secondaryText),
+                  style: TextStyle(color: secondaryText.resolveFrom(context)),
                 ),
               )
             : ListView(
@@ -461,7 +461,7 @@ class McpToolsPage extends StatelessWidget {
                             tool.description.isNotEmpty
                                 ? tool.description
                                 : l10n.noDescription,
-                            style: const TextStyle(color: secondaryText),
+                            style: TextStyle(color: secondaryText.resolveFrom(context)),
                           ),
                         ),
                     ],

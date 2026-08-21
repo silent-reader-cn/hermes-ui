@@ -194,7 +194,10 @@ class InsightsPage extends ConsumerWidget {
                       _peakDay(response)!.day ?? l10n.unknown,
                       _peakDay(response)!.sessions ?? 0,
                     ),
-                    style: const TextStyle(fontSize: 13, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ),
               if (_peakHour(response) != null)
@@ -205,7 +208,10 @@ class InsightsPage extends ConsumerWidget {
                       _formatHour(context, _peakHour(response)!.hour),
                       _peakHour(response)!.sessions ?? 0,
                     ),
-                    style: const TextStyle(fontSize: 13, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ),
             ],
@@ -218,7 +224,10 @@ class InsightsPage extends ConsumerWidget {
             l10n.insightsSourceFooter(
               response.periodDays ?? timeframe.serverDays,
             ),
-            style: const TextStyle(fontSize: 12, color: secondaryText),
+            style: TextStyle(
+              fontSize: 12,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
         ),
       ),
@@ -287,7 +296,10 @@ class InsightsPage extends ConsumerWidget {
             Text(
               l10n.insightsWillShowHere,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -468,7 +480,8 @@ class _DailyTokensBarChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 28,
-                getTitlesWidget: _bottomTitle,
+                getTitlesWidget: (value, meta) =>
+                    _bottomTitle(value, meta, context),
               ),
             ),
           ),
@@ -490,7 +503,7 @@ class _DailyTokensBarChart extends StatelessWidget {
     );
   }
 
-  Widget _bottomTitle(double value, TitleMeta meta) {
+  Widget _bottomTitle(double value, TitleMeta meta, BuildContext context) {
     final index = value.toInt();
     if (index < 0 || index >= days.length) {
       return const SizedBox.shrink();
@@ -507,7 +520,10 @@ class _DailyTokensBarChart extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         _shortDate(date),
-        style: const TextStyle(fontSize: 10, color: secondaryText),
+        style: TextStyle(
+          fontSize: 10,
+          color: secondaryText.resolveFrom(context),
+        ),
       ),
     );
   }

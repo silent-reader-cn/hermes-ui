@@ -127,7 +127,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: CupertinoListSection.insetGrouped(
           footer: Text(
             l10n.removeWorkspaceFooter,
-            style: const TextStyle(fontSize: 12, color: secondaryText),
+            style: TextStyle(
+              fontSize: 12,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
           children: [
             for (final workspace in state.workspaces)
@@ -209,7 +212,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Text(
               l10n.addWorkspaceHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -520,9 +526,9 @@ class _WorkspaceRow extends StatelessWidget {
                         path,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: secondaryText,
+                          color: secondaryText.resolveFrom(context),
                         ),
                       ),
                     ],

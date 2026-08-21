@@ -160,7 +160,10 @@ class _GitPageState extends ConsumerState<GitPage> {
             child: Text(
               l10n.tooManyChangedFilesWarning,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: secondaryText),
+              style: TextStyle(
+                fontSize: 12,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ),
         ),
@@ -403,7 +406,10 @@ class _GitPageState extends ConsumerState<GitPage> {
             Text(
               detail,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -666,7 +672,10 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             l10n.noPendingChanges,
-            style: const TextStyle(fontSize: 13, color: secondaryText),
+            style: TextStyle(
+              fontSize: 13,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
         ],
       ),

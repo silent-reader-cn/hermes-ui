@@ -115,9 +115,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   topPadding: MediaQuery.paddingOf(context).top,
                   brightness:
                       CupertinoTheme.of(context).brightness ?? Brightness.light,
-                  // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不预留顶部
-                  // 空白（电脑端双栏空间紧凑）；手机端单栈 → 宽敞头部（49pt）。
+                  // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
+                  // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
+                  // 手机端单栈 → 宽敞大标题头部（49pt）。
                   compactHeader: !widget.showUtilityRows,
+                  searchField: !widget.showUtilityRows
+                      ? _buildSearchField()
+                      : null,
                   actions: [
                     if (!isSearchMode) _buildFilterAction(state),
                     if (widget.showSettingsTrailing)
@@ -130,7 +134,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               // （视口会把 overscroll 逐级分给前面的 box sliver，导致
               // 指示器拿不到负 overlap 而无法触发）。
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
-              SliverToBoxAdapter(child: _buildSearchBar()),
+              if (widget.showUtilityRows)
+                SliverToBoxAdapter(child: _buildSearchBar()),
               if (widget.showUtilityRows && !isSearchMode)
                 const SliverToBoxAdapter(child: SessionListUtilityRows()),
               ..._buildContentSlivers(
@@ -175,16 +180,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   // 顶部 chrome
   // -------------------------------------------------------------------------
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchField() {
     final l10n = AppLocalizations.of(context);
+    return CupertinoSearchTextField(
+      key: const ValueKey('session-list-search'),
+      controller: _searchController,
+      placeholder: l10n.searchSessions,
+      onChanged: _onSearchChanged,
+    );
+  }
+
+  Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: CupertinoSearchTextField(
-        key: const ValueKey('session-list-search'),
-        controller: _searchController,
-        placeholder: l10n.searchSessions,
-        onChanged: _onSearchChanged,
-      ),
+      child: _buildSearchField(),
     );
   }
 
@@ -466,7 +475,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             child: Center(
               child: Text(
                 l10n.noMore,
-                style: const TextStyle(fontSize: 13, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
             ),
           ),
@@ -539,7 +551,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               isSearchMode
                   ? l10n.tryAnotherKeyword
                   : l10n.tapButtonToStartNewChat,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             if (!isSearchMode) ...[
               const SizedBox(height: 20),
@@ -1086,9 +1101,9 @@ class _SessionRow extends StatelessWidget {
                     _highlightedSpan(
                       context,
                       metadata,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: secondaryText,
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ],

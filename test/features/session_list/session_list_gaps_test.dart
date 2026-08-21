@@ -576,6 +576,71 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('已归档 (2)'), findsOneWidget);
     });
+
+    testWidgets('桌面模式（showUtilityRows=false）：筛选入口与新建入口与搜索框同行，筛选依然可用', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '普通会话', sourceLabel: 'telegram'),
+          session('s2', '另一会话', sourceLabel: 'qq'),
+        ],
+      );
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const SessionListPage(
+              showUtilityRows: false,
+              showSettingsTrailing: false,
+              showFab: false,
+            ),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _FakeProjectApi(),
+            ),
+          ],
+          child: CupertinoApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // 无大标题
+      expect(find.text('会话'), findsNothing);
+      // 筛选按钮与新建按钮存在
+      expect(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-header-new')),
+        findsOneWidget,
+      );
+
+      // 点击筛选
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('session-filter-sheet')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('filter-chip-telegram')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('普通会话'), findsOneWidget);
+      expect(find.text('另一会话'), findsNothing);
+    });
   });
 }
 

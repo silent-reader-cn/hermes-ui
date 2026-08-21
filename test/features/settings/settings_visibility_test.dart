@@ -56,12 +56,26 @@ void main() {
     testWidgets('渲染「会话列表入口」区块及 5 个功能入口开关与记忆入口', (tester) async {
       await pumpSettingsPage(tester);
 
+      // 首页有记忆入口与会话列表入口二级入口
       await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-insights')),
+        find.byKey(const ValueKey('settings-memory-entry')),
         50,
       );
+      expect(
+        find.byKey(const ValueKey('settings-memory-entry')),
+        findsOneWidget,
+      );
 
-      expect(find.text('会话列表入口'), findsOneWidget);
+      final entryFinder =
+          find.byKey(const ValueKey('settings-entry-session-list-entries'));
+      await tester.scrollUntilVisible(entryFinder, -50);
+      expect(entryFinder, findsOneWidget);
+
+      // 进入二级页
+      await tester.tap(entryFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('会话列表入口'), findsWidgets);
       expect(
         find.byKey(const ValueKey('settings-visibility-tasks')),
         findsOneWidget,
@@ -82,19 +96,7 @@ void main() {
         find.byKey(const ValueKey('settings-visibility-insights')),
         findsOneWidget,
       );
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-memory-entry')),
-        50,
-      );
-      expect(
-        find.byKey(const ValueKey('settings-memory-entry')),
-        findsOneWidget,
-      );
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-tasks')),
-        -50,
-      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );
@@ -121,10 +123,12 @@ void main() {
     testWidgets('切换开关后 Provider 状态实时更新且持久化', (tester) async {
       final container = await pumpSettingsPage(tester);
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-insights')),
-        50,
-      );
+      // 进入二级页
+      final entryFinder =
+          find.byKey(const ValueKey('settings-entry-session-list-entries'));
+      await tester.scrollUntilVisible(entryFinder, 50);
+      await tester.tap(entryFinder);
+      await tester.pumpAndSettle();
 
       // 点击任务开关关闭
       await tester.tap(find.byKey(const ValueKey('settings-visibility-tasks')));
@@ -134,10 +138,6 @@ void main() {
       expect(state.tasks, isFalse);
       expect(state.kanban, isTrue);
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-tasks')),
-        -50,
-      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );
@@ -174,15 +174,13 @@ void main() {
         },
       );
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-insights')),
-        50,
-      );
+      // 进入二级页
+      final entryFinder =
+          find.byKey(const ValueKey('settings-entry-session-list-entries'));
+      await tester.scrollUntilVisible(entryFinder, 50);
+      await tester.tap(entryFinder);
+      await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-visibility-tasks')),
-        -50,
-      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );

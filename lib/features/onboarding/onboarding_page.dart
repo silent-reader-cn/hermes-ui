@@ -356,7 +356,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.inputServerAddressHint,
-          style: const TextStyle(fontSize: 15, color: secondaryText),
+          style: TextStyle(
+            fontSize: 15,
+            color: secondaryText.resolveFrom(context),
+          ),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -383,7 +386,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.customHeadersDescription,
-          style: const TextStyle(fontSize: 15, color: secondaryText),
+          style: TextStyle(
+            fontSize: 15,
+            color: secondaryText.resolveFrom(context),
+          ),
         ),
         const SizedBox(height: 16),
         for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),
@@ -418,7 +424,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.checking,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );
@@ -450,7 +459,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.detectingServerAuth,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );
@@ -481,7 +493,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           children: [
             Text(
               l10n.serverPasswordRequired,
-              style: const TextStyle(fontSize: 15, color: secondaryText),
+              style: TextStyle(
+                fontSize: 15,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 12),
             CupertinoTextField(
@@ -513,7 +528,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.verifyingPassword,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );

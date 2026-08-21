@@ -631,5 +631,50 @@ void main() {
         findsNothing,
       );
     });
+
+    testWidgets('showUtilityRows=false 桌面模式：工具行不渲染，头部无大标题且为单行搜索框', (tester) async {
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const SessionListPage(
+              showUtilityRows: false,
+              showSettingsTrailing: false,
+              showFab: false,
+            ),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue(
+              (_) => FakeSessionListApi(),
+            ),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
+          ],
+          child: CupertinoApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('session-list-utility-rows')),
+        findsNothing,
+      );
+      expect(find.text('会话'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('session-list-search')),
+        findsOneWidget,
+      );
+    });
   });
 }

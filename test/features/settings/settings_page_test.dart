@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
 import 'package:hermex_flutter/app/theme/theme_provider.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
@@ -16,6 +20,7 @@ import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../golden/golden_helpers.dart';
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_settings_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
@@ -134,6 +139,38 @@ FakeSettingsApi buildApi() {
   return api;
 }
 
+class _MockHttpClientAdapter implements HttpClientAdapter {
+  _MockHttpClientAdapter(this.handler);
+
+  final ResponseBody Function(RequestOptions options) handler;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return handler(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ApiClient buildMockApiClient({
+  required ResponseBody Function(RequestOptions options) handler,
+  String baseUrl = 'http://test.local:30002',
+}) {
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
+  dio.httpClientAdapter = _MockHttpClientAdapter(handler);
+  return ApiClient(
+    baseUrl: baseUrl,
+    dio: dio,
+  );
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -145,6 +182,7 @@ void main() {
     List<ServerConnection> connections = const [],
     String? activeId,
     FakeOnboardingLoginApi? loginApi,
+    ApiClient? mockApiClient,
   }) async {
     final storage = InMemorySecureStorage();
     final store = ConnectionStore(storage: storage);
@@ -154,15 +192,18 @@ void main() {
     if (activeId != null) {
       await store.setActive(activeId);
     }
+    final client =
+        mockApiClient ?? ApiClient(baseUrl: 'http://test.local:30002');
     final container = ProviderContainer(
       overrides: [
         connectionStoreProvider.overrideWithValue(store),
-        apiClientProvider.overrideWithValue(
-          ApiClient(baseUrl: 'http://test.local:30002'),
-        ),
+        apiClientProvider.overrideWithValue(client),
         settingsApiFactoryProvider.overrideWithValue((_) => api),
         onboardingApiFactoryProvider.overrideWithValue(
           (baseUrl, headers) => loginApi ?? FakeOnboardingLoginApi(),
+        ),
+        serverEditorApiClientFactoryProvider.overrideWithValue(
+          (baseUrl, headers) => client,
         ),
       ],
     );
@@ -198,6 +239,7 @@ void main() {
       expect(find.text('外观'), findsOneWidget);
       expect(find.text('服务器'), findsOneWidget);
       expect(find.text('模型'), findsOneWidget);
+      expect(find.text('高级设置'), findsOneWidget);
 
       // 列表行渲染 name + url（激活标识在行内勾选图标）
       final rowC1 = find.byKey(const ValueKey('server-row-c1'));
@@ -216,13 +258,33 @@ void main() {
       // 模型：默认模型显示名 + 推理强度
       expect(find.text('默认模型'), findsOneWidget);
       expect(find.text('GPT-4o'), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
       expect(find.text('推理强度'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);
 
-      // 桌面分组
-      await tester.scrollUntilVisible(find.text('桌面'), 50);
-      expect(find.text('桌面'), findsOneWidget);
+      // 二级入口行
+      expect(
+        find.byKey(const ValueKey('settings-entry-auxiliary')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('settings-entry-mcp')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-entry-extensions')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-entry-session-list-entries')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-entry-session-row-subtitle')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-entry-desktop')),
+        findsOneWidget,
+      );
 
       // 关于：版本号
       await tester.scrollUntilVisible(find.text('版本'), 50);
@@ -248,14 +310,8 @@ void main() {
       expect(typeNames, [
         '_AppearanceSection',
         '_ServerSection',
-        'ProfileSection',
         '_ModelSection',
-        'AuxiliaryModelsSection',
-        'McpSection',
-        'ExtensionsSection',
-        '_DesktopSection',
-        '_SessionListEntriesSection',
-        '_SessionRowSubtitleSection',
+        '_AdvancedSettingsSection',
         '_MemoryEntrySection',
         '_WorkspacesEntrySection',
         '_AboutSection',
@@ -384,6 +440,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('server-add')));
       await tester.pumpAndSettle();
 
+      // 验证新增表单标签文字与说明
+      expect(find.text('基本信息'), findsOneWidget);
+      expect(find.text('名称'), findsOneWidget);
+      expect(find.text('地址'), findsOneWidget);
+      expect(find.text('密码'), findsOneWidget);
+      expect(find.text('例如 https://hermes.example.com:30002'), findsOneWidget);
+
       // 空 URL 直接保存 → 校验错误
       await tester.tap(find.byKey(const ValueKey('server-editor-save')));
       await tester.pump();
@@ -413,7 +476,9 @@ void main() {
     testWidgets('编辑服务器：表单预填 + 改名保存', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
-        connections: [buildConn('c2', 'Office', 'http://office.example.com:30002')],
+        connections: [
+          buildConn('c2', 'Office', 'http://office.example.com:30002')
+        ],
         activeId: 'c2',
       );
       await pumpPage(tester, container);
@@ -546,6 +611,167 @@ void main() {
     });
   });
 
+  group('服务器编辑页 Profile 集成', () {
+    testWidgets('编辑服务器时加载并显示 Profile，点击弹窗切换 Profile 并刷新', (tester) async {
+      String currentProfile = 'Default';
+      final mockClient = buildMockApiClient(
+        handler: (options) {
+          if (options.path.endsWith('/api/profiles')) {
+            return ResponseBody.fromString(
+              '{"profiles":[{"name":"Default"},{"name":"Work"}],"active":"$currentProfile"}',
+              200,
+              headers: {
+                'content-type': ['application/json']
+              },
+            );
+          }
+          if (options.path.endsWith('/api/profile/switch')) {
+            currentProfile = 'Work';
+            return ResponseBody.fromString(
+              '{"profiles":[{"name":"Default"},{"name":"Work"}],"active":"Work"}',
+              200,
+              headers: {
+                'content-type': ['application/json']
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 200);
+        },
+      );
+
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        mockApiClient: mockClient,
+      );
+      await pumpPage(tester, container);
+
+      await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+      await tester.pumpAndSettle();
+
+      // Profile 区块存在且已加载 active profile
+      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Default'), findsOneWidget);
+
+      // 点击打开选择弹窗
+      await tester
+          .tap(find.byKey(const ValueKey('server-editor-profile-tile')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择 Profile'), findsOneWidget);
+      expect(find.text('Work'), findsOneWidget);
+
+      // 选择 Work
+      await tester.tap(find.text('Work'));
+      await tester.pumpAndSettle();
+
+      // 切换成功，行显示变为 Work
+      expect(find.text('Work'), findsOneWidget);
+    });
+
+    testWidgets('Profile 加载失败显示重试行，点击重试', (tester) async {
+      var shouldFail = true;
+      final mockClient = buildMockApiClient(
+        handler: (options) {
+          if (options.path.endsWith('/api/profiles')) {
+            if (shouldFail) {
+              return ResponseBody.fromString(
+                '{"error":"Network error"}',
+                500,
+                headers: {
+                  'content-type': ['application/json']
+                },
+              );
+            }
+            return ResponseBody.fromString(
+              '{"profiles":[{"name":"Production"}],"active":"Production"}',
+              200,
+              headers: {
+                'content-type': ['application/json']
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 200);
+        },
+      );
+
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        mockApiClient: mockClient,
+      );
+      await pumpPage(tester, container);
+
+      await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+      await tester.pumpAndSettle();
+
+      // 初始加载失败
+      expect(find.text('读取失败'), findsOneWidget);
+      expect(find.text('点击重试'), findsOneWidget);
+
+      // 恢复后重试
+      shouldFail = false;
+      await tester
+          .tap(find.byKey(const ValueKey('server-editor-profile-retry')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('读取失败'), findsNothing);
+      expect(find.text('Production'), findsOneWidget);
+    });
+
+    testWidgets('Profile 切换失败显示错误弹窗', (tester) async {
+      final mockClient = buildMockApiClient(
+        handler: (options) {
+          if (options.path.endsWith('/api/profiles')) {
+            return ResponseBody.fromString(
+              '{"profiles":[{"name":"Default"},{"name":"Dev"}],"active":"Default"}',
+              200,
+              headers: {
+                'content-type': ['application/json']
+              },
+            );
+          }
+          if (options.path.endsWith('/api/profile/switch')) {
+            return ResponseBody.fromString(
+              '{"error":"Switch forbidden"}',
+              403,
+              headers: {
+                'content-type': ['application/json']
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 200);
+        },
+      );
+
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        mockApiClient: mockClient,
+      );
+      await pumpPage(tester, container);
+
+      await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const ValueKey('server-editor-profile-tile')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Dev'));
+      await tester.pumpAndSettle();
+
+      // 弹窗提示失败
+      expect(find.text('Profile 切换失败'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+      expect(find.text('Profile 切换失败'), findsNothing);
+    });
+  });
+
   group('模型操作', () {
     testWidgets('默认模型选择器：进入选择页 → 选 o3 → 调 API 并更新显示', (tester) async {
       final api = buildApi();
@@ -598,14 +824,6 @@ void main() {
     });
   });
 
-/// 滚动至指定 widget 并稍微向下拖动避开导航栏
-Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
-  await tester.scrollUntilVisible(finder, 50);
-  await tester.pumpAndSettle();
-  await tester.drag(find.byType(ListView), const Offset(0, 100));
-  await tester.pumpAndSettle();
-}
-
   group('Extensions 操作', () {
     testWidgets('渲染已安装扩展 + 启停切换', (tester) async {
       final api = buildApi();
@@ -616,10 +834,12 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入扩展二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
+      await tester.pumpAndSettle();
+
       final toggle =
           find.byKey(const ValueKey('extension-toggle-ext-web-search'));
-      await scrollToAndCenter(tester, toggle);
-
       expect(find.text('Web Search'), findsOneWidget);
       expect(find.textContaining('ext-web-search'), findsOneWidget);
       expect(toggle, findsOneWidget);
@@ -639,9 +859,12 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入扩展二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
+      await tester.pumpAndSettle();
+
       final rowFinder =
           find.byKey(const ValueKey('extension-row-ext-web-search'));
-      await scrollToAndCenter(tester, rowFinder);
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
 
@@ -679,9 +902,12 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入扩展二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
+      await tester.pumpAndSettle();
+
       final installTile =
           find.byKey(const ValueKey('settings-extension-install'));
-      await scrollToAndCenter(tester, installTile);
       await tester.tap(installTile);
       await tester.pumpAndSettle();
 
@@ -723,8 +949,11 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入 MCP 二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
+
       final toggle = find.byKey(const ValueKey('mcp-toggle-fetch-server'));
-      await scrollToAndCenter(tester, toggle);
       expect(find.text('fetch-server'), findsOneWidget);
       expect(toggle, findsOneWidget);
 
@@ -743,9 +972,12 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入 MCP 二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
+
       final rowFinder =
           find.byKey(const ValueKey('mcp-server-row-fetch-server'));
-      await scrollToAndCenter(tester, rowFinder);
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
 
@@ -765,7 +997,6 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       await tester.pumpAndSettle();
 
       // 删除确认
-      await scrollToAndCenter(tester, rowFinder);
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('mcp-delete-fetch-server')));
@@ -787,8 +1018,11 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入 MCP 二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
+
       final addFinder = find.byKey(const ValueKey('settings-mcp-add'));
-      await scrollToAndCenter(tester, addFinder);
       await tester.tap(addFinder);
       await tester.pumpAndSettle();
 
@@ -827,8 +1061,11 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入辅助模型二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.pumpAndSettle();
+
       final taskRowFinder = find.byKey(const ValueKey('aux-task-vision'));
-      await scrollToAndCenter(tester, taskRowFinder);
 
       expect(find.text('Vision Understanding'), findsOneWidget);
       expect(find.text('🔑'), findsOneWidget);
@@ -876,8 +1113,11 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       );
       await pumpPage(tester, container);
 
+      // 进入辅助模型二级页
+      await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.pumpAndSettle();
+
       final resetFinder = find.byKey(const ValueKey('settings-aux-reset'));
-      await scrollToAndCenter(tester, resetFinder);
       await tester.tap(resetFinder);
       await tester.pumpAndSettle();
 
@@ -896,5 +1136,67 @@ Future<void> scrollToAndCenter(WidgetTester tester, Finder finder) async {
       ]);
     });
   });
-}
 
+  group('保存按钮几何回归测试', () {
+    testWidgets(
+        '深色模式 + 真实主题 + 金照字体：保存文本完全落在 CupertinoNavigationBar 内 (scale 1.0 & 1.3)',
+        (tester) async {
+      await loadHermexGoldenFonts();
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      for (final textScale in [1.0, 1.3]) {
+        final container = await makeContainer(
+          api: buildApi(),
+          connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+          activeId: 'c1',
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: CupertinoApp(
+              theme: buildCupertinoTheme(Brightness.dark),
+              home: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+                child: const SettingsPage(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // 打开服务器编辑页
+        await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+        await tester.pumpAndSettle();
+
+        final navBarFinder = find.byType(CupertinoNavigationBar);
+        expect(navBarFinder, findsOneWidget);
+        final navBarRect = tester.getRect(navBarFinder);
+
+        final saveBtnFinder = find.byKey(const ValueKey('server-editor-save'));
+        expect(saveBtnFinder, findsOneWidget);
+        final saveBtnRect = tester.getRect(saveBtnFinder);
+
+        final textFinder = find.descendant(
+          of: saveBtnFinder,
+          matching: find.text('保存'),
+        );
+        expect(textFinder, findsOneWidget);
+        final textRect = tester.getRect(textFinder);
+
+        // 断言保存按钮及文本在垂直方向完全处于 44pt 导航栏之内
+        expect(saveBtnRect.top, greaterThanOrEqualTo(navBarRect.top));
+        expect(saveBtnRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
+        expect(textRect.top, greaterThanOrEqualTo(navBarRect.top));
+        expect(textRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
+
+        // 返回设置页
+        await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+        await tester.pumpAndSettle();
+      }
+    });
+  });
+}

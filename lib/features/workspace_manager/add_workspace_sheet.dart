@@ -121,10 +121,10 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               const SizedBox(height: 20),
               Text(
                 l10n.workspacePathLabel,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: secondaryText,
+                  color: secondaryText.resolveFrom(context),
                 ),
               ),
               const SizedBox(height: 6),
@@ -151,10 +151,10 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               const SizedBox(height: 16),
               Text(
                 l10n.workspaceNameOptionalLabel,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: secondaryText,
+                  color: secondaryText.resolveFrom(context),
                 ),
               ),
               const SizedBox(height: 6),

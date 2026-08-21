@@ -239,7 +239,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             const SizedBox(height: 6),
             Text(
               l10n.createTaskPrompt,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -471,9 +474,9 @@ class _TaskRow extends StatelessWidget {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: secondaryText,
+                          color: secondaryText.resolveFrom(context),
                         ),
                       ),
                     ],
@@ -818,7 +821,13 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: secondaryText)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: secondaryText.resolveFrom(context),
+          ),
+        ),
         const SizedBox(height: 6),
         CupertinoTextField(
           key: fieldKey,

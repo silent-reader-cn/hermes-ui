@@ -496,7 +496,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     return Text(
       _formatFileSize(size),
       textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 12, color: secondaryText),
+      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
     );
   }
 
@@ -569,7 +569,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join(' · '),
-      style: const TextStyle(fontSize: 12, color: secondaryText),
+      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
     );
   }
 
@@ -602,7 +602,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             Text(
               l10n.previewUnavailableHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -821,11 +824,17 @@ class _MediaControlsState extends State<_MediaControls> {
             children: [
               Text(
                 _formatDuration(_position),
-                style: const TextStyle(fontSize: 12, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
               Text(
                 _formatDuration(_duration),
-                style: const TextStyle(fontSize: 12, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
             ],
           ),

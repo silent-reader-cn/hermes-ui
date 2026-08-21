@@ -267,7 +267,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             const SizedBox(height: 6),
             Text(
               l10n.clickPlusToCreateFirstCard,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -294,7 +297,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             const SizedBox(height: 6),
             Text(
               l10n.createBoardOnServerPrompt,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -423,7 +429,10 @@ class _KanbanColumnView extends StatelessWidget {
                 ),
                 Text(
                   '${cards.length}',
-                  style: const TextStyle(fontSize: 13, color: secondaryText),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: secondaryText.resolveFrom(context),
+                  ),
                 ),
               ],
             ),
@@ -436,9 +445,9 @@ class _KanbanColumnView extends StatelessWidget {
                   ? Center(
                       child: Text(
                         l10n.noCards,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: secondaryText,
+                          color: secondaryText.resolveFrom(context),
                         ),
                       ),
                     )
@@ -523,7 +532,10 @@ class _KanbanCardTile extends StatelessWidget {
                     card.assignee ?? l10n.unassigned,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ),
                 if (dependencyBadge != null) ...[
@@ -681,8 +693,8 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             style: TextStyle(
               fontSize: 15,
               color: (card.body ?? '').trim().isEmpty
-                  ? secondaryText
-                  : CupertinoColors.label,
+                  ? secondaryText.resolveFrom(context)
+                  : CupertinoColors.label.resolveFrom(context),
             ),
           ),
         ),
@@ -720,7 +732,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             width: 72,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ),
           Expanded(child: value),
@@ -776,7 +791,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             padding: const EdgeInsets.all(12),
             child: Text(
               l10n.noComments,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           )
         else
@@ -794,7 +812,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   const SizedBox(height: 4),
                   Text(
                     _commentMeta(comment),
-                    style: const TextStyle(fontSize: 12, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ],
               ),
@@ -993,7 +1014,10 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           if (currentBoard != null) ...[
             Text(
               l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -1021,7 +1045,10 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           const SizedBox(height: 16),
           Text(
             l10n.initialStatus,
-            style: const TextStyle(fontSize: 13, color: secondaryText),
+            style: TextStyle(
+              fontSize: 13,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
           const SizedBox(height: 8),
           CupertinoSlidingSegmentedControl<String>(
@@ -1051,7 +1078,13 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: secondaryText)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: secondaryText.resolveFrom(context),
+          ),
+        ),
         const SizedBox(height: 6),
         CupertinoTextField(
           key: fieldKey,

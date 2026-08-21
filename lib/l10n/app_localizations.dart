@@ -644,6 +644,14 @@ class AppLocalizations {
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
   String get serverNameOptionalPlaceholder =>
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
+  String get advancedSettings => isEnglish ? 'Advanced Settings' : '高级设置';
+  String get advancedSettingsSection => isEnglish ? 'Advanced Settings' : '高级设置';
+  String get serverBasicInfoSection => isEnglish ? 'Basic Information' : '基本信息';
+  String get serverNameLabel => isEnglish ? 'Name' : '名称';
+  String get serverUrlLabel => isEnglish ? 'Address' : '地址';
+  String get serverPasswordLabel => isEnglish ? 'Password' : '密码';
+  String get serverUrlExampleHint =>
+      isEnglish ? 'e.g. https://hermes.example.com:30002' : '例如 https://hermes.example.com:30002';
   String get serverPasswordPlaceholder =>
       isEnglish ? 'Password (optional; leave blank to keep existing)' : '密码（可选；编辑时留空保持原密码）';
   String get serverPasswordOptionalPlaceholder =>

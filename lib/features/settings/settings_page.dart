@@ -6,29 +6,26 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
+import '../../core/models/server_catalog.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
-import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
-import '../session_list/session_entry_visibility.dart';
-import '../session_list/session_row_subtitle_settings.dart';
+import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
-import 'auxiliary_models_section.dart';
-import 'extensions_section.dart';
-import 'mcp_section.dart';
-import 'profile_section.dart';
 import 'settings_providers.dart';
+import 'settings_subpages.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 分组：外观（主题三态）、会话列表入口（功能入口显隐）、桌面（平台能力开关）、
-/// 服务器（当前服务器 + 列表增删改切换）、模型（默认模型选择 + 推理强度）、
-/// 辅助模型（11 槽位模型绑定）、MCP 服务器管理、扩展生态（已安装/安装/Sidecar）、关于（版本号）。
+/// 首页分组：外观 / 服务器 / 模型 / 二级入口组（辅助模型、MCP、扩展、
+/// 会话列表入口、会话行信息、桌面）/ 记忆入口 / 工作区入口 / 关于。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -44,14 +41,8 @@ class SettingsPage extends ConsumerWidget {
         children: const [
           _AppearanceSection(),
           _ServerSection(),
-          ProfileSection(),
           _ModelSection(),
-          AuxiliaryModelsSection(),
-          McpSection(),
-          ExtensionsSection(),
-          _DesktopSection(),
-          _SessionListEntriesSection(),
-          _SessionRowSubtitleSection(),
+          _AdvancedSettingsSection(),
           _MemoryEntrySection(),
           _WorkspacesEntrySection(),
           _AboutSection(),
@@ -106,143 +97,101 @@ class _AppearanceSection extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 会话列表入口
+// 二级入口组（高级设置）
 // ---------------------------------------------------------------------------
 
-/// 会话列表入口显隐分组（TASK W5 / 蓝本 SidebarSectionVisibility）。
-class _SessionListEntriesSection extends ConsumerWidget {
-  const _SessionListEntriesSection();
+/// 二级入口分组：辅助模型 / MCP 服务器 / 扩展 / 会话列表入口 / 会话行信息 / 桌面。
+class _AdvancedSettingsSection extends StatelessWidget {
+  const _AdvancedSettingsSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final visibility = ref.watch(sessionEntryVisibilityProvider);
-    final controller = ref.read(sessionEntryVisibilityProvider.notifier);
-
     return CupertinoListSection(
-      header: Text(l10n.sessionListEntriesSection),
+      header: Text(l10n.advancedSettingsSection),
       children: [
         CupertinoListTile(
-          title: Text(l10n.tasksTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-tasks'),
-            value: visibility.tasks,
-            onChanged: (value) {
-              unawaited(controller.setVisible('tasks', value));
-            },
+          key: const ValueKey('settings-entry-auxiliary'),
+          title: Text(l10n.auxiliaryModelsSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const AuxiliaryModelsPage(),
+            ),
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.kanbanTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-kanban'),
-            value: visibility.kanban,
-            onChanged: (value) {
-              unawaited(controller.setVisible('kanban', value));
-            },
+          key: const ValueKey('settings-entry-mcp'),
+          title: Text(l10n.mcpSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const McpPage(),
+            ),
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.workspacesTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-workspaces'),
-            value: visibility.workspaces,
-            onChanged: (value) {
-              unawaited(controller.setVisible('workspaces', value));
-            },
+          key: const ValueKey('settings-entry-extensions'),
+          title: Text(l10n.extensionsSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const ExtensionsPage(),
+            ),
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.skillsTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-skills'),
-            value: visibility.skills,
-            onChanged: (value) {
-              unawaited(controller.setVisible('skills', value));
-            },
+          key: const ValueKey('settings-entry-session-list-entries'),
+          title: Text(l10n.sessionListEntriesSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const SessionListEntriesPage(),
+            ),
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.insightsTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-insights'),
-            value: visibility.insights,
-            onChanged: (value) {
-              unawaited(controller.setVisible('insights', value));
-            },
+          key: const ValueKey('settings-entry-session-row-subtitle'),
+          title: Text(l10n.sessionRowSubtitleSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
           ),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 会话行信息
-// ---------------------------------------------------------------------------
-
-/// 会话行信息分组：会话行副标题显示项开关（消息数 / 项目名 / 工作区 /
-/// 渠道 / 预估价钱；渠道与预估价钱默认关闭）。
-class _SessionRowSubtitleSection extends ConsumerWidget {
-  const _SessionRowSubtitleSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final settings = ref.watch(sessionRowSubtitleSettingsProvider);
-    final controller = ref.read(sessionRowSubtitleSettingsProvider.notifier);
-
-    return CupertinoListSection(
-      header: Text(l10n.sessionRowSubtitleSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowMessageCount),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-message-count'),
-            value: settings.messageCount,
-            onChanged: (value) {
-              unawaited(controller.setMessageCount(value));
-            },
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const SessionRowSubtitlePage(),
+            ),
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.sessionRowShowProjectName),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-project-name'),
-            value: settings.projectName,
-            onChanged: (value) {
-              unawaited(controller.setProjectName(value));
-            },
+          key: const ValueKey('settings-entry-desktop'),
+          title: Text(l10n.desktopSection),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowWorkspace),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-workspace'),
-            value: settings.workspace,
-            onChanged: (value) {
-              unawaited(controller.setWorkspace(value));
-            },
-          ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowChannel),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-channel'),
-            value: settings.channel,
-            onChanged: (value) {
-              unawaited(controller.setChannel(value));
-            },
-          ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowEstimatedCost),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-estimated-cost'),
-            value: settings.estimatedCost,
-            onChanged: (value) {
-              unawaited(controller.setEstimatedCost(value));
-            },
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const DesktopSettingsPage(),
+            ),
           ),
         ),
       ],
@@ -304,71 +253,6 @@ class _WorkspacesEntrySection extends ConsumerWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => context.push('/workspaces'),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 桌面
-// ---------------------------------------------------------------------------
-
-/// 桌面分组：最小化到托盘 / 全局快捷键 / 记住窗口位置。
-class _DesktopSection extends ConsumerWidget {
-  const _DesktopSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final settings = ref.watch(desktopSettingsProvider);
-    return CupertinoListSection(
-      header: Text(l10n.desktopSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.minimizeToTray),
-          subtitle: Text(l10n.minimizeToTraySubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-minimize-to-tray'),
-            value: settings.minimizeToTray,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setMinimizeToTray(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.globalShortcuts),
-          subtitle: Text(l10n.globalShortcutsSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-global-shortcuts'),
-            value: settings.globalShortcutsEnabled,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setGlobalShortcutsEnabled(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.rememberWindowPosition),
-          subtitle: Text(l10n.rememberWindowPositionSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-remember-window'),
-            value: settings.rememberWindowPosition,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setRememberWindowPosition(value),
-              );
-            },
-          ),
         ),
       ],
     );
@@ -516,7 +400,7 @@ class _ServerSection extends ConsumerWidget {
   }
 }
 
-/// 服务器新增 / 编辑表单（复用 onboarding 的连接字段：名称 / 地址 / 密码）。
+/// 服务器新增 / 编辑表单（复用 onboarding 的连接字段：名称 / 地址 / 密码 + Profile 管理）。
 class _ServerEditorPage extends ConsumerStatefulWidget {
   const _ServerEditorPage({this.connection});
 
@@ -541,12 +425,121 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
   String _error = '';
   bool _saving = false;
 
+  ProfilesResponse? _profiles;
+  Object? _profileError;
+  bool _loadingProfiles = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.connection != null && widget.connection!.baseUrl.isNotEmpty) {
+      unawaited(_loadProfiles());
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
     _urlController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  ApiClient _getClient() {
+    final active = ref.read(activeConnectionProvider);
+    if (widget.connection != null && widget.connection!.id == active?.id) {
+      return ref.read(apiClientProvider);
+    }
+    final url = widget.connection?.baseUrl ?? _urlController.text.trim();
+    final headers = [
+      for (final entry
+          in (widget.connection?.customHeaders ?? const <String, String>{})
+              .entries)
+        CustomHeader(name: entry.key, value: entry.value),
+    ];
+    final factory = ref.read(serverEditorApiClientFactoryProvider);
+    return factory(url, headers);
+  }
+
+  Future<void> _loadProfiles() async {
+    final url = widget.connection?.baseUrl ?? _urlController.text.trim();
+    if (url.isEmpty || !mounted) return;
+    setState(() {
+      _loadingProfiles = true;
+      _profileError = null;
+    });
+    try {
+      final client = _getClient();
+      final response = await client.profiles();
+      if (mounted) setState(() => _profiles = response);
+    } catch (error) {
+      if (mounted) setState(() => _profileError = error);
+    } finally {
+      if (mounted) setState(() => _loadingProfiles = false);
+    }
+  }
+
+  Future<void> _switchProfile(ProfileSummary profile) async {
+    final name = profile.name ?? '';
+    if (name.isEmpty || name == _profiles?.active) return;
+    setState(() => _loadingProfiles = true);
+    try {
+      final client = _getClient();
+      final response = await client.switchProfile(name);
+      if (mounted) {
+        setState(() => _profiles = response.toProfilesResponse(name));
+        final active = ref.read(activeConnectionProvider);
+        if (widget.connection != null && widget.connection!.id == active?.id) {
+          ref.invalidate(sessionListControllerProvider);
+        }
+      }
+    } catch (error) {
+      if (mounted) await _showProfileError(error);
+    } finally {
+      if (mounted) setState(() => _loadingProfiles = false);
+    }
+  }
+
+  Future<void> _showProfileError(Object error) {
+    final l10n = AppLocalizations.of(context);
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(l10n.profileSwitchFailed),
+        content: Text(
+          error is ApiException ? error.message : '$error',
+          style: TextStyle(color: statusRedText.resolveFrom(context)),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showProfilePicker(List<ProfileSummary> profiles) async {
+    final l10n = AppLocalizations.of(context);
+    final selected = await showCupertinoModalPopup<ProfileSummary>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: Text(l10n.selectProfile),
+        actions: [
+          for (final profile in profiles)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(sheetContext, profile),
+              child: Text(profile.name ?? l10n.unnamed),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext),
+          child: Text(l10n.cancel),
+        ),
+      ),
+    );
+    if (selected != null) await _switchProfile(selected);
   }
 
   String? _validate() {
@@ -633,59 +626,157 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isEditing = widget.connection != null;
+    final profiles = _profiles?.profiles ?? const <ProfileSummary>[];
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        leading: CupertinoNavigationBarBackButton(
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const _PopBackButton(),
         middle: Text(isEditing ? l10n.editServer : l10n.addServer),
-        trailing: CupertinoButton(
-          key: const ValueKey('server-editor-save'),
-          onPressed: _saving ? null : () => unawaited(_save()),
-          child: Text(l10n.save),
+        trailing: Align(
+          alignment: Alignment.centerRight,
+          child: CupertinoButton(
+            key: const ValueKey('server-editor-save'),
+            minimumSize: Size.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            onPressed: _saving ? null : () => unawaited(_save()),
+            child: Text(
+              l10n.save,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
         ),
       ),
       child: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
           children: [
-            CupertinoTextField(
-              key: const ValueKey('server-editor-name'),
-              controller: _nameController,
-              placeholder: l10n.serverNamePlaceholder,
-              autocorrect: false,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoTextField(
-              key: const ValueKey('server-editor-url'),
-              controller: _urlController,
-              placeholder: 'https://hermes.example.com:30002',
-              autocorrect: false,
-              keyboardType: TextInputType.url,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoTextField(
-              key: const ValueKey('server-editor-password'),
-              controller: _passwordController,
-              placeholder: l10n.serverPasswordPlaceholder,
-              obscureText: true,
-              padding: const EdgeInsets.all(12),
-            ),
-            if (_error.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _error,
-                  style: const TextStyle(color: statusRedText),
+            CupertinoListSection(
+              header: Text(l10n.serverBasicInfoSection),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.serverNameLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        key: const ValueKey('server-editor-name'),
+                        controller: _nameController,
+                        placeholder: l10n.serverNamePlaceholder,
+                        autocorrect: false,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.serverUrlLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        key: const ValueKey('server-editor-url'),
+                        controller: _urlController,
+                        placeholder: 'https://hermes.example.com:30002',
+                        autocorrect: false,
+                        keyboardType: TextInputType.url,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        l10n.serverUrlExampleHint,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.serverPasswordLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        key: const ValueKey('server-editor-password'),
+                        controller: _passwordController,
+                        placeholder: l10n.serverPasswordPlaceholder,
+                        obscureText: true,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      if (_error.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            _error,
+                            style: const TextStyle(color: statusRedText),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
+            ),
+            CupertinoListSection(
+              header: Text(l10n.profile),
+              children: [
+                CupertinoListTile(
+                  key: const ValueKey('server-editor-profile-tile'),
+                  title: Text(
+                    _profiles?.active ??
+                        (_loadingProfiles
+                            ? l10n.loadingEllipsis
+                            : l10n.notRead),
+                  ),
+                  leading: const Icon(CupertinoIcons.person_2),
+                  trailing: const CupertinoListTileChevron(),
+                  onTap: profiles.isEmpty
+                      ? _loadProfiles
+                      : () => _showProfilePicker(profiles),
+                ),
+                if (_profileError != null)
+                  CupertinoListTile(
+                    key: const ValueKey('server-editor-profile-retry'),
+                    title: Text(l10n.readFailed),
+                    subtitle: Text(l10n.clickToRetry),
+                    onTap: _loadProfiles,
+                  ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+extension on ProfileSwitchResponse {
+  ProfilesResponse toProfilesResponse(String fallback) => ProfilesResponse(
+        profiles: profiles,
+        active: active ?? fallback,
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -881,9 +972,9 @@ class _AboutSection extends StatelessWidget {
         ),
         CupertinoListTile(
           title: Text(l10n.version),
-          trailing: const Text(
+          trailing: Text(
             appVersion,
-            style: TextStyle(color: secondaryText),
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
         ),
       ],

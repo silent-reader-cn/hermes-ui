@@ -280,7 +280,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               state.displayPath,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -591,10 +594,10 @@ class _PathHeader extends StatelessWidget {
               children: [
                 Text(
                   l10n.locationLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: secondaryText,
+                    color: secondaryText.resolveFrom(context),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -713,7 +716,10 @@ class _PathHeader extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     l10n.loadingIndicator,
-                    style: const TextStyle(fontSize: 13, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ],
               ),
@@ -734,9 +740,9 @@ class _PathHeader extends StatelessWidget {
                       errorMessage!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText,
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ),
@@ -807,9 +813,9 @@ class _WorkspaceEntryRow extends StatelessWidget {
                       detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText,
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ],

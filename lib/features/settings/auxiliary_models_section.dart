@@ -65,7 +65,7 @@ class AuxiliaryModelsSection extends ConsumerWidget {
               title: Text(l10n.auxMainModel),
               subtitle: Text(
                 '${state.main.provider.isNotEmpty ? state.main.provider : l10n.auto} / ${state.main.model}',
-                style: const TextStyle(color: secondaryText),
+                style: TextStyle(color: secondaryText.resolveFrom(context)),
               ),
             ),
           for (final taskRow in state.tasks)
@@ -110,7 +110,7 @@ class AuxiliaryModelsSection extends ConsumerWidget {
       ),
       subtitle: Text(
         modelSubtitle,
-        style: const TextStyle(color: secondaryText),
+        style: TextStyle(color: secondaryText.resolveFrom(context)),
       ),
       trailing: const Icon(
         CupertinoIcons.chevron_right,
@@ -196,9 +196,9 @@ class AuxTaskPickerPage extends ConsumerWidget {
                 CupertinoListTile(
                   key: const ValueKey('aux-model-option-auto'),
                   title: Text(l10n.auto),
-                  subtitle: const Text(
+                  subtitle: Text(
                     'auto',
-                    style: TextStyle(color: secondaryText),
+                    style: TextStyle(color: secondaryText.resolveFrom(context)),
                   ),
                   trailing: isAutoSelected
                       ? const Icon(CupertinoIcons.checkmark)
@@ -252,7 +252,7 @@ class AuxTaskPickerPage extends ConsumerWidget {
       title: Text(displayName),
       subtitle: Text(
         providerId,
-        style: const TextStyle(color: secondaryText),
+        style: TextStyle(color: secondaryText.resolveFrom(context)),
       ),
       trailing: isSelected ? const Icon(CupertinoIcons.checkmark) : null,
       onTap: () {

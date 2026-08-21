@@ -60,7 +60,7 @@ class ExtensionsSection extends ConsumerWidget {
                 state.registry.isNotEmpty
                     ? l10n.selectFromRegistry
                     : l10n.extensionsTitle,
-                style: const TextStyle(color: secondaryText),
+                style: TextStyle(color: secondaryText.resolveFrom(context)),
               ),
             ),
           for (final ext in state.extensions)
@@ -91,7 +91,8 @@ class ExtensionsSection extends ConsumerWidget {
       subtitle: Text(
         '${ext.id}$sidecarInfo',
         style: TextStyle(
-          color: ext.sidecarActive ? statusGreenText : secondaryText,
+          color: (ext.sidecarActive ? statusGreenText : secondaryText)
+              .resolveFrom(context),
         ),
       ),
       trailing: CupertinoSwitch(
@@ -303,7 +304,7 @@ class _ExtensionInstallPageState extends ConsumerState<ExtensionInstallPage> {
                       title: Text(item.name.isNotEmpty ? item.name : item.id),
                       subtitle: Text(
                         '${item.id} · ${item.version}',
-                        style: const TextStyle(color: secondaryText),
+                        style: TextStyle(color: secondaryText.resolveFrom(context)),
                       ),
                       trailing: const Icon(
                         CupertinoIcons.chevron_right,

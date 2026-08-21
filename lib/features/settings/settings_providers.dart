@@ -5,6 +5,7 @@ import '../../core/api/api_client_extensions.dart';
 import '../../core/api/api_client_mcp.dart';
 import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/auxiliary_model.dart';
 import '../../core/models/extensions.dart';
@@ -853,4 +854,18 @@ class AuxiliaryModelsController extends AsyncNotifier<AuxiliaryModelsState> {
     state = AsyncData(current.copyWith(actionError: () => null));
   }
 }
+
+/// 服务器编辑页所需的 API 工厂：根据 baseUrl 与 customHeaders 构造 [ApiClient]
+/// （测试可 override 注入自定义 client / fake）。
+typedef ServerEditorApiClientFactory = ApiClient Function(
+  String baseUrl,
+  List<CustomHeader> headers,
+);
+
+final serverEditorApiClientFactoryProvider =
+    Provider<ServerEditorApiClientFactory>(
+  (ref) => (baseUrl, headers) =>
+      ApiClient(baseUrl: baseUrl, initialHeaders: headers),
+);
+
 

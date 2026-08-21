@@ -11,6 +11,7 @@ import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/session.dart';
+import 'package:hermex_flutter/features/session_list/session_list_header.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
 import 'package:hermex_flutter/features/projects/project_providers.dart';
@@ -756,6 +757,163 @@ void main() {
       await tester.tap(find.text('好'));
       await tester.pumpAndSettle();
       expect(find.text('操作失败'), findsNothing);
+    });
+
+    group('会话列表头部重构（移动端大标题 vs 桌面单行头部）', () {
+      testWidgets('移动模式：渲染「会话」大标题，且头部与搜索栏之间无 0.5px 分隔线', (tester) async {
+        final api = FakeSessionListApi(sessions: [buildSession('s1', '测试会话')]);
+        await pumpSessionList(tester, api);
+
+        // 包含大标题文字
+        expect(find.text('会话'), findsWidgets);
+
+        // 头部内不存在 0.5px 底部分隔线 Container
+        final separatorFinder = find.descendant(
+          of: find.byKey(const ValueKey('session-list-header')),
+          matching: find.byWidgetPredicate(
+            (w) => w is Container && w.constraints?.maxHeight == 0.5,
+          ),
+        );
+        expect(separatorFinder, findsNothing);
+      });
+
+      testWidgets('桌面侧栏模式：无「会话」大标题文字，搜索框与筛选/新建按钮同行并对齐', (tester) async {
+        final api = FakeSessionListApi(sessions: [buildSession('s1', '测试会话')]);
+        final router = GoRouter(
+          initialLocation: '/',
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, _) => const SessionListPage(
+                showUtilityRows: false,
+                showSettingsTrailing: false,
+                showFab: false,
+              ),
+            ),
+            GoRoute(
+              path: '/chat/:sessionId',
+              builder: (_, state) =>
+                  _ChatStub(sessionId: state.pathParameters['sessionId'] ?? ''),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(
+                ApiClient(baseUrl: 'http://test.local:30002'),
+              ),
+              sessionListApiFactoryProvider.overrideWithValue((_) => api),
+              projectApiFactoryProvider.overrideWithValue(
+                (_) => _StubProjectApi(),
+              ),
+            ],
+            child: CupertinoApp.router(routerConfig: router),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        // 1. 彻底移除「会话」大标题文本
+        expect(find.text('会话'), findsNothing);
+
+        // 2. 搜索框、筛选按钮、新建按钮均存在且仅渲染一个搜索框
+        expect(
+          find.byKey(const ValueKey('session-list-search')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('session-list-filter-trigger')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('session-list-header-new')),
+          findsOneWidget,
+        );
+
+        // 3. 搜索框、筛选按钮、新建按钮与搜索框同行（垂直中心对齐）
+        final searchRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-search')),
+        );
+        final filterRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-filter-trigger')),
+        );
+        final newRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-header-new')),
+        );
+
+        // 垂直居中对齐误差在合理阈值内
+        expect(
+          (searchRect.center.dy - filterRect.center.dy).abs(),
+          lessThanOrEqualTo(2.0),
+        );
+        expect(
+          (searchRect.center.dy - newRect.center.dy).abs(),
+          lessThanOrEqualTo(2.0),
+        );
+        expect((filterRect.top - newRect.top).abs(), lessThanOrEqualTo(2.0));
+        // 水平顺序：搜索框在左，筛选在中间，加号在右侧
+        expect(searchRect.right, lessThanOrEqualTo(filterRect.left));
+        expect(filterRect.right, lessThanOrEqualTo(newRect.left));
+
+        // 4. 筛选按钮可正常触发筛选弹层
+        await tester.tap(
+          find.byKey(const ValueKey('session-list-filter-trigger')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('session-filter-sheet')),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('全部'));
+        await tester.pumpAndSettle();
+
+        // 5. 新建按钮可正常触发创建并跳转
+        api.createdSession = const SessionSummary(
+          sessionId: 'desktop-new-1',
+          title: '桌面新建',
+        );
+        await tester.tap(find.byKey(const ValueKey('session-list-header-new')));
+        await tester.pumpAndSettle();
+        expect(api.createCount, 1);
+        expect(find.text('chat-desktop-new-1'), findsOneWidget);
+      });
+    });
+  });
+
+  group('SessionListHeaderDelegate 独立组件单测', () {
+    test('移动端模式：minExtent=barHeight, maxExtent=barHeight+largeTitleHeight', () {
+      const delegate = SessionListHeaderDelegate(
+        title: '会话',
+        topPadding: 20,
+        compactHeader: false,
+      );
+      expect(delegate.minExtent, 20 + 44.0);
+      expect(delegate.maxExtent, 20 + 44.0 + 52.0);
+    });
+
+    test('桌面端模式：minExtent==maxExtent==topPadding+50.0', () {
+      const delegate = SessionListHeaderDelegate(
+        title: '会话',
+        topPadding: 10,
+        compactHeader: true,
+      );
+      expect(delegate.minExtent, 10 + 50.0);
+      expect(delegate.maxExtent, 10 + 50.0);
+    });
+
+    test('shouldRebuild 涵盖 compactHeader 与 searchField 差异', () {
+      const d1 = SessionListHeaderDelegate(title: 'A', compactHeader: false);
+      const d2 = SessionListHeaderDelegate(title: 'A', compactHeader: true);
+      const d3 = SessionListHeaderDelegate(
+        title: 'A',
+        compactHeader: true,
+        searchField: SizedBox(),
+      );
+
+      expect(d1.shouldRebuild(d2), isTrue);
+      expect(d2.shouldRebuild(d3), isTrue);
+      expect(d1.shouldRebuild(d1), isFalse);
     });
   });
 }
