@@ -285,7 +285,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(

@@ -64,7 +64,7 @@ String kanbanStatusTitle(String? rawValue, [BuildContext? context]) {
 /// Kanban 状态标识颜色（对齐 Hermex KanbanStatusPresentation.color）。
 ///
 /// 返回 [CupertinoDynamicColor]：圆点与文字共用，浅色/深色均满足 WCAG AA。
-Color kanbanStatusColor(String? rawValue) {
+CupertinoDynamicColor kanbanStatusColor(String? rawValue) {
   switch (rawValue) {
     case 'triage':
       return statusGreyText;
@@ -331,7 +331,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -411,7 +411,7 @@ class _KanbanColumnView extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: kanbanStatusColor(name),
+                    color: kanbanStatusColor(name).resolveFrom(context),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -942,7 +942,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   ? error.message
                   : (error?.toString() ?? l10n.unknownError),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(

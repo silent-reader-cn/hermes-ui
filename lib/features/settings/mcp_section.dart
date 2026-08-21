@@ -94,7 +94,8 @@ class McpSection extends ConsumerWidget {
       subtitle: Text(
         '$cmdSummary · $statusText',
         style: TextStyle(
-          color: isConnected ? statusGreenText : statusGreyText,
+          color: (isConnected ? statusGreenText : statusGreyText)
+              .resolveFrom(context),
         ),
       ),
       trailing: CupertinoSwitch(
@@ -410,7 +411,7 @@ class _McpServerEditorPageState extends ConsumerState<McpServerEditorPage> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   _error,
-                  style: const TextStyle(color: statusRedText),
+                  style: TextStyle(color: statusRedText.resolveFrom(context)),
                 ),
               ),
           ],

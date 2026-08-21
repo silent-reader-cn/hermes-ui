@@ -234,10 +234,10 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                         ),
                         child: Text(
                           l10n.currentBranchBadge,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.bold,
-                            color: statusBlueText,
+                            color: statusBlueText.resolveFrom(context),
                           ),
                         ),
                       ),
@@ -406,16 +406,16 @@ class _GitBranchTreeState extends State<GitBranchTree> {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.exclamationmark_triangle,
             size: 16,
-            color: statusRedText,
+            color: statusRedText.resolveFrom(context),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               widget.errorMessage ?? l10n.loadFailed,
-              style: const TextStyle(fontSize: 12, color: statusRedText),
+              style: TextStyle(fontSize: 12, color: statusRedText.resolveFrom(context)),
             ),
           ),
           if (widget.onReload != null)

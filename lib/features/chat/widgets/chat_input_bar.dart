@@ -142,7 +142,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: Text(title),
-        content: Text(message, style: const TextStyle(color: statusRedText)),
+        content: Text(message, style: TextStyle(color: statusRedText.resolveFrom(context))),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),

@@ -731,7 +731,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(
                             _error,
-                            style: const TextStyle(color: statusRedText),
+                            style: TextStyle(color: statusRedText.resolveFrom(context)),
                           ),
                         ),
                     ],

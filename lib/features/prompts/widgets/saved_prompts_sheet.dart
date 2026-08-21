@@ -107,7 +107,9 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
         title: Text(title),
         content: Text(
           message,
-          style: isError ? const TextStyle(color: statusRedText) : null,
+          style: isError
+              ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
+              : null,
         ),
         actions: [
           CupertinoDialogAction(
@@ -218,10 +220,10 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                     : () => _handleDelete(id),
                 child: isDeleting
                     ? const CupertinoActivityIndicator(radius: 10)
-                    : const Icon(
+                    : Icon(
                         CupertinoIcons.delete,
                         size: 20,
-                        color: statusRedText,
+                        color: statusRedText.resolveFrom(context),
                       ),
               ),
               onTap: () {
@@ -247,7 +249,7 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
               Text(
                 error.toString(),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: statusRedText),
+                style: TextStyle(color: statusRedText.resolveFrom(context)),
               ),
               const SizedBox(height: 12),
               CupertinoButton(

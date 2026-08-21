@@ -686,9 +686,9 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: statusRedText,
+                color: statusRedText.resolveFrom(context),
               ),
             ),
           ),
@@ -805,7 +805,7 @@ class _NoticeBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(fontSize: 13, color: statusGreenText),
+              style: TextStyle(fontSize: 13, color: statusGreenText.resolveFrom(context)),
             ),
           ),
           AccessibleButton(

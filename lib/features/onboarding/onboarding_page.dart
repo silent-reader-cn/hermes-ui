@@ -398,7 +398,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               _headerError,
-              style: const TextStyle(color: statusRedText),
+              style: TextStyle(color: statusRedText.resolveFrom(context)),
             ),
           ),
         const SizedBox(height: 8),
@@ -434,16 +434,16 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case _HealthState.ok:
         return Text(
           l10n.connectionSuccessfulWithCheck,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: statusGreenText,
+            color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
         );
       case _HealthState.failed:
         return Text(
           '❌ $_healthMessage',
-          style: const TextStyle(fontSize: 14, color: statusRedText),
+          style: TextStyle(fontSize: 14, color: statusRedText.resolveFrom(context)),
         );
     }
   }
@@ -469,18 +469,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case _AuthState.notRequired:
         return Row(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.checkmark_circle_fill,
               size: 16,
-              color: statusGreenText,
+              color: statusGreenText.resolveFrom(context),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 l10n.serverNoPasswordRequired,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: statusGreenText,
+                  color: statusGreenText.resolveFrom(context),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -538,16 +538,16 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case _LoginState.ok:
         return Text(
           _loginMessage,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: statusGreenText,
+            color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
         );
       case _LoginState.failed:
         return Text(
           '❌ $_loginMessage',
-          style: const TextStyle(fontSize: 14, color: statusRedText),
+          style: TextStyle(fontSize: 14, color: statusRedText.resolveFrom(context)),
         );
     }
   }

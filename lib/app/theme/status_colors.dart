@@ -7,7 +7,9 @@
 // - 深色模式用亮色变体（黑底对比 >= 4.5:1）
 // - highContrast* 为系统增强对比度模式下的更强变体。
 //
-// 用法：Text('运行中', style: TextStyle(color: statusGreenText))
+// 用法：Text('运行中', style: TextStyle(color: statusGreenText.resolveFrom(context)))
+// 必须经 resolveFrom(context) 解析为当前主题色，禁止直接作为 const TextStyle 的 color
+//（动态色不解析在暗黑下会退化为浅色变体，对比度不足且与装饰圆点不一致）。
 import 'package:flutter/cupertino.dart';
 
 /// 状态「运行中/成功」文字色：浅 #1E7A34（白底 ~5.9:1）/ 深 #34C759（黑底 ~6.3:1）。
