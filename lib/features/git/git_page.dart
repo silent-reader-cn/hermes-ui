@@ -9,6 +9,7 @@ import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
+import 'git_branch_tree.dart';
 import 'git_providers.dart';
 
 /// 会话工作区 Git 面板（对齐 Hermex GitWorkspaceView 的展示形态）。
@@ -135,6 +136,7 @@ class _GitPageState extends ConsumerState<GitPage> {
 
     return [
       _buildSummarySliver(ref, state),
+      _buildBranchTreeSliver(ref, state),
       if (!state.hasCommittableChanges)
         SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
       else ...[
@@ -216,6 +218,23 @@ class _GitPageState extends ConsumerState<GitPage> {
     );
   }
 
+  Widget _buildBranchTreeSliver(WidgetRef ref, GitState state) {
+    final controller = ref.read(
+      gitControllerProvider(widget.sessionId).notifier,
+    );
+    return SliverToBoxAdapter(
+      child: GitBranchTree(
+        branches: state.branches,
+        currentBranch: state.branches?.current ?? state.status?.branch,
+        isActionRunning: state.isActionRunning,
+        isLoading: state.isBranchesLoading,
+        errorMessage: state.branchesError,
+        onCheckout: (refName) => unawaited(controller.checkout(refName)),
+        onReload: () => unawaited(controller.reloadBranches()),
+      ),
+    );
+  }
+
   Widget _buildFileSectionSliver(
     WidgetRef ref,
     GitState state,
@@ -257,34 +276,40 @@ class _GitPageState extends ConsumerState<GitPage> {
         header: Text(l10n.commitSection),
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: CupertinoTextField(
-              key: const ValueKey('git-commit-message'),
-              controller: _messageController,
-              placeholder: l10n.commitMessagePlaceholder,
-              minLines: 2,
-              maxLines: 4,
-              enabled: !state.isActionRunning,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: CupertinoButton.filled(
-              key: const ValueKey('git-commit-button'),
-              onPressed: state.isActionRunning
-                  ? null
-                  : () {
-                      final message = _messageController.text.trim();
-                      if (message.isEmpty) return;
-                      unawaited(
-                        controller.commit(message).then((ok) {
-                          if (ok && mounted) {
-                            _messageController.clear();
-                          }
-                        }),
-                      );
-                    },
-              child: Text(l10n.commitButton),
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    key: const ValueKey('git-commit-message'),
+                    controller: _messageController,
+                    placeholder: l10n.commitMessagePlaceholder,
+                    minLines: 1,
+                    maxLines: 3,
+                    enabled: !state.isActionRunning,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton.filled(
+                  key: const ValueKey('git-commit-button'),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  onPressed: state.isActionRunning
+                      ? null
+                      : () {
+                          final message = _messageController.text.trim();
+                          if (message.isEmpty) return;
+                          unawaited(
+                            controller.commit(message).then((ok) {
+                              if (ok && mounted) {
+                                _messageController.clear();
+                              }
+                            }),
+                          );
+                        },
+                  child: Text(l10n.commitButton),
+                ),
+              ],
             ),
           ),
         ],

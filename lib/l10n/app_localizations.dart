@@ -569,6 +569,12 @@ class AppLocalizations {
   String get syncedWithRemote => isEnglish ? 'In sync with remote' : '与远程同步';
   String get inSyncWithRemote => isEnglish ? 'In sync with remote' : '与远程同步';
   String get switchBranch => isEnglish ? 'Switch Branch' : '切换分支';
+  String get branchTreeSection => isEnglish ? 'Branch Tree' : '分支树';
+  String get localBranches => isEnglish ? 'Local' : '本地';
+  String get remoteBranches => isEnglish ? 'Remote' : '远程';
+  String get currentBranchBadge => isEnglish ? 'CURRENT' : '当前';
+  String get checkoutBranchAction => isEnglish ? 'Switch' : '切换';
+  String get noBranches => isEnglish ? 'No branches found' : '未找到分支';
   String get changesLabel => isEnglish ? 'Changes' : '变更';
   String get changes => isEnglish ? 'Changes' : '变更';
   String changesSummary(int additions, int deletions, int changed) => isEnglish

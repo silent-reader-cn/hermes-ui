@@ -465,10 +465,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       sliver: SliverToBoxAdapter(
         child: Column(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.music_note_2,
               size: 64,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -588,10 +588,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.doc_plaintext,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -630,10 +630,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -644,7 +644,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -795,7 +798,7 @@ class _MediaControlsState extends State<_MediaControls> {
               child: Icon(
                 _playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
                 size: 28,
-                color: CupertinoColors.activeBlue,
+                color: CupertinoColors.activeBlue.resolveFrom(context),
               ),
             ),
             Expanded(

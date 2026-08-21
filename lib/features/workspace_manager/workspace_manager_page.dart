@@ -159,10 +159,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -173,7 +173,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -198,10 +201,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.folder_badge_plus,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -285,7 +288,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             },
             child: Text(
               l10n.removeWorkspaceTitle,
-              style: const TextStyle(color: statusRedText),
+              style: TextStyle(color: statusRedText.resolveFrom(context)),
             ),
           ),
         ],
@@ -391,7 +394,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
               },
               child: Text(
                 l10n.removeWorkspaceTitle,
-                style: const TextStyle(color: statusRedText),
+                style: TextStyle(color: statusRedText.resolveFrom(context)),
               ),
             ),
           ],
@@ -494,7 +497,7 @@ class _WorkspaceRow extends StatelessWidget {
           },
           child: Text(
             l10n.removeWorkspaceTitle,
-            style: const TextStyle(color: statusRedText),
+            style: TextStyle(color: statusRedText.resolveFrom(context)),
           ),
         ),
       ],
@@ -542,10 +545,10 @@ class _WorkspaceRow extends StatelessWidget {
                 key: ValueKey('workspace-manager-actions-${workspace.path}'),
                 padding: EdgeInsets.zero,
                 onPressed: isMutating ? null : onActions,
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.ellipsis,
                   size: 20,
-                  color: CupertinoColors.secondaryLabel,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
               ),
             ],
@@ -564,13 +567,13 @@ class _FolderBadge extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: CupertinoColors.tertiarySystemFill,
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: const Icon(
+      child: Icon(
         CupertinoIcons.folder,
         size: 16,
-        color: CupertinoColors.label,
+        color: CupertinoColors.label.resolveFrom(context),
       ),
     );
   }
@@ -585,12 +588,17 @@ class _CurrentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemBlue.withValues(alpha: 0.15),
+        color: CupertinoColors.systemBlue
+            .resolveFrom(context)
+            .withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         AppLocalizations.of(context).currentWorkspaceBadge,
-        style: const TextStyle(fontSize: 11, color: statusBlueText),
+        style: TextStyle(
+          fontSize: 11,
+          color: statusBlueText.resolveFrom(context),
+        ),
       ),
     );
   }

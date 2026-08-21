@@ -186,7 +186,10 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                 Text(
                   _inlineError!,
                   key: const ValueKey('workspace-add-error'),
-                  style: const TextStyle(fontSize: 13, color: statusRedText),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: statusRedText.resolveFrom(context),
+                  ),
                 ),
               ],
               const SizedBox(height: 20),

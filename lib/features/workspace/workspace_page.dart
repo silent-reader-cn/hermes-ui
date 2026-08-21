@@ -226,10 +226,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -240,7 +240,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -269,10 +272,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.folder_open,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
@@ -622,7 +625,9 @@ class _PathHeader extends StatelessWidget {
                     horizontal: 10,
                     vertical: 4,
                   ),
-                  disabledColor: CupertinoColors.quaternaryLabel,
+                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                    context,
+                  ),
                   onPressed: isAtRoot ? null : onRoot,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -640,7 +645,9 @@ class _PathHeader extends StatelessWidget {
                     horizontal: 10,
                     vertical: 4,
                   ),
-                  disabledColor: CupertinoColors.quaternaryLabel,
+                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                    context,
+                  ),
                   onPressed: isAtRoot ? null : onUp,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -676,12 +683,15 @@ class _PathHeader extends StatelessWidget {
                       children: [
                         for (var i = 0; i < crumbs.length; i++) ...[
                           if (i > 0)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               child: Icon(
                                 CupertinoIcons.chevron_right,
                                 size: 10,
-                                color: CupertinoColors.tertiaryLabel,
+                                color: CupertinoColors.tertiaryLabel
+                                    .resolveFrom(context),
                               ),
                             ),
                           CupertinoButton(
@@ -690,6 +700,8 @@ class _PathHeader extends StatelessWidget {
                               horizontal: 4,
                               vertical: 4,
                             ),
+                            disabledColor: CupertinoColors.quaternaryLabel
+                                .resolveFrom(context),
                             onPressed: crumbs[i].path == crumbs.last.path
                                 ? null
                                 : () => onCrumbTap(crumbs[i]),
@@ -729,10 +741,10 @@ class _PathHeader extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     CupertinoIcons.exclamationmark_triangle,
                     size: 14,
-                    color: CupertinoColors.systemRed,
+                    color: CupertinoColors.systemRed.resolveFrom(context),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -826,10 +838,10 @@ class _WorkspaceEntryRow extends StatelessWidget {
             if (busy)
               const CupertinoActivityIndicator(radius: 10)
             else if (isDirectory)
-              const Icon(
+              Icon(
                 CupertinoIcons.chevron_right,
                 size: 14,
-                color: CupertinoColors.tertiaryLabel,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               )
             else
               AccessibleButton(
@@ -837,10 +849,10 @@ class _WorkspaceEntryRow extends StatelessWidget {
                 label: l10n.fileActions,
                 padding: EdgeInsets.zero,
                 onPressed: onActions,
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.ellipsis,
                   size: 20,
-                  color: CupertinoColors.secondaryLabel,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
               ),
           ],
@@ -863,16 +875,18 @@ class _EntryIcon extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: entry.isBrowsableDirectory
-            ? CupertinoColors.tertiarySystemFill
-            : CupertinoColors.secondarySystemFill,
+        color:
+            (entry.isBrowsableDirectory
+                    ? CupertinoColors.tertiarySystemFill
+                    : CupertinoColors.secondarySystemFill)
+                .resolveFrom(context),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: Icon(icon, size: 16, color: color),
+      child: Icon(icon, size: 16, color: color.resolveFrom(context)),
     );
   }
 
-  static (IconData, Color) _iconFor(WorkspaceEntry entry) {
+  static (IconData, CupertinoDynamicColor) _iconFor(WorkspaceEntry entry) {
     if (entry.isBrowsableDirectory) {
       return (CupertinoIcons.folder, CupertinoColors.label);
     }
