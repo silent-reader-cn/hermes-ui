@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/core/api/cookie_store.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/chat_message.dart';
@@ -41,7 +42,9 @@ void main() {
       expect(find.textContaining('很好。'), findsOneWidget);
     });
 
-    testWidgets('助手消息 MEDIA: 网络图片 URL 渲染 ChatInlineMediaWidget', (tester) async {
+    testWidgets('助手消息 MEDIA: 网络图片 URL 渲染 ChatInlineMediaWidget', (
+      tester,
+    ) async {
       const message = ChatMessage(
         role: 'assistant',
         content: '请查看：MEDIA:https://example.com/assets/banner.png',
@@ -210,6 +213,89 @@ void main() {
       expect(widgetFinder, findsOneWidget);
       final inlineWidget = tester.widget<ChatInlineMediaWidget>(widgetFinder);
       expect(inlineWidget.baseUrl, 'http://hermes.example.com:30002');
+    });
+
+    // ── 401 修复回归：内联 /api/media 请求必须携带会话 cookie ─────────────
+    ServerConnection mediaServerConnection() => ServerConnection(
+      id: 'conn_media',
+      name: 'Dev Server',
+      baseUrl: 'http://localhost:30002',
+      createdAt: DateTime(2026),
+    );
+
+    void seedSessionCookie() {
+      // 生产环境 cookie 由登录响应种入 CookieStore.shared（与 ApiClient 共享）；
+      // 测试直接注入同款 cookie 并保证用例结束后清空，避免污染其他用例。
+      CookieStore.shared.setCookies(Uri.parse('http://localhost:30002'), [
+        'hermes_session=abc123; Path=/',
+      ]);
+      addTearDown(CookieStore.shared.clear);
+    }
+
+    testWidgets('内联网络图片请求头携带会话 Cookie（/api/media 401 回归）', (tester) async {
+      seedSessionCookie();
+      const message = ChatMessage(
+        role: 'assistant',
+        content: 'MEDIA:/tmp/output.png',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(mediaServerConnection()),
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageBubble(message: message),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 解析链路：MEDIA:/tmp/output.png → /api/media?path=…
+      final image = tester.widget<Image>(find.byType(Image));
+      final provider = image.image as NetworkImage;
+      expect(provider.url, startsWith('http://localhost:30002/api/media'));
+      // 修复前 headers 只含自定义头（无 cookie）→ 后端 401；
+      // 修复后必须带 Cookie 会话头。
+      expect(provider.headers?['Cookie'], 'hermes_session=abc123');
+    });
+
+    testWidgets('Lightbox 放大后的图片请求同样携带会话 Cookie', (tester) async {
+      seedSessionCookie();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(mediaServerConnection()),
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatInlineMediaWidget(
+                rawUri: '/tmp/output.png',
+                baseUrl: 'http://localhost:30002',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(ChatInlineMediaWidget));
+      await tester.pumpAndSettle();
+
+      final viewerImage = tester.widget<Image>(
+        find.descendant(
+          of: find.byType(InteractiveViewer),
+          matching: find.byType(Image),
+        ),
+      );
+      final provider = viewerImage.image as NetworkImage;
+      expect(provider.headers?['Cookie'], 'hermes_session=abc123');
     });
   });
 }

@@ -51,6 +51,16 @@ class ChatInlineMediaWidget extends StatelessWidget {
 
     final isDataUri = resolvedUrl.startsWith('data:image/');
 
+    final isNetworkUrl =
+        resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://');
+    // 网络图片请求必须携带认证信息（自定义头 + 会话 cookie），否则受保护的
+    // /api/media 在开启认证时直接返回 401（hermes-webui `_handle_media`
+    // 仅校验会话 cookie）。Image.network 是裸 HTTP 请求，不会自动带 cookie，
+    // 这里显式合并（host 匹配，跨域不泄漏）后用于内联与 Lightbox 两处。
+    final effectiveHeaders = isNetworkUrl
+        ? ChatMediaHeaders.headersFor(resolvedUrl, customHeaders)
+        : customHeaders;
+
     Widget imageWidget;
     Uint8List? memoryBytes;
 
@@ -89,7 +99,7 @@ class ChatInlineMediaWidget extends StatelessWidget {
         resolvedUrl.startsWith('https://')) {
       imageWidget = Image.network(
         resolvedUrl,
-        headers: customHeaders,
+        headers: effectiveHeaders,
         fit: BoxFit.contain,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
@@ -141,7 +151,7 @@ class ChatInlineMediaWidget extends StatelessWidget {
           resolvedUrl: resolvedUrl,
           memoryBytes: memoryBytes,
           altText: alt ?? title,
-          headers: customHeaders,
+          headers: effectiveHeaders,
         ),
         child: Container(
           constraints: BoxConstraints(
@@ -150,9 +160,7 @@ class ChatInlineMediaWidget extends StatelessWidget {
             maxWidth: maxWidth,
             maxHeight: maxHeight,
           ),
-          decoration: BoxDecoration(
-            borderRadius: borderRadius,
-          ),
+          decoration: BoxDecoration(borderRadius: borderRadius),
           clipBehavior: Clip.antiAlias,
           child: imageWidget,
         ),
@@ -180,6 +188,14 @@ class ChatInlineMediaWidget extends StatelessWidget {
               resolvedUrl,
               headers: headers,
               fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                // 与内联图片一致：加载失败显示占位图标而非白屏/抛未捕获异常。
+                return const Icon(
+                  CupertinoIcons.photo,
+                  size: 64,
+                  color: CupertinoColors.white,
+                );
+              },
             );
           } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
             viewerContent = Image.file(File(resolvedUrl), fit: BoxFit.contain);
@@ -246,9 +262,8 @@ class _ImageErrorPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final displayName = altText ??
-        rawUri?.split('/').last.split(r'\').last ??
-        l10n.mediaImage;
+    final displayName =
+        altText ?? rawUri?.split('/').last.split(r'\').last ?? l10n.mediaImage;
 
     return Container(
       constraints: BoxConstraints(maxWidth: maxWidth),
@@ -352,7 +367,8 @@ class ChatAttachmentChipView extends StatelessWidget {
         : CupertinoColors.secondaryLabel.resolveFrom(context);
 
     // 用户消息中的图片附件：若有具体路径则展示内联预览与芯片
-    final hasImagePath = isImage &&
+    final hasImagePath =
+        isImage &&
         attachment.path != null &&
         attachment.path!.isNotEmpty &&
         (attachment.path!.contains('/') ||
@@ -386,20 +402,13 @@ class ChatAttachmentChipView extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  iconData,
-                  size: 13,
-                  color: iconColor,
-                ),
+                Icon(iconData, size: 13, color: iconColor),
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
                     name,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: fgColor,
-                    ),
+                    style: TextStyle(fontSize: 12, color: fgColor),
                   ),
                 ),
               ],

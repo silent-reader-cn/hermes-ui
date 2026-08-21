@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/core/api/cookie_store.dart';
 import 'package:hermex_flutter/core/models/message_attachment.dart';
 import 'package:hermex_flutter/features/chat/widgets/chat_media_parser.dart';
 
@@ -16,59 +17,42 @@ void main() {
     test('本地绝对路径图片 MEDIA: 标记转换', () {
       const input = '图片已保存至 MEDIA:/tmp/output_plot.jpg';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '图片已保存至 ![output_plot.jpg](/tmp/output_plot.jpg)',
-      );
+      expect(output, '图片已保存至 ![output_plot.jpg](/tmp/output_plot.jpg)');
     });
 
     test('Windows 路径反斜杠转为 Markdown 安全 URL', () {
       const input = r'保存路径：MEDIA:C:\Users\Admin\Desktop\photo.png';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '保存路径：![photo.png](C:/Users/Admin/Desktop/photo.png)',
-      );
+      expect(output, '保存路径：![photo.png](C:/Users/Admin/Desktop/photo.png)');
     });
 
     test('Data URI base64 图片 MEDIA: 标记转换', () {
       const input = 'MEDIA:data:image/png;base64,iVBORw0KGgo=';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '![image](data:image/png;base64,iVBORw0KGgo=)',
-      );
+      expect(output, '![image](data:image/png;base64,iVBORw0KGgo=)');
     });
 
     test('音频 MEDIA: 标记转换为音频芯片链接', () {
       const input = '生成的录音：MEDIA:/music/voice_note.mp3';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '生成的录音：[🎵 voice_note.mp3](/music/voice_note.mp3)',
-      );
+      expect(output, '生成的录音：[🎵 voice_note.mp3](/music/voice_note.mp3)');
     });
 
     test('视频 MEDIA: 标记转换为视频芯片链接', () {
       const input = '生成的视频：MEDIA:/videos/render.mp4';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '生成的视频：[🎬 render.mp4](/videos/render.mp4)',
-      );
+      expect(output, '生成的视频：[🎬 render.mp4](/videos/render.mp4)');
     });
 
     test('文档/文件 MEDIA: 标记转换为附件链接', () {
       const input = '报告已生成：MEDIA:/docs/annual_report.pdf';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '报告已生成：[📎 annual_report.pdf](/docs/annual_report.pdf)',
-      );
+      expect(output, '报告已生成：[📎 annual_report.pdf](/docs/annual_report.pdf)');
     });
 
     test('多行代码块内部的 MEDIA: 标记受保护不被转换', () {
-      const input = '```python\nprint("MEDIA:/tmp/secret.png")\n```\n外部 MEDIA:/tmp/public.png';
+      const input =
+          '```python\nprint("MEDIA:/tmp/secret.png")\n```\n外部 MEDIA:/tmp/public.png';
       final output = ChatMediaParser.parseMediaMarkers(input);
       expect(
         output,
@@ -77,7 +61,8 @@ void main() {
     });
 
     test('行内反引号内部的 MEDIA: 标记受保护', () {
-      const input = '使用 `MEDIA:/path/to/img.png` 作为指令。实际图片：MEDIA:/path/to/real.png';
+      const input =
+          '使用 `MEDIA:/path/to/img.png` 作为指令。实际图片：MEDIA:/path/to/real.png';
       final output = ChatMediaParser.parseMediaMarkers(input);
       expect(
         output,
@@ -88,28 +73,19 @@ void main() {
     test('裸 file:// 图片链接解析为 Markdown 图片', () {
       const input = '查看本地文件 file:///tmp/figure.png 进行确认';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '查看本地文件 ![figure.png](file:///tmp/figure.png) 进行确认',
-      );
+      expect(output, '查看本地文件 ![figure.png](file:///tmp/figure.png) 进行确认');
     });
 
     test('裸 file:// 非图片链接解析为附件芯片', () {
       const input = '附带日志：file:///var/log/app.log';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '附带日志：[📎 app.log](file:///var/log/app.log)',
-      );
+      expect(output, '附带日志：[📎 app.log](file:///var/log/app.log)');
     });
 
     test('末尾句号标点不被误作为扩展名一部分', () {
       const input = '请查看 MEDIA:/tmp/chart.png.';
       final output = ChatMediaParser.parseMediaMarkers(input);
-      expect(
-        output,
-        '请查看 ![chart.png](/tmp/chart.png).',
-      );
+      expect(output, '请查看 ![chart.png](/tmp/chart.png).');
     });
   });
 
@@ -172,7 +148,10 @@ void main() {
       expect(MessageAttachment.isImageReference('test.svg'), isTrue);
       expect(MessageAttachment.isImageReference('icon.ico'), isTrue);
       expect(MessageAttachment.isImageReference('pic.avif'), isTrue);
-      expect(MessageAttachment.isImageReference('data:image/png;base64,...'), isTrue);
+      expect(
+        MessageAttachment.isImageReference('data:image/png;base64,...'),
+        isTrue,
+      );
 
       expect(MessageAttachment.isAudioReference('song.mp3'), isTrue);
       expect(MessageAttachment.isAudioReference('track.flac'), isTrue);
@@ -187,11 +166,90 @@ void main() {
     });
 
     test('mediaKindForName 分类准确', () {
-      expect(MessageAttachment.mediaKindForName('a.png'), MessageMediaKind.image);
-      expect(MessageAttachment.mediaKindForName('a.wav'), MessageMediaKind.audio);
-      expect(MessageAttachment.mediaKindForName('a.webm'), MessageMediaKind.video);
-      expect(MessageAttachment.mediaKindForName('a.json'), MessageMediaKind.document);
-      expect(MessageAttachment.mediaKindForName('a.unknown_binary'), MessageMediaKind.file);
+      expect(
+        MessageAttachment.mediaKindForName('a.png'),
+        MessageMediaKind.image,
+      );
+      expect(
+        MessageAttachment.mediaKindForName('a.wav'),
+        MessageMediaKind.audio,
+      );
+      expect(
+        MessageAttachment.mediaKindForName('a.webm'),
+        MessageMediaKind.video,
+      );
+      expect(
+        MessageAttachment.mediaKindForName('a.json'),
+        MessageMediaKind.document,
+      );
+      expect(
+        MessageAttachment.mediaKindForName('a.unknown_binary'),
+        MessageMediaKind.file,
+      );
+    });
+  });
+
+  group('ChatMediaHeaders 认证头合并单元测试', () {
+    test('会话 cookie 按 host 匹配自动注入（401 修复核心）', () {
+      final store = CookieStore()
+        ..setCookies(Uri.parse('http://localhost:30002'), [
+          'hermes_session=abc123; Path=/',
+        ]);
+      final headers = ChatMediaHeaders.headersFor(
+        'http://localhost:30002/api/media?path=%2Ftmp%2Fx.png',
+        null,
+        cookieStore: store,
+      );
+      expect(headers, {'Cookie': 'hermes_session=abc123'});
+    });
+
+    test('自定义头与会话 cookie 同时附加', () {
+      final store = CookieStore()
+        ..setCookies(Uri.parse('http://localhost:30002'), [
+          'hermes_session=abc123; Path=/',
+        ]);
+      final headers = ChatMediaHeaders.headersFor(
+        'http://localhost:30002/api/media?path=x',
+        {'Authorization': 'Bearer token123'},
+        cookieStore: store,
+      );
+      expect(headers?['Authorization'], 'Bearer token123');
+      expect(headers?['Cookie'], 'hermes_session=abc123');
+    });
+
+    test('已显式设置的 Cookie 头不被覆盖（内置头恒胜）', () {
+      final store = CookieStore()
+        ..setCookies(Uri.parse('http://localhost:30002'), [
+          'hermes_session=abc123; Path=/',
+        ]);
+      final headers = ChatMediaHeaders.headersFor(
+        'http://localhost:30002/api/media?path=x',
+        {'Cookie': 'explicit_session=1'},
+        cookieStore: store,
+      );
+      expect(headers, {'Cookie': 'explicit_session=1'});
+    });
+
+    test('跨域 URL 不泄漏本服务器会话 cookie', () {
+      final store = CookieStore()
+        ..setCookies(Uri.parse('http://localhost:30002'), [
+          'hermes_session=abc123; Path=/',
+        ]);
+      final headers = ChatMediaHeaders.headersFor(
+        'https://cdn.example.com/banner.png',
+        null,
+        cookieStore: store,
+      );
+      expect(headers, isNull);
+    });
+
+    test('无 cookie 且无自定义头时返回 null（不附加空头）', () {
+      final headers = ChatMediaHeaders.headersFor(
+        'http://localhost:30002/api/media?path=x',
+        null,
+        cookieStore: CookieStore(),
+      );
+      expect(headers, isNull);
     });
   });
 }
