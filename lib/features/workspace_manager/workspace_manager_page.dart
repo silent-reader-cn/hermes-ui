@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'add_workspace_sheet.dart';
@@ -73,9 +74,9 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         key: const ValueKey('workspaces-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.workspacesTitle),
-            middle: Text(l10n.workspacesTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.workspacesTitle,
+            showMiddleOnNarrow: true,
             leading: const AppBackButton(fallback: '/settings'),
             trailing: CupertinoButton(
               key: const ValueKey('workspaces-add'),

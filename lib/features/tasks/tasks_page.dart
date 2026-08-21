@@ -7,6 +7,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
@@ -101,8 +102,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         key: const ValueKey('tasks-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.tasksTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.tasksTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('tasks-create'),

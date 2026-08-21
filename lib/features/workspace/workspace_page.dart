@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
@@ -121,9 +122,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         key: const ValueKey('workspace-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.files),
-            middle: Text(l10n.files),
+          AdaptiveSliverNavigationBar(
+            title: l10n.files,
+            showMiddleOnNarrow: true,
             leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

@@ -12,6 +12,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
@@ -342,9 +343,9 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       child: CustomScrollView(
         key: const ValueKey('preview-scroll'),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(widget.entry.name ?? l10n.unnamedFile),
-            middle: Text(widget.entry.name ?? l10n.unnamedFile),
+          AdaptiveSliverNavigationBar(
+            title: widget.entry.name ?? l10n.unnamedFile,
+            showMiddleOnNarrow: true,
             leading: const AppBackButton(),
             trailing: _DownloadButton(
               downloading: _downloading,
@@ -768,7 +769,10 @@ class _MediaControlsState extends State<_MediaControls> {
   @override
   Widget build(BuildContext context) {
     final maxMs = _duration.inMilliseconds.toDouble();
-    final posMs = _position.inMilliseconds.toDouble().clamp(0, maxMs > 0 ? maxMs : 0);
+    final posMs = _position.inMilliseconds.toDouble().clamp(
+      0,
+      maxMs > 0 ? maxMs : 0,
+    );
     final hasDuration = maxMs > 0;
     return Column(
       children: [
@@ -800,7 +804,9 @@ class _MediaControlsState extends State<_MediaControls> {
                 onChanged: hasDuration
                     ? (value) {
                         unawaited(
-                          widget.player.seek(Duration(milliseconds: value.round())),
+                          widget.player.seek(
+                            Duration(milliseconds: value.round()),
+                          ),
                         );
                       }
                     : null,

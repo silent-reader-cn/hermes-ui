@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_server_panels.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
@@ -35,6 +37,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
 
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final TextEditingController _textController = TextEditingController();
+  final GlobalKey _bookmarkKey = GlobalKey();
   bool _hasText = false;
 
   bool _uploading = false;
@@ -46,12 +49,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 重试上一轮：controller 写入 composerPrefill，这里同步到输入框并清除。
-    final prefill = ref.watch(chatControllerProvider(widget.sessionId)).composerPrefill;
+    final prefill = ref
+        .watch(chatControllerProvider(widget.sessionId))
+        .composerPrefill;
     if (prefill != null && prefill != _appliedPrefill) {
       _appliedPrefill = prefill;
       _textController.text = prefill;
       _hasText = prefill.trim().isNotEmpty;
-      ref.read(chatControllerProvider(widget.sessionId).notifier).clearComposerPrefill();
+      ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .clearComposerPrefill();
     } else if (prefill == null) {
       _appliedPrefill = null;
     }
@@ -69,7 +76,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _textController.clear();
     setState(() => _hasText = false);
     // 控制器自动分派：idle → 普通发送；流式 → steer。
-    await ref.read(chatControllerProvider(widget.sessionId).notifier).send(text);
+    await ref
+        .read(chatControllerProvider(widget.sessionId).notifier)
+        .send(text);
   }
 
   Future<void> _handleAttachment() async {
@@ -95,8 +104,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       );
       if (!mounted) return;
       // 上传成功后把附件作为本地消息追加进聊天流
-      await ref.read(chatControllerProvider(widget.sessionId).notifier).send('📎 ${picked.name}');
-      await _showNotice(l10n.uploadSuccess, l10n.attachmentUploaded(picked.name));
+      await ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .send('📎 ${picked.name}');
+      await _showNotice(
+        l10n.uploadSuccess,
+        l10n.attachmentUploaded(picked.name),
+      );
     } catch (error) {
       if (!mounted) return;
       await _showError(l10n.uploadFailed, _errorMessage(error));
@@ -113,7 +127,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         title: Text(title),
         content: Text(message),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.ok)),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.ok),
+          ),
         ],
       ),
     );
@@ -127,7 +144,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         title: Text(title),
         content: Text(message, style: const TextStyle(color: statusRedText)),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.ok)),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.ok),
+          ),
         ],
       ),
     );
@@ -156,6 +176,43 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _showSavedPromptsSheet() async {
+    // 宽屏（桌面/平板双栏）：在按钮上方弹出局部气泡，避免底部弹层遮蔽内容区；
+    // 窄屏（手机）：保持系统底部 Sheet 体验。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    if (isWide) {
+      await showCupertinoPopover(
+        context: context,
+        anchorKey: _bookmarkKey,
+        builder: (popoverContext, close) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  AppLocalizations.of(popoverContext).savedPromptsTitle,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              height: 0.5,
+              color: CupertinoColors.separator.resolveFrom(popoverContext),
+            ),
+            SavedPromptsPanel(
+              onInsert: _insertPromptText,
+              getCurrentInput: () => _textController.text,
+              onInserted: close,
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => SavedPromptsSheet(
@@ -185,7 +242,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             CupertinoActionSheetAction(
               key: const ValueKey('chat-model-default'),
               onPressed: () {
-                ref.read(chatControllerProvider(widget.sessionId).notifier).selectModel(null);
+                ref
+                    .read(chatControllerProvider(widget.sessionId).notifier)
+                    .selectModel(null);
                 Navigator.of(context).pop();
               },
               child: Text(l10n.followServerDefault),
@@ -194,7 +253,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               CupertinoActionSheetAction(
                 key: ValueKey('chat-model-$model'),
                 onPressed: () {
-                  ref.read(chatControllerProvider(widget.sessionId).notifier).selectModel(model);
+                  ref
+                      .read(chatControllerProvider(widget.sessionId).notifier)
+                      .selectModel(model);
                   Navigator.of(context).pop();
                 },
                 child: Text(model),
@@ -213,11 +274,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     if (raw is! Map) return const [];
     final values = <String>[];
     void add(Object? value) {
-      if (value is String && value.trim().isNotEmpty && !values.contains(value)) {
+      if (value is String &&
+          value.trim().isNotEmpty &&
+          !values.contains(value)) {
         values.add(value.trim());
       } else if (value is Map) {
         final id = value['id'] ?? value['model'] ?? value['name'];
-        if (id is String && id.trim().isNotEmpty && !values.contains(id.trim())) {
+        if (id is String &&
+            id.trim().isNotEmpty &&
+            !values.contains(id.trim())) {
           values.add(id.trim());
         }
       }
@@ -259,7 +324,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: CupertinoColors.systemGrey4.resolveFrom(context), width: 0.5),
+          top: BorderSide(
+            color: CupertinoColors.systemGrey4.resolveFrom(context),
+            width: 0.5,
+          ),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -271,18 +339,31 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             AccessibleButton(
               key: const ValueKey('chat-attach-button'),
               label: l10n.addAttachment,
-              onPressed: (!interactive || isSending || _uploading) ? null : _handleAttachment,
+              onPressed: (!interactive || isSending || _uploading)
+                  ? null
+                  : _handleAttachment,
               padding: EdgeInsets.zero,
               child: _uploading
                   ? const CupertinoActivityIndicator()
-                  : const Icon(CupertinoIcons.plus_circle, color: CupertinoColors.systemGrey),
+                  : const Icon(
+                      CupertinoIcons.plus_circle,
+                      color: CupertinoColors.systemGrey,
+                    ),
             ),
-            AccessibleButton(
-              key: const ValueKey('chat-saved-prompts-button'),
-              label: l10n.bookmarkPrompt,
-              onPressed: (!interactive || isSending || _uploading) ? null : _showSavedPromptsSheet,
-              padding: EdgeInsets.zero,
-              child: const Icon(CupertinoIcons.bookmark, color: CupertinoColors.systemGrey),
+            KeyedSubtree(
+              key: _bookmarkKey,
+              child: AccessibleButton(
+                key: const ValueKey('chat-saved-prompts-button'),
+                label: l10n.bookmarkPrompt,
+                onPressed: (!interactive || isSending || _uploading)
+                    ? null
+                    : _showSavedPromptsSheet,
+                padding: EdgeInsets.zero,
+                child: const Icon(
+                  CupertinoIcons.bookmark,
+                  color: CupertinoColors.systemGrey,
+                ),
+              ),
             ),
             Expanded(
               child: CupertinoTextField(
@@ -290,9 +371,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 controller: _textController,
                 placeholder: !interactive
                     ? l10n.readOnlySessionPlaceholder
-                    : (isStreaming ? l10n.steerPromptPlaceholder : l10n.sendMessagePlaceholder),
+                    : (isStreaming
+                          ? l10n.steerPromptPlaceholder
+                          : l10n.sendMessagePlaceholder),
                 enabled: !isSending && interactive,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 onChanged: (value) {
                   final hasText = value.trim().isNotEmpty;
                   if (hasText != _hasText) setState(() => _hasText = hasText);
@@ -316,7 +402,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 label: l10n.stopGenerating,
                 onPressed: _stop,
                 padding: EdgeInsets.zero,
-                child: const Icon(CupertinoIcons.stop_circle, color: CupertinoColors.systemRed),
+                child: const Icon(
+                  CupertinoIcons.stop_circle,
+                  color: CupertinoColors.systemRed,
+                ),
               ),
             ] else if (!isSending)
               AccessibleButton(

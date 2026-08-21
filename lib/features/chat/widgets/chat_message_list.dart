@@ -42,6 +42,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
   bool _initialPositioned = false;
+  bool _initialPositioning = false;
   bool _restoringOlderPosition = false;
   bool _userHasScrolled = false;
   int _layoutGeneration = 0;
@@ -66,7 +67,11 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!_controller.hasClients) return;
     final position = _controller.position;
     final nearBottom = position.maxScrollExtent - position.pixels < 120;
-    if (!_restoringOlderPosition) {
+    // 用户在初始定位收敛完成前的一切位置变化（含 jumpTo 自身触发）都不
+    // 算用户滚动，避免估算偏差把「初始定位未到底」误判为「用户已上滚」。
+    if (!_restoringOlderPosition &&
+        _initialPositioned &&
+        !_initialPositioning) {
       if (!nearBottom) _userHasScrolled = true;
       if (nearBottom != _nearBottom) {
         setState(() => _nearBottom = nearBottom);
@@ -142,28 +147,70 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     });
   }
 
+  /// 初始定位滚到底部：lazy `ListView.builder` 首帧的 `maxScrollExtent` 是
+  /// 估算值（未构建条目按估算高度折算），单次 jumpTo 会停在估算位置——
+  /// 长会话下表现为「随机停在中间」。改为逐帧复核、收敛到真实底部。
   void _positionInitialView({required bool hasContent}) {
     if (!mounted ||
         !hasContent ||
         _userHasScrolled ||
-        _initialPositionScheduled) {
+        _initialPositionScheduled ||
+        _initialPositioned) {
       return;
     }
     _initialPositionScheduled = true;
     final generation = ++_layoutGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialPositionScheduled = false;
-      if (!mounted || !_controller.hasClients || _userHasScrolled) return;
-      if (generation != _layoutGeneration) return;
-      final target = _controller.position.maxScrollExtent;
-      if (target <= 0 && _controller.position.viewportDimension <= 0) {
-        _initialPositionScheduled = false;
-        _positionInitialView(hasContent: true);
+      if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
         return;
       }
-      _initialPositioned = true;
-      _controller.jumpTo(target);
-      _nearBottom = true;
+      // ListView 尚未挂载 controller：等待下一次 build 重试。
+      if (!_controller.hasClients) return;
+      _settleToBottom(generation: generation, attempts: 0);
+    });
+  }
+
+  /// 收敛循环：跳到底部 → 下一帧复核 `maxScrollExtent` 是否仍在增长
+  /// （新增条目改变了真实 extent）→ 增长则再跳；稳定或超限则完成。
+  void _settleToBottom({required int generation, required int attempts}) {
+    if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
+      _initialPositioning = false;
+      return;
+    }
+    if (attempts >= 12 || !_controller.hasClients) {
+      _initialPositioning = false;
+      _initialPositioned = true; // 尽力而为：以当前 extent 收场。
+      _nearBottom =
+          _controller.hasClients &&
+          _controller.position.maxScrollExtent - _controller.position.pixels <
+              120;
+      return;
+    }
+    final target = _controller.position.maxScrollExtent;
+    if (target <= 0 && _controller.position.viewportDimension <= 0) {
+      // 视口尚未布局：下一帧再试，避免空转。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _settleToBottom(generation: generation, attempts: attempts + 1);
+      });
+      return;
+    }
+    _initialPositioning = true;
+    _controller.jumpTo(target);
+    // 下一帧复核真实 extent 是否与跳转目标仍有出入。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
+        _initialPositioning = false;
+        return;
+      }
+      final now = _controller.position.maxScrollExtent;
+      if ((now - target).abs() > 1.0) {
+        _settleToBottom(generation: generation, attempts: attempts + 1);
+      } else {
+        _initialPositioning = false;
+        _initialPositioned = true;
+        _nearBottom = true;
+      }
     });
   }
 

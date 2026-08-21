@@ -107,6 +107,10 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                       button: true,
                       child: CupertinoButton(
                         key: ValueKey('sidebar-utility-${item.id}'),
+                        // 视觉压到 32pt（icon 20 + 上下 6pt），点击区保持
+                        // 44pt HIG 下限；配合外层 6pt×2 边距总高 44px，
+                        // 与内容区标准导航栏 / 紧凑导航条顶端对齐。
+                        minimumSize: const Size(40, 32),
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         borderRadius: BorderRadius.circular(8.0),
                         color: isSelected

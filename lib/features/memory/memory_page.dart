@@ -8,6 +8,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
@@ -42,8 +43,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         key: const ValueKey('memory-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.memoryTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.memoryTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('memory-refresh'),

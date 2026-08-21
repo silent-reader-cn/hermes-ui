@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
@@ -32,8 +33,8 @@ class InsightsPage extends ConsumerWidget {
         key: const ValueKey('insights-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.insightsTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.insightsTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('insights-refresh'),
@@ -193,10 +194,7 @@ class InsightsPage extends ConsumerWidget {
                       _peakDay(response)!.day ?? l10n.unknown,
                       _peakDay(response)!.sessions ?? 0,
                     ),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: secondaryText,
-                    ),
+                    style: const TextStyle(fontSize: 13, color: secondaryText),
                   ),
                 ),
               if (_peakHour(response) != null)
@@ -207,10 +205,7 @@ class InsightsPage extends ConsumerWidget {
                       _formatHour(context, _peakHour(response)!.hour),
                       _peakHour(response)!.sessions ?? 0,
                     ),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: secondaryText,
-                    ),
+                    style: const TextStyle(fontSize: 13, color: secondaryText),
                   ),
                 ),
             ],
@@ -220,11 +215,10 @@ class InsightsPage extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           child: Text(
-            l10n.insightsSourceFooter(response.periodDays ?? timeframe.serverDays),
-            style: const TextStyle(
-              fontSize: 12,
-              color: secondaryText,
+            l10n.insightsSourceFooter(
+              response.periodDays ?? timeframe.serverDays,
             ),
+            style: const TextStyle(fontSize: 12, color: secondaryText),
           ),
         ),
       ),
@@ -254,10 +248,7 @@ class InsightsPage extends ConsumerWidget {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -296,10 +287,7 @@ class InsightsPage extends ConsumerWidget {
             Text(
               l10n.insightsWillShowHere,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -344,7 +332,11 @@ class InsightsPage extends ConsumerWidget {
     );
   }
 
-  Widget _periodHeader(BuildContext context, InsightsResponse response, InsightsTimeframe timeframe) {
+  Widget _periodHeader(
+    BuildContext context,
+    InsightsResponse response,
+    InsightsTimeframe timeframe,
+  ) {
     final l10n = AppLocalizations.of(context);
     if (response.periodDays != null) {
       return Text(l10n.recentDaysHeader(response.periodDays!));
@@ -358,7 +350,10 @@ class InsightsPage extends ConsumerWidget {
   }
 }
 
-String _insightsTimeframeTitle(BuildContext context, InsightsTimeframe timeframe) {
+String _insightsTimeframeTitle(
+  BuildContext context,
+  InsightsTimeframe timeframe,
+) {
   final l10n = AppLocalizations.of(context);
   switch (timeframe) {
     case InsightsTimeframe.today:
@@ -409,10 +404,14 @@ class _ModelBreakdownTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final share = model.displayShare;
-    final title = model.model?.isNotEmpty == true ? model.model! : l10n.unknownModel;
+    final title = model.model?.isNotEmpty == true
+        ? model.model!
+        : l10n.unknownModel;
     return CupertinoListTile(
       title: Text(title),
-      subtitle: Text(l10n.modelTokensSubtitle(formatInsightsNumber(model.totalTokens))),
+      subtitle: Text(
+        l10n.modelTokensSubtitle(formatInsightsNumber(model.totalTokens)),
+      ),
       trailing: share == null
           ? null
           : Text(

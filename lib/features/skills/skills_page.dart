@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
@@ -58,8 +59,8 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         key: const ValueKey('skills-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.skillsTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.skillsTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('skills-refresh'),

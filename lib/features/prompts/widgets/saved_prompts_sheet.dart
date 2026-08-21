@@ -6,20 +6,21 @@ import '../../../core/models/saved_prompt.dart';
 import '../../../l10n/app_localizations.dart';
 import '../prompts_providers.dart';
 
-/// 收藏提示词底部 Sheet（Cupertino 风格）。
+/// 收藏提示词列表面板（内容层，供底部 Sheet 与桌面 Popover 两种容器复用）。
 ///
-/// - 内部用 [savedPromptsControllerProvider] 驱动列表
-/// - 行点击回调 [onInsert] 并关闭 Sheet
-/// - 底部「收藏当前输入」需外部传入当前输入（[currentInput] 或 [getCurrentInput]）
-class SavedPromptsSheet extends ConsumerStatefulWidget {
-  const SavedPromptsSheet({
+/// - 列表由 [savedPromptsControllerProvider] 驱动；
+/// - 行点击回调 [onInsert] 并关闭浮层（由调用方负责）；
+/// - 底部「收藏当前输入」按钮需外部传入当前输入（[currentInput] 或 [getCurrentInput]）。
+class SavedPromptsPanel extends ConsumerStatefulWidget {
+  const SavedPromptsPanel({
     super.key,
     required this.onInsert,
     this.currentInput,
     this.getCurrentInput,
+    this.onInserted,
   });
 
-  /// 选中某条收藏后的插入回调（由调用方负责写入输入框）。
+  /// 选中某条收藏后的插入回调（由调用方负责写入输入框并关闭浮层）。
   final ValueChanged<String> onInsert;
 
   /// 当前输入快照（静态值）。
@@ -28,11 +29,14 @@ class SavedPromptsSheet extends ConsumerStatefulWidget {
   /// 当前输入回调（动态读取，优先于 [currentInput]）。
   final String Function()? getCurrentInput;
 
+  /// 行插入成功后回调（用于让调用方关闭容器）。
+  final VoidCallback? onInserted;
+
   @override
-  ConsumerState<SavedPromptsSheet> createState() => _SavedPromptsSheetState();
+  ConsumerState<SavedPromptsPanel> createState() => _SavedPromptsPanelState();
 }
 
-class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
+class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
   bool _saving = false;
   final Set<String> _deletingIds = <String>{};
 
@@ -52,12 +56,18 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final prompt = await ref.read(savedPromptsControllerProvider.notifier).create(text: text);
+      final prompt = await ref
+          .read(savedPromptsControllerProvider.notifier)
+          .create(text: text);
       if (!mounted) return;
       if (prompt != null) {
         await _showAlert(l10n.promptSaved, l10n.promptSaved);
       } else {
-        await _showAlert(l10n.savePromptFailed, l10n.savePromptFailed, isError: true);
+        await _showAlert(
+          l10n.savePromptFailed,
+          l10n.savePromptFailed,
+          isError: true,
+        );
       }
     } catch (error) {
       if (!mounted) return;
@@ -75,19 +85,30 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
       await ref.read(savedPromptsControllerProvider.notifier).remove(id);
     } catch (error) {
       if (!mounted) return;
-      await _showAlert(l10n.deletePromptFailed, error.toString(), isError: true);
+      await _showAlert(
+        l10n.deletePromptFailed,
+        error.toString(),
+        isError: true,
+      );
     } finally {
       if (mounted) setState(() => _deletingIds.remove(id));
     }
   }
 
-  Future<void> _showAlert(String title, String message, {bool isError = false}) {
+  Future<void> _showAlert(
+    String title,
+    String message, {
+    bool isError = false,
+  }) {
     final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
         title: Text(title),
-        content: Text(message, style: isError ? const TextStyle(color: statusRedText) : null),
+        content: Text(
+          message,
+          style: isError ? const TextStyle(color: statusRedText) : null,
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -102,59 +123,37 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final async = ref.watch(savedPromptsControllerProvider);
-    final bg = CupertinoColors.systemGrey6.resolveFrom(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 5,
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey3.resolveFrom(context),
-                borderRadius: BorderRadius.circular(2.5),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.savedPromptsTitle,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Container(height: 0.5, color: CupertinoColors.separator.resolveFrom(context)),
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 380),
-                child: _buildBody(context, async),
-              ),
-            ),
-            Container(height: 0.5, color: CupertinoColors.separator.resolveFrom(context)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: SizedBox(
-                width: double.infinity,
-                child: CupertinoButton.filled(
-                  key: const ValueKey('saved-prompts-save-current'),
-                  onPressed: _saving ? null : _handleSaveCurrent,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: _saving
-                      ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                      : Text(l10n.saveCurrentInput),
-                ),
-              ),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 320),
+            child: _buildBody(context, async),
+          ),
         ),
-      ),
+        Container(
+          height: 0.5,
+          color: CupertinoColors.separator.resolveFrom(context),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: CupertinoButton.filled(
+              key: const ValueKey('saved-prompts-save-current'),
+              onPressed: _saving ? null : _handleSaveCurrent,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: _saving
+                  ? const CupertinoActivityIndicator(
+                      color: CupertinoColors.white,
+                    )
+                  : Text(l10n.saveCurrentInput),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -169,7 +168,9 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
               child: Text(
                 l10n.savedPromptsEmpty,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: CupertinoColors.secondaryLabel.resolveFrom(context)),
+                style: TextStyle(
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
               ),
             ),
           );
@@ -217,12 +218,15 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
                     : () => _handleDelete(id),
                 child: isDeleting
                     ? const CupertinoActivityIndicator(radius: 10)
-                    : const Icon(CupertinoIcons.delete, size: 20, color: statusRedText),
+                    : const Icon(
+                        CupertinoIcons.delete,
+                        size: 20,
+                        color: statusRedText,
+                      ),
               ),
               onTap: () {
-                final insertText = prompt.text ?? '';
-                widget.onInsert(insertText);
-                Navigator.of(context).pop();
+                widget.onInsert(prompt.text ?? '');
+                widget.onInserted?.call();
               },
             );
           },
@@ -248,11 +252,83 @@ class _SavedPromptsSheetState extends ConsumerState<SavedPromptsSheet> {
               const SizedBox(height: 12),
               CupertinoButton(
                 key: const ValueKey('saved-prompts-retry'),
-                onPressed: () => ref.read(savedPromptsControllerProvider.notifier).refresh(),
+                onPressed: () =>
+                    ref.read(savedPromptsControllerProvider.notifier).refresh(),
                 child: Text(l10n.retry),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 收藏提示词底部 Sheet（移动端窄屏容器：占底部的全宽弹层）。
+///
+/// 内容委托给 [SavedPromptsPanel]；桌面/平板宽屏请改用 popover 容器
+/// （见 `lib/app/widgets/cupertino_popover.dart`）。
+class SavedPromptsSheet extends StatelessWidget {
+  const SavedPromptsSheet({
+    super.key,
+    required this.onInsert,
+    this.currentInput,
+    this.getCurrentInput,
+  });
+
+  /// 选中某条收藏后的插入回调（由调用方负责写入输入框）。
+  final ValueChanged<String> onInsert;
+
+  /// 当前输入快照（静态值）。
+  final String? currentInput;
+
+  /// 当前输入回调（动态读取，优先于 [currentInput]）。
+  final String Function()? getCurrentInput;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final bg = CupertinoColors.systemGrey6.resolveFrom(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGrey3.resolveFrom(context),
+                borderRadius: BorderRadius.circular(2.5),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.savedPromptsTitle,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 0.5,
+              color: CupertinoColors.separator.resolveFrom(context),
+            ),
+            SavedPromptsPanel(
+              onInsert: onInsert,
+              currentInput: currentInput,
+              getCurrentInput: getCurrentInput,
+              onInserted: () => Navigator.of(context).maybePop(),
+            ),
+          ],
         ),
       ),
     );

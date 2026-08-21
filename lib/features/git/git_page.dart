@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/git_workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'git_providers.dart';
@@ -45,8 +46,8 @@ class _GitPageState extends ConsumerState<GitPage> {
         key: const ValueKey('git-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.gitPanelTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.gitPanelTitle,
             leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
             trailing: AccessibleButton(
               key: const ValueKey('git-refresh'),
@@ -138,9 +139,19 @@ class _GitPageState extends ConsumerState<GitPage> {
         SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
       else ...[
         if (state.stagedFiles.isNotEmpty)
-          _buildFileSectionSliver(ref, state, l10n.stagedSection, state.stagedFiles),
+          _buildFileSectionSliver(
+            ref,
+            state,
+            l10n.stagedSection,
+            state.stagedFiles,
+          ),
         if (state.unstagedFiles.isNotEmpty)
-          _buildFileSectionSliver(ref, state, l10n.unstagedSection, state.unstagedFiles),
+          _buildFileSectionSliver(
+            ref,
+            state,
+            l10n.unstagedSection,
+            state.unstagedFiles,
+          ),
       ],
       if (state.status?.truncated == true)
         SliverToBoxAdapter(
@@ -149,10 +160,7 @@ class _GitPageState extends ConsumerState<GitPage> {
             child: Text(
               l10n.tooManyChangedFilesWarning,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 12, color: secondaryText),
             ),
           ),
         ),
@@ -179,9 +187,13 @@ class _GitPageState extends ConsumerState<GitPage> {
               CupertinoIcons.arrow_branch,
               color: CupertinoColors.systemBlue,
             ),
-            title: Text(current?.isNotEmpty == true ? current! : l10n.unknownBranch),
+            title: Text(
+              current?.isNotEmpty == true ? current! : l10n.unknownBranch,
+            ),
             subtitle: Text(
-              ahead > 0 || behind > 0 ? l10n.aheadBehind(ahead, behind) : l10n.syncedWithRemote,
+              ahead > 0 || behind > 0
+                  ? l10n.aheadBehind(ahead, behind)
+                  : l10n.syncedWithRemote,
             ),
             trailing: CupertinoButton(
               key: const ValueKey('git-branch-picker'),
@@ -351,10 +363,7 @@ class _GitPageState extends ConsumerState<GitPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -394,10 +403,7 @@ class _GitPageState extends ConsumerState<GitPage> {
             Text(
               detail,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -660,10 +666,7 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             l10n.noPendingChanges,
-            style: const TextStyle(
-              fontSize: 13,
-              color: secondaryText,
-            ),
+            style: const TextStyle(fontSize: 13, color: secondaryText),
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
@@ -102,15 +103,15 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
     final async = ref.watch(kanbanControllerProvider);
     final state = async.valueOrNull;
 
-    ref.listen<AsyncValue<KanbanState>>(
-      kanbanControllerProvider,
-      (previous, next) {
-        final error = next.valueOrNull?.actionError;
-        if (error != null && error != previous?.valueOrNull?.actionError) {
-          unawaited(_showActionError(context, error));
-        }
-      },
-    );
+    ref.listen<AsyncValue<KanbanState>>(kanbanControllerProvider, (
+      previous,
+      next,
+    ) {
+      final error = next.valueOrNull?.actionError;
+      if (error != null && error != previous?.valueOrNull?.actionError) {
+        unawaited(_showActionError(context, error));
+      }
+    });
 
     final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
@@ -118,15 +119,16 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         key: const ValueKey('kanban-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.kanbanTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.kanbanTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('kanban-create'),
               label: l10n.newCard,
               padding: EdgeInsets.zero,
-              onPressed:
-                  state == null || state.readOnly ? null : () => _openCreate(context),
+              onPressed: state == null || state.readOnly
+                  ? null
+                  : () => _openCreate(context),
               child: const Icon(CupertinoIcons.add),
             ),
           ),
@@ -195,16 +197,13 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             color: selected
                 ? CupertinoColors.activeBlue
                 : CupertinoColors.secondarySystemFill,
-            onPressed:
-                selected ? null : () => unawaited(_selectBoard(slug)),
+            onPressed: selected ? null : () => unawaited(_selectBoard(slug)),
             child: Text(
               board.name ?? board.slug ?? l10n.unnamedBoard,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected
-                    ? CupertinoColors.white
-                    : CupertinoColors.label,
+                color: selected ? CupertinoColors.white : CupertinoColors.label,
               ),
             ),
           );
@@ -228,23 +227,25 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) => _KanbanColumnView(
           column: columns[index],
-          onCardDropped: (card) => _moveCardLocally(
-            state,
-            card,
-            columns[index].name ?? '',
-          ),
+          onCardDropped: (card) =>
+              _moveCardLocally(state, card, columns[index].name ?? ''),
         ),
       ),
     );
   }
 
-  void _moveCardLocally(KanbanState state, KanbanCard card, String targetStatus) {
+  void _moveCardLocally(
+    KanbanState state,
+    KanbanCard card,
+    String targetStatus,
+  ) {
     if (card.status?.rawValue == targetStatus || targetStatus.isEmpty) return;
     // 服务端当前只有 status PATCH；跨列拖拽对应状态变更，复用既有守卫与错误处理。
-    unawaited(ref.read(kanbanControllerProvider.notifier).setStatus(
-      cardId: card.cardID ?? '',
-      status: targetStatus,
-    ));
+    unawaited(
+      ref
+          .read(kanbanControllerProvider.notifier)
+          .setStatus(cardId: card.cardID ?? '', status: targetStatus),
+    );
   }
 
   Widget _buildEmptyBoard() {
@@ -266,10 +267,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             const SizedBox(height: 6),
             Text(
               l10n.clickPlusToCreateFirstCard,
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -296,10 +294,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             const SizedBox(height: 6),
             Text(
               l10n.createBoardOnServerPrompt,
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -330,10 +325,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -431,10 +423,7 @@ class _KanbanColumnView extends StatelessWidget {
                 ),
                 Text(
                   '${cards.length}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: secondaryText,
-                  ),
+                  style: const TextStyle(fontSize: 13, color: secondaryText),
                 ),
               ],
             ),
@@ -445,36 +434,39 @@ class _KanbanColumnView extends StatelessWidget {
               onAcceptWithDetails: (details) => onCardDropped(details.data),
               builder: (context, candidate, _) => cards.isEmpty
                   ? Center(
-                    child: Text(
-                      l10n.noCards,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: secondaryText,
+                      child: Text(
+                        l10n.noCards,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: secondaryText,
+                        ),
                       ),
+                    )
+                  : ListView.separated(
+                      key: ValueKey(
+                        'kanban-column-${name.isEmpty ? '?' : name}',
+                      ),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      itemCount: cards.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) =>
+                          LongPressDraggable<KanbanCard>(
+                            data: cards[index],
+                            feedback: Opacity(
+                              opacity: 0.8,
+                              child: SizedBox(
+                                width: 260,
+                                child: _KanbanCardTile(card: cards[index]),
+                              ),
+                            ),
+                            childWhenDragging: Opacity(
+                              opacity: 0.35,
+                              child: _KanbanCardTile(card: cards[index]),
+                            ),
+                            child: _KanbanCardTile(card: cards[index]),
+                          ),
                     ),
-                  )
-                : ListView.separated(
-                    key: ValueKey('kanban-column-${name.isEmpty ? '?' : name}'),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    itemCount: cards.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) => LongPressDraggable<KanbanCard>(
-                                            data: cards[index],
-                                            feedback: Opacity(
-                                              opacity: 0.8,
-                                              child: SizedBox(
-                                                width: 260,
-                                                child: _KanbanCardTile(card: cards[index]),
-                                              ),
-                                            ),
-                                            childWhenDragging: Opacity(
-                                              opacity: 0.35,
-                                              child: _KanbanCardTile(card: cards[index]),
-                                            ),
-                                            child: _KanbanCardTile(card: cards[index]),
-                                          ),
-                  ),
-              ),
+            ),
           ),
         ],
       ),
@@ -515,10 +507,7 @@ class _KanbanCardTile extends StatelessWidget {
               card.title ?? l10n.unnamedCard,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Row(
@@ -534,10 +523,7 @@ class _KanbanCardTile extends StatelessWidget {
                     card.assignee ?? l10n.unassigned,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: secondaryText,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: secondaryText),
                   ),
                 ),
                 if (dependencyBadge != null) ...[
@@ -574,7 +560,9 @@ class _KanbanCardTile extends StatelessWidget {
           ),
           const SizedBox(width: 3),
           Text(
-            parents > 0 ? l10n.parentsDependency(parents) : l10n.childrenDependency(children),
+            parents > 0
+                ? l10n.parentsDependency(parents)
+                : l10n.childrenDependency(children),
             style: const TextStyle(
               fontSize: 11,
               // 徽章文字用全强度 label：statusOrangeText 在 20% 黄底上
@@ -705,11 +693,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   Widget _buildMetadata(KanbanCard card) {
     final l10n = AppLocalizations.of(context);
     final rows = <Widget>[
-      _metadataRow(l10n.statusLabel, Text(kanbanStatusTitle(card.status?.rawValue, context))),
       _metadataRow(
-        l10n.assigneeLabel,
-        Text(card.assignee ?? l10n.unassigned),
+        l10n.statusLabel,
+        Text(kanbanStatusTitle(card.status?.rawValue, context)),
       ),
+      _metadataRow(l10n.assigneeLabel, Text(card.assignee ?? l10n.unassigned)),
       if (card.priority != null)
         _metadataRow(l10n.priorityLabel, Text('P${card.priority}')),
       if (card.createdAt != null && card.createdAt!.isNotEmpty)
@@ -732,10 +720,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             width: 72,
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 14,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 14, color: secondaryText),
             ),
           ),
           Expanded(child: value),
@@ -774,11 +759,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: buttons,
-          ),
+          child: Wrap(spacing: 8, runSpacing: 8, children: buttons),
         ),
       ],
     );
@@ -795,10 +776,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             padding: const EdgeInsets.all(12),
             child: Text(
               l10n.noComments,
-              style: const TextStyle(
-                fontSize: 14,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 14, color: secondaryText),
             ),
           )
         else
@@ -816,10 +794,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   const SizedBox(height: 4),
                   Text(
                     _commentMeta(comment),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: secondaryText,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: secondaryText),
                   ),
                 ],
               ),
@@ -845,9 +820,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(36, 36),
                 onPressed:
-                    state.isSubmittingComment || _commentController.text.trim().isEmpty
-                        ? null
-                        : () => unawaited(_submitComment()),
+                    state.isSubmittingComment ||
+                        _commentController.text.trim().isEmpty
+                    ? null
+                    : () => unawaited(_submitComment()),
                 child: state.isSubmittingComment
                     ? const CupertinoActivityIndicator(radius: 9)
                     : const Icon(CupertinoIcons.arrow_up_circle_fill, size: 28),
@@ -941,18 +917,21 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              error is ApiException ? error.message : (error?.toString() ?? l10n.unknownError),
+              error is ApiException
+                  ? error.message
+                  : (error?.toString() ?? l10n.unknownError),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('kanban-detail-retry'),
               onPressed: () => unawaited(
-                ref.read(kanbanDetailControllerProvider(widget.cardId).notifier).refresh(),
+                ref
+                    .read(
+                      kanbanDetailControllerProvider(widget.cardId).notifier,
+                    )
+                    .refresh(),
               ),
               child: Text(l10n.retry),
             ),
@@ -982,8 +961,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
   String _status = 'triage';
   bool _saving = false;
 
-  bool get _canSave =>
-      !_saving && _titleController.text.trim().isNotEmpty;
+  bool get _canSave => !_saving && _titleController.text.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -1015,10 +993,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           if (currentBoard != null) ...[
             Text(
               l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
             const SizedBox(height: 12),
           ],
@@ -1046,10 +1021,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           const SizedBox(height: 16),
           Text(
             l10n.initialStatus,
-            style: const TextStyle(
-              fontSize: 13,
-              color: secondaryText,
-            ),
+            style: const TextStyle(fontSize: 13, color: secondaryText),
           ),
           const SizedBox(height: 8),
           CupertinoSlidingSegmentedControl<String>(
@@ -1079,13 +1051,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            color: secondaryText,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 13, color: secondaryText)),
         const SizedBox(height: 6),
         CupertinoTextField(
           key: fieldKey,
@@ -1103,9 +1069,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     final controller = ref.read(kanbanControllerProvider.notifier);
     final ok = await controller.createCard(
       title: _titleController.text,
-      body: _bodyController.text.trim().isEmpty
-          ? null
-          : _bodyController.text,
+      body: _bodyController.text.trim().isEmpty ? null : _bodyController.text,
       status: _status,
       assignee: _assigneeController.text.trim().isEmpty
           ? null
