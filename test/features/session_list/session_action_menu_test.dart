@@ -109,7 +109,7 @@ void main() {
       // 断言工作区与 Git 选项存在
       expect(find.byKey(const ValueKey('session-action-workspace')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-action-git')), findsOneWidget);
-      expect(find.text('工作区'), findsOneWidget);
+      expect(find.text('工作区'), findsAtLeastNWidgets(1));
       expect(find.text('Git'), findsOneWidget);
 
       // 现有选项也正常展示

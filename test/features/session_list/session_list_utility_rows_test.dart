@@ -21,6 +21,7 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
       kanban: true,
       skills: true,
       insights: false,
+      workspaces: true,
     );
   }
 }
@@ -33,6 +34,7 @@ class _AllVisibleVisibilityNotifier extends SessionEntryVisibilityController {
       kanban: true,
       skills: true,
       insights: true,
+      workspaces: true,
     );
   }
 }
@@ -45,6 +47,7 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       kanban: false,
       skills: false,
       insights: false,
+      workspaces: false,
     );
   }
 }
@@ -100,6 +103,7 @@ void main() {
       // 默认 3 个入口文本（看板与记忆默认关闭）
       expect(find.text('任务'), findsOneWidget);
       expect(find.text('看板'), findsNothing);
+      expect(find.text('工作区'), findsOneWidget);
       expect(find.text('技能'), findsOneWidget);
       expect(find.text('记忆'), findsNothing);
       expect(find.text('统计'), findsOneWidget);
@@ -112,6 +116,10 @@ void main() {
       expect(
         find.byKey(const ValueKey('session-list-utility-kanban')),
         findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-workspaces')),
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('session-list-utility-skills')),
@@ -127,7 +135,7 @@ void main() {
       );
     });
 
-    testWidgets('显式全开时渲染 4 个入口（含看板）', (tester) async {
+    testWidgets('显式全开时渲染 5 个入口（含看板与工作区）', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -151,6 +159,7 @@ void main() {
     testWidgets('自定义回调可正常触发', (tester) async {
       var tasksCalled = false;
       var kanbanCalled = false;
+      var workspacesCalled = false;
       var skillsCalled = false;
       var insightsCalled = false;
 
@@ -166,6 +175,7 @@ void main() {
               child: SessionListUtilityRows(
                 onTapTasks: () => tasksCalled = true,
                 onTapKanban: () => kanbanCalled = true,
+                onTapWorkspaces: () => workspacesCalled = true,
                 onTapSkills: () => skillsCalled = true,
                 onTapInsights: () => insightsCalled = true,
               ),
@@ -185,6 +195,12 @@ void main() {
       );
       await tester.pump();
       expect(kanbanCalled, isTrue);
+
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-utility-workspaces')),
+      );
+      await tester.pump();
+      expect(workspacesCalled, isTrue);
 
       await tester.tap(
         find.byKey(const ValueKey('session-list-utility-skills')),
@@ -278,6 +294,10 @@ void main() {
         findsOneWidget,
       );
       expect(
+        find.byKey(const ValueKey('session-list-utility-workspaces')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const ValueKey('session-list-utility-skills')),
         findsOneWidget,
       );
@@ -291,7 +311,7 @@ void main() {
       );
     });
 
-    testWidgets('4 个功能入口全关时组件返回 SizedBox.shrink()（不渲染容器）', (tester) async {
+    testWidgets('5 个功能入口全关时组件返回 SizedBox.shrink()（不渲染容器）', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -431,6 +451,10 @@ void main() {
       expect(
         find.byKey(const ValueKey('session-list-utility-kanban')),
         findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-workspaces')),
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('session-list-utility-skills')),

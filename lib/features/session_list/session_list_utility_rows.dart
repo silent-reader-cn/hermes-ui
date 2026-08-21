@@ -8,11 +8,12 @@ import 'session_entry_visibility.dart';
 
 /// 会话列表顶部工具行入口组件（对齐 Hermex SessionSidebarUtilityRows）。
 ///
-/// 提供 4 个核心功能模块的快捷跳转（记忆入口已移至设置页）：
+/// 提供 5 个核心功能模块的快捷跳转（记忆入口已移至设置页，工作区 2026-08-21 新增）：
 /// 1. 任务 (Tasks) → /tasks (CupertinoIcons.clock, 对齐 LucideCalendarClock)
 /// 2. 看板 (Kanban) → /kanban (CupertinoIcons.square_list, 对齐 LucideColumns3)
-/// 3. 技能 (Skills) → /skills (CupertinoIcons.hammer, 对齐 LucideHammer)
-/// 4. 统计 (Insights) → /insights (CupertinoIcons.chart_bar_square, 对齐 LucideChartColumnIncreasing)
+/// 3. 工作区 (Workspaces) → /workspaces (CupertinoIcons.folder, 对齐 LucideFolder)
+/// 4. 技能 (Skills) → /skills (CupertinoIcons.hammer, 对齐 LucideHammer)
+/// 5. 统计 (Insights) → /insights (CupertinoIcons.chart_bar_square, 对齐 LucideChartColumnIncreasing)
 ///
 /// 视觉采用纯 Cupertino 风格，支持深浅色自适应及 VoiceOver 语义与触觉反馈。
 class SessionListUtilityRows extends ConsumerWidget {
@@ -20,6 +21,7 @@ class SessionListUtilityRows extends ConsumerWidget {
     super.key,
     this.onTapTasks,
     this.onTapKanban,
+    this.onTapWorkspaces,
     this.onTapSkills,
     this.onTapInsights,
   });
@@ -29,6 +31,9 @@ class SessionListUtilityRows extends ConsumerWidget {
 
   /// 看板入口自定义点击回调（为空时默认 context.go('/kanban')）。
   final VoidCallback? onTapKanban;
+
+  /// 工作区入口自定义点击回调（为空时默认 context.go('/workspaces')）。
+  final VoidCallback? onTapWorkspaces;
 
   /// 技能入口自定义点击回调（为空时默认 context.go('/skills')）。
   final VoidCallback? onTapSkills;
@@ -62,6 +67,15 @@ class SessionListUtilityRows extends ConsumerWidget {
           label: l10n.kanban,
           route: '/kanban',
           customCallback: onTapKanban,
+        ),
+      if (visibility.workspaces)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-workspaces'),
+          icon: CupertinoIcons.folder,
+          label: l10n.workspacesTitle,
+          route: '/workspaces',
+          customCallback: onTapWorkspaces,
         ),
       if (visibility.skills)
         _buildUtilityItem(

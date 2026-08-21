@@ -7,12 +7,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SessionEntryVisibility 模型单测', () {
-    test('默认配置：任务/技能/统计开，看板关（使用率低默认隐藏）', () {
+    test('默认配置：任务/工作区/技能/统计开，看板关（使用率低默认隐藏）', () {
       const visibility = SessionEntryVisibility();
       expect(visibility.tasks, isTrue);
       expect(visibility.kanban, isFalse);
       expect(visibility.skills, isTrue);
       expect(visibility.insights, isTrue);
+      expect(visibility.workspaces, isTrue);
       expect(visibility.showsAny, isTrue);
       expect(SessionEntryVisibility.defaults, equals(visibility));
     });
@@ -24,6 +25,7 @@ void main() {
           kanban: false,
           skills: false,
           insights: false,
+          workspaces: false,
         ).showsAny,
         isFalse,
       );
@@ -55,12 +57,14 @@ void main() {
         kanban: false,
         skills: true,
         insights: true,
+        workspaces: true,
       );
 
       expect(visibility.isVisible('tasks'), isTrue);
       expect(visibility.isVisible('kanban'), isFalse);
       expect(visibility.isVisible('skills'), isTrue);
       expect(visibility.isVisible('insights'), isTrue);
+      expect(visibility.isVisible('workspaces'), isTrue);
       expect(visibility.isVisible('unknown'), isTrue);
     });
 
@@ -72,6 +76,7 @@ void main() {
       expect(modified.kanban, isFalse);
       expect(modified.skills, isTrue);
       expect(modified.insights, isTrue);
+      expect(modified.workspaces, isTrue);
     });
 
     test('== 与 hashCode 及 toString', () {
@@ -100,6 +105,7 @@ void main() {
       expect(state.kanban, isFalse);
       expect(state.skills, isTrue);
       expect(state.insights, isTrue);
+      expect(state.workspaces, isTrue);
     });
 
     test('初始状态从 SharedPreferences 读取已有持久化值', () async {
@@ -122,6 +128,7 @@ void main() {
       expect(state.kanban, isTrue);
       expect(state.skills, isFalse);
       expect(state.insights, isFalse);
+      expect(state.workspaces, isTrue);
     });
 
     test('setVisible 更新状态并持久化到 SharedPreferences', () async {
@@ -140,13 +147,14 @@ void main() {
       expect(state.kanban, isTrue);
       expect(state.skills, isTrue);
       expect(state.insights, isFalse);
+      expect(state.workspaces, isTrue);
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('session_entry_visibility_tasks'), isFalse);
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
     });
 
-    test('setVisible 处理所有 4 个合法 key 及未知 key', () async {
+    test('setVisible 处理所有 5 个合法 key 及未知 key', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -158,6 +166,7 @@ void main() {
       await controller.setVisible('kanban', false);
       await controller.setVisible('skills', false);
       await controller.setVisible('insights', false);
+      await controller.setVisible('workspaces', false);
       await controller.setVisible('unknown_key', false);
 
       final state = container.read(sessionEntryVisibilityProvider);
@@ -168,6 +177,7 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_kanban'), isFalse);
       expect(prefs.getBool('session_entry_visibility_skills'), isFalse);
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
+      expect(prefs.getBool('session_entry_visibility_workspaces'), isFalse);
       expect(
         prefs.containsKey('session_entry_visibility_unknown_key'),
         isFalse,

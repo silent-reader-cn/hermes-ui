@@ -53,7 +53,7 @@ void main() {
   }
 
   group('设置页会话列表入口显隐开关测试', () {
-    testWidgets('渲染「会话列表入口」区块及 4 个功能入口开关与记忆入口', (tester) async {
+    testWidgets('渲染「会话列表入口」区块及 5 个功能入口开关与记忆入口', (tester) async {
       await pumpSettingsPage(tester);
 
       await tester.scrollUntilVisible(
@@ -68,6 +68,10 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('settings-visibility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-visibility-workspaces')),
         findsOneWidget,
       );
       expect(
@@ -97,6 +101,9 @@ void main() {
       final kanbanSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-kanban')),
       );
+      final workspacesSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('settings-visibility-workspaces')),
+      );
       final skillsSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-skills')),
       );
@@ -106,6 +113,7 @@ void main() {
 
       expect(tasksSwitch.value, isTrue);
       expect(kanbanSwitch.value, isTrue);
+      expect(workspacesSwitch.value, isTrue);
       expect(skillsSwitch.value, isTrue);
       expect(insightsSwitch.value, isTrue);
     });
