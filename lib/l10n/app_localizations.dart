@@ -33,10 +33,8 @@ class AppLocalizations {
   String get unnamed => isEnglish ? 'Unnamed' : '未命名';
   String get unknownError => isEnglish ? 'Unknown error' : '未知错误';
   String get loadFailed => isEnglish ? 'Failed to load' : '加载失败';
-  String get loadFailedRetry =>
-      isEnglish ? 'Loading failed, please retry' : '加载失败，请重试';
-  String get loadFailedPleaseRetry =>
-      isEnglish ? 'Loading failed, please retry' : '加载失败，请重试';
+  String get loadFailedRetry => isEnglish ? 'Loading failed, please retry' : '加载失败，请重试';
+  String get loadFailedPleaseRetry => isEnglish ? 'Loading failed, please retry' : '加载失败，请重试';
   String get actionFailed => isEnglish ? 'Action Failed' : '操作失败';
   String get dismissNotice => isEnglish ? 'Dismiss notice' : '关闭提示';
   String get closeNotice => isEnglish ? 'Dismiss notice' : '关闭提示';
@@ -60,20 +58,15 @@ class AppLocalizations {
       ? 'Enter the hermes-webui address (with port), e.g. https://hermes.example.com:30002'
       : '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:30002';
   String get testConnection => isEnglish ? 'Test Connection' : '连接测试';
-  String get haveApiKeySkipWizard =>
-      isEnglish ? 'Have an API Key? Skip wizard' : '已有 API Key？跳过向导';
+  String get haveApiKeySkipWizard => isEnglish ? 'Have an API Key? Skip wizard' : '已有 API Key？跳过向导';
   String get checking => isEnglish ? 'Checking…' : '正在检查…';
-  String get connectionSuccessful =>
-      isEnglish ? 'Connection successful' : '连接成功';
-  String get connectionSuccessfulWithCheck =>
-      isEnglish ? '✅ Connection successful' : '✅ 连接成功';
+  String get connectionSuccessful => isEnglish ? 'Connection successful' : '连接成功';
+  String get connectionSuccessfulWithCheck => isEnglish ? '✅ Connection successful' : '✅ 连接成功';
   String get serverReturnedAbnormalStatus =>
       isEnglish ? 'Server returned abnormal status' : '服务器返回异常状态';
-  String get cannotConnectToServer =>
-      isEnglish ? 'Cannot connect to server' : '无法连接到服务器';
+  String get cannotConnectToServer => isEnglish ? 'Cannot connect to server' : '无法连接到服务器';
   String get authentication => isEnglish ? 'Authentication' : '认证';
-  String get detectingServerAuth =>
-      isEnglish ? 'Detecting server authentication…' : '正在检测服务器认证…';
+  String get detectingServerAuth => isEnglish ? 'Detecting server authentication…' : '正在检测服务器认证…';
   String get serverNoPasswordRequired => isEnglish
       ? 'Password authentication is not enabled on this server, you can proceed directly'
       : '该服务器未启用密码认证，可直接继续';
@@ -87,13 +80,10 @@ class AppLocalizations {
   String get loginFailed => isEnglish ? 'Login Failed' : '登录失败';
   String loginFailedWithReason(String reason) =>
       isEnglish ? 'Login failed: $reason' : '登录失败：$reason';
-  String loginFailedWithMessage(String msg) =>
-      isEnglish ? 'Login failed: $msg' : '登录失败：$msg';
-  String get cannotConnectRetryLater => isEnglish
-      ? 'Cannot connect to server, please try again later'
-      : '无法连接到服务器，请稍后重试';
-  String get customHeadersOptional =>
-      isEnglish ? 'Custom Headers (optional)' : '自定义 Headers（可选）';
+  String loginFailedWithMessage(String msg) => isEnglish ? 'Login failed: $msg' : '登录失败：$msg';
+  String get cannotConnectRetryLater =>
+      isEnglish ? 'Cannot connect to server, please try again later' : '无法连接到服务器，请稍后重试';
+  String get customHeadersOptional => isEnglish ? 'Custom Headers (optional)' : '自定义 Headers（可选）';
   String get customHeadersDescription => isEnglish
       ? 'Add custom request headers for reverse proxy setups, e.g. Authorization: Bearer xxx'
       : '反向代理场景可添加自定义请求头，如 Authorization: Bearer xxx';
@@ -104,10 +94,8 @@ class AppLocalizations {
   String get continueAction => isEnglish ? 'Continue' : '继续';
   String get loginAndContinue => isEnglish ? 'Log in & Continue' : '登录并继续';
   String get finish => isEnglish ? 'Finish' : '完成';
-  String get pleaseEnterServerUrl =>
-      isEnglish ? 'Please enter the server address' : '请输入服务器地址';
-  String get serverUrlRequired =>
-      isEnglish ? 'Please enter the server address' : '请输入服务器地址';
+  String get pleaseEnterServerUrl => isEnglish ? 'Please enter the server address' : '请输入服务器地址';
+  String get serverUrlRequired => isEnglish ? 'Please enter the server address' : '请输入服务器地址';
   String get pleaseEnterValidServerUrl => isEnglish
       ? 'Please enter a valid server address, e.g. https://hermes.example.com:30002'
       : '请输入有效的服务器地址，例如 https://hermes.example.com:30002';
@@ -120,9 +108,8 @@ class AppLocalizations {
   String get connectAndSave => isEnglish ? 'Connect & Save' : '连接并保存';
   String get passwordVerified => isEnglish ? '✅ Password correct' : '✅ 密码正确';
   String get verifyingPassword => isEnglish ? 'Verifying password…' : '正在验证密码…';
-  String get passwordRequiredOnServer => isEnglish
-      ? 'This server requires a password. Enter it to connect.'
-      : '该服务器需要密码认证，请填写密码后再连接';
+  String get passwordRequiredOnServer =>
+      isEnglish ? 'This server requires a password. Enter it to connect.' : '该服务器需要密码认证，请填写密码后再连接';
 
   // ---------------------------------------------------------------------------
   // 2. Session List
@@ -134,8 +121,7 @@ class AppLocalizations {
   String get archived => isEnglish ? 'Archived' : '已归档';
   String get clearFilter => isEnglish ? 'Clear filter' : '清除筛选';
   String get untitledProject => isEnglish ? 'Untitled project' : '未命名项目';
-  String selectedCount(int count) =>
-      isEnglish ? 'Selected $count' : '已选 $count 个';
+  String selectedCount(int count) => isEnglish ? 'Selected $count' : '已选 $count 个';
   String get selectAll => isEnglish ? 'Select All' : '全选';
   String get archive => isEnglish ? 'Archive' : '归档';
   String get batchMoveProject => isEnglish ? 'Move Project' : '移动项目';
@@ -149,8 +135,7 @@ class AppLocalizations {
   String get jsonFormat => isEnglish ? 'JSON' : 'JSON';
   String exportSuccess(String format) =>
       isEnglish ? '$format exported successfully' : '$format 导出成功';
-  String get exportContentEmpty =>
-      isEnglish ? 'Exported content is empty' : '导出内容为空';
+  String get exportContentEmpty => isEnglish ? 'Exported content is empty' : '导出内容为空';
   String get copyContent => isEnglish ? 'Copy Content' : '复制内容';
   String get exportFailed => isEnglish ? 'Export Failed' : '导出失败';
   String get deleteSession => isEnglish ? 'Delete Session' : '删除会话';
@@ -158,15 +143,13 @@ class AppLocalizations {
       ? 'Are you sure you want to delete "$title"? This action cannot be undone.'
       : '确定删除「$title」？此操作不可撤销。';
   String get batchArchiveTitle => isEnglish ? 'Batch Archive' : '批量归档';
-  String get confirmBatchArchivePrompt =>
-      isEnglish ? 'Archive selected sessions?' : '归档选中的会话？';
+  String get confirmBatchArchivePrompt => isEnglish ? 'Archive selected sessions?' : '归档选中的会话？';
   String get batchDeleteTitle => isEnglish ? 'Batch Delete' : '批量删除';
   String confirmBatchDeletePrompt(int count) => isEnglish
       ? 'Delete selected $count sessions? This action cannot be undone.'
       : '删除选中的 $count 个会话？此操作不可撤销。';
   String get noMore => isEnglish ? 'No more' : '没有更多了';
-  String get noMatchingSessionsFound =>
-      isEnglish ? 'No matching sessions found' : '未找到相关会话';
+  String get noMatchingSessionsFound => isEnglish ? 'No matching sessions found' : '未找到相关会话';
   String get noSessions => isEnglish ? 'No sessions' : '暂无会话';
   String get tryAnotherKeyword => isEnglish ? 'Try another keyword' : '换个关键词试试';
   String get tapButtonToStartNewChat =>
@@ -174,8 +157,7 @@ class AppLocalizations {
   String get pendingInput => isEnglish ? 'Pending input' : '待输入';
   String get sessionActions => isEnglish ? 'Session Actions' : '会话操作';
   String get untitledSession => isEnglish ? 'Untitled session' : '未命名会话';
-  String messageCountLabel(int count) =>
-      isEnglish ? '$count messages' : '$count 条消息';
+  String messageCountLabel(int count) => isEnglish ? '$count messages' : '$count 条消息';
   String get scheduledSection => isEnglish ? 'Scheduled' : '定时';
   String get pinnedSection => isEnglish ? 'Pinned' : '置顶';
   String get todaySection => isEnglish ? 'Today' : '今天';
@@ -191,12 +173,10 @@ class AppLocalizations {
   String branchSessionDescription(String parentId) => isEnglish
       ? 'This session is a branch of another session.\nParent session $parentId'
       : '该会话是另一个会话的分支。\n父会话 $parentId';
-  String get jumpToParentSession =>
-      isEnglish ? 'Jump to Parent Session' : '跳转父会话';
+  String get jumpToParentSession => isEnglish ? 'Jump to Parent Session' : '跳转父会话';
   String get renameSession => isEnglish ? 'Rename Session' : '重命名会话';
   String get compressSession => isEnglish ? 'Compress Session' : '压缩会话';
-  String get focusTopicPlaceholder =>
-      isEnglish ? 'Focus topic (optional)' : '聚焦主题（可留空）';
+  String get focusTopicPlaceholder => isEnglish ? 'Focus topic (optional)' : '聚焦主题（可留空）';
   String get compress => isEnglish ? 'Compress' : '压缩';
   String get undoLastTurn => isEnglish ? 'Undo Last Turn' : '撤销上一轮';
   String get confirmUndoLastTurnPrompt => isEnglish
@@ -204,27 +184,21 @@ class AppLocalizations {
       : '删除最后一轮对话？此操作不可撤销';
   String get retryLastTurn => isEnglish ? 'Retry Last Turn' : '重试上一轮';
   String get sessionSettings => isEnglish ? 'Session Settings' : '会话设置';
-  String get workspaceOptionalPlaceholder =>
-      isEnglish ? 'Workspace (optional)' : 'Workspace（可留空）';
-  String get modelNameOptionalPlaceholder =>
-      isEnglish ? 'Model name (optional)' : '模型名（可留空）';
+  String get workspaceOptionalPlaceholder => isEnglish ? 'Workspace (optional)' : 'Workspace（可留空）';
+  String get modelNameOptionalPlaceholder => isEnglish ? 'Model name (optional)' : '模型名（可留空）';
   String get enableYolo => isEnglish ? 'Enable YOLO' : '开启 YOLO';
   String get disableYolo => isEnglish ? 'Disable YOLO' : '关闭 YOLO';
   String get createBranch => isEnglish ? 'Create Branch' : '创建分支';
-  String get exportSuccessDialogTitle =>
-      isEnglish ? 'Export Succeeded' : '导出成功';
+  String get exportSuccessDialogTitle => isEnglish ? 'Export Succeeded' : '导出成功';
   String get markdownCopiedToClipboard =>
       isEnglish ? 'Markdown copied to clipboard.' : 'Markdown 已复制到剪贴板。';
   String get approvalNeeded => isEnglish ? 'Approval Needed' : '需要审批';
   String get clarificationNeeded => isEnglish ? 'Clarification Needed' : '需要澄清';
-  String queuedBannerMessage(int count) => isEnglish
-      ? '已排队 $count 条消息，将在当前回复结束后自动发送'
-      : '已排队 $count 条消息，将在当前回复结束后自动发送';
-  String get offlineCacheBanner => isEnglish
-      ? 'Offline cache mode. Content may not be up to date.'
-      : '离线缓存模式，部分内容可能不是最新';
-  String get dismissOfflineBanner =>
-      isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
+  String queuedBannerMessage(int count) =>
+      isEnglish ? '已排队 $count 条消息，将在当前回复结束后自动发送' : '已排队 $count 条消息，将在当前回复结束后自动发送';
+  String get offlineCacheBanner =>
+      isEnglish ? 'Offline cache mode. Content may not be up to date.' : '离线缓存模式，部分内容可能不是最新';
+  String get dismissOfflineBanner => isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
   String get pendingUserMessageBanner =>
       isEnglish ? '(This session has a pending message…)' : '（该会话有一条待处理消息…）';
   String get pickFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
@@ -237,24 +211,18 @@ class AppLocalizations {
       isEnglish ? 'Attachment "$name" uploaded.' : '附件「$name」已上传。';
   String get uploadFailed => isEnglish ? 'Upload Failed' : '上传失败';
   String get selectModel => isEnglish ? 'Select Model' : '选择模型';
-  String get followServerDefault =>
-      isEnglish ? 'Follow Server Default' : '跟随服务器默认';
+  String get followServerDefault => isEnglish ? 'Follow Server Default' : '跟随服务器默认';
   String get addAttachment => isEnglish ? 'Add Attachment' : '添加附件';
-  String get sessionIsReadOnly =>
-      isEnglish ? 'This session is read-only' : '此会话为只读';
-  String get readOnlySessionPlaceholder =>
-      isEnglish ? 'This session is read-only' : '此会话为只读';
-  String get steerCurrentReplyPlaceholder =>
-      isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
-  String get steerPromptPlaceholder =>
-      isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
+  String get sessionIsReadOnly => isEnglish ? 'This session is read-only' : '此会话为只读';
+  String get readOnlySessionPlaceholder => isEnglish ? 'This session is read-only' : '此会话为只读';
+  String get steerCurrentReplyPlaceholder => isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
+  String get steerPromptPlaceholder => isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
   String get sendMessagePlaceholder => isEnglish ? 'Send a message…' : '发送消息…';
   String get steerCurrentReply => isEnglish ? 'Steer current reply' : '提示当前回复';
   String get steerPrompt => isEnglish ? 'Steer current reply' : '提示当前回复';
   String get stopGenerating => isEnglish ? 'Stop generating' : '停止生成';
   String get sendMessage => isEnglish ? 'Send message' : '发送消息';
-  String get copiedToClipboardNotice =>
-      isEnglish ? 'Copied to clipboard' : '已复制到剪贴板';
+  String get copiedToClipboardNotice => isEnglish ? 'Copied to clipboard' : '已复制到剪贴板';
   String get thinking => isEnglish ? 'Thinking…' : '思考中…';
   String get thinkingIndicator => isEnglish ? 'Thinking…' : '思考中…';
   String get sending => isEnglish ? 'Sending…' : '发送中…';
@@ -292,8 +260,7 @@ class AppLocalizations {
   String get cronTasks => isEnglish ? 'Scheduled Tasks' : '定时任务';
   String get tasksTitle => isEnglish ? 'Scheduled Tasks' : '定时任务';
   String get newScheduledTask => isEnglish ? 'New Scheduled Task' : '新建定时任务';
-  String totalTasksHeader(int count) =>
-      isEnglish ? '$count tasks in total' : '共 $count 个任务';
+  String totalTasksHeader(int count) => isEnglish ? '$count tasks in total' : '共 $count 个任务';
   String get noTasks => isEnglish ? 'No tasks' : '暂无任务';
   String get noTasksDescription => isEnglish
       ? 'Create scheduled tasks to let the assistant run automatically'
@@ -318,34 +285,26 @@ class AppLocalizations {
       ? 'Are you sure you want to delete "$name"? This action cannot be undone.'
       : '确定删除「$name」？此操作不可撤销。';
   String get taskActions => isEnglish ? 'Task Actions' : '任务操作';
-  String lastRunTime(String time) =>
-      isEnglish ? 'Last run $time' : '上次运行 $time';
+  String lastRunTime(String time) => isEnglish ? 'Last run $time' : '上次运行 $time';
   String get taskOutput => isEnglish ? 'Task Output' : '任务输出';
   String get closeOutputPanel => isEnglish ? 'Close Output Panel' : '关闭输出面板';
   String get noOutput => isEnglish ? 'No output' : '暂无输出';
   String outputNumber(int index) => isEnglish ? 'Output $index' : '输出 $index';
-  String outputItemTitle(int index) =>
-      isEnglish ? 'Output $index' : '输出 $index';
+  String outputItemTitle(int index) => isEnglish ? 'Output $index' : '输出 $index';
   String get taskName => isEnglish ? 'Name' : '名称';
-  String get taskNamePlaceholder =>
-      isEnglish ? 'Task name (optional)' : '任务名称（可选）';
-  String get taskNameOptionalPlaceholder =>
-      isEnglish ? 'Task name (optional)' : '任务名称（可选）';
+  String get taskNamePlaceholder => isEnglish ? 'Task name (optional)' : '任务名称（可选）';
+  String get taskNameOptionalPlaceholder => isEnglish ? 'Task name (optional)' : '任务名称（可选）';
   String get scheduleExpression => isEnglish ? 'Schedule Expression' : '调度表达式';
-  String get schedulePlaceholder => isEnglish
-      ? 'e.g. 0 9 * * * or every 2 hours'
-      : '例如 0 9 * * * 或 every 2 hours';
-  String get scheduleExpressionPlaceholder => isEnglish
-      ? 'e.g. 0 9 * * * or every 2 hours'
-      : '例如 0 9 * * * 或 every 2 hours';
+  String get schedulePlaceholder =>
+      isEnglish ? 'e.g. 0 9 * * * or every 2 hours' : '例如 0 9 * * * 或 every 2 hours';
+  String get scheduleExpressionPlaceholder =>
+      isEnglish ? 'e.g. 0 9 * * * or every 2 hours' : '例如 0 9 * * * 或 every 2 hours';
   String get promptLabel => isEnglish ? 'Prompt' : '提示词';
   String get promptField => isEnglish ? 'Prompt' : '提示词';
-  String get promptPlaceholder => isEnglish
-      ? 'Prompt sent to the assistant when executed'
-      : '定时执行时发送给助手的提示词';
-  String get promptFieldPlaceholder => isEnglish
-      ? 'Prompt sent to the assistant when executed'
-      : '定时执行时发送给助手的提示词';
+  String get promptPlaceholder =>
+      isEnglish ? 'Prompt sent to the assistant when executed' : '定时执行时发送给助手的提示词';
+  String get promptFieldPlaceholder =>
+      isEnglish ? 'Prompt sent to the assistant when executed' : '定时执行时发送给助手的提示词';
   String get pushNotifications => isEnglish ? 'Push Notifications' : '推送通知';
   String get statusRunning => isEnglish ? 'Running' : '运行中';
   String get statusNormal => isEnglish ? 'Active' : '正常';
@@ -368,17 +327,14 @@ class AppLocalizations {
   String get skillsTitle => isEnglish ? 'Skills' : '技能';
   String get refreshSkills => isEnglish ? 'Refresh Skills' : '刷新技能';
   String get searchSkills => isEnglish ? 'Search skills' : '搜索技能';
-  String get noMatchingSkillsFound =>
-      isEnglish ? 'No matching skills found' : '未找到相关技能';
+  String get noMatchingSkillsFound => isEnglish ? 'No matching skills found' : '未找到相关技能';
   String get noSkills => isEnglish ? 'No skills' : '暂无技能';
   String get serverSkillsWillShowHere =>
       isEnglish ? 'Skills from the server will appear here' : '服务器的技能将显示在这里';
   String get disabledBadge => isEnglish ? 'Disabled' : '已禁用';
   String get skillDisabledBadge => isEnglish ? 'Disabled' : '已禁用';
-  String get noMoreSkillDetails =>
-      isEnglish ? 'No further details for this skill' : '该技能没有更多详情';
-  String get noMoreDetailsForSkill =>
-      isEnglish ? 'No further details for this skill' : '该技能没有更多详情';
+  String get noMoreSkillDetails => isEnglish ? 'No further details for this skill' : '该技能没有更多详情';
+  String get noMoreDetailsForSkill => isEnglish ? 'No further details for this skill' : '该技能没有更多详情';
   String get pathLabel => isEnglish ? 'Path' : '路径';
   String get skillPathLabel => isEnglish ? 'Path' : '路径';
   String get relatedSkillsLabel => isEnglish ? 'Related skills' : '相关技能';
@@ -396,8 +352,7 @@ class AppLocalizations {
       isEnglish ? 'View notes, profile and project context' : '查看笔记、画像与项目上下文';
   String get refreshMemory => isEnglish ? 'Refresh Memory' : '刷新记忆';
   String get noMemory => isEnglish ? 'No memory' : '暂无记忆';
-  String get noMemoryContentYet =>
-      isEnglish ? 'No memory content yet' : '还没有任何记忆内容';
+  String get noMemoryContentYet => isEnglish ? 'No memory content yet' : '还没有任何记忆内容';
   String get projectContext => isEnglish ? 'Project Context' : '项目上下文';
   String get projectContextTitle => isEnglish ? 'Project Context' : '项目上下文';
   String get memoryNotesTitle => isEnglish ? 'My Notes' : '我的笔记';
@@ -438,8 +393,7 @@ class AppLocalizations {
   String confirmDeleteFile(String name) => isEnglish
       ? 'Are you sure you want to delete "$name"? This action cannot be undone.'
       : '确定要删除「$name」吗？此操作不可撤销。';
-  String get filePickerNotAvailable =>
-      isEnglish ? 'File picker not yet available' : '文件选择功能待接入';
+  String get filePickerNotAvailable => isEnglish ? 'File picker not yet available' : '文件选择功能待接入';
   String get filePickerPendingPlatformSupport => isEnglish
       ? 'Selecting local files requires platform channel support (file picker), which will be available in a future version.'
       : '选择本地文件需要平台通道支持（file picker），将在后续版本提供。';
@@ -458,11 +412,9 @@ class AppLocalizations {
   String get workspacePathHint => isEnglish
       ? 'Absolute path on disk, e.g. D:/projects/my-app'
       : '磁盘上的绝对路径，例如 D:/projects/my-app';
-  String get workspaceNameOptionalLabel =>
-      isEnglish ? 'Name (optional)' : '名称（可选）';
+  String get workspaceNameOptionalLabel => isEnglish ? 'Name (optional)' : '名称（可选）';
   String get workspaceNamePlaceholder => isEnglish ? 'Display name' : '显示名称';
-  String get createDirectoryIfMissing =>
-      isEnglish ? 'Create if missing' : '目录不存在时自动创建';
+  String get createDirectoryIfMissing => isEnglish ? 'Create if missing' : '目录不存在时自动创建';
   String get renameWorkspaceTitle => isEnglish ? 'Rename Workspace' : '重命名工作区';
   String get removeWorkspaceTitle => isEnglish ? 'Remove Workspace' : '移除工作区';
   String confirmRemoveWorkspace(String name) => isEnglish
@@ -472,28 +424,23 @@ class AppLocalizations {
       ? 'Removing a workspace only unregisters its path from the server list. No files are deleted.'
       : '移除工作区只是从列表注销路径，不会删除磁盘上的文件。';
   String get noWorkspacesYet => isEnglish ? 'No workspaces yet' : '还没有工作区';
-  String get addWorkspaceHint => isEnglish
-      ? 'Tap + at the top right to add a workspace.'
-      : '点右上角 + 添加工作区。';
+  String get addWorkspaceHint =>
+      isEnglish ? 'Tap + at the top right to add a workspace.' : '点右上角 + 添加工作区。';
   String get currentWorkspaceBadge => isEnglish ? 'Current' : '当前';
   String get browseWorkspaceFiles => isEnglish ? 'Browse files' : '浏览文件';
-  String get noSessionForWorkspaceTitle =>
-      isEnglish ? 'Cannot browse this workspace' : '无法浏览该工作区';
+  String get noSessionForWorkspaceTitle => isEnglish ? 'Cannot browse this workspace' : '无法浏览该工作区';
   String noSessionForWorkspaceBody(String path) => isEnglish
       ? 'No session is using this workspace ($path) yet. Open it from a session first, or create a new session.'
       : '当前没有会话使用该工作区（$path）。请先从会话进入该工作区的文件页，或新建会话后重试。';
   String get preview => isEnglish ? 'Preview' : '预览';
-  String get previewUnavailable =>
-      isEnglish ? 'Preview not available' : '无法预览该文件';
+  String get previewUnavailable => isEnglish ? 'Preview not available' : '无法预览该文件';
   String get previewUnavailableHint => isEnglish
       ? 'This file type is not supported for preview yet. Download it instead.'
       : '暂不支持预览该文件类型，请改用下载。';
-  String get downloadFolderZip =>
-      isEnglish ? 'Download folder as ZIP' : '打包下载当前目录';
+  String get downloadFolderZip => isEnglish ? 'Download folder as ZIP' : '打包下载当前目录';
   String get emptyFile => isEnglish ? '(empty file)' : '（空文件）';
   String get linesShort => isEnglish ? 'lines' : '行';
-  String get previewTruncated =>
-      isEnglish ? 'Truncated: file too large' : '已截断：文件过大';
+  String get previewTruncated => isEnglish ? 'Truncated: file too large' : '已截断：文件过大';
 
   // ---------------------------------------------------------------------------
   // 8. Kanban
@@ -503,31 +450,24 @@ class AppLocalizations {
   String get newCard => isEnglish ? 'New Card' : '新建卡片';
   String get unnamedBoard => isEnglish ? 'Untitled board' : '未命名看板';
   String get untitledBoard => isEnglish ? 'Untitled board' : '未命名看板';
-  String get kanbanEmptyContent =>
-      isEnglish ? 'Board has no content' : '看板暂无内容';
+  String get kanbanEmptyContent => isEnglish ? 'Board has no content' : '看板暂无内容';
   String get boardEmpty => isEnglish ? 'Board has no content' : '看板暂无内容';
-  String get clickPlusToCreateFirstCard => isEnglish
-      ? 'Tap the + button at the top right to create the first card'
-      : '点击右上角 + 创建第一张卡片';
-  String get tapPlusToCreateFirstCard => isEnglish
-      ? 'Tap the + button at the top right to create the first card'
-      : '点击右上角 + 创建第一张卡片';
+  String get clickPlusToCreateFirstCard =>
+      isEnglish ? 'Tap the + button at the top right to create the first card' : '点击右上角 + 创建第一张卡片';
+  String get tapPlusToCreateFirstCard =>
+      isEnglish ? 'Tap the + button at the top right to create the first card' : '点击右上角 + 创建第一张卡片';
   String get noKanbanBoards => isEnglish ? 'No boards' : '暂无看板';
   String get noBoards => isEnglish ? 'No boards' : '暂无看板';
-  String get createBoardOnServerPrompt => isEnglish
-      ? 'Pull down to refresh after creating a board on the server'
-      : '在服务器端创建看板后下拉刷新';
+  String get createBoardOnServerPrompt =>
+      isEnglish ? 'Pull down to refresh after creating a board on the server' : '在服务器端创建看板后下拉刷新';
   String get noCards => isEnglish ? 'No cards' : '暂无卡片';
   String get unnamedCard => isEnglish ? 'Untitled card' : '未命名卡片';
   String get untitledCard => isEnglish ? 'Untitled card' : '未命名卡片';
   String get unassigned => isEnglish ? 'Unassigned' : '未指派';
-  String parentsDependency(int count) =>
-      isEnglish ? 'Parents $count' : '前驱 $count';
-  String childrenDependency(int count) =>
-      isEnglish ? 'Children $count' : '后继 $count';
+  String parentsDependency(int count) => isEnglish ? 'Parents $count' : '前驱 $count';
+  String childrenDependency(int count) => isEnglish ? 'Children $count' : '后继 $count';
   String parentsCount(int count) => isEnglish ? 'Parents $count' : '前驱 $count';
-  String childrenCount(int count) =>
-      isEnglish ? 'Children $count' : '后继 $count';
+  String childrenCount(int count) => isEnglish ? 'Children $count' : '后继 $count';
   String get cardDetail => isEnglish ? 'Card Detail' : '卡片详情';
   String get cardDoesNotExist => isEnglish ? 'Card does not exist' : '卡片不存在';
   String get cardNotFound => isEnglish ? 'Card not found' : '卡片不存在';
@@ -542,8 +482,7 @@ class AppLocalizations {
   String get createdAt => isEnglish ? 'Created at' : '创建时间';
   String get updatedAt => isEnglish ? 'Updated at' : '更新时间';
   String get changeStatus => isEnglish ? 'Change Status' : '变更状态';
-  String commentsHeader(int count) =>
-      isEnglish ? 'Comments ($count)' : '评论（$count）';
+  String commentsHeader(int count) => isEnglish ? 'Comments ($count)' : '评论（$count）';
   String get noComments => isEnglish ? 'No comments' : '暂无评论';
   String get addCommentPlaceholder => isEnglish ? 'Add a comment…' : '添加评论…';
   String get sendComment => isEnglish ? 'Send comment' : '发送评论';
@@ -551,10 +490,8 @@ class AppLocalizations {
   String get titleLabel => isEnglish ? 'Title' : '标题';
   String get title => isEnglish ? 'Title' : '标题';
   String get cardTitlePlaceholder => isEnglish ? 'Card title' : '卡片标题';
-  String get cardDescriptionPlaceholder =>
-      isEnglish ? 'Card description (optional)' : '卡片描述（可选）';
-  String get assignProfilePlaceholder =>
-      isEnglish ? 'Assign profile (optional)' : '指派 profile（可选）';
+  String get cardDescriptionPlaceholder => isEnglish ? 'Card description (optional)' : '卡片描述（可选）';
+  String get assignProfilePlaceholder => isEnglish ? 'Assign profile (optional)' : '指派 profile（可选）';
   String get initialStatus => isEnglish ? 'Initial Status' : '初始状态';
   String get kanbanStatusTriage => isEnglish ? 'Triage' : '待分类';
   String get kanbanStatusTodo => isEnglish ? 'To Do' : '待办';
@@ -564,8 +501,7 @@ class AppLocalizations {
   String get kanbanStatusDone => isEnglish ? 'Done' : '完成';
   String get kanbanStatusArchived => isEnglish ? 'Archived' : '已归档';
   String get kanbanStatusUnknown => isEnglish ? 'Unknown Status' : '未知状态';
-  String kanbanStatusUnsupported(String? raw) =>
-      isEnglish ? 'Unsupported: $raw' : '不支持: $raw';
+  String kanbanStatusUnsupported(String? raw) => isEnglish ? 'Unsupported: $raw' : '不支持: $raw';
 
   // ---------------------------------------------------------------------------
   // 9. Insights
@@ -577,10 +513,8 @@ class AppLocalizations {
   String get timeframeLast7Days => isEnglish ? 'Last 7 Days' : '近 7 天';
   String get timeframeLast30Days => isEnglish ? 'Last 30 Days' : '近 30 天';
   String get timeframeAll => isEnglish ? 'All Time' : '全部';
-  String recentDaysHeader(int days) =>
-      isEnglish ? 'Last $days Days' : '最近 $days 天';
-  String periodRecentDays(int days) =>
-      isEnglish ? 'Last $days Days' : '最近 $days 天';
+  String recentDaysHeader(int days) => isEnglish ? 'Last $days Days' : '最近 $days 天';
+  String periodRecentDays(int days) => isEnglish ? 'Last $days Days' : '最近 $days 天';
   String get metricSessions => isEnglish ? 'Sessions' : '会话';
   String get metricMessages => isEnglish ? 'Messages' : '消息';
   String get metricInputTokens => isEnglish ? 'Input Tokens' : '输入令牌';
@@ -588,14 +522,11 @@ class AppLocalizations {
   String get metricTotalTokens => isEnglish ? 'Total Tokens' : '总令牌';
   String get metricEstimatedCost => isEnglish ? 'Estimated Cost' : '估算费用';
   String get metricCacheHitRate => isEnglish ? 'Cache Hit Rate' : '缓存命中率';
-  String get metricCacheReadTokens =>
-      isEnglish ? 'Cache Read Tokens' : '缓存读取令牌';
+  String get metricCacheReadTokens => isEnglish ? 'Cache Read Tokens' : '缓存读取令牌';
   String get models => isEnglish ? 'Models' : '模型';
   String get modelsSection => isEnglish ? 'Models' : '模型';
-  String get tokensLast14Days =>
-      isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
-  String get recent14DaysTokens =>
-      isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
+  String get tokensLast14Days => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
+  String get recent14DaysTokens => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
   String get activity => isEnglish ? 'Activity' : '活动';
   String get activitySection => isEnglish ? 'Activity' : '活动';
   String get mostActiveDay => isEnglish ? 'Most Active Day' : '最活跃的一天';
@@ -604,19 +535,15 @@ class AppLocalizations {
   String get mostActiveHour => isEnglish ? 'Peak Activity Hour' : '最活跃时段';
   String peakHourSessions(String hour, int count) =>
       isEnglish ? '$hour · $count sessions' : '$hour · $count 个会话';
-  String insightsSourceFooter(int days) => isEnglish
-      ? 'Source: Server statistics over the last $days days.'
-      : '来源：服务器按最近 $days 天统计。';
-  String insightsSourceDisclaimer(int days) => isEnglish
-      ? 'Source: Server statistics over the last $days days.'
-      : '来源：服务器按最近 $days 天统计。';
+  String insightsSourceFooter(int days) =>
+      isEnglish ? 'Source: Server statistics over the last $days days.' : '来源：服务器按最近 $days 天统计。';
+  String insightsSourceDisclaimer(int days) =>
+      isEnglish ? 'Source: Server statistics over the last $days days.' : '来源：服务器按最近 $days 天统计。';
   String get noInsights => isEnglish ? 'No Statistics' : '暂无统计';
-  String get insightsWillShowHere => isEnglish
-      ? 'Usage data will appear here once you have conversations.'
-      : '有对话后这里会显示用量数据。';
+  String get insightsWillShowHere =>
+      isEnglish ? 'Usage data will appear here once you have conversations.' : '有对话后这里会显示用量数据。';
   String get unknownModel => isEnglish ? 'Unknown model' : '未知模型';
-  String modelTokensSubtitle(String tokens) =>
-      isEnglish ? '$tokens tokens' : '$tokens 令牌';
+  String modelTokensSubtitle(String tokens) => isEnglish ? '$tokens tokens' : '$tokens 令牌';
 
   // ---------------------------------------------------------------------------
   // 10. Git
@@ -629,13 +556,11 @@ class AppLocalizations {
   String get notAGitRepoDetail => isEnglish
       ? 'This workspace is not a git repository and Git features cannot be used.'
       : '该工作区不是 git 仓库，无法使用 Git 功能。';
-  String get notAGitRepository =>
-      isEnglish ? 'Not a Git Repository' : '不是 Git 仓库';
+  String get notAGitRepository => isEnglish ? 'Not a Git Repository' : '不是 Git 仓库';
   String get stagedSection => isEnglish ? 'Staged' : '已暂存';
   String get unstagedSection => isEnglish ? 'Unstaged' : '未暂存';
-  String get tooManyChangedFilesWarning => isEnglish
-      ? 'Too many changed files, displaying the first 500 only.'
-      : '变更文件过多，仅显示前 500 个。';
+  String get tooManyChangedFilesWarning =>
+      isEnglish ? 'Too many changed files, displaying the first 500 only.' : '变更文件过多，仅显示前 500 个。';
   String get unknownBranch => isEnglish ? 'Unknown branch' : '未知分支';
   String aheadBehind(int ahead, int behind) =>
       isEnglish ? 'ahead $ahead · behind $behind' : '领先 $ahead · 落后 $behind';
@@ -663,8 +588,7 @@ class AppLocalizations {
   String get gitChangeUntracked => isEnglish ? 'Untracked' : '未跟踪';
   String get gitChangeIgnored => isEnglish ? 'Ignored' : '忽略';
   String get gitChangeModified => isEnglish ? 'Modified' : '修改';
-  String get cannotLoadDiff =>
-      isEnglish ? 'Unable to load diff.' : '无法加载 diff。';
+  String get cannotLoadDiff => isEnglish ? 'Unable to load diff.' : '无法加载 diff。';
   String get binaryFileCannotShowDiff =>
       isEnglish ? 'Binary file, diff cannot be displayed.' : '二进制文件，无法显示 diff。';
   String get noDiffContent => isEnglish ? 'No diff content.' : '无 diff 内容。';
@@ -672,8 +596,7 @@ class AppLocalizations {
       ? 'File is too large, showing partial content:\n$partial'
       : '文件过大，以下为部分内容：\n$partial';
   String get workspaceClean => isEnglish ? 'Workspace Clean' : '工作区干净';
-  String get noPendingChanges =>
-      isEnglish ? 'No changes to commit.' : '没有待提交的变更。';
+  String get noPendingChanges => isEnglish ? 'No changes to commit.' : '没有待提交的变更。';
 
   // ---------------------------------------------------------------------------
   // 11. Settings & Profile
@@ -682,18 +605,14 @@ class AppLocalizations {
   String get settings => isEnglish ? 'Settings' : '设置';
   String get appearanceSection => isEnglish ? 'Appearance' : '外观';
   String get appearance => isEnglish ? 'Appearance' : '外观';
-  String get sessionListEntriesSection =>
-      isEnglish ? 'Session List Entries' : '会话列表入口';
-  String get sessionListEntries =>
-      isEnglish ? 'Session List Entries' : '会话列表入口';
-  String get sessionRowSubtitleSection =>
-      isEnglish ? 'Session Row Details' : '会话行信息';
+  String get sessionListEntriesSection => isEnglish ? 'Session List Entries' : '会话列表入口';
+  String get sessionListEntries => isEnglish ? 'Session List Entries' : '会话列表入口';
+  String get sessionRowSubtitleSection => isEnglish ? 'Session Row Details' : '会话行信息';
   String get sessionRowShowMessageCount => isEnglish ? 'Message count' : '消息数';
   String get sessionRowShowProjectName => isEnglish ? 'Project name' : '项目名';
   String get sessionRowShowWorkspace => isEnglish ? 'Workspace' : '工作区';
   String get sessionRowShowChannel => isEnglish ? 'Channel' : '渠道';
-  String get sessionRowShowEstimatedCost =>
-      isEnglish ? 'Estimated cost' : '预估价钱';
+  String get sessionRowShowEstimatedCost => isEnglish ? 'Estimated cost' : '预估价钱';
   String get themeLabel => isEnglish ? 'Theme' : '主题';
   String get theme => isEnglish ? 'Theme' : '主题';
   String get themeSystem => isEnglish ? 'System' : '跟随系统';
@@ -702,26 +621,20 @@ class AppLocalizations {
   String get desktopSection => isEnglish ? 'Desktop' : '桌面';
   String get desktop => isEnglish ? 'Desktop' : '桌面';
   String get minimizeToTray => isEnglish ? 'Minimize to Tray' : '最小化到托盘';
-  String get minimizeToTraySubtitle => isEnglish
-      ? 'Hide to tray instead of quitting when closing window'
-      : '关闭窗口时隐藏到托盘而非退出';
+  String get minimizeToTraySubtitle =>
+      isEnglish ? 'Hide to tray instead of quitting when closing window' : '关闭窗口时隐藏到托盘而非退出';
   String get globalShortcuts => isEnglish ? 'Global Shortcuts' : '全局快捷键';
   String get globalShortcutsSubtitle => isEnglish
       ? 'Ctrl+Shift+H show window, Ctrl+Shift+N new session'
       : 'Ctrl+Shift+H 唤起主窗口，Ctrl+Shift+N 新建会话';
-  String get rememberWindowPosition =>
-      isEnglish ? 'Remember Window Position' : '记住窗口位置';
-  String get rememberWindowPositionSubtitle => isEnglish
-      ? 'Restore window size and position on startup'
-      : '启动时恢复上次窗口位置与尺寸';
+  String get rememberWindowPosition => isEnglish ? 'Remember Window Position' : '记住窗口位置';
+  String get rememberWindowPositionSubtitle =>
+      isEnglish ? 'Restore window size and position on startup' : '启动时恢复上次窗口位置与尺寸';
   String get serverSection => isEnglish ? 'Servers' : '服务器';
-  String get serverSectionDisconnected =>
-      isEnglish ? 'Servers (Not Connected)' : '服务器（未连接）';
-  String get noServerConfigured =>
-      isEnglish ? 'No servers configured' : '尚未配置服务器';
-  String get noServerConfiguredSubtitle => isEnglish
-      ? 'Click "Add Server" below or configure from onboarding'
-      : '点击下方「添加服务器」或从引导页配置';
+  String get serverSectionDisconnected => isEnglish ? 'Servers (Not Connected)' : '服务器（未连接）';
+  String get noServerConfigured => isEnglish ? 'No servers configured' : '尚未配置服务器';
+  String get noServerConfiguredSubtitle =>
+      isEnglish ? 'Click "Add Server" below or configure from onboarding' : '点击下方「添加服务器」或从引导页配置';
   String get addServer => isEnglish ? 'Add Server' : '添加服务器';
   String get editServer => isEnglish ? 'Edit Server' : '编辑服务器';
   String get deleteServer => isEnglish ? 'Delete Server' : '删除服务器';
@@ -731,12 +644,10 @@ class AppLocalizations {
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
   String get serverNameOptionalPlaceholder =>
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
-  String get serverPasswordPlaceholder => isEnglish
-      ? 'Password (optional; leave blank to keep existing)'
-      : '密码（可选；编辑时留空保持原密码）';
-  String get serverPasswordOptionalPlaceholder => isEnglish
-      ? 'Password (optional; leave blank to keep existing)'
-      : '密码（可选；编辑时留空保持原密码）';
+  String get serverPasswordPlaceholder =>
+      isEnglish ? 'Password (optional; leave blank to keep existing)' : '密码（可选；编辑时留空保持原密码）';
+  String get serverPasswordOptionalPlaceholder =>
+      isEnglish ? 'Password (optional; leave blank to keep existing)' : '密码（可选；编辑时留空保持原密码）';
   String get loadingModels => isEnglish ? 'Loading models…' : '正在加载模型…';
   String get modelsLoadFailed => isEnglish ? 'Failed to load models' : '模型加载失败';
   String get defaultModel => isEnglish ? 'Default Model' : '默认模型';
@@ -746,10 +657,8 @@ class AppLocalizations {
   String get noModelsAvailable => isEnglish ? 'No models available' : '暂无可用模型';
   String get aboutSection => isEnglish ? 'About' : '关于';
   String get about => isEnglish ? 'About' : '关于';
-  String get hermesWebUIClient =>
-      isEnglish ? 'Hermes WebUI Client' : 'Hermes WebUI 客户端';
-  String get hermesWebUiClient =>
-      isEnglish ? 'Hermes WebUI Client' : 'Hermes WebUI 客户端';
+  String get hermesWebUIClient => isEnglish ? 'Hermes WebUI Client' : 'Hermes WebUI 客户端';
+  String get hermesWebUiClient => isEnglish ? 'Hermes WebUI Client' : 'Hermes WebUI 客户端';
   String get version => isEnglish ? 'Version' : '版本';
   String get profile => isEnglish ? 'Profile' : 'Profile';
   String get notRead => isEnglish ? 'Not loaded' : '未读取';
@@ -757,8 +666,7 @@ class AppLocalizations {
   String get readFailed => isEnglish ? 'Read Failed' : '读取失败';
   String get clickToRetry => isEnglish ? 'Click to retry' : '点击重试';
   String get selectProfile => isEnglish ? 'Select Profile' : '选择 Profile';
-  String get profileSwitchFailed =>
-      isEnglish ? 'Profile Switch Failed' : 'Profile 切换失败';
+  String get profileSwitchFailed => isEnglish ? 'Profile Switch Failed' : 'Profile 切换失败';
 
   // ---------------------------------------------------------------------------
   // 12. Projects
@@ -778,6 +686,22 @@ class AppLocalizations {
       ? 'Sessions in the project will not be deleted, only unassigned.'
       : '删除后项目内会话不会被删除，仅解除归类。';
 
+  // ---------------------------------------------------------------------------
+  // 13. Saved Prompts
+  // ---------------------------------------------------------------------------
+  String get savedPrompts => isEnglish ? 'Saved Prompts' : '收藏提示词';
+  String get savedPromptsTitle => isEnglish ? 'Saved Prompts' : '收藏提示词';
+  String get savedPromptsEmpty => isEnglish ? 'No saved prompts yet.' : '暂无收藏提示词';
+  String get savedPromptsDelete => isEnglish ? 'Delete' : '删除';
+  String get savedPromptsSaveCurrent => isEnglish ? 'Save current input' : '收藏当前输入';
+  String get saveCurrentInput => isEnglish ? 'Save current input' : '收藏当前输入';
+  String get savedPromptsEmptyInput => isEnglish ? 'Type a prompt first' : '请先输入提示词';
+  String get bookmarkPrompt => isEnglish ? 'Saved prompts' : '收藏提示词';
+  String get promptSaved => isEnglish ? 'Prompt saved' : '已收藏';
+  String get promptDeleted => isEnglish ? 'Prompt deleted' : '已删除';
+  String get savePromptFailed => isEnglish ? 'Failed to save prompt' : '收藏失败';
+  String get deletePromptFailed => isEnglish ? 'Failed to delete prompt' : '删除失败';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));
@@ -788,12 +712,10 @@ class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
   const AppLocalizationsDelegate();
 
   @override
-  bool isSupported(Locale locale) =>
-      const ['en', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => const ['en', 'zh'].contains(locale.languageCode);
 
   @override
-  Future<AppLocalizations> load(Locale locale) async =>
-      AppLocalizations(locale);
+  Future<AppLocalizations> load(Locale locale) async => AppLocalizations(locale);
 
   @override
   bool shouldReload(AppLocalizationsDelegate old) => false;
