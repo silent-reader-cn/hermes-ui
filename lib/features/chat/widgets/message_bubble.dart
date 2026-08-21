@@ -10,6 +10,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'markdown_styles.dart';
 import 'tool_call_card.dart';
 
 /// 单条消息气泡（chat_spec.md §6.3 渲染分支）。
@@ -70,18 +71,25 @@ class ChatMessageBubble extends StatelessWidget {
     // 在电脑端双栏里超出屏幕（right overflow）。
     return LayoutBuilder(
       builder: (context, constraints) {
+        // 会话样式（对齐 WebUI 惯例，深浅色一致）：
+        // - user：蓝色气泡 + 白字（深浅模式同款蓝泡）
+        // - assistant：不包裹气泡，裸文本与子卡片直接上背景 —— 浅色模式下
+        //   若给 assistant 加浅灰气泡会与页面背景同色「隐形」，而深色模式下
+        //   又显形，视觉上深浅不一致；改按 WebUI 惯例统一「user 有泡、
+        //   assistant 无泡」后，深浅模式样式天然一致（正文/代码块/卡片
+        //   各有自身的色块与间距承载层级）。
         final bubble = Container(
           key: const ValueKey('chat-message-bubble'),
           constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            // 动态色必须显式 resolve：BoxDecoration paint 不做主题解析，
-            // 直塞 CupertinoColors.* 在暗黑模式下会画成 light 值（白/亮块）。
-            color: isUser
-                ? CupertinoColors.activeBlue.resolveFrom(context)
-                : CupertinoColors.systemGrey6.resolveFrom(context),
-            borderRadius: BorderRadius.circular(16),
-          ),
+          padding: isUser
+              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 9)
+              : EdgeInsets.zero,
+          decoration: isUser
+              ? BoxDecoration(
+                  color: CupertinoColors.activeBlue.resolveFrom(context),
+                  borderRadius: BorderRadius.circular(16),
+                )
+              : null,
           child: isUser
               ? _UserContent(
                   message: message,
@@ -136,8 +144,9 @@ class _UserContent extends StatelessWidget {
 
     final hasMediaMarker =
         display.contains('MEDIA:') || display.contains('file://');
-    final parsedDisplay =
-        hasMediaMarker ? ChatMediaParser.parseMediaMarkers(display) : display;
+    final parsedDisplay = hasMediaMarker
+        ? ChatMediaParser.parseMediaMarkers(display)
+        : display;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -147,7 +156,7 @@ class _UserContent extends StatelessWidget {
             MarkdownBody(
               data: parsedDisplay,
               selectable: true,
-              styleSheet: _buildUserMarkdownStyleSheet(context),
+              styleSheet: buildUserMarkdownStyleSheet(context),
               // ignore: deprecated_member_use
               imageBuilder: (uri, title, alt) {
                 return ChatInlineMediaWidget(
@@ -182,27 +191,6 @@ class _UserContent extends StatelessWidget {
       ],
     );
   }
-
-  static MarkdownStyleSheet _buildUserMarkdownStyleSheet(BuildContext context) {
-    return MarkdownStyleSheet.fromCupertinoTheme(CupertinoTheme.of(context))
-        .copyWith(
-          p: const TextStyle(
-            fontSize: 15,
-            height: 1.4,
-            color: CupertinoColors.white,
-          ),
-          listBullet: const TextStyle(
-            fontSize: 15,
-            color: CupertinoColors.white,
-          ),
-          code: TextStyle(
-            fontSize: 13,
-            fontFamily: 'monospace',
-            color: CupertinoColors.white,
-            backgroundColor: CupertinoColors.white.withValues(alpha: 0.22),
-          ),
-        );
-  }
 }
 
 class _AssistantContent extends StatelessWidget {
@@ -235,7 +223,7 @@ class _AssistantContent extends StatelessWidget {
           MarkdownBody(
             data: parsedContent,
             selectable: true,
-            styleSheet: _buildMarkdownStyleSheet(context),
+            styleSheet: buildAssistantMarkdownStyleSheet(context),
             // ignore: deprecated_member_use
             imageBuilder: (uri, title, alt) {
               return ChatInlineMediaWidget(
@@ -261,44 +249,6 @@ class _AssistantContent extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-
-  /// Markdown 样式：以 Cupertino 主题为基底（标题/链接/表格等自动随深浅色），
-  /// 再叠加项目尺寸定制。正文/代码块显式用解析后的语义色：
-  /// - 文字色 `label` 保证深浅色下都是高对比正文色（fallback 样式在纯
-  ///   CupertinoApp 下会回退到浅色 Material 主题的黑色，暗黑模式翻车）；
-  /// - 背景块 `systemGrey5` 必须 resolve —— BoxDecoration/paint 不自动解析
-  ///   动态色，直塞会在暗黑模式下画成浅灰亮块。
-  static MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
-    final theme = CupertinoTheme.of(context);
-    final label = CupertinoColors.label.resolveFrom(context);
-    final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
-    return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
-      p: theme.textTheme.textStyle.copyWith(
-        fontSize: 15,
-        height: 1.4,
-        color: label,
-      ),
-      listBullet: theme.textTheme.textStyle.copyWith(
-        fontSize: 15,
-        color: label,
-      ),
-      code: TextStyle(
-        fontSize: 13,
-        fontFamily: 'monospace',
-        color: label,
-        backgroundColor: grey5,
-      ),
-      codeblockDecoration: BoxDecoration(
-        color: grey5,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: grey5,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      blockquotePadding: const EdgeInsets.all(8),
     );
   }
 }
