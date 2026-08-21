@@ -49,53 +49,124 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  /// 进入步骤 1 并填好服务器地址。
-  Future<void> fillUrl(WidgetTester tester) async {
-    await tester.enterText(
-      find.byKey(const ValueKey('onboarding-url')),
-      'http://hermes.local:30002',
-    );
+  /// 填入服务器地址。
+  Future<void> fillUrl(
+    WidgetTester tester, [
+    String url = 'http://hermes.local:30002',
+  ]) async {
+    await tester.enterText(find.byKey(const ValueKey('onboarding-url')), url);
     await tester.pump();
   }
 
-  /// 走完步骤 1/2 到达步骤 3（auth 未启用，跳过认证）。
-  Future<void> goToStep3(WidgetTester tester) async {
-    await fillUrl(tester);
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
+  /// 让当前聚焦的输入框失焦：点击页面内另一个可聚焦控件（Header 名输入框）。
+  ///
+  /// FocusNode listener 触发对应即时校验（URL → 健康检查；密码 → 试探登录），
+  /// 两次异步段各 pump 一次以完成 setState。
+  Future<void> unfocusIntoHeader(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('onboarding-header-name-0')));
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
     await tester.pump();
   }
 
-  testWidgets('三步向导：健康检查 → 跳过认证 → 自定义头 → 完成保存并跳转 /', (tester) async {
+  testWidgets('单页连接：合法 URL 失焦 → 健康检查成功显示通过提示', (tester) async {
     await pumpApp(tester);
 
-    // 路由守卫：无连接 → onboarding
+    // 路由守卫：无连接 → onboarding 单页
     expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
 
-    // 步骤 1：填 URL + 健康检查成功
     await fillUrl(tester);
-    await tester.tap(find.byKey(const ValueKey('onboarding-health-check')));
-    await tester.pump();
-    await tester.pump();
+    await unfocusIntoHeader(tester);
+
+    // 健康检查成功：绿色通过提示 + auth 未启用文案（fake 默认），无密码框
     expect(find.text('✅ 连接成功'), findsOneWidget);
-    expect(api.healthCalls, 1);
-
-    // 下一步 → 步骤 2：服务器未启用认证，显示可跳过
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    await tester.pump();
     expect(find.text('该服务器未启用密码认证，可直接继续'), findsOneWidget);
+    expect(api.healthCalls, 1);
+    expect(api.authCalls, 1);
+  });
 
-    // 继续 → 步骤 3：自定义 Headers
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    expect(find.text('自定义 Headers（可选）'), findsOneWidget);
+  testWidgets('非法 URL 失焦 → 即时显示格式错误，不触发健康检查', (tester) async {
+    await pumpApp(tester);
 
-    // 添加一行 header 并填写
-    await tester.tap(find.byKey(const ValueKey('onboarding-add-header')));
+    await fillUrl(tester, 'not-a-url');
+    await unfocusIntoHeader(tester);
+
+    expect(
+      find.text('❌ 请输入有效的服务器地址，例如 https://hermes.example.com:30002'),
+      findsOneWidget,
+    );
+    expect(api.healthCalls, 0);
+    expect(find.byKey(const ValueKey('onboarding-password')), findsNothing);
+  });
+
+  testWidgets('auth 启用时显示密码框，密码失焦验证成功显示通过提示', (tester) async {
+    api.authEnabled = true;
+    await pumpApp(tester);
+
+    await fillUrl(tester);
+    await unfocusIntoHeader(tester);
+    expect(find.text('该服务器需要密码认证，请登录'), findsOneWidget);
+
+    // 密码框出现后才能填写
+    final passwordField = find.byKey(const ValueKey('onboarding-password'));
+    expect(passwordField, findsOneWidget);
+    await tester.enterText(passwordField, 'pw123');
     await tester.pump();
+
+    await unfocusIntoHeader(tester);
+
+    expect(find.text('✅ 密码正确'), findsOneWidget);
+    expect(api.loginCalls, 1);
+    expect(api.lastPassword, 'pw123');
+  });
+
+  testWidgets('密码失焦验证失败 → 就地显示错误文案', (tester) async {
+    api.authEnabled = true;
+    api.loginOk = false;
+    await pumpApp(tester);
+
+    await fillUrl(tester);
+    await unfocusIntoHeader(tester);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-password')),
+      'wrong',
+    );
+    await tester.pump();
+    await unfocusIntoHeader(tester);
+
+    expect(find.textContaining('登录失败'), findsOneWidget);
+    expect(api.loginCalls, 1);
+  });
+
+  testWidgets('auth 未启用时不显示密码框', (tester) async {
+    api.authEnabled = false;
+    await pumpApp(tester);
+
+    await fillUrl(tester);
+    await unfocusIntoHeader(tester);
+
+    expect(find.text('该服务器未启用密码认证，可直接继续'), findsOneWidget);
+    expect(find.byKey(const ValueKey('onboarding-password')), findsNothing);
+  });
+
+  testWidgets('完整流程：URL + 密码 + Header → 连接保存（username 为 null）并跳转 /', (
+    tester,
+  ) async {
+    api.authEnabled = true;
+    await pumpApp(tester);
+
+    await fillUrl(tester);
+    await unfocusIntoHeader(tester);
+
+    // 填写密码（不失焦验证也可直接保存）
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-password')),
+      'pw123',
+    );
+    await tester.pump();
+
+    // 自定义 Header（初始已有一行）
     await tester.enterText(
       find.byKey(const ValueKey('onboarding-header-name-0')),
       'Authorization',
@@ -106,14 +177,14 @@ void main() {
     );
     await tester.pump();
 
-    // 完成 → 保存连接 + setActive + 跳转 /
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-finish')));
+    // 连接 → 保存连接 + setActive + 跳转 /
+    await tester.tap(find.byKey(const ValueKey('onboarding-connect')));
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('暂无会话'), findsOneWidget);
 
-    // 验证持久化：connections blob + active id
+    // 验证持久化：connections blob + 密码单独 key + active id
     final raw = storage.data[ConnectionStore.connectionsKey];
     expect(raw, isNotNull);
     final list = jsonDecode(raw!) as List;
@@ -121,70 +192,17 @@ void main() {
     final saved = list.single as Map<String, Object?>;
     expect(saved['base_url'], 'http://hermes.local:30002');
     expect(saved['name'], 'hermes.local');
-    expect(
-      (saved['custom_headers'] as Map)['Authorization'],
-      'Bearer abc',
-    );
-    expect(storage.data[ConnectionStore.activeConnectionKey], saved['id']);
+    expect(saved.containsKey('username'), isFalse); // 无用户名概念，恒为 null
+    expect((saved['custom_headers'] as Map)['Authorization'], 'Bearer abc');
+    final id = saved['id'] as String;
+    expect(storage.data[ConnectionStore.passwordKey(id)], 'pw123');
+    expect(storage.data[ConnectionStore.activeConnectionKey], id);
   });
 
-  testWidgets('密码登录路径：auth 启用 → 登录成功进入步骤 3', (tester) async {
-    api.authEnabled = true;
+  testWidgets('非法 Header 点连接 → 报错不保存，停留在 onboarding', (tester) async {
     await pumpApp(tester);
+
     await fillUrl(tester);
-
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('该服务器需要密码认证，请登录'), findsOneWidget);
-
-    await tester.enterText(
-      find.byKey(const ValueKey('onboarding-password')),
-      'pw123',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('自定义 Headers（可选）'), findsOneWidget);
-    expect(api.loginCalls, 1);
-    expect(api.lastPassword, 'pw123');
-  });
-
-  testWidgets('登录失败 → CupertinoAlertDialog 提示，停留在步骤 2', (tester) async {
-    api.authEnabled = true;
-    api.loginOk = false;
-    await pumpApp(tester);
-    await fillUrl(tester);
-
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    await tester.pump();
-    await tester.enterText(
-      find.byKey(const ValueKey('onboarding-password')),
-      'wrong',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-next')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('登录失败'), findsOneWidget);
-    expect(api.loginCalls, 1);
-
-    // 关闭弹窗后仍在步骤 2
-    await tester.tap(find.text('好'));
-    await tester.pump();
-    await tester.pump();
-    expect(find.byKey(const ValueKey('onboarding-password')), findsOneWidget);
-    expect(find.text('自定义 Headers（可选）'), findsNothing);
-  });
-
-  testWidgets('非法 Header（名含空格）→ 完成时报错，不保存连接', (tester) async {
-    await pumpApp(tester);
-    await goToStep3(tester);
-
     await tester.enterText(
       find.byKey(const ValueKey('onboarding-header-name-0')),
       'Bad Name', // 空格不是 RFC 7230 token
@@ -195,31 +213,13 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byKey(const ValueKey('onboarding-footer-finish')));
+    await tester.tap(find.byKey(const ValueKey('onboarding-connect')));
     await tester.pump();
+    await tester.pump();
+
     expect(find.text('Header 名必须是合法 token，值不能包含换行'), findsOneWidget);
-
     expect(storage.data[ConnectionStore.connectionsKey], isNull); // 未保存
-  });
-
-  testWidgets('跳过向导入口：直接进入步骤 3', (tester) async {
-    await pumpApp(tester);
-    await fillUrl(tester);
-
-    await tester.tap(find.byKey(const ValueKey('onboarding-skip-wizard')));
-    await tester.pump();
-    expect(find.text('自定义 Headers（可选）'), findsOneWidget);
-  });
-
-  testWidgets('健康检查失败（服务器返回异常状态）显示错误', (tester) async {
-    api.healthOk = false;
-    await pumpApp(tester);
-    await fillUrl(tester);
-
-    await tester.tap(find.byKey(const ValueKey('onboarding-health-check')));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('❌ 服务器返回异常状态'), findsOneWidget);
+    expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
   });
 }
 

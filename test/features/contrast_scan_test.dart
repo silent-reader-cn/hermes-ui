@@ -20,7 +20,9 @@ import 'package:hermex_flutter/core/models/skills.dart';
 import 'package:hermex_flutter/core/models/workspace.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
+
 import '../helpers/fake_chat_api.dart';
+
 import 'package:hermex_flutter/features/git/git_api.dart';
 import 'package:hermex_flutter/features/git/git_page.dart';
 import 'package:hermex_flutter/features/insights/insights_api.dart';
@@ -328,7 +330,7 @@ String _issueKey(ContrastFinding f) =>
 /// A 的修复落地后对应条目会失效（报告不再出现），届时应清空本名单。
 final Set<String> allKnownIssues = <String>{
   // ---- 模型误报：按钮/主色底上的白字（真背景是 #007AFF 蓝，白字对比 >4.5） ----
-  'onboarding|light|下一步', // CupertinoButton 主按钮白字
+  'onboarding|light|连接并保存', // CupertinoButton 主按钮白字
   'chat|light|帮我检查一下对比度', // 用户气泡（蓝底白字，本扫描误以页面底色参考）
   'chat|light|用深色主题再看看', // 用户气泡（同上蓝色底）
   'git|light|提交', // 主按钮白字

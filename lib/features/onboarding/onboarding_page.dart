@@ -4,30 +4,37 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
-import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import 'onboarding_providers.dart';
 
-/// 健康检查状态。
+/// 健康检查状态（URL 失焦/提交时自动触发）。
 enum _HealthState { idle, checking, ok, failed }
 
 /// 认证模式（由 GET /api/auth/status 决定）。
 enum _AuthState { checking, notRequired, required }
 
-/// 登录进行状态。
-enum _LoginState { idle, loggingIn, failed }
+/// 密码验证进行状态（密码失焦/提交时试探性登录）。
+enum _LoginState { idle, verifying, ok, failed }
 
-/// 三步 onboarding 向导（app_shell_spec.md §6）。
+/// 单页「连接服务器」页（替代原三步向导）。
 ///
-/// 1. 服务器地址 + 健康检查（GET /health）
-/// 2. 认证（无密码跳过 / 密码登录 POST /api/auth/login）
-/// 3. 自定义 Headers（可选）→ 保存连接并跳转 `/`
+/// 结构与交互：
+/// 1. 服务器地址：失焦即格式校验 + 健康检查（GET /health），成功后再查
+///    auth 状态（GET /api/auth/status），结果即时显示在输入框下方。
+/// 2. 认证：服务端启用密码时显示密码框，失焦即试探登录（POST /api/auth/login），
+///    成功/失败就地提示（不跳转）；未启用密码则显示「无需密码」文案。
+/// 3. 自定义 Headers（可选，不参与校验流程）。
+/// 4. 底部「连接并保存」：校验 URL + headers（+ 必填密码）后保存
+///    [ServerConnection] 并跳转 `/`。
+///
+/// 后端 hermes-webui 只认密码（无用户名），保存连接时 username 恒为 null。
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
 
@@ -37,8 +44,9 @@ class OnboardingPage extends ConsumerStatefulWidget {
 
 /// 单行自定义头输入（key + value 各自持有控制器，便于增删行）。
 class _HeaderField {
-  _HeaderField() : nameController = TextEditingController(),
-                   valueController = TextEditingController();
+  _HeaderField()
+    : nameController = TextEditingController(),
+      valueController = TextEditingController();
 
   final TextEditingController nameController;
   final TextEditingController valueController;
@@ -50,25 +58,33 @@ class _HeaderField {
 }
 
 class _OnboardingPageState extends ConsumerState<OnboardingPage> {
-  static const _stepCount = 3;
-
   final _urlController = TextEditingController();
-  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _urlFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
   final List<_HeaderField> _headers = [_HeaderField()];
 
-  int _step = 1;
   _HealthState _health = _HealthState.idle;
   String _healthMessage = '';
   _AuthState _auth = _AuthState.checking;
   _LoginState _loginState = _LoginState.idle;
+  String _loginMessage = '';
   String _headerError = '';
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    // 失焦即时校验：FocusNode listener（输入框 blur 时触发）。
+    _urlFocusNode.addListener(_onUrlFocusChanged);
+    _passwordFocusNode.addListener(_onPasswordFocusChanged);
+  }
+
+  @override
   void dispose() {
+    _urlFocusNode.dispose();
+    _passwordFocusNode.dispose();
     _urlController.dispose();
-    _usernameController.dispose();
     _passwordController.dispose();
     for (final field in _headers) {
       field.dispose();
@@ -79,17 +95,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   /// 根据已填 URL 构建 onboarding API 客户端（测试经 factory Provider 注入 fake）。
   OnboardingServerApi _buildClient() {
     final factory = ref.read(onboardingApiFactoryProvider);
-    return factory(
-      _urlController.text.trim(),
-      [
-        for (final field in _headers)
-          if (field.nameController.text.trim().isNotEmpty)
-            CustomHeader(
-              name: field.nameController.text.trim(),
-              value: field.valueController.text,
-            ),
-      ],
-    );
+    return factory(_urlController.text.trim(), [
+      for (final field in _headers)
+        if (field.nameController.text.trim().isNotEmpty)
+          CustomHeader(
+            name: field.nameController.text.trim(),
+            value: field.valueController.text,
+          ),
+    ]);
   }
 
   String? _validateUrl(String raw) {
@@ -106,16 +119,38 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 步骤 1：服务器地址 + 健康检查
+  // 失焦即时校验
   // ---------------------------------------------------------------------------
 
+  void _onUrlFocusChanged() {
+    if (!_urlFocusNode.hasFocus) {
+      // 等当前帧（含焦点切换/输入连接交接）完全结束后再触发健康检查：
+      // 失焦后立刻 setState 重建仍持焦的输入框会打断框架的键盘焦点交接，
+      // 导致后续输入落到错误的输入框。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_runHealthCheck());
+      });
+    }
+  }
+
+  void _onPasswordFocusChanged() {
+    if (!_passwordFocusNode.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_verifyPassword());
+      });
+    }
+  }
+
+  /// 健康检查：格式校验 → GET /health → 成功后刷新 auth 状态。
   Future<void> _runHealthCheck() async {
+    if (_health == _HealthState.checking) return;
     final l10n = AppLocalizations.of(context);
     final error = _validateUrl(_urlController.text);
     if (error != null) {
       setState(() {
         _health = _HealthState.failed;
         _healthMessage = error;
+        _auth = _AuthState.checking; // 地址无效时认证区一并隐藏重置
       });
       return;
     }
@@ -125,6 +160,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     });
     try {
       final result = await _buildClient().health();
+      if (!mounted) return;
       final ok = result.status == 'ok';
       setState(() {
         _health = ok ? _HealthState.ok : _HealthState.failed;
@@ -132,73 +168,74 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ? l10n.connectionSuccessful
             : l10n.serverReturnedAbnormalStatus;
       });
+      if (ok) await _checkAuth();
     } on ApiException catch (error) {
+      if (!mounted) return;
       setState(() {
         _health = _HealthState.failed;
         _healthMessage = error.message;
+        _auth = _AuthState.checking;
       });
     } on Exception {
+      if (!mounted) return;
       setState(() {
         _health = _HealthState.failed;
         _healthMessage = l10n.cannotConnectToServer;
+        _auth = _AuthState.checking;
       });
     }
   }
 
-  Future<void> _nextFromStep1() async {
-    final error = _validateUrl(_urlController.text);
-    if (error != null) {
-      setState(() {
-        _health = _HealthState.failed;
-        _healthMessage = error;
-      });
-      return;
-    }
-    _goToStep(2);
-    await _checkAuth();
-  }
-
-  // ---------------------------------------------------------------------------
-  // 步骤 2：认证
-  // ---------------------------------------------------------------------------
-
+  /// 查询服务端认证模式（auth_enabled）；失败按需认证处理（保守）。
   Future<void> _checkAuth() async {
     setState(() => _auth = _AuthState.checking);
     try {
       final result = await _buildClient().authStatus();
+      if (!mounted) return;
       final enabled = result.authEnabled == true;
       setState(() {
         _auth = enabled ? _AuthState.required : _AuthState.notRequired;
       });
     } on Exception {
-      // 查询失败按需认证处理（保守），仍允许用户跳过。
+      if (!mounted) return;
       setState(() => _auth = _AuthState.required);
     }
   }
 
-  Future<void> _login() async {
-    final l10n = AppLocalizations.of(context);
+  /// 密码失焦试探性登录：成功显示「密码正确」，失败就地报错（不跳转）。
+  Future<void> _verifyPassword() async {
     final password = _passwordController.text;
-    if (password.isEmpty) return;
-    setState(() => _loginState = _LoginState.loggingIn);
+    if (password.isEmpty || _auth != _AuthState.required) return;
+    if (_loginState == _LoginState.verifying) return;
+    final l10n = AppLocalizations.of(context);
+    setState(() {
+      _loginState = _LoginState.verifying;
+      _loginMessage = '';
+    });
     try {
       await _buildClient().login(password);
       if (!mounted) return;
-      setState(() => _loginState = _LoginState.idle);
-      _goToStep(3);
+      setState(() {
+        _loginState = _LoginState.ok;
+        _loginMessage = l10n.passwordVerified;
+      });
     } on ApiException catch (error) {
       if (!mounted) return;
-      setState(() => _loginState = _LoginState.failed);
-      await _showAlert(l10n.loginFailed, error.message);
+      setState(() {
+        _loginState = _LoginState.failed;
+        _loginMessage = l10n.loginFailedWithMessage(error.message);
+      });
     } on Exception {
       if (!mounted) return;
-      setState(() => _loginState = _LoginState.failed);
-      await _showAlert(l10n.loginFailed, l10n.cannotConnectRetryLater);
+      setState(() {
+        _loginState = _LoginState.failed;
+        _loginMessage = l10n.cannotConnectRetryLater;
+      });
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 步骤 3：自定义 Headers + 完成
+  // 自定义 Headers + 完成
   // ---------------------------------------------------------------------------
 
   void _addHeaderField() {
@@ -232,11 +269,20 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   Future<void> _finish() async {
     if (_saving) return;
+    final l10n = AppLocalizations.of(context);
     final urlError = _validateUrl(_urlController.text);
     final headerError = _headerErrorText();
-    if (urlError != null || headerError != null) {
+    final passwordMissing =
+        _auth == _AuthState.required && _passwordController.text.isEmpty;
+    if (urlError != null || headerError != null || passwordMissing) {
       setState(() {
-        _headerError = headerError ?? urlError ?? '';
+        _headerError = headerError ?? '';
+        _healthMessage = urlError ?? _healthMessage;
+        if (urlError != null) _health = _HealthState.failed;
+        if (passwordMissing) {
+          _loginState = _LoginState.failed;
+          _loginMessage = l10n.passwordRequiredOnServer;
+        }
       });
       return;
     }
@@ -248,9 +294,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       id: uuidV4(),
       name: host == null || host.isEmpty ? url : host,
       baseUrl: url,
-      username: _usernameController.text.trim().isEmpty
-          ? null
-          : _usernameController.text.trim(),
+      username: null, // hermes-webui 认证只认密码，无用户名概念
       password: _passwordController.text.isEmpty
           ? null
           : _passwordController.text,
@@ -262,60 +306,37 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       createdAt: DateTime.now().toUtc(),
     );
 
-    final saved = await ref.read(connectionsProvider.notifier).upsert(connection);
+    final saved = await ref
+        .read(connectionsProvider.notifier)
+        .upsert(connection);
     await ref.read(activeConnectionProvider.notifier).setActive(saved.id);
     if (!mounted) return;
     context.go('/');
   }
 
   // ---------------------------------------------------------------------------
-  // 通用
+  // UI
   // ---------------------------------------------------------------------------
-
-  void _goToStep(int step) {
-    setState(() {
-      _step = step.clamp(1, _stepCount);
-      _headerError = '';
-    });
-  }
-
-  Future<void> _showAlert(String title, String message) {
-    final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: _step > 1
-            ? CupertinoNavigationBarBackButton(
-                onPressed: () => _goToStep(_step - 1),
-              )
-            : null,
-        middle: Text(l10n.connectServer),
-      ),
+      navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
       child: SafeArea(
         child: Column(
           children: [
-            Expanded(child: _buildStepBody()),
+            Expanded(child: _buildForm()),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: SizedBox(width: double.infinity, child: _buildFooter()),
+              child: SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  key: const ValueKey('onboarding-connect'),
+                  onPressed: _saving ? null : () => unawaited(_finish()),
+                  child: Text(l10n.connectAndSave),
+                ),
+              ),
             ),
           ],
         ),
@@ -323,20 +344,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     );
   }
 
-  Widget _buildStepBody() {
-    switch (_step) {
-      case 1:
-        return _buildStep1();
-      case 2:
-        return _buildStep2();
-      default:
-        return _buildStep3();
-    }
-  }
-
-  Widget _buildStep1() {
+  Widget _buildForm() {
     final l10n = AppLocalizations.of(context);
-    final checking = _health == _HealthState.checking;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -353,150 +362,23 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         CupertinoTextField(
           key: const ValueKey('onboarding-url'),
           controller: _urlController,
+          focusNode: _urlFocusNode,
           placeholder: 'https://hermes.example.com:30002',
           autocorrect: false,
           keyboardType: TextInputType.url,
+          onEditingComplete: () => unawaited(_runHealthCheck()),
           padding: const EdgeInsets.all(12),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            CupertinoButton(
-              key: const ValueKey('onboarding-health-check'),
-              onPressed: checking ? null : () => unawaited(_runHealthCheck()),
-              child: Text(l10n.testConnection),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildHealthStatus(),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: CupertinoButton(
-            key: const ValueKey('onboarding-skip-wizard'),
-            onPressed: () => unawaited(_skipToHeaders()),
-            child: Text(
-              l10n.haveApiKeySkipWizard,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHealthStatus() {
-    final l10n = AppLocalizations.of(context);
-    switch (_health) {
-      case _HealthState.idle:
-        return const SizedBox.shrink();
-      case _HealthState.checking:
-        return Row(
-          children: [
-            const CupertinoActivityIndicator(),
-            const SizedBox(width: 8),
-            Text(l10n.checking),
-          ],
-        );
-      case _HealthState.ok:
-        return Text(l10n.connectionSuccessfulWithCheck);
-      case _HealthState.failed:
-        return Text(
-          '❌ $_healthMessage',
-          style: const TextStyle(color: statusRedText),
-        );
-    }
-  }
-
-  Future<void> _skipToHeaders() async {
-    final error = _validateUrl(_urlController.text);
-    if (error != null) {
-      setState(() {
-        _health = _HealthState.failed;
-        _healthMessage = error;
-      });
-      return;
-    }
-    _goToStep(3);
-  }
-
-  Widget _buildStep2() {
-    final l10n = AppLocalizations.of(context);
-    final checking = _auth == _AuthState.checking;
-    final loggingIn = _loginState == _LoginState.loggingIn;
-    final notRequired = _auth == _AuthState.notRequired;
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text(
-          l10n.authentication,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        if (checking)
-          Row(
-            children: [
-              const CupertinoActivityIndicator(),
-              const SizedBox(width: 8),
-              Text(l10n.detectingServerAuth),
-            ],
-          )
-        else if (notRequired)
-          Text(
-            l10n.serverNoPasswordRequired,
-            style: const TextStyle(fontSize: 15, color: CupertinoColors.systemGreen),
-          )
-        else
-          Text(
-            l10n.serverPasswordRequired,
-            style: const TextStyle(fontSize: 15, color: secondaryText),
-          ),
+        _buildHealthStatus(),
+        if (_health == _HealthState.ok) ...[
+          const SizedBox(height: 20),
+          _buildAuthSection(),
+        ],
         const SizedBox(height: 24),
-        CupertinoTextField(
-          key: const ValueKey('onboarding-username'),
-          controller: _usernameController,
-          placeholder: l10n.usernameOptional,
-          autocorrect: false,
-          padding: const EdgeInsets.all(12),
-        ),
-        const SizedBox(height: 12),
-        CupertinoTextField(
-          key: const ValueKey('onboarding-password'),
-          controller: _passwordController,
-          placeholder: l10n.password,
-          obscureText: true,
-          padding: const EdgeInsets.all(12),
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: CupertinoButton(
-            key: const ValueKey('onboarding-skip-auth'),
-            onPressed: () => _goToStep(3),
-            child: Text(
-              l10n.skipAuthNoPasswordMode,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        ),
-        if (loggingIn)
-          const Padding(
-            padding: EdgeInsets.only(top: 16),
-            child: Center(child: CupertinoActivityIndicator()),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildStep3() {
-    final l10n = AppLocalizations.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
         Text(
           l10n.customHeadersOptional,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         Text(
@@ -521,6 +403,135 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         ),
       ],
     );
+  }
+
+  /// URL 下方的健康检查状态（成功绿勾 / 失败红文案 / 检查中进度）。
+  Widget _buildHealthStatus() {
+    final l10n = AppLocalizations.of(context);
+    switch (_health) {
+      case _HealthState.idle:
+        return const SizedBox.shrink();
+      case _HealthState.checking:
+        return Row(
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(width: 8),
+            Text(
+              l10n.checking,
+              style: const TextStyle(fontSize: 14, color: secondaryText),
+            ),
+          ],
+        );
+      case _HealthState.ok:
+        return Text(
+          l10n.connectionSuccessfulWithCheck,
+          style: const TextStyle(
+            fontSize: 14,
+            color: statusGreenText,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+      case _HealthState.failed:
+        return Text(
+          '❌ $_healthMessage',
+          style: const TextStyle(fontSize: 14, color: statusRedText),
+        );
+    }
+  }
+
+  /// 认证区：仅在健康检查通过后展示（检测中 / 无需密码 / 需密码+输入框）。
+  Widget _buildAuthSection() {
+    final l10n = AppLocalizations.of(context);
+    switch (_auth) {
+      case _AuthState.checking:
+        return Row(
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(width: 8),
+            Text(
+              l10n.detectingServerAuth,
+              style: const TextStyle(fontSize: 14, color: secondaryText),
+            ),
+          ],
+        );
+      case _AuthState.notRequired:
+        return Row(
+          children: [
+            const Icon(
+              CupertinoIcons.checkmark_circle_fill,
+              size: 16,
+              color: statusGreenText,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                l10n.serverNoPasswordRequired,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: statusGreenText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      case _AuthState.required:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.serverPasswordRequired,
+              style: const TextStyle(fontSize: 15, color: secondaryText),
+            ),
+            const SizedBox(height: 12),
+            CupertinoTextField(
+              key: const ValueKey('onboarding-password'),
+              controller: _passwordController,
+              focusNode: _passwordFocusNode,
+              placeholder: l10n.password,
+              obscureText: true,
+              onEditingComplete: () => unawaited(_verifyPassword()),
+              padding: const EdgeInsets.all(12),
+            ),
+            const SizedBox(height: 8),
+            _buildPasswordStatus(),
+          ],
+        );
+    }
+  }
+
+  /// 密码框下方的验证状态（验证中 / 密码正确 / 错误原因）。
+  Widget _buildPasswordStatus() {
+    final l10n = AppLocalizations.of(context);
+    switch (_loginState) {
+      case _LoginState.idle:
+        return const SizedBox.shrink();
+      case _LoginState.verifying:
+        return Row(
+          children: [
+            const CupertinoActivityIndicator(),
+            const SizedBox(width: 8),
+            Text(
+              l10n.verifyingPassword,
+              style: const TextStyle(fontSize: 14, color: secondaryText),
+            ),
+          ],
+        );
+      case _LoginState.ok:
+        return Text(
+          _loginMessage,
+          style: const TextStyle(
+            fontSize: 14,
+            color: statusGreenText,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+      case _LoginState.failed:
+        return Text(
+          '❌ $_loginMessage',
+          style: const TextStyle(fontSize: 14, color: statusRedText),
+        );
+    }
   }
 
   Widget _buildHeaderRow(int index) {
@@ -562,33 +573,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFooter() {
-    final l10n = AppLocalizations.of(context);
-    final (String label, VoidCallback? onPressed) = switch (_step) {
-      1 => (
-        l10n.nextStep,
-        () => unawaited(_nextFromStep1()),
-      ),
-      2 => _auth == _AuthState.notRequired
-          ? (l10n.continueAction, () => _goToStep(3))
-          : (
-              l10n.loginAndContinue,
-              _loginState == _LoginState.loggingIn
-                  ? null
-                  : () => unawaited(_login()),
-            ),
-      _ => (
-        l10n.finish,
-        _saving ? null : () => unawaited(_finish()),
-      ),
-    };
-    return CupertinoButton.filled(
-      key: ValueKey('onboarding-footer-${_step == 3 ? 'finish' : 'next'}'),
-      onPressed: onPressed,
-      child: Text(label),
     );
   }
 }
