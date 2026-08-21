@@ -26,6 +26,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
     this.actions = const [],
     this.topPadding = 0,
     this.brightness = Brightness.light,
+    this.compactHeader = false,
   });
 
   /// 顶部安全区高度（状态栏），由页面在 build 时以
@@ -43,18 +44,32 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// 比较会导致标题颜色冻结在旧主题（桌面端浅深切换不跟色 bug）。
   final Brightness brightness;
 
+  /// 紧凑头部模式：不预留大标题顶部空白（大标题直接贴状态栏下方）。
+  ///
+  /// 电脑端双栏侧栏复用会话列表时传 `true`（侧栏空间紧凑，标题紧贴顶部）；
+  /// 手机端窄屏单栈保持默认 `false`（预留 49pt 顶部空白，与任务 / 技能页
+  /// 系统导航栏大标题对齐，切换页面时标题不跳位）。
+  final bool compactHeader;
+
   /// 收起态导航栏高度（对齐 iOS `_kNavBarPersistentHeight`）。
   static const double barHeight = 44.0;
 
   /// 展开态大标题区高度（对齐系统 `_kNavBarLargeTitleHeightExtension`）。
   static const double largeTitleHeight = 52.0;
 
-  /// 展开态大标题文字顶部距状态栏的间距。
+  /// 大标题文字顶部距状态栏的间距（紧凑模式：直接贴状态栏下方）。
+  static const double _compactLargeTitleTopGap = 6.0;
+
+  /// 展开态大标题文字顶部距状态栏的间距（宽敞模式）。
   ///
   /// 对齐系统 `CupertinoSliverNavigationBar` 展开态大标题的视觉位置
   /// （persistent 栏 44pt + 大标题区内文字偏移 5pt），保证与任务 / 技能
-  /// 等使用系统导航栏的页面切换时标题顶部间距一致。
-  static const double _largeTitleTopGap = 49.0;
+  /// 等使用系统导航栏的页面切换时标题顶部间距一致。仅手机端单栈使用。
+  static const double _spaciousLargeTitleTopGap = 49.0;
+
+  /// 当前生效的大标题顶部间距（据 [compactHeader]）。
+  double get _largeTitleTopGap =>
+      compactHeader ? _compactLargeTitleTopGap : _spaciousLargeTitleTopGap;
 
   /// 大标题文字行盒高度（MiSans 34pt 实测渲染高度，探针数据）。
   ///
@@ -69,14 +84,17 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => topPadding + barHeight;
 
   @override
-  double get maxExtent => topPadding + barHeight + largeTitleHeight;
+  double get maxExtent =>
+      topPadding +
+      (compactHeader ? largeTitleHeight : barHeight + largeTitleHeight);
 
   @override
   bool shouldRebuild(SessionListHeaderDelegate oldDelegate) =>
       oldDelegate.title != title ||
       oldDelegate.actions != actions ||
       oldDelegate.topPadding != topPadding ||
-      oldDelegate.brightness != brightness;
+      oldDelegate.brightness != brightness ||
+      oldDelegate.compactHeader != compactHeader;
 
   /// 展开进度：1 = 完全展开（大标题可见），0 = 完全收起。
   double _expandProgress(double shrinkOffset) {

@@ -115,6 +115,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   topPadding: MediaQuery.paddingOf(context).top,
                   brightness:
                       CupertinoTheme.of(context).brightness ?? Brightness.light,
+                  // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不预留顶部
+                  // 空白（电脑端双栏空间紧凑）；手机端单栈 → 宽敞头部（49pt）。
+                  compactHeader: !widget.showUtilityRows,
                   actions: [
                     if (!isSearchMode) _buildFilterAction(state),
                     if (widget.showSettingsTrailing)
