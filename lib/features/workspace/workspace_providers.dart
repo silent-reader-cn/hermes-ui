@@ -49,6 +49,7 @@ class WorkspaceState {
     this.currentPath = '.',
     this.isRefreshing = false,
     this.isUploading = false,
+    this.isFolderDownloading = false,
     this.busyPaths = const {},
     this.actionError,
     this.notice,
@@ -65,6 +66,9 @@ class WorkspaceState {
 
   /// 上传请求在途（UI 用 ActivityIndicator 替换上传按钮）。
   final bool isUploading;
+
+  /// 当前目录打包下载在途（UI 用 ActivityIndicator 替换下载按钮）。
+  final bool isFolderDownloading;
 
   /// 正在执行变更（下载/删除/重命名）的条目路径（UI 用 ActivityIndicator
   /// 替换对应行的操作按钮，防止并发变更竞态）。
@@ -120,6 +124,7 @@ class WorkspaceState {
     String? currentPath,
     bool? isRefreshing,
     bool? isUploading,
+    bool? isFolderDownloading,
     Set<String>? busyPaths,
     String? Function()? actionError,
     String? Function()? notice,
@@ -129,6 +134,7 @@ class WorkspaceState {
       currentPath: currentPath ?? this.currentPath,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       isUploading: isUploading ?? this.isUploading,
+      isFolderDownloading: isFolderDownloading ?? this.isFolderDownloading,
       busyPaths: busyPaths ?? this.busyPaths,
       actionError: actionError != null ? actionError() : this.actionError,
       notice: notice != null ? notice() : this.notice,
@@ -303,6 +309,37 @@ class WorkspaceController extends FamilyAsyncNotifier<WorkspaceState, String> {
       return true;
     } on Exception catch (error) {
       await _clearBusy(path);
+      await _setActionError(_messageOf(error));
+      return false;
+    }
+  }
+
+  /// 下载当前目录打包 zip；磁盘保存待平台通道接入，当前仅提示字节数。
+  Future<bool> downloadFolder() async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    state = AsyncData(current.copyWith(isFolderDownloading: true));
+    try {
+      final bytes = await _api.downloadFolder(
+        sessionId: sessionId,
+        path: current.currentPath,
+      );
+      final after = state.valueOrNull;
+      if (after != null) {
+        final name = after.isAtRoot ? '根目录' : after.currentPath;
+        state = AsyncData(
+          after.copyWith(
+            isFolderDownloading: false,
+            notice: () => '已下载「$name.zip」（${bytes.length} 字节），保存到本地待平台通道接入。',
+          ),
+        );
+      }
+      return true;
+    } on Exception catch (error) {
+      final after = state.valueOrNull;
+      if (after != null) {
+        state = AsyncData(after.copyWith(isFolderDownloading: false));
+      }
       await _setActionError(_messageOf(error));
       return false;
     }

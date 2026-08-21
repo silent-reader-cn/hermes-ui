@@ -12,7 +12,11 @@ import 'package:flutter/foundation.dart';
 ///
 /// 已知限制：仅覆盖冷启动深链；App 运行中收到深链（热启动）需
 /// app_links 等平台通道，待 iOS 真机验证批次接入。
-String resolveInitialRoute(String raw, {TargetPlatform? platform, bool? isWeb}) {
+String resolveInitialRoute(
+  String raw, {
+  TargetPlatform? platform,
+  bool? isWeb,
+}) {
   if (raw.isEmpty || raw == '/') return '/';
 
   var path = raw;
@@ -48,6 +52,7 @@ const List<String> knownRoutePaths = <String>[
   r'^/skills$',
   r'^/memory$',
   r'^/workspace/[^/]+$',
+  r'^/workspaces$',
   r'^/kanban$',
   r'^/git/[^/]+$',
   r'^/insights$',

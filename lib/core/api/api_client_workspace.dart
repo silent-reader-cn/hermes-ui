@@ -14,7 +14,9 @@ extension ApiClientWorkspace on ApiClient {
   }
 
   /// GET /api/workspaces/suggest?prefix=。
-  Future<WorkspaceSuggestionsResponse> workspaceSuggestions(String prefix) async {
+  Future<WorkspaceSuggestionsResponse> workspaceSuggestions(
+    String prefix,
+  ) async {
     final json = await sendJson(Endpoint.workspaceSuggestions(prefix));
     return WorkspaceSuggestionsResponse.fromJson(_asMap(json));
   }
@@ -57,7 +59,9 @@ extension ApiClientWorkspace on ApiClient {
   }
 
   /// POST /api/workspaces/reorder {paths: [String]}。
-  Future<WorkspaceMutationResponse> reorderWorkspaces(List<String> paths) async {
+  Future<WorkspaceMutationResponse> reorderWorkspaces(
+    List<String> paths,
+  ) async {
     final json = await sendJson(
       Endpoint.workspaceReorder,
       method: 'POST',
@@ -103,11 +107,7 @@ extension ApiClientWorkspace on ApiClient {
     final json = await sendJson(
       Endpoint.fileDelete,
       method: 'POST',
-      body: {
-        'session_id': sessionId,
-        'path': path,
-        'recursive': recursive,
-      },
+      body: {'session_id': sessionId, 'path': path, 'recursive': recursive},
     );
     return FileDeleteResponse.fromJson(_asMap(json));
   }
@@ -132,12 +132,26 @@ extension ApiClientWorkspace on ApiClient {
     required String path,
   }) => sendData(Endpoint.media(sessionId: sessionId, path: path));
 
+  /// GET /api/folder/download?session_id=&path= — 目录打包 zip 下载。
+  ///
+  /// 走 [ApiClient.downloadData]（同域自动带 cookie + 自定义头 + autoReauth）；
+  /// `path` 缺省/为空 = 工作区根。内容为 `application/zip` 字节流。
+  Future<Uint8List> folderDownloadData({
+    required String sessionId,
+    String? path,
+  }) {
+    return downloadData(
+      Endpoint.folderDownload(sessionId: sessionId, path: path).url(baseUrl),
+    );
+  }
+
   /// 外部（跨域）媒体 URL 下载：**不带**自定义头、**不带** cookie（裸会话）；
   /// 同域 URL 走带 header 的正常会话（[ApiClient.downloadData] 自动分流）。
   Future<Uint8List> remoteTranscriptMediaData(Uri url) => downloadData(url);
 }
 
-Map<String, Object?> _asMap(Object? json) =>
-    json is Map<String, Object?>
-        ? json
-        : (json is Map ? Map<String, Object?>.from(json) : const <String, Object?>{});
+Map<String, Object?> _asMap(Object? json) => json is Map<String, Object?>
+    ? json
+    : (json is Map
+          ? Map<String, Object?>.from(json)
+          : const <String, Object?>{});

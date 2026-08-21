@@ -349,6 +349,18 @@ class Endpoint {
     );
   }
 
+  /// GET /api/folder/download?session_id=&path=（目录打包 zip 下载；
+  /// `path` 缺省/为空 = 工作区根）。
+  static Endpoint folderDownload({required String sessionId, String? path}) {
+    return Endpoint(
+      '/api/folder/download',
+      query: [
+        QueryParam('session_id', sessionId),
+        if (path != null && path.isNotEmpty) QueryParam('path', path),
+      ],
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // 1.8 git — 16 个
   // ---------------------------------------------------------------------------

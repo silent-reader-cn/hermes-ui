@@ -95,6 +95,18 @@ abstract interface class WorkspaceApi {
     required String path,
     required String newName,
   });
+
+  /// GET /api/file?session_id=&path= → 文本内容（预览页用）。
+  Future<FileResponse> fetchFileContent({
+    required String sessionId,
+    required String path,
+  });
+
+  /// GET /api/folder/download?session_id=&path= → 目录打包 zip 字节。
+  Future<Uint8List> downloadFolder({
+    required String sessionId,
+    required String path,
+  });
 }
 
 /// [WorkspaceApi] 的生产实现：包 [ApiClient]，把 `Object?` JSON 解码为模型。
@@ -162,5 +174,21 @@ class WorkspaceApiClient implements WorkspaceApi {
       path: path,
       newName: newName,
     );
+  }
+
+  @override
+  Future<FileResponse> fetchFileContent({
+    required String sessionId,
+    required String path,
+  }) {
+    return _client.file(sessionId: sessionId, path: path);
+  }
+
+  @override
+  Future<Uint8List> downloadFolder({
+    required String sessionId,
+    required String path,
+  }) {
+    return _client.folderDownloadData(sessionId: sessionId, path: path);
   }
 }

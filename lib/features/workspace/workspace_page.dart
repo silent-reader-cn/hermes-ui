@@ -10,6 +10,7 @@ import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
+import '../workspace_manager/file_preview_page.dart';
 import 'workspace_providers.dart';
 
 /// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
@@ -150,6 +151,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             crumbs: crumbs,
             displayPath: state?.displayPath ?? l10n.rootDir,
             isRefreshing: state?.isRefreshing == true,
+            isFolderDownloading: state?.isFolderDownloading == true,
             errorMessage:
                 state != null &&
                     state.actionError != null &&
@@ -159,6 +161,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             onRoot: () =>
                 unawaited(ref.read(provider.notifier).navigateToRoot()),
             onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
+            onDownloadFolder: () =>
+                unawaited(ref.read(provider.notifier).downloadFolder()),
             onRetry: () =>
                 unawaited(ref.read(provider.notifier).retryLastLoad()),
             onCrumbTap: (crumb) =>
@@ -235,10 +239,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: statusRedText,
-              ),
+              style: const TextStyle(fontSize: 13, color: statusRedText),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -278,10 +279,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               state.displayPath,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: secondaryText,
-              ),
+              style: const TextStyle(fontSize: 13, color: secondaryText),
             ),
           ],
         ),
@@ -311,6 +309,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       builder: (context) => CupertinoActionSheet(
         title: Text(entry.name ?? entry.path ?? ''),
         actions: [
+          if (workspaceFileIsPreviewable(entry) && !entry.isReadOnlyEscape)
+            CupertinoActionSheetAction(
+              key: const ValueKey('workspace-action-preview'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _openPreview(entry);
+              },
+              child: Text(l10n.preview),
+            ),
           CupertinoActionSheetAction(
             key: const ValueKey('workspace-action-download'),
             onPressed: () {
@@ -350,6 +357,16 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)
         .download(entry);
+  }
+
+  /// 打开文件预览页（文本/图片走 /api/file、/api/file/raw）。
+  void _openPreview(WorkspaceEntry entry) {
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (context) =>
+            FilePreviewPage(sessionId: widget.sessionId, entry: entry),
+      ),
+    );
   }
 
   void _showDeleteDialog(WorkspaceEntry entry) {
@@ -537,9 +554,11 @@ class _PathHeader extends StatelessWidget {
     required this.crumbs,
     required this.displayPath,
     required this.isRefreshing,
+    required this.isFolderDownloading,
     required this.errorMessage,
     required this.onRoot,
     required this.onUp,
+    required this.onDownloadFolder,
     required this.onRetry,
     required this.onCrumbTap,
   });
@@ -547,9 +566,11 @@ class _PathHeader extends StatelessWidget {
   final List<WorkspaceBreadcrumb> crumbs;
   final String displayPath;
   final bool isRefreshing;
+  final bool isFolderDownloading;
   final String? errorMessage;
   final VoidCallback onRoot;
   final VoidCallback onUp;
+  final VoidCallback onDownloadFolder;
   final VoidCallback onRetry;
 
   /// 点击面包屑 → 跳转到该路径。
@@ -622,10 +643,27 @@ class _PathHeader extends StatelessWidget {
                     children: [
                       const Icon(CupertinoIcons.arrow_up, size: 14),
                       const SizedBox(width: 4),
-                      Text(l10n.parentDir, style: const TextStyle(fontSize: 13)),
+                      Text(
+                        l10n.parentDir,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 6),
+                if (isFolderDownloading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: CupertinoActivityIndicator(radius: 9),
+                  )
+                else
+                  AccessibleButton(
+                    key: const ValueKey('workspace-download-folder'),
+                    label: l10n.downloadFolderZip,
+                    padding: EdgeInsets.zero,
+                    onPressed: onDownloadFolder,
+                    child: const Icon(CupertinoIcons.arrow_down_doc, size: 16),
+                  ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: SingleChildScrollView(
@@ -674,10 +712,7 @@ class _PathHeader extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     l10n.loadingIndicator,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: secondaryText,
-                    ),
+                    style: const TextStyle(fontSize: 13, color: secondaryText),
                   ),
                 ],
               ),
@@ -708,7 +743,10 @@ class _PathHeader extends StatelessWidget {
                     key: const ValueKey('workspace-banner-retry'),
                     padding: EdgeInsets.zero,
                     onPressed: onRetry,
-                    child: Text(l10n.retry, style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      l10n.retry,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
               ),

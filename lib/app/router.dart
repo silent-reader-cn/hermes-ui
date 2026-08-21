@@ -18,6 +18,7 @@ import '../features/settings/settings_page.dart';
 import '../features/skills/skills_page.dart';
 import '../features/tasks/tasks_page.dart';
 import '../features/workspace/workspace_page.dart';
+import '../features/workspace_manager/workspace_manager_page.dart';
 
 /// 全局路由表（app_shell_spec.md §3 / TASK W2 自适应外壳）。
 ///
@@ -31,6 +32,7 @@ import '../features/workspace/workspace_page.dart';
 /// | `/skills` | SkillsPage | 技能管理 |
 /// | `/memory` | MemoryPage | 记忆管理 |
 /// | `/workspace/:sessionId` | WorkspacePage | 会话工作区文件 |
+/// | `/workspaces` | WorkspaceManagerPage | 工作区管理（注册表） |
 /// | `/kanban` | KanbanPage | 看板 |
 /// | `/git/:sessionId` | GitPage | 会话工作区 Git |
 /// | `/insights` | InsightsPage | 用量统计 |
@@ -116,6 +118,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 );
               },
             ),
+          ),
+          GoRoute(
+            path: '/workspaces',
+            builder: (context, state) => const WorkspaceManagerPage(),
           ),
           GoRoute(
             path: '/kanban',

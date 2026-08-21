@@ -4,26 +4,36 @@ import '../utils/uuid.dart';
 
 /// 工作区列表响应信封（Swift: WorkspacesResponse）。
 class WorkspacesResponse {
-  const WorkspacesResponse({this.workspaces, this.last});
+  const WorkspacesResponse({
+    this.workspaces,
+    this.last,
+    this.terminalRemoteBackend,
+  });
 
   factory WorkspacesResponse.fromJson(Map<String, Object?> json) {
     return WorkspacesResponse(
       workspaces: optModelList(json, 'workspaces', WorkspaceRoot.fromJson),
       last: optString(json, 'last'),
+      terminalRemoteBackend: optBool(json, 'terminal_remote_backend'),
     );
   }
 
   final List<WorkspaceRoot>? workspaces;
   final String? last;
 
+  /// 服务器是否运行在远程后端（`terminal_remote_backend`）。
+  final bool? terminalRemoteBackend;
+
   @override
   bool operator ==(Object other) =>
       other is WorkspacesResponse &&
       deepEquals(other.workspaces, workspaces) &&
-      other.last == last;
+      other.last == last &&
+      other.terminalRemoteBackend == terminalRemoteBackend;
 
   @override
-  int get hashCode => Object.hash(deepHash(workspaces), last);
+  int get hashCode =>
+      Object.hash(deepHash(workspaces), last, terminalRemoteBackend);
 
   @override
   String toString() => 'WorkspacesResponse(workspaces: ${workspaces?.length})';
@@ -144,10 +154,10 @@ class AddWorkspaceRequest {
   final bool? create;
 
   Map<String, Object?> toJson() => {
-        'path': path,
-        if (name != null) 'name': name,
-        if (create != null) 'create': create,
-      };
+    'path': path,
+    if (name != null) 'name': name,
+    if (create != null) 'create': create,
+  };
 
   @override
   bool operator ==(Object other) {
@@ -231,6 +241,7 @@ class DirectoryListResponse {
     this.path,
     this.workspace,
     this.error,
+    this.signature,
   });
 
   factory DirectoryListResponse.fromJson(Map<String, Object?> json) {
@@ -239,6 +250,7 @@ class DirectoryListResponse {
       path: optString(json, 'path'),
       workspace: optString(json, 'workspace'),
       error: optString(json, 'error'),
+      signature: optString(json, 'signature'),
     );
   }
 
@@ -247,24 +259,29 @@ class DirectoryListResponse {
   final String? workspace;
   final String? error;
 
+  /// 目录内容签名（SHA-256 hex，基于条目元数据；客户端缓存失效可选用）。
+  final String? signature;
+
   @override
   bool operator ==(Object other) {
     return other is DirectoryListResponse &&
         deepEquals(other.entries, entries) &&
         other.path == path &&
         other.workspace == workspace &&
-        other.error == error;
+        other.error == error &&
+        other.signature == signature;
   }
 
   @override
-  int get hashCode => Object.hash(deepHash(entries), path, workspace, error);
+  int get hashCode =>
+      Object.hash(deepHash(entries), path, workspace, error, signature);
 
   @override
   String toString() => 'DirectoryListResponse(path: $path)';
 }
 
 /// 工作区目录条目（Swift: WorkspaceEntry）。`id` = path ?? name ?? uuid；
-/// `isBrowsableDirectory` = isDirectory==true || type=='dir'。
+/// `isBrowsableDirectory` = isDirectory==true || type=='dir'（外部 symlink 除外）。
 class WorkspaceEntry {
   const WorkspaceEntry({
     this.name,
@@ -273,6 +290,9 @@ class WorkspaceEntry {
     this.size,
     this.modified,
     this.isDirectory,
+    this.mtimeNs,
+    this.target,
+    this.targetOutsideWorkspace,
   });
 
   factory WorkspaceEntry.fromJson(Map<String, Object?> json) {
@@ -283,6 +303,9 @@ class WorkspaceEntry {
       size: optInt(json, 'size'),
       modified: optDouble(json, 'modified'),
       isDirectory: firstKey(json, ['is_directory', 'is_dir'], optBool),
+      mtimeNs: optInt(json, 'mtime_ns'),
+      target: optString(json, 'target'),
+      targetOutsideWorkspace: optBool(json, 'target_outside_workspace'),
     );
   }
 
@@ -290,12 +313,34 @@ class WorkspaceEntry {
   final String? path;
   final String? type;
   final int? size;
+
+  /// 兼容旧键名的修改时间（double，Unix 秒）；新服务器发 [mtimeNs]。
   final double? modified;
+
   final bool? isDirectory;
+
+  /// 纳秒时间戳（`os.stat` 的 `st_mtime_ns`，服务器真实键名）。
+  final int? mtimeNs;
+
+  /// symlink 解析目标绝对路径（仅 symlink 且未逃逸工作区时出现）。
+  final String? target;
+
+  /// symlink 是否指向工作区外（仅 symlink 出现；true = 只展示不可读写）。
+  final bool? targetOutsideWorkspace;
 
   String get id => path ?? name ?? uuidV4();
 
-  bool get isBrowsableDirectory => isDirectory == true || type == 'dir';
+  /// 是否为 symlink 条目。
+  bool get isSymlink => type == 'symlink';
+
+  /// 指向工作区外部的 symlink：只读（不可进入/重命名/删除，WebUI
+  /// `isReadOnlyEscape` 语义）。
+  bool get isReadOnlyEscape => isSymlink && targetOutsideWorkspace == true;
+
+  /// 是否可进入的目录：普通目录（is_directory/is_dir 或 type=='dir'）可进入；
+  /// 指向工作区外的 symlink **不可进入**（对齐规格 §8.4）。
+  bool get isBrowsableDirectory =>
+      !isReadOnlyEscape && (isDirectory == true || type == 'dir');
 
   @override
   bool operator ==(Object other) {
@@ -305,11 +350,24 @@ class WorkspaceEntry {
         other.type == type &&
         other.size == size &&
         other.modified == modified &&
-        other.isDirectory == isDirectory;
+        other.isDirectory == isDirectory &&
+        other.mtimeNs == mtimeNs &&
+        other.target == target &&
+        other.targetOutsideWorkspace == targetOutsideWorkspace;
   }
 
   @override
-  int get hashCode => Object.hash(name, path, type, size, modified, isDirectory);
+  int get hashCode => Object.hash(
+    name,
+    path,
+    type,
+    size,
+    modified,
+    isDirectory,
+    mtimeNs,
+    target,
+    targetOutsideWorkspace,
+  );
 
   @override
   String toString() => 'WorkspaceEntry(name: $name, path: $path)';
@@ -325,6 +383,13 @@ class FileResponse {
     this.size,
     this.lines,
     this.error,
+    this.previewKind,
+    this.officeFormat,
+    this.renderMode,
+    this.editable,
+    this.editBlockedReason,
+    this.truncated,
+    this.isBinary,
   });
 
   factory FileResponse.fromJson(Map<String, Object?> json) {
@@ -336,6 +401,13 @@ class FileResponse {
       size: lossyInt(json, 'size'),
       lines: lossyInt(json, 'lines'),
       error: optString(json, 'error'),
+      previewKind: optString(json, 'preview_kind'),
+      officeFormat: optString(json, 'office_format'),
+      renderMode: optString(json, 'render_mode'),
+      editable: optBool(json, 'editable'),
+      editBlockedReason: optString(json, 'edit_blocked_reason'),
+      truncated: optBool(json, 'truncated'),
+      isBinary: optBool(json, 'binary'),
     );
   }
 
@@ -347,6 +419,27 @@ class FileResponse {
   final int? lines;
   final String? error;
 
+  /// Office 预览标记（office 文档时为 `'office'`）。
+  final String? previewKind;
+
+  /// Office 文档格式（docx / xlsx / pptx）。
+  final String? officeFormat;
+
+  /// Office 预览渲染模式。
+  final String? renderMode;
+
+  /// 编辑是否被允许（office 预览字段）。
+  final bool? editable;
+
+  /// 编辑被阻止的原因（如只读 symlink 逃逸条目）。
+  final String? editBlockedReason;
+
+  /// 内容是否被截断（超过预览长度上限）。
+  final bool? truncated;
+
+  /// 二进制标记（前端防御性检查，服务器常规不发）。
+  final bool? isBinary;
+
   @override
   bool operator ==(Object other) {
     return other is FileResponse &&
@@ -356,12 +449,33 @@ class FileResponse {
         other.language == language &&
         other.size == size &&
         other.lines == lines &&
-        other.error == error;
+        other.error == error &&
+        other.previewKind == previewKind &&
+        other.officeFormat == officeFormat &&
+        other.renderMode == renderMode &&
+        other.editable == editable &&
+        other.editBlockedReason == editBlockedReason &&
+        other.truncated == truncated &&
+        other.isBinary == isBinary;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(content, path, name, language, size, lines, error);
+  int get hashCode => Object.hash(
+    content,
+    path,
+    name,
+    language,
+    size,
+    lines,
+    error,
+    previewKind,
+    officeFormat,
+    renderMode,
+    editable,
+    editBlockedReason,
+    truncated,
+    isBinary,
+  );
 
   @override
   String toString() => 'FileResponse(path: $path, size: $size)';
@@ -400,12 +514,7 @@ class FileDeleteResponse {
 
 /// 文件重命名响应（`/api/file/rename` 返回形状）。
 class FileRenameResponse {
-  const FileRenameResponse({
-    this.ok,
-    this.oldPath,
-    this.newPath,
-    this.error,
-  });
+  const FileRenameResponse({this.ok, this.oldPath, this.newPath, this.error});
 
   factory FileRenameResponse.fromJson(Map<String, Object?> json) {
     return FileRenameResponse(
@@ -447,4 +556,3 @@ bool _listEquals(List<String>? a, List<String>? b) {
   }
   return true;
 }
-

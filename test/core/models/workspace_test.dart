@@ -23,7 +23,11 @@ void main() {
     test('畸形输入：缺失/错型 → null 容错', () {
       // 数组含非对象元素 → 整数组 null（Swift try? 语义）
       final response = WorkspacesResponse.fromJson({
-        'workspaces': ['/a', 42, {'path': 5}],
+        'workspaces': [
+          '/a',
+          42,
+          {'path': 5},
+        ],
         'last': 7,
       });
       expect(response.workspaces, isNull);
@@ -50,22 +54,23 @@ void main() {
       expect(suggestions.suggestions, hasLength(2));
       expect(suggestions.prefix, '/home/u');
       expect(
-        WorkspaceSuggestionsResponse.fromJson({'suggestions': [1]}).suggestions,
+        WorkspaceSuggestionsResponse.fromJson({
+          'suggestions': [1],
+        }).suggestions,
         isNull,
       );
 
       final mutation = WorkspaceMutationResponse.fromJson({
         'ok': true,
-        'workspaces': [{'path': '/home/u/proj'}],
+        'workspaces': [
+          {'path': '/home/u/proj'},
+        ],
         'error': null,
       });
       expect(mutation.ok, true);
       expect(mutation.workspaces!.single.path, '/home/u/proj');
       // lossyBool：'no' → false
-      expect(
-        WorkspaceMutationResponse.fromJson({'ok': 'no'}).ok,
-        false,
-      );
+      expect(WorkspaceMutationResponse.fromJson({'ok': 'no'}).ok, false);
     });
 
     test('WorkspaceMutationRejection 错误描述', () {
@@ -87,18 +92,14 @@ void main() {
         const AddWorkspaceRequest(path: '/a', name: 'n', create: true).toJson(),
         {'path': '/a', 'name': 'n', 'create': true},
       );
-      expect(
-        const RemoveWorkspaceRequest(path: '/a').toJson(),
-        {'path': '/a'},
-      );
-      expect(
-        const RenameWorkspaceRequest(path: '/a', name: 'b').toJson(),
-        {'path': '/a', 'name': 'b'},
-      );
-      expect(
-        const ReorderWorkspacesRequest(paths: ['/a', '/b']).toJson(),
-        {'paths': ['/a', '/b']},
-      );
+      expect(const RemoveWorkspaceRequest(path: '/a').toJson(), {'path': '/a'});
+      expect(const RenameWorkspaceRequest(path: '/a', name: 'b').toJson(), {
+        'path': '/a',
+        'name': 'b',
+      });
+      expect(const ReorderWorkspacesRequest(paths: ['/a', '/b']).toJson(), {
+        'paths': ['/a', '/b'],
+      });
     });
   });
 
@@ -129,18 +130,12 @@ void main() {
     });
 
     test('is_directory/is_dir 双键 + type 兜底', () {
-      expect(
-        WorkspaceEntry.fromJson({'is_dir': true}).isDirectory,
-        true,
-      );
+      expect(WorkspaceEntry.fromJson({'is_dir': true}).isDirectory, true);
       expect(
         WorkspaceEntry.fromJson({'type': 'dir'}).isBrowsableDirectory,
         true,
       );
-      expect(
-        WorkspaceEntry.fromJson(const {}).isBrowsableDirectory,
-        false,
-      );
+      expect(WorkspaceEntry.fromJson(const {}).isBrowsableDirectory, false);
       expect(WorkspaceEntry.fromJson(const {}).id, isNotEmpty);
     });
 
@@ -189,5 +184,90 @@ void main() {
     final b = WorkspaceRoot.fromJson('/x');
     expect(a, b);
     expect(a.hashCode, b.hashCode);
+  });
+
+  group('工作区管理增量字段（2026-08 规格 v1）', () {
+    test('WorkspacesResponse.terminalRemoteBackend 解析 + 畸形', () {
+      final response = WorkspacesResponse.fromJson({
+        'workspaces': [
+          {'path': '/a', 'name': 'A'},
+        ],
+        'last': '/a',
+        'terminal_remote_backend': true,
+      });
+      expect(response.terminalRemoteBackend, isTrue);
+      expect(
+        WorkspacesResponse.fromJson(const {}).terminalRemoteBackend,
+        isNull,
+      );
+      expect(
+        WorkspacesResponse.fromJson({'terminal_remote_backend': 'yes'})
+            .terminalRemoteBackend,
+        isNull,
+      );
+    });
+
+    test('WorkspaceEntry.mtime_ns / target / target_outside_workspace 解析', () {
+      final entry = WorkspaceEntry.fromJson({
+        'name': 'link',
+        'path': 'link',
+        'type': 'symlink',
+        'size': null,
+        'mtime_ns': 1787179911828507100,
+        'is_dir': true,
+        'target': r'D:\outside',
+        'target_outside_workspace': true,
+      });
+      expect(entry.mtimeNs, 1787179911828507100);
+              expect(entry.isDirectory, isTrue);
+      expect(entry.target, r'D:\outside');
+      expect(entry.targetOutsideWorkspace, isTrue);
+      expect(entry.isSymlink, isTrue);
+      expect(entry.isReadOnlyEscape, isTrue);
+      // 外部 symlink 不可进入
+      expect(entry.isBrowsableDirectory, isFalse);
+
+      // 工作区内 symlink（未逃逸）仍可进入
+      final inside = WorkspaceEntry.fromJson({
+        'type': 'symlink',
+        'is_dir': true,
+        'target': '/proj/real',
+      });
+      expect(inside.isReadOnlyEscape, isFalse);
+      expect(inside.isBrowsableDirectory, isTrue);
+    });
+
+    test('DirectoryListResponse.signature 解析', () {
+      final response = DirectoryListResponse.fromJson({
+        'entries': [
+          {'name': 'a', 'type': 'dir'},
+        ],
+        'path': '.',
+        'signature': '567213e156933a5e704208427bc7681f',
+      });
+      expect(response.signature, '567213e156933a5e704208427bc7681f');
+      expect(DirectoryListResponse.fromJson(const {}).signature, isNull);
+    });
+
+    test('FileResponse office/binary 字段解析 + 畸形', () {
+      final response = FileResponse.fromJson({
+        'content': 'x',
+        'preview_kind': 'office',
+        'office_format': 'docx',
+        'render_mode': 'preview',
+        'editable': true,
+        'edit_blocked_reason': null,
+        'truncated': false,
+        'binary': true,
+      });
+      expect(response.previewKind, 'office');
+      expect(response.officeFormat, 'docx');
+      expect(response.renderMode, 'preview');
+      expect(response.editable, isTrue);
+      expect(response.editBlockedReason, isNull);
+      expect(response.truncated, isFalse);
+      expect(response.isBinary, isTrue);
+      expect(FileResponse.fromJson({'editable': 'yes'}).editable, isNull);
+    });
   });
 }

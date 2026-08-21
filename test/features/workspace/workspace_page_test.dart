@@ -392,5 +392,82 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('操作失败'), findsNothing);
     });
+
+    testWidgets('预览：文本文件行菜单出现「预览」→ push FilePreviewPage', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('readme.txt', size: 42)],
+        },
+      );
+      api.fileContents['readme.txt'] = const FileResponse(
+        content: 'hello preview',
+        path: 'readme.txt',
+        size: 13,
+        lines: 1,
+      );
+      await pumpWorkspace(tester, api);
+
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-actions-readme.txt')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('workspace-action-preview')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('workspace-action-preview')));
+      await tester.pumpAndSettle();
+
+      // FilePreviewPage 已进入（文本内容渲染）
+      expect(api.fetchFileCalls, ['s1|readme.txt']);
+      expect(find.byKey(const ValueKey('preview-scroll')), findsOneWidget);
+      expect(find.text('hello preview'), findsOneWidget);
+    });
+
+    testWidgets('预览：归档文件不出现「预览」动作（直接下载）', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('bundle.zip', size: 1024)],
+        },
+      );
+      await pumpWorkspace(tester, api);
+
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-actions-bundle.zip')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('workspace-action-preview')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('workspace-action-download')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('workspace-action-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('目录打包下载：头部按钮 → /api/folder/download → 字节数提示', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('a.txt')],
+        },
+      );
+      api.downloadFolderBytes = Uint8List.fromList(List.filled(2048, 2));
+      await pumpWorkspace(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('workspace-download-folder')));
+      await tester.pumpAndSettle();
+
+      expect(api.downloadFolderCalls, ['s1|.']);
+      expect(find.text('提示'), findsOneWidget);
+      expect(find.textContaining('2048'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('workspace-dialog-ok')));
+      await tester.pumpAndSettle();
+      expect(find.text('提示'), findsNothing);
+    });
   });
 }

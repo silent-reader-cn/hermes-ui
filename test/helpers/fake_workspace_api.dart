@@ -30,9 +30,17 @@ class FakeWorkspaceApi implements WorkspaceApi {
   Object? downloadError;
   Object? deleteError;
   Object? renameError;
+  Object? fetchFileError;
+  Object? downloadFolderError;
 
   /// `downloadFile` 返回的字节。
   Uint8List downloadBytes = Uint8List.fromList([1, 2, 3, 4]);
+
+  /// `downloadFolder` 返回的 zip 字节。
+  Uint8List downloadFolderBytes = Uint8List.fromList([9, 8, 7, 6]);
+
+  /// path → 文本内容（`fetchFileContent` 返回）。
+  final Map<String, FileResponse> fileContents = {};
 
   int fetchCount = 0;
   int uploadCount = 0;
@@ -43,6 +51,8 @@ class FakeWorkspaceApi implements WorkspaceApi {
   final List<String> downloadCalls = [];
   final List<String> deleteCalls = [];
   final List<String> renameCalls = [];
+  final List<String> fetchFileCalls = [];
+  final List<String> downloadFolderCalls = [];
 
   @override
   Future<DirectoryListResponse> fetchDirectory({
@@ -122,5 +132,27 @@ class FakeWorkspaceApi implements WorkspaceApi {
     renameCalls.add('$sessionId|$path|$newName');
     final error = renameError;
     if (error != null) throw error;
+  }
+
+  @override
+  Future<FileResponse> fetchFileContent({
+    required String sessionId,
+    required String path,
+  }) async {
+    fetchFileCalls.add('$sessionId|$path');
+    final error = fetchFileError;
+    if (error != null) throw error;
+    return fileContents[path] ?? const FileResponse();
+  }
+
+  @override
+  Future<Uint8List> downloadFolder({
+    required String sessionId,
+    required String path,
+  }) async {
+    downloadFolderCalls.add('$sessionId|$path');
+    final error = downloadFolderError;
+    if (error != null) throw error;
+    return downloadFolderBytes;
   }
 }
