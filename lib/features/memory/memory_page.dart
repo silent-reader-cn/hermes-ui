@@ -29,7 +29,7 @@ class MemoryPage extends ConsumerStatefulWidget {
 }
 
 class _MemoryPageState extends ConsumerState<MemoryPage> {
-  _MemoryTab _selectedTab = _MemoryTab.memory;
+  _MemoryTab _selectedTab = _MemoryTab.projectContext;
 
   @override
   Widget build(BuildContext context) {

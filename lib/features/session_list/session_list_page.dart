@@ -19,6 +19,7 @@ import 'scheduled_session_disclosure.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
+import 'session_row_subtitle_settings.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -81,6 +82,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final state = async.valueOrNull;
     final sections = ref.watch(sessionListSectionsProvider);
     final isSearchMode = state?.searchQuery?.trim().isNotEmpty == true;
+    // 会话行副标题显示开关（设置页配置）+ projectId→名称映射（同屏一次解析）。
+    final subtitleSettings = ref.watch(sessionRowSubtitleSettingsProvider);
+    final projectNames = _projectNameMap(ref);
 
     ref.listen<AsyncValue<SessionListState>>(sessionListControllerProvider, (
       previous,
@@ -126,7 +130,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               SliverToBoxAdapter(child: _buildSearchBar()),
               if (widget.showUtilityRows && !isSearchMode)
                 const SliverToBoxAdapter(child: SessionListUtilityRows()),
-              ..._buildContentSlivers(async, state, sections, isSearchMode),
+              ..._buildContentSlivers(
+                async,
+                state,
+                sections,
+                isSearchMode,
+                subtitleSettings,
+                projectNames,
+              ),
             ],
           ),
           if (state?.isSelectionMode == true)
@@ -338,6 +349,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     SessionListState? state,
     List<SessionListSection> sections,
     bool isSearchMode,
+    SessionRowSubtitleSettings subtitleSettings,
+    Map<String, String> projectNames,
   ) {
     if (state == null) {
       if (async.isLoading) {
@@ -372,6 +385,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         'session-row-${session.sessionId ?? session.id}',
                       ),
                       session: session,
+                      subtitleSettings: subtitleSettings,
+                      projectNames: projectNames,
                       highlightQuery: isSearchMode
                           ? state.searchQuery?.trim()
                           : null,
@@ -407,6 +422,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         'session-row-${session.sessionId ?? session.id}',
                       ),
                       session: session,
+                      subtitleSettings: subtitleSettings,
+                      projectNames: projectNames,
                       highlightQuery: isSearchMode
                           ? state.searchQuery?.trim()
                           : null,
@@ -942,6 +959,8 @@ class _SessionRow extends StatelessWidget {
     super.key,
     required this.session,
     required this.onTap,
+    required this.subtitleSettings,
+    required this.projectNames,
     this.onLongPress,
     this.onActions,
     this.selectionMode = false,
@@ -952,6 +971,12 @@ class _SessionRow extends StatelessWidget {
   final SessionSummary session;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+
+  /// 副标题显示项开关（设置页配置）。
+  final SessionRowSubtitleSettings subtitleSettings;
+
+  /// projectId → 项目名称 映射（副标题「项目名」显示项）。
+  final Map<String, String> projectNames;
 
   /// 行尾操作按钮回调；null = 隐藏（多选模式下）。
   final VoidCallback? onActions;
@@ -966,7 +991,12 @@ class _SessionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final metadata = _metadataLabel(context, session);
+    final metadata = _metadataLabel(
+      context,
+      session,
+      settings: subtitleSettings,
+      projectNames: projectNames,
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -1131,16 +1161,29 @@ class _SessionRow extends StatelessWidget {
     );
   }
 
-  static String? _metadataLabel(BuildContext context, SessionSummary session) {
+  /// 按副标题显示开关组装元数据行（消息数 / 项目名 / 工作区 / 渠道 /
+  /// 预估价钱 + 搜索命中预览），渠道与预估价钱默认关闭。
+  static String? _metadataLabel(
+    BuildContext context,
+    SessionSummary session, {
+    required SessionRowSubtitleSettings settings,
+    required Map<String, String> projectNames,
+  }) {
     final l10n = AppLocalizations.of(context);
+    final projectName = session.projectId == null
+        ? null
+        : _nonEmpty(projectNames[session.projectId]);
     final parts = <String>[
-      if (session.messageCount != null && session.messageCount! >= 0)
+      if (settings.messageCount &&
+          session.messageCount != null &&
+          session.messageCount! >= 0)
         l10n.messageCountLabel(session.messageCount!),
-      if (_nonEmpty(session.workspace) != null)
+      if (settings.projectName && projectName != null) projectName,
+      if (settings.workspace && _nonEmpty(session.workspace) != null)
         _lastPathComponent(_nonEmpty(session.workspace)!),
-      if (_nonEmpty(session.sourceLabel) != null)
+      if (settings.channel && _nonEmpty(session.sourceLabel) != null)
         '· ${_nonEmpty(session.sourceLabel)}',
-      if (session.estimatedCost != null)
+      if (settings.estimatedCost && session.estimatedCost != null)
         '· \$${session.estimatedCost!.toStringAsFixed(2)}',
       if (_nonEmpty(session.matchPreview) != null)
         _nonEmpty(session.matchPreview)!,
@@ -1169,6 +1212,16 @@ String _displayTitle(BuildContext context, SessionSummary session) {
     return AppLocalizations.of(context).untitledSession;
   }
   return title;
+}
+
+/// 由 [projectsProvider] 构建 projectId → 名称 映射（会话行副标题「项目名」
+/// 项使用；一次构建供整屏复用以避免逐行 map）。
+Map<String, String> _projectNameMap(WidgetRef ref) {
+  final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+  return {
+    for (final project in projects)
+      if (project.projectId != null) project.projectId!: project.name ?? '',
+  };
 }
 
 /// 筛选底部弹层：状态（全部 / 已归档）+ 渠道 chips + 项目 chips。

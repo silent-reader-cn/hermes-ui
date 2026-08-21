@@ -7,12 +7,19 @@ import 'package:flutter/cupertino.dart';
 /// 呈现「标题一行、按钮一行」的割裂效果，且展开态顶部遗留一条无内容空带。
 ///
 /// 本组件把大标题与右上角操作按钮放进同一个布局坐标里：
-/// - **展开态无顶部空带**：maxExtent = 状态栏 + 大标题区（52），标题直接从
-///   状态栏下方开始，操作按钮与大标题视觉同行（光学中心对齐）。
+/// - **展开几何对齐系统导航栏**：maxExtent = 状态栏 + 44pt 导航栏 +
+///   52pt 大标题区，大标题顶部与系统大标题位置一致（切换页面时标题
+///   与顶部间距完全对齐，手机端不再贴顶）；操作按钮与大标题同行
+///   （垂直中心对齐大标题文字行盒中心）。
 /// - **滚动收起**：平滑过渡到导航栏高度（状态栏 + 44），大标题上移淡出、
 ///   中标题淡入、背景从透明过渡为 bar 底色。
 /// - **多操作支持**：[actions] 为右侧按钮列表（设置 / 筛选 / 新建等），
 ///   由调用方按端与场景组合。
+///
+/// 几何基准（探针实测 MiSans 34pt 行盒高 39）：系统 `CupertinoSliverNavigationBar`
+/// 展开态大标题文字的 top = 状态栏 + 44 + 5（persistent 栏 44pt + 大标题区
+/// 52pt 内文字底部留白偏移），即状态栏下方固定 49pt 可见间距；按钮中心
+/// 对齐该文字行盒中心（top + 39/2），保证「与左侧标题垂直居中」。
 class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   const SessionListHeaderDelegate({
     required this.title,
@@ -39,23 +46,30 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// 收起态导航栏高度（对齐 iOS `_kNavBarPersistentHeight`）。
   static const double barHeight = 44.0;
 
-  /// 展开态大标题区高度（对齐 iOS `_kNavBarLargeTitleHeightExtension`）。
+  /// 展开态大标题区高度（对齐系统 `_kNavBarLargeTitleHeightExtension`）。
   static const double largeTitleHeight = 52.0;
 
-  /// 展开态大标题顶部距状态栏的间距。
-  static const double _largeTitleTopGap = 6.0;
+  /// 展开态大标题文字顶部距状态栏的间距。
+  ///
+  /// 对齐系统 `CupertinoSliverNavigationBar` 展开态大标题的视觉位置
+  /// （persistent 栏 44pt + 大标题区内文字偏移 5pt），保证与任务 / 技能
+  /// 等使用系统导航栏的页面切换时标题顶部间距一致。
+  static const double _largeTitleTopGap = 49.0;
+
+  /// 大标题文字行盒高度（MiSans 34pt 实测渲染高度，探针数据）。
+  ///
+  /// 收起态中标题（17pt）与展开态大标题的文字布局都以此类字体度量
+  /// 为基准计算按钮中心，保证按钮与文字垂直居中而非依赖估算偏移。
+  static const double _largeTitleLineHeight = 39.0;
 
   /// 按钮视觉半高（按钮 44×44 点击区，中心定位）。
   static const double _buttonHalfSize = 22.0;
-
-  /// 图标相对文字光学中心的微上偏移（大字号的下行高度占比小，光学中心偏上）。
-  static const double _opticalLift = 3.0;
 
   @override
   double get minExtent => topPadding + barHeight;
 
   @override
-  double get maxExtent => topPadding + largeTitleHeight;
+  double get maxExtent => topPadding + barHeight + largeTitleHeight;
 
   @override
   bool shouldRebuild(SessionListHeaderDelegate oldDelegate) =>
@@ -93,15 +107,17 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
       context,
     );
 
-    // 标题几何：展开态大标题紧贴状态栏下方（无 44pt 空带），收起态中标题
-    // 位于导航栏中线。两者起点同为 left 20，滚动时同轴缩放不跳位。
-    // 大标题文字中心（展开态）。
+    // 标题几何：展开态大标题从状态栏下方 49pt 处开始（与系统导航栏大标题
+    // 位置一致），收起态中标题位于导航栏中线。两者起点同为 left 20，
+    // 滚动时同轴缩放不跳位。
+    // 大标题文字行盒中心（展开态，按钮对齐基准）。
     final largeTitleCenterY =
-        topPadding + _largeTitleTopGap + largeTitleHeight / 2 - 8;
+        topPadding + _largeTitleTopGap + _largeTitleLineHeight / 2;
     // 中标题文字中心（收起态）。
     final collapsedTitleCenterY = topPadding + barHeight / 2;
-    // 按钮中心：展开态与大标题文字光学中心对齐（略上提），收起态对齐导航栏。
-    final expandedButtonCenterY = largeTitleCenterY - _opticalLift;
+    // 按钮中心：展开态与大标题文字行盒中心对齐（垂直居中），收起态对齐
+    // 导航栏中线。
+    final expandedButtonCenterY = largeTitleCenterY;
     final collapsedButtonCenterY = collapsedTitleCenterY;
     final buttonCenterY =
         collapsedButtonCenterY +

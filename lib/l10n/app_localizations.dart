@@ -117,6 +117,12 @@ class AppLocalizations {
   String get headerValidationFailed => isEnglish
       ? 'Header name must be a valid token, and value cannot contain newlines'
       : 'Header 名必须是合法 token，值不能包含换行';
+  String get connectAndSave => isEnglish ? 'Connect & Save' : '连接并保存';
+  String get passwordVerified => isEnglish ? '✅ Password correct' : '✅ 密码正确';
+  String get verifyingPassword => isEnglish ? 'Verifying password…' : '正在验证密码…';
+  String get passwordRequiredOnServer => isEnglish
+      ? 'This server requires a password. Enter it to connect.'
+      : '该服务器需要密码认证，请填写密码后再连接';
 
   // ---------------------------------------------------------------------------
   // 2. Session List
@@ -386,6 +392,8 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   String get memory => isEnglish ? 'Memory' : '记忆';
   String get memoryTitle => isEnglish ? 'Memory' : '记忆';
+  String get memoryEntrySubtitle =>
+      isEnglish ? 'View notes, profile and project context' : '查看笔记、画像与项目上下文';
   String get refreshMemory => isEnglish ? 'Refresh Memory' : '刷新记忆';
   String get noMemory => isEnglish ? 'No memory' : '暂无记忆';
   String get noMemoryContentYet =>
@@ -439,6 +447,53 @@ class AppLocalizations {
       ? 'Selecting local files requires platform channel support (file picker), which will be available in a future version.'
       : '选择本地文件需要平台通道支持（file picker），将在后续版本提供。';
   String get fileActions => isEnglish ? 'File Actions' : '文件操作';
+  String get manageWorkspaces => isEnglish ? 'Manage Workspaces' : '工作区管理';
+  String get manageWorkspacesSubtitle => isEnglish
+      ? 'Add, rename or remove workspaces, and browse their files'
+      : '添加/重命名/移除工作区，并浏览其文件';
+  String get workspacesTitle => isEnglish ? 'Workspaces' : '工作区';
+  String get addWorkspace => isEnglish ? 'Add Workspace' : '添加工作区';
+  String get addWorkspaceButton => isEnglish ? 'Add' : '添加';
+  String get workspacePathLabel => isEnglish ? 'Path' : '路径';
+  String get workspacePathHint => isEnglish
+      ? 'Absolute path on disk, e.g. D:/projects/my-app'
+      : '磁盘上的绝对路径，例如 D:/projects/my-app';
+  String get workspaceNameOptionalLabel =>
+      isEnglish ? 'Name (optional)' : '名称（可选）';
+  String get workspaceNamePlaceholder => isEnglish ? 'Display name' : '显示名称';
+  String get createDirectoryIfMissing =>
+      isEnglish ? 'Create if missing' : '目录不存在时自动创建';
+  String get renameWorkspaceTitle => isEnglish ? 'Rename Workspace' : '重命名工作区';
+  String get removeWorkspaceTitle => isEnglish ? 'Remove Workspace' : '移除工作区';
+  String confirmRemoveWorkspace(String name) => isEnglish
+      ? 'Remove "$name" from the workspace list? Only the path is unregistered — no files on disk are deleted.'
+      : '确定从列表移除「$name」吗？只注销路径，不会删除磁盘上的任何文件。';
+  String get removeWorkspaceFooter => isEnglish
+      ? 'Removing a workspace only unregisters its path from the server list. No files are deleted.'
+      : '移除工作区只是从列表注销路径，不会删除磁盘上的文件。';
+  String get noWorkspacesYet => isEnglish ? 'No workspaces yet' : '还没有工作区';
+  String get addWorkspaceHint => isEnglish
+      ? 'Tap + at the top right to add a workspace.'
+      : '点右上角 + 添加工作区。';
+  String get currentWorkspaceBadge => isEnglish ? 'Current' : '当前';
+  String get browseWorkspaceFiles => isEnglish ? 'Browse files' : '浏览文件';
+  String get noSessionForWorkspaceTitle =>
+      isEnglish ? 'Cannot browse this workspace' : '无法浏览该工作区';
+  String noSessionForWorkspaceBody(String path) => isEnglish
+      ? 'No session is using this workspace ($path) yet. Open it from a session first, or create a new session.'
+      : '当前没有会话使用该工作区（$path）。请先从会话进入该工作区的文件页，或新建会话后重试。';
+  String get preview => isEnglish ? 'Preview' : '预览';
+  String get previewUnavailable =>
+      isEnglish ? 'Preview not available' : '无法预览该文件';
+  String get previewUnavailableHint => isEnglish
+      ? 'This file type is not supported for preview yet. Download it instead.'
+      : '暂不支持预览该文件类型，请改用下载。';
+  String get downloadFolderZip =>
+      isEnglish ? 'Download folder as ZIP' : '打包下载当前目录';
+  String get emptyFile => isEnglish ? '(empty file)' : '（空文件）';
+  String get linesShort => isEnglish ? 'lines' : '行';
+  String get previewTruncated =>
+      isEnglish ? 'Truncated: file too large' : '已截断：文件过大';
 
   // ---------------------------------------------------------------------------
   // 8. Kanban
@@ -631,6 +686,14 @@ class AppLocalizations {
       isEnglish ? 'Session List Entries' : '会话列表入口';
   String get sessionListEntries =>
       isEnglish ? 'Session List Entries' : '会话列表入口';
+  String get sessionRowSubtitleSection =>
+      isEnglish ? 'Session Row Details' : '会话行信息';
+  String get sessionRowShowMessageCount => isEnglish ? 'Message count' : '消息数';
+  String get sessionRowShowProjectName => isEnglish ? 'Project name' : '项目名';
+  String get sessionRowShowWorkspace => isEnglish ? 'Workspace' : '工作区';
+  String get sessionRowShowChannel => isEnglish ? 'Channel' : '渠道';
+  String get sessionRowShowEstimatedCost =>
+      isEnglish ? 'Estimated cost' : '预估价钱';
   String get themeLabel => isEnglish ? 'Theme' : '主题';
   String get theme => isEnglish ? 'Theme' : '主题';
   String get themeSystem => isEnglish ? 'System' : '跟随系统';

@@ -7,12 +7,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SessionEntryVisibility 模型单测', () {
-    test('默认配置：任务/技能/记忆/统计开，看板关（使用率低默认隐藏）', () {
+    test('默认配置：任务/技能/统计开，看板关（使用率低默认隐藏）', () {
       const visibility = SessionEntryVisibility();
       expect(visibility.tasks, isTrue);
       expect(visibility.kanban, isFalse);
       expect(visibility.skills, isTrue);
-      expect(visibility.memory, isTrue);
       expect(visibility.insights, isTrue);
       expect(visibility.showsAny, isTrue);
       expect(SessionEntryVisibility.defaults, equals(visibility));
@@ -24,7 +23,6 @@ void main() {
           tasks: false,
           kanban: false,
           skills: false,
-          memory: false,
           insights: false,
         ).showsAny,
         isFalse,
@@ -35,7 +33,6 @@ void main() {
           tasks: true,
           kanban: false,
           skills: false,
-          memory: false,
           insights: false,
         ).showsAny,
         isTrue,
@@ -46,7 +43,6 @@ void main() {
           tasks: false,
           kanban: false,
           skills: false,
-          memory: false,
           insights: true,
         ).showsAny,
         isTrue,
@@ -58,26 +54,23 @@ void main() {
         tasks: true,
         kanban: false,
         skills: true,
-        memory: false,
         insights: true,
       );
 
       expect(visibility.isVisible('tasks'), isTrue);
       expect(visibility.isVisible('kanban'), isFalse);
       expect(visibility.isVisible('skills'), isTrue);
-      expect(visibility.isVisible('memory'), isFalse);
       expect(visibility.isVisible('insights'), isTrue);
       expect(visibility.isVisible('unknown'), isTrue);
     });
 
     test('copyWith 支持增量覆盖', () {
       const original = SessionEntryVisibility();
-      final modified = original.copyWith(tasks: false, memory: false);
+      final modified = original.copyWith(tasks: false);
 
       expect(modified.tasks, isFalse);
       expect(modified.kanban, isFalse);
       expect(modified.skills, isTrue);
-      expect(modified.memory, isFalse);
       expect(modified.insights, isTrue);
     });
 
@@ -106,7 +99,6 @@ void main() {
       expect(state.tasks, isTrue);
       expect(state.kanban, isFalse);
       expect(state.skills, isTrue);
-      expect(state.memory, isTrue);
       expect(state.insights, isTrue);
     });
 
@@ -115,7 +107,6 @@ void main() {
         'session_entry_visibility_tasks': false,
         'session_entry_visibility_kanban': true,
         'session_entry_visibility_skills': false,
-        'session_entry_visibility_memory': true,
         'session_entry_visibility_insights': false,
       });
 
@@ -130,7 +121,6 @@ void main() {
       expect(state.tasks, isFalse);
       expect(state.kanban, isTrue);
       expect(state.skills, isFalse);
-      expect(state.memory, isTrue);
       expect(state.insights, isFalse);
     });
 
@@ -138,7 +128,9 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final controller = container.read(sessionEntryVisibilityProvider.notifier);
+      final controller = container.read(
+        sessionEntryVisibilityProvider.notifier,
+      );
 
       await controller.setVisible('tasks', false);
       await controller.setVisible('insights', false);
@@ -147,7 +139,6 @@ void main() {
       expect(state.tasks, isFalse);
       expect(state.kanban, isTrue);
       expect(state.skills, isTrue);
-      expect(state.memory, isTrue);
       expect(state.insights, isFalse);
 
       final prefs = await SharedPreferences.getInstance();
@@ -155,16 +146,17 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
     });
 
-    test('setVisible 处理所有 5 个合法 key 及未知 key', () async {
+    test('setVisible 处理所有 4 个合法 key 及未知 key', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final controller = container.read(sessionEntryVisibilityProvider.notifier);
+      final controller = container.read(
+        sessionEntryVisibilityProvider.notifier,
+      );
 
       await controller.setVisible('tasks', false);
       await controller.setVisible('kanban', false);
       await controller.setVisible('skills', false);
-      await controller.setVisible('memory', false);
       await controller.setVisible('insights', false);
       await controller.setVisible('unknown_key', false);
 
@@ -175,9 +167,11 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_tasks'), isFalse);
       expect(prefs.getBool('session_entry_visibility_kanban'), isFalse);
       expect(prefs.getBool('session_entry_visibility_skills'), isFalse);
-      expect(prefs.getBool('session_entry_visibility_memory'), isFalse);
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
-      expect(prefs.containsKey('session_entry_visibility_unknown_key'), isFalse);
+      expect(
+        prefs.containsKey('session_entry_visibility_unknown_key'),
+        isFalse,
+      );
     });
   });
 }

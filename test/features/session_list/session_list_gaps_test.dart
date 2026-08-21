@@ -8,6 +8,8 @@ import 'package:hermex_flutter/core/models/session.dart';
 import 'package:hermex_flutter/features/projects/project_providers.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/session_list/session_row_subtitle_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
 
@@ -62,6 +64,7 @@ void main() {
     bool readOnly = false,
     double? cost,
     String? projectId,
+    int? messageCount,
   }) {
     return SessionSummary(
       sessionId: id,
@@ -73,6 +76,7 @@ void main() {
       isReadOnly: readOnly,
       estimatedCost: cost,
       projectId: projectId,
+      messageCount: messageCount,
       createdAt: (DateTime.now().millisecondsSinceEpoch / 1000) - 3600,
     );
   }
@@ -348,8 +352,9 @@ void main() {
     });
   });
 
-  group('行 badge', () {
-    testWidgets('分支/只读/待输入/成本 badge 渲染', (tester) async {
+  group('行 badge 与副标题开关', () {
+    testWidgets('分支/只读 badge 默认渲染；渠道与预估价钱默认关闭', (tester) async {
+      SharedPreferences.setMockInitialValues({});
       final api = FakeSessionListApi(
         sessions: [
           session(
@@ -358,6 +363,7 @@ void main() {
             parentSessionId: 'p0',
             readOnly: true,
             cost: 1.25,
+            messageCount: 5,
           ),
           session('s2', '待输入会话', sourceLabel: 'qq'),
         ],
@@ -366,8 +372,46 @@ void main() {
 
       expect(find.byIcon(CupertinoIcons.arrow_2_squarepath), findsOneWidget);
       expect(find.byIcon(CupertinoIcons.lock_fill), findsOneWidget);
+      // 渠道与预估价钱开关默认关闭：副标题不出现两者。
+      expect(find.textContaining('· \$1.25'), findsNothing);
+      expect(find.textContaining('· qq'), findsNothing);
+      // 消息数仍显示（默认开）。
+      expect(find.textContaining('5 条消息'), findsOneWidget);
+    });
+
+    testWidgets('开启渠道/预估价钱/项目名开关后副标题渲染对应项', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        SessionRowSubtitleSettingsController.keyChannel: true,
+        SessionRowSubtitleSettingsController.keyEstimatedCost: true,
+      });
+      final api = FakeSessionListApi(
+        sessions: [
+          session(
+            's1',
+            '分支会话',
+            parentSessionId: 'p0',
+            readOnly: true,
+            cost: 1.25,
+            projectId: 'p1',
+          ),
+          session('s2', '待输入会话', sourceLabel: 'qq'),
+        ],
+      );
+      await pumpList(
+        tester,
+        api,
+        projectApi: _FakeProjectApi(
+          projects: const [
+            ProjectSummary(projectId: 'p1', name: '迁移项目'),
+          ],
+        ),
+      );
+
+      expect(find.byIcon(CupertinoIcons.arrow_2_squarepath), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.lock_fill), findsOneWidget);
       expect(find.textContaining('· \$1.25'), findsOneWidget);
       expect(find.textContaining('· qq'), findsOneWidget);
+      expect(find.textContaining('迁移项目'), findsOneWidget);
     });
   });
 

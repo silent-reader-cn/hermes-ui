@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
@@ -15,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_entry_visibility.dart';
+import '../session_list/session_row_subtitle_settings.dart';
 import '../shared/app_back_button.dart';
 import 'profile_section.dart';
 import 'settings_providers.dart';
@@ -42,6 +44,9 @@ class SettingsPage extends ConsumerWidget {
           _ModelSection(),
           _DesktopSection(),
           _SessionListEntriesSection(),
+          _SessionRowSubtitleSection(),
+          _MemoryEntrySection(),
+          _WorkspacesEntrySection(),
           _AboutSection(),
         ],
       ),
@@ -74,7 +79,9 @@ class _AppearanceSection extends ConsumerWidget {
                 groupValue: mode,
                 onValueChanged: (value) {
                   if (value != null) {
-                    unawaited(ref.read(themeModeProvider.notifier).setMode(value));
+                    unawaited(
+                      ref.read(themeModeProvider.notifier).setMode(value),
+                    );
                   }
                 },
                 children: {
@@ -139,16 +146,6 @@ class _SessionListEntriesSection extends ConsumerWidget {
           ),
         ),
         CupertinoListTile(
-          title: Text(l10n.memoryTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-memory'),
-            value: visibility.memory,
-            onChanged: (value) {
-              unawaited(controller.setVisible('memory', value));
-            },
-          ),
-        ),
-        CupertinoListTile(
           title: Text(l10n.insightsTitle),
           trailing: CupertinoSwitch(
             key: const ValueKey('settings-visibility-insights'),
@@ -157,6 +154,139 @@ class _SessionListEntriesSection extends ConsumerWidget {
               unawaited(controller.setVisible('insights', value));
             },
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 会话行信息
+// ---------------------------------------------------------------------------
+
+/// 会话行信息分组：会话行副标题显示项开关（消息数 / 项目名 / 工作区 /
+/// 渠道 / 预估价钱；渠道与预估价钱默认关闭）。
+class _SessionRowSubtitleSection extends ConsumerWidget {
+  const _SessionRowSubtitleSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final settings = ref.watch(sessionRowSubtitleSettingsProvider);
+    final controller = ref.read(sessionRowSubtitleSettingsProvider.notifier);
+
+    return CupertinoListSection(
+      header: Text(l10n.sessionRowSubtitleSection),
+      children: [
+        CupertinoListTile(
+          title: Text(l10n.sessionRowShowMessageCount),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-subtitle-message-count'),
+            value: settings.messageCount,
+            onChanged: (value) {
+              unawaited(controller.setMessageCount(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.sessionRowShowProjectName),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-subtitle-project-name'),
+            value: settings.projectName,
+            onChanged: (value) {
+              unawaited(controller.setProjectName(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.sessionRowShowWorkspace),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-subtitle-workspace'),
+            value: settings.workspace,
+            onChanged: (value) {
+              unawaited(controller.setWorkspace(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.sessionRowShowChannel),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-subtitle-channel'),
+            value: settings.channel,
+            onChanged: (value) {
+              unawaited(controller.setChannel(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.sessionRowShowEstimatedCost),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-subtitle-estimated-cost'),
+            value: settings.estimatedCost,
+            onChanged: (value) {
+              unawaited(controller.setEstimatedCost(value));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 记忆入口
+// ---------------------------------------------------------------------------
+
+/// 记忆入口分组：记忆页使用频率低，入口从会话工具行移至设置页
+/// （2026-08 主人指示），点击进入 `/memory`。
+class _MemoryEntrySection extends ConsumerWidget {
+  const _MemoryEntrySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return CupertinoListSection(
+      children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-memory-entry'),
+          title: Text(l10n.memoryTitle),
+          subtitle: Text(l10n.memoryEntrySubtitle),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => context.go('/memory'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 工作区管理入口
+// ---------------------------------------------------------------------------
+
+/// 工作区管理入口分组：工作区注册表（添加/重命名/移除 + 文件浏览），
+/// 点击进入 `/workspaces`。
+class _WorkspacesEntrySection extends ConsumerWidget {
+  const _WorkspacesEntrySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return CupertinoListSection(
+      children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-workspaces-entry'),
+          title: Text(l10n.manageWorkspaces),
+          subtitle: Text(l10n.manageWorkspacesSubtitle),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => context.push('/workspaces'),
         ),
       ],
     );
@@ -242,7 +372,9 @@ class _ServerSection extends ConsumerWidget {
     final connections = ref.watch(connectionsProvider);
     final active = ref.watch(activeConnectionProvider);
     return CupertinoListSection(
-      header: Text(active == null ? l10n.serverSectionDisconnected : l10n.serverSection),
+      header: Text(
+        active == null ? l10n.serverSectionDisconnected : l10n.serverSection,
+      ),
       children: [
         if (connections.isEmpty)
           CupertinoListTile(
@@ -250,7 +382,12 @@ class _ServerSection extends ConsumerWidget {
             subtitle: Text(l10n.noServerConfiguredSubtitle),
           ),
         for (final connection in connections)
-          _buildServerRow(context, ref, connection, connection.id == active?.id),
+          _buildServerRow(
+            context,
+            ref,
+            connection,
+            connection.id == active?.id,
+          ),
         CupertinoListTile(
           key: const ValueKey('server-add'),
           leading: const Icon(CupertinoIcons.add_circled),
@@ -296,11 +433,8 @@ class _ServerSection extends ConsumerWidget {
             label: l10n.deleteServer,
             padding: EdgeInsets.zero,
             minimumSize: const Size(32, 32),
-            onPressed: () => unawaited(_confirmDeleteServer(
-              context,
-              ref,
-              connection,
-            )),
+            onPressed: () =>
+                unawaited(_confirmDeleteServer(context, ref, connection)),
             child: const Icon(
               CupertinoIcons.trash,
               size: 18,
@@ -312,10 +446,10 @@ class _ServerSection extends ConsumerWidget {
       onTap: isActive
           ? null
           : () => unawaited(
-                ref.read(activeConnectionProvider.notifier).setActive(
-                      connection.id,
-                    ),
-              ),
+              ref
+                  .read(activeConnectionProvider.notifier)
+                  .setActive(connection.id),
+            ),
     );
   }
 
@@ -423,8 +557,9 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final host = Uri.tryParse(url)?.host;
     final existing = widget.connection;
     // 编辑时密码留空 = 保留原密码；新增时留空 = 无密码。
-    final password =
-        _passwordController.text.isEmpty ? existing?.password : _passwordController.text;
+    final password = _passwordController.text.isEmpty
+        ? existing?.password
+        : _passwordController.text;
     // 有密码 → 先登录种会话 cookie（否则保存后会话列表必 401「密码被拒绝」）；
     // 登录失败 → 报错并停留，不保存无效配置。
     if (password != null && password.isNotEmpty) {
@@ -463,7 +598,8 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final l10n = AppLocalizations.of(context);
     final factory = ref.read(onboardingApiFactoryProvider);
     final api = factory(url, [
-      for (final entry in (existing?.customHeaders ?? const <String, String>{}).entries)
+      for (final entry
+          in (existing?.customHeaders ?? const <String, String>{}).entries)
         CustomHeader(name: entry.key, value: entry.value),
     ]);
     try {
@@ -591,9 +727,7 @@ class _ModelSection extends ConsumerWidget {
               title: Text(l10n.reasoningEffort),
               subtitle: Text(state.reasoningEffort ?? l10n.notSet),
               trailing: const Icon(CupertinoIcons.chevron_right),
-              onTap: () => unawaited(
-                _openReasoningPicker(context, ref, state),
-              ),
+              onTap: () => unawaited(_openReasoningPicker(context, ref, state)),
             ),
         ],
       ),
@@ -670,7 +804,10 @@ class _ModelPickerPage extends ConsumerWidget {
                   CupertinoListSection(
                     header: Text(group.name),
                     children: [
-                      for (final model in [...group.models, ...group.extraModels])
+                      for (final model in [
+                        ...group.models,
+                        ...group.extraModels,
+                      ])
                         CupertinoListTile(
                           key: ValueKey('model-option-${model.id}'),
                           title: Text(model.displayName),

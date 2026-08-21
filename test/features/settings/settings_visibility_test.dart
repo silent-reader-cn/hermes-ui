@@ -45,9 +45,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const CupertinoApp(
-          home: SettingsPage(),
-        ),
+        child: const CupertinoApp(home: SettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -55,7 +53,7 @@ void main() {
   }
 
   group('设置页会话列表入口显隐开关测试', () {
-    testWidgets('渲染「会话列表入口」区块及 5 个功能入口开关', (tester) async {
+    testWidgets('渲染「会话列表入口」区块及 4 个功能入口开关与记忆入口', (tester) async {
       await pumpSettingsPage(tester);
 
       await tester.scrollUntilVisible(
@@ -64,12 +62,35 @@ void main() {
       );
 
       expect(find.text('会话列表入口'), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-visibility-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-visibility-kanban')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-visibility-skills')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-visibility-memory')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-visibility-insights')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-visibility-tasks')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-visibility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-visibility-skills')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-visibility-insights')),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-memory-entry')),
+        50,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-memory-entry')),
+        findsOneWidget,
+      );
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-visibility-tasks')),
+        -50,
+      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );
@@ -79,9 +100,6 @@ void main() {
       final skillsSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-skills')),
       );
-      final memorySwitch = tester.widget<CupertinoSwitch>(
-        find.byKey(const ValueKey('settings-visibility-memory')),
-      );
       final insightsSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-insights')),
       );
@@ -89,7 +107,6 @@ void main() {
       expect(tasksSwitch.value, isTrue);
       expect(kanbanSwitch.value, isTrue);
       expect(skillsSwitch.value, isTrue);
-      expect(memorySwitch.value, isTrue);
       expect(insightsSwitch.value, isTrue);
     });
 
@@ -109,22 +126,29 @@ void main() {
       expect(state.tasks, isFalse);
       expect(state.kanban, isTrue);
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-visibility-tasks')),
+        -50,
+      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );
       expect(tasksSwitch.value, isFalse);
 
       // 点击看板和统计开关关闭
-      await tester.tap(find.byKey(const ValueKey('settings-visibility-kanban')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-visibility-kanban')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-visibility-insights')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-visibility-insights')),
+      );
       await tester.pumpAndSettle();
 
       state = container.read(sessionEntryVisibilityProvider);
       expect(state.tasks, isFalse);
       expect(state.kanban, isFalse);
       expect(state.skills, isTrue);
-      expect(state.memory, isTrue);
       expect(state.insights, isFalse);
 
       final prefs = await SharedPreferences.getInstance();
@@ -134,16 +158,23 @@ void main() {
     });
 
     testWidgets('读取 SharedPreferences 初始开关状态', (tester) async {
-      await pumpSettingsPage(tester, initialPrefs: {
-        'session_entry_visibility_tasks': false,
-        'session_entry_visibility_skills': false,
-      });
+      await pumpSettingsPage(
+        tester,
+        initialPrefs: {
+          'session_entry_visibility_tasks': false,
+          'session_entry_visibility_skills': false,
+        },
+      );
 
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('settings-visibility-insights')),
         50,
       );
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-visibility-tasks')),
+        -50,
+      );
       final tasksSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-visibility-tasks')),
       );

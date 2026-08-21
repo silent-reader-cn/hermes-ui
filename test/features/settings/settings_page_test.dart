@@ -172,14 +172,17 @@ void main() {
       final childrenDelegate = listView.childrenDelegate as SliverChildListDelegate;
       final typeNames = childrenDelegate.children.map((w) => w.runtimeType.toString()).toList();
       expect(typeNames, [
-        '_AppearanceSection',
-        '_ServerSection',
-        'ProfileSection',
-        '_ModelSection',
-        '_DesktopSection',
-        '_SessionListEntriesSection',
-        '_AboutSection',
-      ]);
+              '_AppearanceSection',
+              '_ServerSection',
+              'ProfileSection',
+              '_ModelSection',
+              '_DesktopSection',
+              '_SessionListEntriesSection',
+              '_SessionRowSubtitleSection',
+              '_MemoryEntrySection',
+              '_WorkspacesEntrySection',
+              '_AboutSection',
+            ]);
     });
 
     testWidgets('无激活连接 → 显示未连接', (tester) async {

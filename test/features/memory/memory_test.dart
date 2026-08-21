@@ -399,11 +399,11 @@ void main() {
       );
       await pumpMemoryPage(tester, api);
 
-      // 宽屏下只展示当前 tab 的单一卡片，不双列并排
-      expect(find.text('m'), findsOneWidget);
+      // 宽屏下只展示当前 tab（默认项目上下文）的单一卡片，不双列并排
+      expect(find.text('pc'), findsOneWidget);
+      expect(find.text('m'), findsNothing);
       expect(find.text('u'), findsNothing);
       expect(find.text('s'), findsNothing);
-      expect(find.text('pc'), findsNothing);
 
       // 验证 ConstrainedBox 限制 maxWidth 为 720
       final constrainedBox = tester.widget<ConstrainedBox>(
@@ -425,7 +425,14 @@ void main() {
       );
       await pumpMemoryPage(tester, api);
 
+      // 默认选中项目上下文 Tab（主人指示，2026-08）
+      expect(find.text('项目上下文内容'), findsOneWidget);
+      expect(find.text('笔记内容'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
       expect(find.text('笔记内容'), findsOneWidget);
+      expect(find.text('项目上下文内容'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('memory-tab-user')));
       await tester.pump();

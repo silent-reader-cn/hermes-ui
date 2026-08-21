@@ -22,7 +22,6 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
       tasks: false,
       kanban: true,
       skills: true,
-      memory: false,
       insights: true,
     );
   }
@@ -35,7 +34,6 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       tasks: false,
       kanban: false,
       skills: false,
-      memory: false,
       insights: false,
     );
   }
@@ -78,7 +76,7 @@ void main() {
   ];
 
   group('SidebarUtilityToolbar 显隐与过滤测试', () {
-    testWidgets('默认全开时展示全部 6 个入口（含设置）', (tester) async {
+    testWidgets('默认全开时展示全部 5 个入口（含设置，记忆入口已移至设置页）', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: CupertinoApp(
@@ -107,7 +105,7 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('sidebar-utility-memory')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const ValueKey('sidebar-utility-insights')),

@@ -53,10 +53,8 @@ void main() {
       initialLocation: initialLocation,
       routes: [
         ShellRoute(
-          builder: (context, state, child) => AdaptiveShell(
-            state: state,
-            child: child,
-          ),
+          builder: (context, state, child) =>
+              AdaptiveShell(state: state, child: child),
           routes: [
             GoRoute(
               path: '/',
@@ -105,12 +103,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('tasks-child')), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsNothing,
+      );
       expect(find.byType(EmptyDetailPane), findsNothing);
     });
 
-    testWidgets('宽视口（1280×800）处于根路径 `/`：渲染双栏，左侧常驻侧栏，右侧 EmptyDetailPane', (tester) async {
+    testWidgets('宽视口（1280×800）处于根路径 `/`：渲染双栏，左侧常驻侧栏，右侧 EmptyDetailPane', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -125,14 +131,22 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsOneWidget,
+      );
       expect(find.byType(SidebarUtilityToolbar), findsOneWidget);
       expect(find.byType(EmptyDetailPane), findsOneWidget);
       expect(find.byType(SessionListPage), findsOneWidget);
     });
 
-    testWidgets('宽视口（1280×800）处于二级子路径 `/tasks`：左侧侧栏可见，右侧展示 child', (tester) async {
+    testWidgets('宽视口（1280×800）处于二级子路径 `/tasks`：左侧侧栏可见，右侧展示 child', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -147,8 +161,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('tasks-child')), findsOneWidget);
       expect(find.byType(EmptyDetailPane), findsNothing);
     });
@@ -167,7 +187,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsNothing,
+      );
 
       // 900.0 宽 → 宽屏
       tester.view.physicalSize = const Size(900, 600);
@@ -179,7 +202,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -202,10 +228,7 @@ void main() {
       expect(handleFinder, findsOneWidget);
 
       final mouseRegion = tester.widget<MouseRegion>(
-        find.descendant(
-          of: handleFinder,
-          matching: find.byType(MouseRegion),
-        ),
+        find.descendant(of: handleFinder, matching: find.byType(MouseRegion)),
       );
       expect(mouseRegion.cursor, SystemMouseCursors.resizeLeftRight);
 
@@ -229,7 +252,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final handleFinder = find.byKey(const ValueKey('adaptive-shell-resize-handle'));
+      final handleFinder = find.byKey(
+        const ValueKey('adaptive-shell-resize-handle'),
+      );
       expect(handleFinder, findsOneWidget);
 
       // 水平向右拖动 +40 像素
@@ -245,7 +270,9 @@ void main() {
       expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), 360.0);
     });
 
-    testWidgets('拖拽边界 clamp 验证：拖动 +500 限制在 420，拖动 -500 限制在 280', (tester) async {
+    testWidgets('拖拽边界 clamp 验证：拖动 +500 限制在 420，拖动 -500 限制在 280', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -259,7 +286,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final handleFinder = find.byKey(const ValueKey('adaptive-shell-resize-handle'));
+      final handleFinder = find.byKey(
+        const ValueKey('adaptive-shell-resize-handle'),
+      );
 
       // 超出上限拖拽 +500
       await tester.drag(handleFinder, const Offset(500, 0));
@@ -270,7 +299,10 @@ void main() {
       );
       expect(sidebarBox.width, kAdaptiveSidebarMaxWidth);
       var prefs = await SharedPreferences.getInstance();
-      expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), kAdaptiveSidebarMaxWidth);
+      expect(
+        prefs.getDouble(kAdaptiveSidebarWidthStorageKey),
+        kAdaptiveSidebarMaxWidth,
+      );
 
       // 超出下限拖拽 -500
       await tester.drag(handleFinder, const Offset(-500, 0));
@@ -281,10 +313,15 @@ void main() {
       );
       expect(sidebarBox.width, kAdaptiveSidebarMinWidth);
       prefs = await SharedPreferences.getInstance();
-      expect(prefs.getDouble(kAdaptiveSidebarWidthStorageKey), kAdaptiveSidebarMinWidth);
+      expect(
+        prefs.getDouble(kAdaptiveSidebarWidthStorageKey),
+        kAdaptiveSidebarMinWidth,
+      );
     });
 
-    testWidgets('冷启恢复：SharedPreferences 预置 360 时 pump 后侧栏恢复 360 宽度', (tester) async {
+    testWidgets('冷启恢复：SharedPreferences 预置 360 时 pump 后侧栏恢复 360 宽度', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         kAdaptiveSidebarWidthStorageKey: 360.0,
       });
@@ -308,7 +345,9 @@ void main() {
       expect(sidebarBox.width, 360.0);
     });
 
-    testWidgets('冷启容错恢复：SharedPreferences 预置异常值时安全 clamp 到有效范围', (tester) async {
+    testWidgets('冷启容错恢复：SharedPreferences 预置异常值时安全 clamp 到有效范围', (
+      tester,
+    ) async {
       // 预置超大异常值 999
       SharedPreferences.setMockInitialValues({
         kAdaptiveSidebarWidthStorageKey: 999.0,
@@ -367,12 +406,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(SidebarResizeHandle), findsNothing);
-      expect(find.byKey(const ValueKey('adaptive-shell-resize-handle')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-resize-handle')),
+        findsNothing,
+      );
     });
   });
 
   group('SidebarUtilityToolbar 与 EmptyDetailPane 交互测试', () {
-    testWidgets('侧栏工具条包含全部 6 个工具入口且对应 Key 准确', (tester) async {
+    testWidgets('侧栏工具条包含全部 5 个工具入口且对应 Key 准确', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -397,12 +439,30 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-kanban')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-skills')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-memory')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-insights')), findsOneWidget);
-      expect(find.byKey(const ValueKey('sidebar-utility-settings')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-tasks')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-skills')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-memory')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sidebar-utility-settings')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('EmptyDetailPane 展示图标、说明与新建按钮', (tester) async {
@@ -413,7 +473,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            sessionListApiFactoryProvider.overrideWithValue((_) => FakeSessionListApi()),
+            sessionListApiFactoryProvider.overrideWithValue(
+              (_) => FakeSessionListApi(),
+            ),
           ],
           child: const MediaQuery(
             data: MediaQueryData(size: Size(1280, 800)),
@@ -430,7 +492,10 @@ void main() {
 
       expect(find.text('选择会话'), findsOneWidget);
       expect(find.text('从左侧选择会话或新建聊天'), findsOneWidget);
-      expect(find.byKey(const ValueKey('empty-detail-new-chat-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('empty-detail-new-chat-button')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -455,8 +520,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(OnboardingPage), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsNothing,
+      );
     });
 
     testWidgets('已激活连接在窄屏（390×844）：展示单栈 SessionListPage，无侧栏', (tester) async {
@@ -487,11 +558,19 @@ void main() {
       }
 
       expect(find.byType(SessionListPage), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsNothing);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsNothing,
+      );
     });
 
-    testWidgets('已激活连接在宽屏（1280×800）：展示双栏外壳（左侧侧栏 + 右侧 EmptyDetailPane）', (tester) async {
+    testWidgets('已激活连接在宽屏（1280×800）：展示双栏外壳（左侧侧栏 + 右侧 EmptyDetailPane）', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -519,8 +598,14 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
       }
 
-      expect(find.byKey(const ValueKey('adaptive-shell-wide-layout')), findsOneWidget);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('adaptive-shell-wide-layout')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsOneWidget,
+      );
       expect(find.byType(EmptyDetailPane), findsOneWidget);
       expect(find.byType(SessionListPage), findsOneWidget);
 
@@ -535,7 +620,10 @@ void main() {
 
       expect(find.byType(TasksPage), findsOneWidget);
       expect(find.byType(EmptyDetailPane), findsNothing);
-      expect(find.byKey(const ValueKey('adaptive-session-sidebar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('adaptive-session-sidebar')),
+        findsOneWidget,
+      );
     });
   });
 }
