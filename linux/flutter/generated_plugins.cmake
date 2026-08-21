@@ -5,6 +5,8 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_linux
   hotkey_manager_linux
+  media_kit_libs_linux
+  media_kit_video
   screen_retriever_linux
   tray_manager
   window_manager

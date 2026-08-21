@@ -425,6 +425,22 @@ void main() {
       expect(find.text('hello preview'), findsOneWidget);
     });
 
+    testWidgets('预览：视频文件行菜单同样出现「预览」', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [const WorkspaceEntry(name: 'clip.mp4', path: 'clip.mp4', size: 12345)],
+        },
+      );
+      api.downloadBytes = Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+      await pumpWorkspace(tester, api);
+      await tester.tap(find.byKey(const ValueKey('workspace-actions-clip.mp4')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('workspace-action-preview')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('预览：归档文件不出现「预览」动作（直接下载）', (tester) async {
       final api = FakeWorkspaceApi(
         directories: {

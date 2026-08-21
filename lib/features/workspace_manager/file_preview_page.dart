@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
@@ -22,10 +25,10 @@ enum WorkspaceFileKind {
   /// 图片，走 /api/file/raw 原始字节。
   image,
 
-  /// 音视频（内嵌播放器后置，当前走下载兜底）。
+  /// 视频，media_kit 内存字节播放（mp4/mov/webm/mkv/avi/m4v）。
   video,
 
-  /// 音频（内嵌播放器后置，当前走下载兜底）。
+  /// 音频，media_kit 内存字节播放（mp3/wav/m4a/aac/ogg/flac/opus）。
   audio,
 
   /// PDF（内置渲染器后置，当前走下载兜底）。
@@ -164,10 +167,13 @@ WorkspaceFileKind workspaceFileKindOf(WorkspaceEntry entry) {
   return WorkspaceFileKind.other;
 }
 
-/// 是否可在应用内预览（文本/图片）；其余类型走下载兜底。
+/// 是否可在应用内预览（文本/图片/音视频）；其余类型走下载兜底。
 bool workspaceFileIsPreviewable(WorkspaceEntry entry) {
   final kind = workspaceFileKindOf(entry);
-  return kind == WorkspaceFileKind.text || kind == WorkspaceFileKind.image;
+  return kind == WorkspaceFileKind.text ||
+      kind == WorkspaceFileKind.image ||
+      kind == WorkspaceFileKind.video ||
+      kind == WorkspaceFileKind.audio;
 }
 
 /// 文件预览页（push 进入，参数 `{sessionId, entry}`）。
@@ -175,7 +181,8 @@ bool workspaceFileIsPreviewable(WorkspaceEntry entry) {
 /// - 文本（.md/.txt/.dart/...）：GET /api/file → SelectableText（monospace），
 ///   `.md` 用 flutter_markdown 富渲染（沿用 chat 的 Cupertino theme 化样式）；
 /// - 图片：GET /api/file/raw → Image.memory（InteractiveViewer 缩放）；
-/// - 音视频/PDF/归档/未知：展示「无法预览」+ 下载兜底（播放器/渲染器后置）；
+/// - 音视频：GET /api/file/raw → 临时文件 + media_kit Player（Cupertino 播放控件）；
+/// - PDF/归档/未知：展示「无法预览」+ 下载兜底（播放器/渲染器后置）；
 /// - 加载失败：statusRedText 错误详情 + 重试 + 「改用下载」兜底。
 class FilePreviewPage extends ConsumerStatefulWidget {
   const FilePreviewPage({
@@ -206,6 +213,13 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
   /// 图片原始字节（仅 image 类型）。
   Uint8List? _imageBytes;
 
+  /// 音视频临时文件路径（video/audio）。
+  String? _mediaTempPath;
+
+  /// 音视频播放器（video/audio 共用 media_kit；null = 未初始化或失败）。
+  Player? _player;
+  VideoController? _videoController;
+
   bool _downloading = false;
 
   WorkspaceApi get _api =>
@@ -217,10 +231,38 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     unawaited(_load());
   }
 
+  @override
+  void dispose() {
+    unawaited(_disposeMedia());
+    super.dispose();
+  }
+
+  Future<void> _disposeMedia() async {
+    final player = _player;
+    _videoController = null;
+    _player = null;
+    // VideoController 随 Player 释放自动清理（见 VideoController 构造中的
+    // player.platform?.release 监听）；此处仅释放 Player。
+    try {
+      await player?.dispose();
+    } catch (_) {}
+    final tempPath = _mediaTempPath;
+    if (tempPath != null) {
+      try {
+        final file = File(tempPath);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+  }
+
   Future<void> _load() async {
+    // 切换重载时先释放旧的音视频资源。
+    await _disposeMedia();
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _loadError = null;
+      _mediaTempPath = null;
     });
     try {
       if (_kind == WorkspaceFileKind.text) {
@@ -243,8 +285,39 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           _imageBytes = bytes;
           _loading = false;
         });
+      } else if (_kind == WorkspaceFileKind.video ||
+          _kind == WorkspaceFileKind.audio) {
+        final bytes = await _api.downloadFile(
+          sessionId: widget.sessionId,
+          path: widget.entry.path ?? '',
+        );
+        if (!mounted) return;
+        if (bytes.isEmpty) {
+          setState(() => _loading = false);
+          return;
+        }
+        // bytes → 临时文件 → media_kit Player（mpv 解码；扩展名决定 mime）。
+        final ext = _extOf(widget.entry.name ?? widget.entry.path ?? '');
+        final tempDir = Directory.systemTemp;
+        final tempFile = File(
+          '${tempDir.path}/hermex_preview_${DateTime.now().millisecondsSinceEpoch}$ext',
+        );
+        await tempFile.writeAsBytes(bytes, flush: true);
+        final player = Player();
+        final controller = _kind == WorkspaceFileKind.video
+            ? VideoController(player)
+            : null;
+        // 先挂载到 state 再 open，避免 open 期间 setState 丢引用。
+        setState(() {
+          _mediaTempPath = tempFile.path;
+          _player = player;
+          _videoController = controller;
+        });
+        await player.open(Media(tempFile.path));
+        if (!mounted) return;
+        setState(() => _loading = false);
       } else {
-        // 音视频/PDF/归档/未知：无内嵌渲染器，直接展示下载兜底视图。
+        // PDF/归档/未知：无内嵌渲染器，直接展示下载兜底视图。
         setState(() => _loading = false);
       }
     } on Exception catch (error) {
@@ -254,6 +327,12 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         _loadError = error;
       });
     }
+  }
+
+  static String _extOf(String name) {
+    final idx = name.lastIndexOf('.');
+    if (idx < 0) return '';
+    return name.substring(idx).toLowerCase();
   }
 
   @override
@@ -329,12 +408,106 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           ),
         ];
       case WorkspaceFileKind.video:
+        return [_buildVideoSliver()];
       case WorkspaceFileKind.audio:
+        return [_buildAudioSliver()];
       case WorkspaceFileKind.pdf:
       case WorkspaceFileKind.archive:
       case WorkspaceFileKind.other:
         return [_buildUnsupportedSliver()];
     }
+  }
+
+  Widget _buildVideoSliver() {
+    final l10n = AppLocalizations.of(context);
+    final controller = _videoController;
+    final player = _player;
+    if (controller == null || player == null) {
+      return _buildUnsupportedSliver();
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildMediaMetaLine(l10n),
+            const SizedBox(height: 12),
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Video(
+                key: const ValueKey('preview-video'),
+                controller: controller,
+                // 自带的 Material 控件与 Cupertino 视觉不统一，这里用 null
+                // 禁用内置控件，改用下方统一的 _MediaControls（Cupertino 风格）。
+              ),
+            ),
+            const SizedBox(height: 12),
+            _MediaControls(
+              key: const ValueKey('preview-video-controls'),
+              player: player,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioSliver() {
+    final l10n = AppLocalizations.of(context);
+    final player = _player;
+    if (player == null) {
+      return _buildUnsupportedSliver();
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          children: [
+            const Icon(
+              CupertinoIcons.music_note_2,
+              size: 64,
+              color: CupertinoColors.systemGrey,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              widget.entry.name ?? l10n.unnamedFile,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            _buildMediaMetaLine(l10n),
+            const SizedBox(height: 20),
+            _MediaControls(
+              key: const ValueKey('preview-audio-controls'),
+              player: player,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaMetaLine(AppLocalizations l10n) {
+    // 复用 WorkspaceEntry 的 size（若有）作占位；时长由播放器自身展示。
+    final size = widget.entry.size;
+    if (size == null) return const SizedBox.shrink();
+    return Text(
+      _formatFileSize(size),
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 12, color: secondaryText),
+    );
+  }
+
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
   }
 
   Widget _buildTextSliver() {
@@ -535,6 +708,123 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Cupertino 风格的音视频播放控件（播放/暂停、进度条、时长）。
+class _MediaControls extends StatefulWidget {
+  const _MediaControls({super.key, required this.player});
+
+  final Player player;
+
+  @override
+  State<_MediaControls> createState() => _MediaControlsState();
+}
+
+class _MediaControlsState extends State<_MediaControls> {
+  late final StreamSubscription<bool> _playingSub;
+  late final StreamSubscription<Duration> _positionSub;
+  late final StreamSubscription<Duration> _durationSub;
+
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _playing = widget.player.state.playing;
+    _position = widget.player.state.position;
+    _duration = widget.player.state.duration;
+    _playingSub = widget.player.stream.playing.listen((value) {
+      if (mounted) setState(() => _playing = value);
+    });
+    _positionSub = widget.player.stream.position.listen((value) {
+      if (mounted) setState(() => _position = value);
+    });
+    _durationSub = widget.player.stream.duration.listen((value) {
+      if (mounted) setState(() => _duration = value);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_playingSub.cancel());
+    unawaited(_positionSub.cancel());
+    unawaited(_durationSub.cancel());
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (d.inHours > 0) {
+      return '${d.inHours}:$minutes:$seconds';
+    }
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxMs = _duration.inMilliseconds.toDouble();
+    final posMs = _position.inMilliseconds.toDouble().clamp(0, maxMs > 0 ? maxMs : 0);
+    final hasDuration = maxMs > 0;
+    return Column(
+      children: [
+        Row(
+          children: [
+            CupertinoButton(
+              key: const ValueKey('preview-media-play-pause'),
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(44, 44),
+              onPressed: () {
+                if (_playing) {
+                  unawaited(widget.player.pause());
+                } else {
+                  unawaited(widget.player.play());
+                }
+              },
+              child: Icon(
+                _playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
+                size: 28,
+                color: CupertinoColors.activeBlue,
+              ),
+            ),
+            Expanded(
+              child: CupertinoSlider(
+                key: const ValueKey('preview-media-slider'),
+                value: hasDuration ? posMs.toDouble() : 0,
+                min: 0,
+                max: hasDuration ? maxMs : 1,
+                onChanged: hasDuration
+                    ? (value) {
+                        unawaited(
+                          widget.player.seek(Duration(milliseconds: value.round())),
+                        );
+                      }
+                    : null,
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(_position),
+                style: const TextStyle(fontSize: 12, color: secondaryText),
+              ),
+              Text(
+                _formatDuration(_duration),
+                style: const TextStyle(fontSize: 12, color: secondaryText),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
