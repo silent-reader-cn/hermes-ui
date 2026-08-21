@@ -1,103 +1,303 @@
 # AGENTS.md — hermex-flutter 项目行为守则
 
-> 说明：本文件因 Hermes 对 `AGENTS.md` 文件名的审批机制在 QQ 渠道不可用（审批按钮点击无效），
-> 按主人指示以 `AGENT_.md` 落盘；**请手动将本文件重命名为 `AGENTS.md`** 后生效。
-> 内容与 [docs/CODING_STYLE.md](docs/CODING_STYLE.md) 一致（该文档为规范备份）。
-> 本文档是**所有参与本仓库工作的 AI 代理（含子代理）的强制规范**。
-> 开工前必读；与本仓库代码风格冲突的写法一律以本文档为准。
+> 本文档是**所有参与本仓库工作的 AI 代理（含子代理）的强制规范**，开工前必读。
+> 与本仓库代码风格冲突的写法一律以本文档为准；本文档与 `docs/CODING_STYLE.md` 同源，冲突时以本文档为准。
+> 历史说明：曾因 Hermes 对 `AGENTS.md` 文件名的审批机制在 QQ 渠道不可用而以 `AGENT_.md` 落盘，现已正名。
 
 ## 1. 项目简介
 
 将 Hermex（iOS 原生 SwiftUI，MIT 开源）移植为 Flutter + Cupertino 的全平台客户端。
-API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002）。
+API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002，经 frp 暴露公网）。
 
 - 蓝本源码（只读参考，不进仓库）：`.reference/hermex-src/`（即 uzairansaruzi/hermex 的 HermesMobile 目录）
 - 上游 hermes-webui：https://github.com/nesquena/hermes-webui
 - 优先平台：Android + Windows；后置：macOS / Linux / Web
+- 公开仓库：https://github.com/silent-reader-cn/hermex-flutter
 
 ## 2. 技术栈（锁死，不得私自更换）
 
-- Flutter 3.x stable + Dart 3.x
-- UI：**全部使用 Cupertino widgets**（CupertinoApp / CupertinoPageScaffold / CupertinoListSection / CupertinoListTile / CupertinoNavigationBar / CupertinoTextField / CupertinoSwitch / CupertinoSlider / CupertinoPicker / CupertinoAlertDialog / CupertinoSlidingSegmentedControl / CupertinoActivityIndicator），**禁止 Material widgets 混入业务 UI**（除 App 壳的 MaterialApp 桥接层外）
-- 状态管理：flutter_riverpod（Notifier / AsyncNotifier / Provider）
-- 网络：dio（HTTP）+ sse_client 自封装（SSE）+ web_socket_channel（WS）
-- 路由：go_router
-- Markdown：flutter_markdown（自定义渲染器）
-- 离线缓存：drift（SQLite）
-- 安全存储：flutter_secure_storage
-- 图表：fl_chart
+| 领域 | 选型 | 说明 |
+|---|---|---|
+| 框架 | Flutter 3.x stable + Dart 3.x (`sdk: ^3.13.0`) | 六平台单代码库 |
+| UI | **全部 Cupertino widgets** | CupertinoApp / PageScaffold / ListSection / ListTile / NavigationBar / TextField / Switch / Slider / Picker / AlertDialog / SlidingSegmentedControl / ActivityIndicator；**禁止 Material widgets 混入业务 UI**（仅 App 壳桥接层例外） |
+| 状态管理 | flutter_riverpod 2.6.x | Notifier / AsyncNotifier / Provider |
+| 网络 | dio + 自封装 sse_client + web_socket_channel | HTTP / SSE 流式 / WS（Kanban） |
+| 路由 | go_router 17.5.x | ShellRoute 单 Navigator，外壳见 `DESIGN.md` |
+| Markdown | flutter_markdown 0.7.x | 自定义渲染器 |
+| 离线缓存 | drift 2.34.x + drift_flutter + sqlite3 | SQLite，会话只读缓存 |
+| 安全存储 | flutter_secure_storage 11.x | API Key / 凭据，禁硬编码、禁进日志 |
+| 本地持久化 | shared_preferences 2.5.x + path_provider | 轻量配置、窗口记忆等 |
+| 桌面能力 | window_manager + tray_manager + hotkey_manager | 窗口记忆、系统托盘、全局快捷键 |
+| 通知 | flutter_local_notifications 22.3.x | Android 后台回合通知 |
+| 媒体 | media_kit + media_kit_video + file_picker | 音视频预览、附件选择 |
+| 图表 | fl_chart 1.2.x | Insights 统计 |
+| 字体 | MiSans (Regular/Medium) | 见 §5 样式规范 |
+| 测试 | flutter_test + mocktail + fake_async + golden_toolkit + build_runner/drift_dev | 单元/widget/契约/金照 |
 
-## 3. 目录结构
+> 完整依赖以 `pubspec.yaml` 为准；新增依赖需对齐本表选型，不得私自引入 Material 体系或替代状态管理方案。
+
+## 3. 目录结构（以实盘为准）
 
 ```
 lib/
-├── main.dart                 # 入口（平台分支）
-├── app/                      # 壳：router / theme / 全局初始化
+├── main.dart
+├── driver_main.dart
+├── l10n/app_localizations.dart
+├── app/
+│   ├── app.dart                    # 壳：CupertinoApp + 主题 + 本地化
+│   ├── router.dart                 # go_router + ShellRoute
+│   ├── deep_link.dart
+│   ├── shell/                      # 自适应双栏外壳（DESIGN.md）
+│   │   ├── adaptive_shell.dart
+│   │   ├── session_sidebar.dart
+│   │   ├── sidebar_utility_toolbar.dart
+│   │   ├── sidebar_resize_handle.dart
+│   │   └── empty_detail_pane.dart
+│   └── theme/
+│       ├── cupertino_theme.dart
+│       ├── status_colors.dart
+│       └── theme_provider.dart
 ├── core/
-│   ├── api/                  # ApiClient / endpoints / sse / ws / errors
-│   ├── models/               # 全部数据模型（fromJson 容错解码）
-│   ├── cache/                # drift 数据库
-│   └── utils/                # 工具
+│   ├── api/                        # ApiClient + 10 域扩展 + endpoints/sse/ws/cookie/header/errors
+│   │   ├── api_client*.dart
+│   │   ├── endpoints.dart
+│   │   ├── sse_client.dart
+│   │   ├── ws_client.dart
+│   │   ├── cookie_store.dart
+│   │   └── custom_header.dart
+│   ├── models/                     # 24+ 数据模型（手写 fromJson/toJson 容错）
+│   ├── cache/                      # drift 数据库 + cache/media_cache
+│   ├── connections/                # 多服务器连接与切换
+│   ├── providers/                  # file_picker 等跨域 provider
+│   └── utils/                      # accessibility/lossy_json/equality/uuid/...
 └── features/
     ├── onboarding/  session_list/  chat/  tasks/  skills/
-    ├── memory/  workspace/  kanban/  insights/  settings/
-    └── shared/               # 跨 feature 复用组件
-test/                         # 单元 + widget 测试（镜像 lib/ 结构）
-tools/fake_gateway/           # 契约测试用本地模拟服务器
+    ├── memory/  workspace/  workspace_manager/  kanban/  insights/  settings/
+    ├── git/  prompts/  projects/  notifications/  desktop/  shared/
+
+test/                               # 镜像 lib/ 结构（单元 + widget + 契约）
+assets/
+├── branding/                       # hermes 图标、托盘图标
+└── fonts/  MiSans-Regular.ttf / MiSans-Medium.ttf
+tool/                               # Flutter tool 扩展（预留）
+tools/
+├── fake_gateway/  main.py + smoke_test.py  # 契约模拟服务器
+└── icon_pipeline/ generate_icons.py
+docs/
+├── CODING_STYLE.md                 # 本文档精简备份（同源，AGENTS.md 为准）
+├── PROTOCOL_NOTES.md               # SSE/WS 协议笔记
+├── QA.md / RELEASE.md / auto_reauth_spec.md / cache_audit_report.md
+└── specs/  api_spec.md / app_shell_spec.md / chat_spec.md / models_spec.md ...
+.reference/hermex-src/              # 蓝本只读参考，不进仓库
 ```
+
+> 新增 feature 必须在 `lib/features/<name>/` 下自成目录，Provider 与页面同目录；跨 feature 复用进 `features/shared/`。
 
 ## 4. Dart 代码风格（强制）
 
 - 文件：`snake_case.dart`；类/枚举：`PascalCase`；变量/函数：`camelCase`；常量：`lowerCamelCase`
-- 每个文件一个主类型；import 顺序：dart: → package: → 相对路径，空行分隔
+- 每个文件一个主类型；import 顺序：`dart:` → `package:` → 相对路径，空行分隔
 - 私有成员一律 `_` 前缀；公开 API 必须有 doc comment（`///`）
 - `const` 能加就加；`final` 优先于 `var`
 - 禁止 `dynamic` 滥用（JSON 解析边界除外）；禁止 `print()` 调试（用 `dart:developer log`）
-- 字符串用单引号；格式化用 `dart format`（行宽 100 按官方默认）
+- 字符串用单引号；格式化用 `dart format`（跟随 `flutter_lints` 默认，不自定义行宽）
 - 错误处理：业务层抛自定义异常（继承 `ApiException`），UI 层 catch 展示；不吞异常
 - 异步：优先 `async/await`，禁止裸 `Future` 忽略（加 `unawaited` 或注释说明）
-- analysis_options.yaml 启用 `flutter_lints` + 项目追加规则，`flutter analyze` 必须零告警才算完成
+- `analysis_options.yaml` 启用 `package:flutter_lints/flutter.yaml` + 项目追加规则，`flutter analyze` 必须零告警才算完成
 
-## 5. 模型与 API 约定（对齐 Hermex 容错策略）
+当前追加 lint（`analysis_options.yaml`）：
+
+```yaml
+avoid_print: true
+prefer_single_quotes: true
+prefer_final_locals: true
+prefer_const_constructors: true
+always_declare_return_types: true
+unawaited_futures: true
+discarded_futures: true
+avoid_dynamic_calls: false  # 容错解码刻意放宽
+```
+
+## 5. 样式规范（Cupertino 主题与设计令牌）
+
+### 5.1 主题
+
+- 定义位置：`lib/app/theme/cupertino_theme.dart` → `buildCupertinoTheme(Brightness)`
+- 主色：`Color(0xFF007AFF)`（Hermex iOS 蓝）
+- 背景：浅色 `CupertinoColors.systemGroupedBackground`，深色 `Color(0xFF000000)` 纯黑；`barBackgroundColor` 跟随 scaffold（不透明，避免毛玻璃过渡）
+- 全局字体：`kAppFontFamily = 'MiSans'`（`assets/fonts/MiSans-Regular.ttf` 400 / `MiSans-Medium.ttf` 500/600/700），`pubspec.yaml` 已注册
+- `CupertinoTextThemeData` 显式绑定 `fontFamily` 与 `color: CupertinoColors.label`，覆盖 17pt 正文、10pt tabLabel、17pt navTitle(600)、34pt largeTitle(bold)、21pt picker 等
+
+### 5.2 状态色（WCAG AA ≥4.5:1）
+
+定义位置：`lib/app/theme/status_colors.dart`，全部为 `CupertinoDynamicColor.withBrightnessAndContrast`：
+
+| 令牌 | 浅色 | 深色 | 用途 |
+|---|---|---|---|
+| statusGreenText | #1E7A34 | #34C759 | 运行中/成功 |
+| statusOrangeText | #B25000 | #FF9500 | 暂停/警告 |
+| statusBlueText | #005FB8 | #0A84FF | 进行中/主色 |
+| statusGreyText | #595959 | #8E8E93 | 关闭/离线 |
+| statusTealText | #0E7C86 | #30B0C7 | 就绪 |
+| statusRedText | #B3001B | #FF453A | 错误/失败详情（替代 systemRed 浅色对比不足） |
+| secondaryText | #3C3C43/60% | #EBEBF5/72% | 副标/次要信息（浅 ~4.5:1，深 ~8.9:1） |
+
+> 禁止直接用 `systemGreen/systemOrange/systemRed` 作文字色（浅底对比 ~2.0-3.4:1 不达标）；装饰圆点/图标可例外。
+
+### 5.3 布局与外壳
+
+- 自适应阈值：`kAdaptiveBreakpoint = 900.0`，`MediaQuery.sizeOf(context).width >= 900` 为宽屏（`DESIGN.md` §2，避开 Flutter 测试默认 800×600 视口）
+- 宽屏：`AdaptiveShell` → 左 320px `SessionSidebar`（工具条 + 完整 `SessionListPage` + 1px separator）+ 右 `Expanded` 内容区；窄屏直接透传 `child`
+- 路由进壳：`/`、`/chat*`、`/tasks`、`/kanban`、`/skills`、`/memory`、`/insights`、`/settings`、`/workspace/*`、`/git/*` 进 `ShellRoute`；`/onboarding` 顶层独立
+- 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`tray_icon*.png/.ico`
+
+### 5.4 无障碍与本地化
+
+- 无障碍：`lib/core/utils/accessibility.dart` 提供 `AccessibleButton` 与 haptic helpers；逐步迁移既有图标按钮，需通过动态字号与对比度审计（`test/features/contrast_scan_test.dart`、`a11y_text_scale_test.dart`）
+- 本地化：`supportedLocales: en/zh` + Cupertino/Material/Widgets delegates + `AppLocalizationsDelegate`（`lib/app/app.dart`、`lib/l10n/`）；业务文案逐步 ARB 抽离，现阶段中英 facade 已可用
+
+## 6. 模型与 API 约定（对齐 Hermex 容错策略）
 
 - 所有模型手写 `fromJson` / `toJson`（**不用 json_serializable codegen**），保持可控容错
 - 容错规则：未知字段忽略；字段缺失/类型不符时给**安全默认值**，绝不 crash；可空字段用 `?`
-- `endpoints.dart` 端点表必须与 `.reference/hermex-src/Networking/Endpoints.swift` 一一对应
-- 响应形状以真实服务器为准；改动前先跑 `tools/fake_gateway` 契约测试
+- `endpoints.dart` 端点表必须与 `.reference/hermex-src/Networking/Endpoints.swift` 一一对应（约 150 端点）
+- 响应形状以真实服务器为准；改动前先跑 `tools/fake_gateway` 契约测试（`smoke_test.py`）
 - API Key 存 flutter_secure_storage，禁止硬编码、禁止进日志
+- SSE 事件映射以 `docs/PROTOCOL_NOTES.md` 为准（token/interim_assistant/reasoning/tool/title/metering/done/initial/approval/clarify 等全量对照）
 
-## 6. Riverpod 约定
+## 7. Riverpod 约定
 
 - 业务状态用 `Notifier`/`AsyncNotifier` + `NotifierProvider`；派生状态用 `Provider`/`FutureProvider`
 - Provider 文件与页面同目录（如 `features/chat/chat_providers.dart`）
 - 所有 Provider 命名后缀 `Provider`；Notifier 类名后缀 `Controller`
 - 页面组件（Widget）不直接持有网络逻辑，一律走 Provider
 
-## 7. 测试要求（必写）
+## 8. 测试要求与流水线（必写）
+
+### 8.1 测试要求
 
 - 每个模型：JSON 解析单测（含**畸形输入**容错用例）
 - 每个 Controller：核心状态机单测（流式追加、错误恢复、重连）
 - ApiClient 方法：用 mock（mocktail）测请求路径/参数/解析
 - 页面：关键交互 widget 测试（会话列表、聊天发送、设置表单）
-- `flutter test` 全绿 + `flutter analyze` 零告警 = 完成标准
+- 对比度/无障碍：`contrast_scan_test`、`a11y_text_scale` 等专项
 
-## 8. Git 规范
+### 8.2 本地流水线
+
+```bash
+flutter analyze          # 零告警（含 info）
+flutter test             # 全绿
+flutter build apk --debug
+python tools/fake_gateway/smoke_test.py
+```
+
+> Windows 宿主在 MSYS bash 下跑 flutter/dart 需走封装 bat（如 `C:/tmp/f.bat`），避免 HOME/PATH 污染（见 `windows-terminal` skill）。
+
+### 8.3 CI 流水线（`.github/workflows/ci.yml`）
+
+| Job | 触发 | 步骤 |
+|---|---|---|
+| analyze-test | push main / PR | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test` |
+| android-debug | 依赖 analyze-test | 同上 → `flutter build apk --debug` |
+| fake-gateway | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py` |
+
+> 合并到 main 前必须三 job 全绿；新增端点/模型需同步更新 `tools/fake_gateway` 契约。
+
+### 8.4 完成标准
+
+`flutter test` 全绿 + `flutter analyze` 零告警 + 无 Material 混入 + 与 Hermex 对应功能行为一致 = 完成。
+
+## 9. Git 规范
 
 - 分支：`feat/<模块>`；提交信息：`<type>(<scope>): <subject>`（type: feat/fix/refactor/test/docs/chore）
 - 提交前 `git status` 确认只 add 相关文件；禁止 `git add -A` 混入无关文件
 - 合并到 main 前必须：analyze 通过 + 测试通过 + 无 TODO 遗留（有意遗留的 TODO 要标注负责人）
+- 任务前先 commit 当前进度；子代理禁止自行 commit（由 Leader 统一提交，见 §12）
 
-## 9. 参考优先级
+## 10. 参考优先级
 
 1. 本 AGENTS.md（强制规范，最高优先）
 2. `.reference/hermex-src/`（蓝本实现，翻译而非发明）
 3. Flutter / Riverpod 官方文档
 4. 如与 Hermex 行为冲突：以 Hermex 行为为准（它是产品定义）
 
-## 10. 完成定义（DoD）
+## 11. 完成定义（DoD）
 
 - [ ] `flutter analyze` 零告警
 - [ ] `flutter test` 全绿（新增代码有测试）
 - [ ] 无 Material 组件混入业务 UI
 - [ ] 与 Hermex 对应功能行为一致（对照 `.reference/hermex-src`）
 - [ ] 提交信息规范、分支正确
+- [ ] CI 三 job 全绿（analyze-test / android-debug / fake-gateway）
+
+## 12. 并行治理与 Leader 工作流（强制）
+
+> 本节定义本仓库的**协作治理规范**。柚子担任 Leader，负责通过 AGY 调度并行子代理完成任务，承担下令、盯场、验收、合并全责。所有参与本仓库的 AI 代理（含子代理）必须遵守。
+
+### 12.1 角色与职责
+
+- **Leader（柚子）**：接收主人指示，拆解任务，编写任务书，派发 AGY 子代理，实时盯场与 steer 纠偏，独立复验成果，统一提交入库，并向主人汇报阶段快照。
+- **子代理**：无对话上下文，按任务书自包含指令执行；只写分配给自己的文件分区；禁止自行 commit/push；各自自测后报告。
+- **主人**：下达目标与验收标准，不需关心并发细节；阻塞或重大偏离时由 Leader 报损失、给方案、等指示。
+
+### 12.2 五步闭环（固定节奏）
+
+```
+1. 规格先行 — 预研子代理读透 .reference/hermex-src 与现有代码，产出规格文档（字段映射/端点表/状态机/容错规则/易错点，关键结论带源码行号），Leader 逐条抽查验收后入库 docs/specs/
+2. 编码并行 — 子代理按规格与文件级分区并行编码，互不重叠，交叉依赖接口在规格中定死
+3. 盯场纠偏 — Leader 实时查看 transcript 与产出文件数，静默 3 分钟即 steer，给具体绕坑方案而非空催
+4. 独立复验 — 不轻信子代理自报，Leader 独立重跑 flutter analyze（零告警）+ flutter test（全绿），清理临时文件，核查规格偏离
+5. 统一提交 — 子代理禁止 commit，由 Leader 统一 git add 指定文件、规范提交、推送；进入下一阶段
+```
+
+### 12.3 任务书自包含规范
+
+每个 AGY 子代理任务书必须包含：
+
+- 项目根路径 `D:\projects\hermex-flutter` 与 Windows/MSYS 环境坑说明（flutter/dart 必须走封装 bat，如 `C:/tmp/f.bat`，见 `windows-terminal` skill 的 `references/flutter-toolchain-msys-setup.md`）
+- 必读文档清单（绝对路径：本 AGENTS.md、DESIGN.md、IMPLEMENTATION_PLAN.md、对应 .reference 源码）
+- 关键已有代码路径（先读再写，避免重复造轮子）
+- 文件级分区（例：`lib/features/chat/*` 归 A，`lib/core/models/*` 归 B，禁止交叉写）
+- 验收标准（具体命令与阈值：`flutter analyze` 零告警、`flutter test` 全绿、无 Material 混入）
+- Git 纪律：**不要 commit**，Leader 统一提交
+- 模型固定：`gemini-3.7-flash-high`（用户指定，禁换）
+- 产出要求：手写 fromJson/toJson 容错、Cupertino 全量、Riverpod 后缀规范等（同本文第 4-8 节）
+
+### 12.4 盯场与 steer
+
+- 进度检查：`find <产出目录> -name "*.dart" | wc -l` 计数 + `tail` live transcript 看最近动作
+- 静默 3 分钟无日志视为可能卡住，立即 steer，示例话术："立即落盘第一个文件，不要在脑中一次性生成全部；按 <文件顺序> 逐个写"
+- steer 必须给**具体方案**：如 secure_storage 测试卡 platform 注入 → 建议抽象 `SecureStorage` 接口并注入内存 fake；网络超时 → 提示用 mocktail 隔离
+- 子代理回复"信息足够，开始写"后仍无产出，二次 steer 指定文件顺序与首个文件路径
+
+### 12.5 独立复验（验收清单）
+
+每批子代理交活后 Leader 必须逐项复验：
+
+- [ ] 独立跑 `flutter analyze` 全项目零告警（含 info 级）
+- [ ] 独立跑 `flutter test` 全绿（含原有用例无回归）
+- [ ] 无临时调试文件残留（如 `debug_tmp_test.dart`、未清理 mock、TODO(merge)）
+- [ ] 无 Material 组件混入业务 UI
+- [ ] 子代理偏离规格处有书面说明，无说明偏离需追问
+- [ ] 全量通过后统一 commit + push，提交信息 `<type>(<scope>): <subject>` 并标注阶段与测试数
+
+> 并发 flaky 识别：两子代理同时跑 `flutter test` 会抢 build 锁导致时序敏感用例偶发失败。判定：单独重跑该文件全绿且工作区干净即判为并发干扰，不视为回归；验收应在子代理全部结束后统一重跑。
+
+### 12.6 环境与提交纪律
+
+- Windows 宿主：子代理与 Leader 共用同一机器，flutter/dart 的 MSYS PATH/HOME 污染问题一致，任务书必须写明封装 bat 路径
+- Git：`checkout -b feat/<模块>` 新分支；任务前 commit；commit 前 `git status` 仅 add 相关文件，禁止 `git add -A`；合并到 main 前满足 §11 DoD
+- 文档沉淀：规格文档、SSE/WS 事件映射、端点对照表等一律进 `docs/` 并 git 入库；项目决策（优先级/命名/工具链位置/推进方式）记入 `IMPLEMENTATION_PLAN.md`
+
+### 12.7 汇报节奏
+
+- 每阶段完成向主人汇报「已完成 / 进行中 / 下一步」快照
+- 阻塞、数据丢失、核心事实错误等重错：立即停手 → 报损失 → 给方案 → 等指示；轻错（拼写/路径）秒修不提
+- 进度更新用中文短平快，技术结论先行、分析附后
+
+### 12.8 引用 Skill
+
+- `parallel-subagent-project-governance` — 并行治理主规范
+- `windows-terminal` — Windows 上 flutter 工具链封装与 MSYS 坑位
+- `hermex-flutter-codebase` — 本仓库代码导航与移植约束
+- `hermes-agent` — Hermes 本体能力查询（与 docs 冲突时以 docs 为准）
