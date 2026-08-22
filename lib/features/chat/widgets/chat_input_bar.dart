@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../chat/selection_provider.dart';
+import '../../chat/widgets/selection_chips.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/cupertino_popover.dart';
@@ -71,14 +73,24 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _submit() async {
-    final text = _textController.text;
-    if (text.trim().isEmpty) return;
+    final raw = _textController.text;
+    final repo = ref.read(pendingSelectionsProvider(widget.sessionId).notifier);
+    final extra = repo.buildMessageForApi(raw);
+    if (extra.trim().isEmpty) return;
     _textController.clear();
     setState(() => _hasText = false);
-    // 控制器自动分派：idle → 普通发送；流式 → steer。
-    await ref
+    final sent = await ref
         .read(chatControllerProvider(widget.sessionId).notifier)
-        .send(text);
+        .send(extra);
+    if (sent && extra != raw) {
+      ref.read(pendingSelectionsProvider(widget.sessionId).notifier).clear();
+    } else if (!sent) {
+      _textController.text = raw;
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _textController.text.length),
+      );
+      setState(() => _hasText = raw.trim().isNotEmpty);
+    }
   }
 
   Future<void> _handleAttachment() async {
@@ -320,117 +332,132 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         phase == ChatPhase.recovering;
     final isSending = phase == ChatPhase.sending;
     final interactive = widget.enabled;
+    final pending = ref.watch(pendingSelectionsProvider(widget.sessionId));
+    final canSendWithPending = pending.isNotEmpty;
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.systemGrey4.resolveFrom(context),
-            width: 0.5,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SelectionChipPanel(sessionId: widget.sessionId),
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: CupertinoColors.systemGrey4.resolveFrom(context),
+                width: 0.5,
+              ),
+            ),
           ),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            AccessibleButton(
-              key: const ValueKey('chat-attach-button'),
-              label: l10n.addAttachment,
-              onPressed: (!interactive || isSending || _uploading)
-                  ? null
-                  : _handleAttachment,
-              padding: EdgeInsets.zero,
-              child: _uploading
-                  ? const CupertinoActivityIndicator()
-                  : const Icon(
-                      CupertinoIcons.plus_circle,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                AccessibleButton(
+                  key: const ValueKey('chat-attach-button'),
+                  label: l10n.addAttachment,
+                  onPressed: (!interactive || isSending || _uploading)
+                      ? null
+                      : _handleAttachment,
+                  padding: EdgeInsets.zero,
+                  child: _uploading
+                      ? const CupertinoActivityIndicator()
+                      : const Icon(
+                          CupertinoIcons.plus_circle,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                ),
+                KeyedSubtree(
+                  key: _bookmarkKey,
+                  child: AccessibleButton(
+                    key: const ValueKey('chat-saved-prompts-button'),
+                    label: l10n.bookmarkPrompt,
+                    onPressed: (!interactive || isSending || _uploading)
+                        ? null
+                        : _showSavedPromptsSheet,
+                    padding: EdgeInsets.zero,
+                    child: const Icon(
+                      CupertinoIcons.bookmark,
                       color: CupertinoColors.systemGrey,
                     ),
+                  ),
+                ),
+                Expanded(
+                  child: CupertinoTextField(
+                    key: const ValueKey('chat-input-field'),
+                    controller: _textController,
+                    placeholder: !interactive
+                        ? l10n.readOnlySessionPlaceholder
+                        : (isStreaming
+                              ? l10n.steerPromptPlaceholder
+                              : l10n.sendMessagePlaceholder),
+                    enabled: !isSending && interactive,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    onChanged: (value) {
+                      final hasText =
+                          value.trim().isNotEmpty || canSendWithPending;
+                      if (hasText != _hasText) {
+                        setState(() => _hasText = hasText);
+                      }
+                    },
+                    onSubmitted: (_) => _submit(),
+                  ),
+                ),
+                if (isStreaming) ...[
+                  AccessibleButton(
+                    key: const ValueKey('chat-steer-button'),
+                    label: l10n.steerPrompt,
+                    onPressed: (interactive && _hasText) ? _submit : null,
+                    padding: EdgeInsets.zero,
+                    child: const Icon(
+                      CupertinoIcons.arrow_right_circle,
+                      color: CupertinoColors.activeBlue,
+                    ),
+                  ),
+                  AccessibleButton(
+                    key: const ValueKey('chat-stop-button'),
+                    label: l10n.stopGenerating,
+                    onPressed: _stop,
+                    padding: EdgeInsets.zero,
+                    child: const Icon(
+                      CupertinoIcons.stop_circle,
+                      color: CupertinoColors.systemRed,
+                    ),
+                  ),
+                ] else if (!isSending)
+                  AccessibleButton(
+                    key: const ValueKey('chat-send-button'),
+                    label: l10n.sendMessage,
+                    onPressed:
+                        (interactive && (_hasText || canSendWithPending))
+                        ? _submit
+                        : null,
+                    padding: EdgeInsets.zero,
+                    child: const Icon(
+                      CupertinoIcons.arrow_up_circle,
+                      color: CupertinoColors.activeBlue,
+                    ),
+                  ),
+                AccessibleButton(
+                  key: const ValueKey('chat-model-button'),
+                  label: l10n.selectModel,
+                  onPressed: interactive ? _showModelPicker : null,
+                  padding: EdgeInsets.zero,
+                  child: const Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    color: CupertinoColors.systemGrey,
+                  ),
+                ),
+              ],
             ),
-            KeyedSubtree(
-              key: _bookmarkKey,
-              child: AccessibleButton(
-                key: const ValueKey('chat-saved-prompts-button'),
-                label: l10n.bookmarkPrompt,
-                onPressed: (!interactive || isSending || _uploading)
-                    ? null
-                    : _showSavedPromptsSheet,
-                padding: EdgeInsets.zero,
-                child: const Icon(
-                  CupertinoIcons.bookmark,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-            ),
-            Expanded(
-              child: CupertinoTextField(
-                key: const ValueKey('chat-input-field'),
-                controller: _textController,
-                placeholder: !interactive
-                    ? l10n.readOnlySessionPlaceholder
-                    : (isStreaming
-                          ? l10n.steerPromptPlaceholder
-                          : l10n.sendMessagePlaceholder),
-                enabled: !isSending && interactive,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                onChanged: (value) {
-                  final hasText = value.trim().isNotEmpty;
-                  if (hasText != _hasText) setState(() => _hasText = hasText);
-                },
-                onSubmitted: (_) => _submit(),
-              ),
-            ),
-            if (isStreaming) ...[
-              AccessibleButton(
-                key: const ValueKey('chat-steer-button'),
-                label: l10n.steerPrompt,
-                onPressed: (interactive && _hasText) ? _submit : null,
-                padding: EdgeInsets.zero,
-                child: const Icon(
-                  CupertinoIcons.arrow_right_circle,
-                  color: CupertinoColors.activeBlue,
-                ),
-              ),
-              AccessibleButton(
-                key: const ValueKey('chat-stop-button'),
-                label: l10n.stopGenerating,
-                onPressed: _stop,
-                padding: EdgeInsets.zero,
-                child: const Icon(
-                  CupertinoIcons.stop_circle,
-                  color: CupertinoColors.systemRed,
-                ),
-              ),
-            ] else if (!isSending)
-              AccessibleButton(
-                key: const ValueKey('chat-send-button'),
-                label: l10n.sendMessage,
-                onPressed: (interactive && _hasText) ? _submit : null,
-                padding: EdgeInsets.zero,
-                child: const Icon(
-                  CupertinoIcons.arrow_up_circle,
-                  color: CupertinoColors.activeBlue,
-                ),
-              ),
-            AccessibleButton(
-              key: const ValueKey('chat-model-button'),
-              label: l10n.selectModel,
-              onPressed: interactive ? _showModelPicker : null,
-              padding: EdgeInsets.zero,
-              child: const Icon(
-                CupertinoIcons.slider_horizontal_3,
-                color: CupertinoColors.systemGrey,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

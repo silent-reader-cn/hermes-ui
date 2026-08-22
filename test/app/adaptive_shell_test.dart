@@ -19,12 +19,17 @@ import 'package:hermex_flutter/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fake_session_list_api.dart';
+import 'package:hermex_flutter/features/session_list/session_auto_refresh.dart';
 import '../helpers/fake_tasks_api.dart';
 import '../helpers/in_memory_secure_storage.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    enableSessionAutoRefresh = false;
+  });
+  tearDown(() {
+    enableSessionAutoRefresh = true;
   });
 
   const List<LocalizationsDelegate<dynamic>> testDelegates = [

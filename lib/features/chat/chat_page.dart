@@ -126,7 +126,8 @@ class ChatPage extends ConsumerWidget {
             if (state.hasPendingUserMessage)
               const _PendingUserMessageBanner(),
             if (state.noticeMessage != null)
-              _NoticeBanner(
+              _TransientNoticeToast(
+                key: ValueKey('chat-notice-toast-${state.noticeMessage}'),
                 message: state.noticeMessage!,
                 onDismiss: () =>
                     ref.read(chatControllerProvider(sessionId).notifier).dismissNotice(),
@@ -778,6 +779,9 @@ class _PendingUserMessageBanner extends StatelessWidget {
 }
 
 /// 成功类会话操作轻提示横幅（可点 × 关闭）。
+///
+/// 已保留作兼容，当前挂载点已改为 [_TransientNoticeToast]。
+// ignore: unused_element
 class _NoticeBanner extends StatelessWidget {
   const _NoticeBanner({required this.message, required this.onDismiss});
 
@@ -818,6 +822,131 @@ class _NoticeBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 轻量自动消失通知 toast（selected-context-spec §5.2，复制提示分型）。
+///
+/// - 2800ms 后自动 [onDismiss]（`Timer` 在 `State` 内持有，`dispose` 取消）。
+/// - 200ms `AnimatedOpacity` 淡入淡出；新 `message` 到达时旧定时被取消（`Key` 以 message 区分，同一时刻仅一条）。
+/// - 距输入栏 8px（`margin bottom 8`），不遮输入框；轻量视觉：`secondarySystemBackground` + `separator` 边框、圆角 8、13px 次要色文字、右上角 × 手动关闭。
+/// - 与 [_ErrorBanner] 分型：错误横幅（`statusRedText`）仍常驻，仅 toast 自动消失。
+class _TransientNoticeToast extends StatefulWidget {
+  const _TransientNoticeToast({
+    required super.key,
+    required this.message,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_TransientNoticeToast> createState() => _TransientNoticeToastState();
+}
+
+class _TransientNoticeToastState extends State<_TransientNoticeToast> {
+  Timer? _timer;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _visible = true;
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TransientNoticeToast oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message != widget.message) {
+      _timer?.cancel();
+      _visible = true;
+      _arm();
+    }
+  }
+
+  void _arm() {
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 2800), () {
+      if (!mounted) return;
+      setState(() => _visible = false);
+      // 等淡出完成再真正清除状态，避免被下一条 toast 的 Key 复用误清。
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (!mounted) return;
+        widget.onDismiss();
+      });
+    });
+  }
+
+  void _dismissNow() {
+    _timer?.cancel();
+    setState(() => _visible = false);
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      widget.onDismiss();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
+    return AnimatedOpacity(
+      key: const ValueKey('chat-notice-toast-opacity'),
+      opacity: _visible ? 1 : 0,
+      duration: const Duration(milliseconds: 200),
+      child: Container(
+        key: const ValueKey('chat-notice-toast'),
+        margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF2C2C2E)
+              : CupertinoColors.secondarySystemBackground.resolveFrom(context),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: CupertinoColors.separator.resolveFrom(context),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              CupertinoIcons.checkmark_circle,
+              size: 16,
+              color: CupertinoColors.systemGreen,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.message,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: secondaryText.resolveFrom(context),
+                ),
+              ),
+            ),
+            AccessibleButton(
+              key: const ValueKey('chat-notice-toast-dismiss'),
+              label: l10n.dismissNotice,
+              onPressed: _dismissNow,
+              child: const Icon(
+                CupertinoIcons.xmark_circle_fill,
+                size: 16,
+                color: CupertinoColors.systemGrey,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

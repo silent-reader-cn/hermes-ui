@@ -13,9 +13,11 @@ import '../../core/models/session.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
+import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
 import 'scheduled_session_disclosure.dart';
+import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
@@ -100,7 +102,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
 
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
+    final isDesktop = isDesktopPlatform();
+    final isWide = MediaQuery.sizeOf(context).width >= 900;
+    final showDesktopRefresh = isDesktop && isWide;
+    final refreshing = ref.watch(sessionListRefreshingProvider);
+    return SessionAutoRefreshObserver(
+      child: CupertinoPageScaffold(
       child: Stack(
         children: [
           CustomScrollView(
@@ -127,6 +134,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     if (widget.showSettingsTrailing)
                       _buildSettingsOrDoneAction(state),
                     if (!widget.showUtilityRows) _buildNewSessionAction(),
+                    if (showDesktopRefresh) _buildDesktopRefreshAction(refreshing),
                   ],
                 ),
               ),
@@ -173,12 +181,34 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   // -------------------------------------------------------------------------
   // 顶部 chrome
   // -------------------------------------------------------------------------
+
+  Widget _buildDesktopRefreshAction(bool refreshing) {
+    final l10n = AppLocalizations.of(context);
+    return AccessibleButton(
+      key: const ValueKey('session-list-desktop-refresh'),
+      // 避免新增 l10n 键，复用刷新相关语义
+      label: l10n.refreshInsights,
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(44, 44),
+      onPressed: refreshing
+          ? null
+          : () => unawaited(
+                ref
+                    .read(sessionListControllerProvider.notifier)
+                    .refreshIfStale(force: true),
+              ),
+      child: refreshing
+          ? const CupertinoActivityIndicator(radius: 10)
+          : const Icon(CupertinoIcons.refresh, size: 22),
+    );
+  }
 
   Widget _buildSearchField() {
     final l10n = AppLocalizations.of(context);

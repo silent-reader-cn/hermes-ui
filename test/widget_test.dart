@@ -9,12 +9,17 @@ import 'package:hermex_flutter/features/session_list/session_list_providers.dart
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/fake_session_list_api.dart';
+import 'package:hermex_flutter/features/session_list/session_auto_refresh.dart';
 import 'helpers/in_memory_secure_storage.dart';
 
 /// App 壳冒烟测试（替换模板 Counter 测试）。
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    enableSessionAutoRefresh = false;
+  });
+  tearDown(() {
+    enableSessionAutoRefresh = true;
   });
 
   ServerConnection buildConn(String id) {

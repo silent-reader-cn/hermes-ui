@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/desktop/desktop_lifecycle_observer.dart';
 import '../features/notifications/notification_lifecycle_observer.dart';
+import '../features/session_list/session_auto_refresh.dart';
 import '../l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
@@ -29,8 +30,9 @@ class HermexApp extends ConsumerWidget {
       AppThemeMode.system => MediaQuery.platformBrightnessOf(context),
     };
     return DesktopLifecycleObserver(
-      child: NotificationLifecycleObserver(
-        child: CupertinoApp.router(
+      child: WindowFocusObserver(
+        child: NotificationLifecycleObserver(
+          child: CupertinoApp.router(
           title: 'Hermex',
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,
@@ -43,6 +45,7 @@ class HermexApp extends ConsumerWidget {
             GlobalWidgetsLocalizations.delegate,
           ],
           supportedLocales: const [Locale('zh'), Locale('en')],
+          ),
         ),
       ),
     );

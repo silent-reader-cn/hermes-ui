@@ -9,10 +9,12 @@ import '../../../core/models/tool_call.dart';
 import '../../../core/utils/injected_message.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
+import '../../../core/utils/selected_context.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
 import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
+import 'selected_context_card.dart';
 import 'tool_call_card.dart';
 
 /// 单条消息气泡（chat_spec.md §6.3 渲染分支）。
@@ -168,14 +170,23 @@ class _UserContent extends StatelessWidget {
         ? ''
         : MessageAttachment.contentWithoutAttachedFilesMarker(content);
 
+    // SelectedContext 解析闭环：行级扫描 marker + label + > 引用，围栏保护
+    // 顺序：先解析选中上下文，再对剩余 cleanText 做媒体标记解析
+    // 渲染：卡片区置顶（gap8），cleanText 在下，两者间 6px 间隙
+    final selected = SelectedContextParser.parse(display);
+    final blocks = selected.blocks;
+    final cleanText = selected.cleanText;
     final hasMediaMarker =
-        display.contains('MEDIA:') || display.contains('file://');
+        cleanText.contains('MEDIA:') || cleanText.contains('file://');
     final parsedDisplay = hasMediaMarker
-        ? ChatMediaParser.parseMediaMarkers(display)
-        : display;
+        ? ChatMediaParser.parseMediaMarkers(cleanText)
+        : cleanText;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (blocks.isNotEmpty) SelectedContextCardGroup(blocks: blocks),
+        if (blocks.isNotEmpty && parsedDisplay.isNotEmpty)
+          const SizedBox(height: 6),
         if (parsedDisplay.isNotEmpty)
           if (hasMediaMarker)
             MarkdownBody(
@@ -204,7 +215,8 @@ class _UserContent extends StatelessWidget {
               ),
             ),
         if (message.attachments?.isNotEmpty == true) ...[
-          if (parsedDisplay.isNotEmpty) const SizedBox(height: 6),
+          if (blocks.isNotEmpty || parsedDisplay.isNotEmpty)
+            const SizedBox(height: 6),
           for (final attachment in message.attachments!)
             _AttachmentChip(
               attachment: attachment,
@@ -238,11 +250,21 @@ class _AssistantContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = message.content ?? '';
-    final parsedContent = ChatMediaParser.parseMediaMarkers(content);
+    // SelectedContext 解析：assistant 历史内容也可能包含同格式块（兼容性）
+    // 同样先解析选中块，再对 cleanText 做媒体解析，渲染顺序：卡片→正文
+    final selected = SelectedContextParser.parse(content);
+    final blocks = selected.blocks;
+    final cleanText = selected.cleanText;
+    final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (blocks.isNotEmpty) ...[
+          SelectedContextCardGroup(blocks: blocks),
+          if (parsedContent.isNotEmpty || toolGroups.isNotEmpty || reasoningGroups.isNotEmpty)
+            const SizedBox(height: 6),
+        ],
         for (final group in reasoningGroups) _ReasoningBlock(group: group),
         if (parsedContent.isNotEmpty)
           MarkdownBody(
