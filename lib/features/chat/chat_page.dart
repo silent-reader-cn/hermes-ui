@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -22,7 +23,7 @@ import 'widgets/chat_message_list.dart';
 /// 聊天页（chat_spec.md §6：消息气泡列表 + 流式渲染 + 工具卡片 + 输入栏）。
 ///
 /// `/chat/:sessionId`，sessionId 为空串表示新会话。
-class ChatPage extends ConsumerWidget {
+class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
     super.key,
     required this.sessionId,
@@ -40,13 +41,20 @@ class ChatPage extends ConsumerWidget {
   final String? matchType;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends ConsumerState<ChatPage> {
+  final GlobalKey _actionsKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final state = ref.watch(chatControllerProvider(sessionId));
-    final queued = ref.watch(queuedCountProvider(sessionId));
+    final state = ref.watch(chatControllerProvider(widget.sessionId));
+    final queued = ref.watch(queuedCountProvider(widget.sessionId));
     // 初始化时拉取 YOLO 状态（控制器内部一次性守卫，安全可重复调用）。
     unawaited(
-      ref.read(chatControllerProvider(sessionId).notifier).loadYoloState(),
+      ref.read(chatControllerProvider(widget.sessionId).notifier).loadYoloState(),
     );
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
@@ -86,12 +94,21 @@ class ChatPage extends ConsumerWidget {
               ),
           ],
         ),
-        trailing: AccessibleButton(
-          key: const ValueKey('chat-session-actions'),
-          label: l10n.sessionActions,
-          padding: EdgeInsets.zero,
-          onPressed: () => _showSessionActions(context, ref, sessionId, state),
-          child: const Icon(CupertinoIcons.ellipsis),
+        trailing: KeyedSubtree(
+          key: _actionsKey,
+          child: AccessibleButton(
+            key: const ValueKey('chat-session-actions'),
+            label: l10n.sessionActions,
+            padding: EdgeInsets.zero,
+            onPressed: () => _showSessionActions(
+              context,
+              ref,
+              widget.sessionId,
+              state,
+              _actionsKey,
+            ),
+            child: const Icon(CupertinoIcons.ellipsis),
+          ),
         ),
       ),
       child: SafeArea(
@@ -99,27 +116,27 @@ class ChatPage extends ConsumerWidget {
         child: Column(
           children: [
             if (state.pendingAction.hasPendingPrompt)
-              _PendingPromptCard(sessionId: sessionId),
+              _PendingPromptCard(sessionId: widget.sessionId),
             if (state.isShowingOfflineCache)
               _OfflineCacheBanner(
                 onReload: () => ref
-                    .read(chatControllerProvider(sessionId).notifier)
+                    .read(chatControllerProvider(widget.sessionId).notifier)
                     .loadMessages(),
                 onDismiss: () => ref
-                    .read(chatControllerProvider(sessionId).notifier)
+                    .read(chatControllerProvider(widget.sessionId).notifier)
                     .dismissOfflineCache(),
               ),
             Expanded(
               child: ChatMessageList(
-                sessionId: sessionId,
-                highlightQuery: matchType == 'content' ? searchQuery : null,
+                sessionId: widget.sessionId,
+                highlightQuery: widget.matchType == 'content' ? widget.searchQuery : null,
               ),
             ),
             if (state.sendErrorMessage != null)
               _ErrorBanner(
                 message: state.sendErrorMessage!,
                 onDismiss: () =>
-                    ref.read(chatControllerProvider(sessionId).notifier).dismissError(),
+                    ref.read(chatControllerProvider(widget.sessionId).notifier).dismissError(),
               ),
             if (queued > 0)
               _QueuedBanner(count: queued),
@@ -130,9 +147,9 @@ class ChatPage extends ConsumerWidget {
                 key: ValueKey('chat-notice-toast-${state.noticeMessage}'),
                 message: state.noticeMessage!,
                 onDismiss: () =>
-                    ref.read(chatControllerProvider(sessionId).notifier).dismissNotice(),
+                    ref.read(chatControllerProvider(widget.sessionId).notifier).dismissNotice(),
               ),
-            ChatInputBar(sessionId: sessionId, enabled: !state.isReadOnly),
+            ChatInputBar(sessionId: widget.sessionId, enabled: !state.isReadOnly),
           ],
         ),
       ),
@@ -176,120 +193,106 @@ Future<void> _showSessionActions(
   WidgetRef ref,
   String sessionId,
   ChatState state,
+  GlobalKey actionsKey,
 ) async {
   if (sessionId.isEmpty) return;
   final l10n = AppLocalizations.of(context);
   final isReadOnly = state.isReadOnly;
-  final action = await showCupertinoModalPopup<String>(
-    context: context,
-    builder: (sheetContext) => CupertinoActionSheet(
-      title: Text(state.displayTitle),
-      // 只读会话：仅保留 分支/导出（变更类操作全部不展示）。
-      actions: [
-        if (!isReadOnly) ...[
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-rename'),
-            onPressed: () => Navigator.pop(sheetContext, 'rename'),
-            child: Text(l10n.rename),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-pin'),
-            onPressed: () => Navigator.pop(sheetContext, 'pin'),
-            child: Text(l10n.pin),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-archive'),
-            onPressed: () => Navigator.pop(sheetContext, 'archive'),
-            child: Text(l10n.archive),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-compress'),
-            onPressed: () => Navigator.pop(sheetContext, 'compress'),
-            child: Text(l10n.compressSession),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-undo'),
-            onPressed: () => Navigator.pop(sheetContext, 'undo'),
-            child: Text(l10n.undoLastTurn),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-retry'),
-            onPressed: () => Navigator.pop(sheetContext, 'retry'),
-            child: Text(l10n.retryLastTurn),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-settings'),
-            onPressed: () => Navigator.pop(sheetContext, 'settings'),
-            child: Text(l10n.sessionSettings),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-yolo'),
-            onPressed: () => Navigator.pop(sheetContext, 'yolo'),
-            child: Text(state.yoloEnabled ? l10n.disableYolo : l10n.enableYolo),
-          ),
-        ],
-        CupertinoActionSheetAction(
-          key: const ValueKey('chat-action-branch'),
-          onPressed: () => Navigator.pop(sheetContext, 'branch'),
-          child: Text(l10n.createBranch),
-        ),
-        CupertinoActionSheetAction(
-          key: const ValueKey('chat-action-export'),
-          onPressed: () => Navigator.pop(sheetContext, 'export'),
-          child: Text(l10n.export),
-        ),
-        if (!isReadOnly)
-          CupertinoActionSheetAction(
-            key: const ValueKey('chat-action-delete'),
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(sheetContext, 'delete'),
-            child: Text(l10n.delete),
-          ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        key: const ValueKey('chat-action-cancel'),
-        onPressed: () => Navigator.pop(sheetContext),
-        child: Text(l10n.cancel),
-      ),
-    ),
-  );
-  if (!context.mounted || action == null) return;
   final controller = ref.read(chatControllerProvider(sessionId).notifier);
-  switch (action) {
-    case 'rename':
-      await _renameSession(context, controller, state.displayTitle);
-    case 'pin':
-      await controller.setPinned(true);
-    case 'archive':
-      if (await controller.setArchived(true)) {
-        if (context.mounted) context.go('/');
-      }
-    case 'compress':
-      await _compressSession(context, controller);
-    case 'undo':
-      final confirmed = await _confirmSessionUndo(context);
-      if (confirmed) await controller.undoLastTurn();
-    case 'retry':
-      await controller.retryLastTurn();
-    case 'settings':
-      await _sessionSettings(context, controller, state);
-    case 'yolo':
-      await controller.toggleYolo(!state.yoloEnabled);
-    case 'branch':
-      final newId = await controller.branchSession();
-      if (newId != null) {
-        if (context.mounted) context.go('/chat/$newId');
-      }
-    case 'export':
-      await _exportSession(context, ref, sessionId);
-    case 'delete':
-      final confirmed = await _confirmSessionDelete(context, state.displayTitle);
-      if (confirmed) {
-        if (await controller.deleteSession()) {
-          if (context.mounted) context.go('/');
+  final items = [
+    if (!isReadOnly) ...[
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-rename'),
+        label: l10n.rename,
+        onPressed: () => unawaited(
+          _renameSession(context, controller, state.displayTitle),
+        ),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-pin'),
+        label: l10n.pin,
+        onPressed: () => unawaited(controller.setPinned(true)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-archive'),
+        label: l10n.archive,
+        onPressed: () async {
+          if (await controller.setArchived(true)) {
+            if (context.mounted) context.go('/');
+          }
+        },
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-compress'),
+        label: l10n.compressSession,
+        onPressed: () => unawaited(_compressSession(context, controller)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-undo'),
+        label: l10n.undoLastTurn,
+        onPressed: () async {
+          final confirmed = await _confirmSessionUndo(context);
+          if (confirmed) await controller.undoLastTurn();
+        },
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-retry'),
+        label: l10n.retryLastTurn,
+        onPressed: () => unawaited(controller.retryLastTurn()),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-settings'),
+        label: l10n.sessionSettings,
+        onPressed: () => unawaited(_sessionSettings(context, controller, state)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-yolo'),
+        label: state.yoloEnabled ? l10n.disableYolo : l10n.enableYolo,
+        onPressed: () => unawaited(controller.toggleYolo(!state.yoloEnabled)),
+      ),
+    ],
+    AdaptiveMenuItem(
+      key: const ValueKey('chat-action-branch'),
+      label: l10n.createBranch,
+      onPressed: () async {
+        final newId = await controller.branchSession();
+        if (newId != null && context.mounted) {
+          context.go('/chat/$newId');
         }
-      }
-  }
+      },
+    ),
+    AdaptiveMenuItem(
+      key: const ValueKey('chat-action-export'),
+      label: l10n.export,
+      onPressed: () => unawaited(_exportSession(context, ref, sessionId)),
+    ),
+    if (!isReadOnly)
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-delete'),
+        isDestructive: true,
+        label: l10n.delete,
+        onPressed: () async {
+          final confirmed = await _confirmSessionDelete(
+            context,
+            state.displayTitle,
+          );
+          if (confirmed) {
+            if (await controller.deleteSession()) {
+              if (context.mounted) context.go('/');
+            }
+          }
+        },
+      ),
+  ];
+
+  await AdaptiveActionMenu.show(
+    context,
+    anchorKey: actionsKey,
+    items: items,
+    title: state.displayTitle,
+    cancelLabel: l10n.cancel,
+    cancelKey: const ValueKey('chat-action-cancel'),
+  );
 }
 
 Future<void> _renameSession(BuildContext context, ChatController controller, String current) async {
