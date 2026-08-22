@@ -46,16 +46,41 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final GlobalKey _actionsKey = GlobalKey();
+  String? _yoloLoadedFor;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _ensureYoloLoaded();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _ensureYoloLoaded();
+      });
+    }
+  }
+
+  void _ensureYoloLoaded() {
+    if (_yoloLoadedFor == widget.sessionId) return;
+    _yoloLoadedFor = widget.sessionId;
+    unawaited(
+      ref.read(chatControllerProvider(widget.sessionId).notifier).loadYoloState(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(chatControllerProvider(widget.sessionId));
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
-    // 初始化时拉取 YOLO 状态（控制器内部一次性守卫，安全可重复调用）。
-    unawaited(
-      ref.read(chatControllerProvider(widget.sessionId).notifier).loadYoloState(),
-    );
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),

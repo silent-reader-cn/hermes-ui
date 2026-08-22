@@ -1083,6 +1083,7 @@ class _SessionRowState extends State<_SessionRow> {
       settings: widget.subtitleSettings,
       projectNames: widget.projectNames,
     );
+    final isStreaming = _SessionRow._isStreaming(widget.session);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
@@ -1102,17 +1103,6 @@ class _SessionRowState extends State<_SessionRow> {
                     : CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
               const SizedBox(width: 10),
-            ],
-            if (_SessionRow._isStreaming(widget.session)) ...[
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: CupertinoColors.systemGreen,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
             ],
             Expanded(
               child: Column(
@@ -1185,15 +1175,32 @@ class _SessionRowState extends State<_SessionRow> {
                   key: ValueKey(
                     'session-actions-${widget.session.sessionId ?? widget.session.id}',
                   ),
-                  label: l10n.sessionActions,
+                  label: isStreaming
+                      ? '${l10n.sessionActions} — Active'
+                      : l10n.sessionActions,
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(36, 36),
                   onPressed: () => widget.onActions!(_actionKey),
-                  child: const Icon(
-                    CupertinoIcons.ellipsis,
-                    size: 20,
-                    color: CupertinoColors.systemGrey,
-                  ),
+                  child: isStreaming
+                      ? Semantics(
+                          label: 'Active',
+                          excludeSemantics: true,
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CupertinoActivityIndicator(
+                              radius: 9,
+                              color: CupertinoColors.activeBlue.resolveFrom(
+                                context,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 20,
+                          color: CupertinoColors.systemGrey,
+                        ),
                 ),
               ),
           ],

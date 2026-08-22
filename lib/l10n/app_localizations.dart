@@ -212,6 +212,16 @@ class AppLocalizations {
   String get uploadFailed => isEnglish ? 'Upload Failed' : '上传失败';
   String get selectModel => isEnglish ? 'Select Model' : '选择模型';
   String get followServerDefault => isEnglish ? 'Follow Server Default' : '跟随服务器默认';
+  String get contextWindowTitle => isEnglish ? 'Context window' : '上下文窗口';
+  String get contextWindowInput => isEnglish ? 'Input' : '输入';
+  String get contextWindowOutput => isEnglish ? 'Output' : '输出';
+  String get contextWindowThreshold => isEnglish ? 'Threshold' : '阈值';
+  String get contextWindowCost => isEnglish ? 'Cost' : '费用';
+  String get compressHint =>
+      isEnglish ? 'Compress when usage is high' : '上下文较高时建议压缩';
+  String get compressing => isEnglish ? 'Compressing…' : '压缩中…';
+  String get unavailable => isEnglish ? 'Unavailable' : '暂无数据';
+  String get modelLabel => isEnglish ? 'Model' : '模型';
   String get addAttachment => isEnglish ? 'Add Attachment' : '添加附件';
   String get sessionIsReadOnly => isEnglish ? 'This session is read-only' : '此会话为只读';
   String get readOnlySessionPlaceholder => isEnglish ? 'This session is read-only' : '此会话为只读';

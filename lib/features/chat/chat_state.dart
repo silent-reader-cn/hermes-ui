@@ -324,6 +324,7 @@ class ChatState {
     this.completedReasoningGroups = const [],
     this.queuedSlashMessages = const [],
     this.pinnedLocalNotices = const [],
+    this.lastSteerHint,
     this.stream = const ChatStreamState(),
     this.pendingAction = const ChatPendingActionState(),
     this.contextWindowSnapshot,
@@ -420,6 +421,9 @@ class ChatState {
   /// 流进行中产生的本地 notice（流结束后 flush 进 transcript）。
   final List<String> pinnedLocalNotices;
 
+  /// 最近一次 steer 提示文本（ephemeral，不进 transcript；流结束后自动清除）。
+  final String? lastSteerHint;
+
   /// 流状态（activeStreamId 等）。
   final ChatStreamState stream;
 
@@ -475,6 +479,8 @@ class ChatState {
     List<ReasoningGroup>? completedReasoningGroups,
     List<String>? queuedSlashMessages,
     List<String>? pinnedLocalNotices,
+    String? lastSteerHint,
+    bool clearLastSteerHint = false,
     ChatStreamState? stream,
     ChatPendingActionState? pendingAction,
     ContextWindowSnapshot? contextWindowSnapshot,
@@ -519,6 +525,7 @@ class ChatState {
           completedReasoningGroups ?? this.completedReasoningGroups,
       queuedSlashMessages: queuedSlashMessages ?? this.queuedSlashMessages,
       pinnedLocalNotices: pinnedLocalNotices ?? this.pinnedLocalNotices,
+      lastSteerHint: clearLastSteerHint ? null : (lastSteerHint ?? this.lastSteerHint),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
       contextWindowSnapshot:

@@ -728,7 +728,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (_disposed || gen != _generation) return false;
       if (response.accepted == true) {
         _markProgress();
-        state = state.copyWith(phase: ChatPhase.steered);
+        state = state.copyWith(phase: ChatPhase.steered, lastSteerHint: text);
         return true;
       }
       _queueSteerFailure(text);
@@ -1519,6 +1519,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _api?.stopStream();
     state = state.copyWith(
       phase: ChatPhase.idle,
+      clearLastSteerHint: true,
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
         clearLastEventId: true,
@@ -1637,6 +1638,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       phase: endPhase,
       messages: messages,
       pinnedLocalNotices: const [],
+      clearLastSteerHint: true,
       pendingAction: const ChatPendingActionState(),
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
