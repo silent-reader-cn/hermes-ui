@@ -36,21 +36,17 @@ Future<void> showCupertinoPopover({
   // 卡片最大高度（含标题 + 列表 + 保存按钮）。
   const maxHeight = 420.0;
   final gap = 8.0;
-  final aboveFit = anchorTopLeft.dy - maxHeight - gap >= 0;
-  // 未测量前的初始 top（上方放得下则向上弹，否则向下）。
-  final initialTop = aboveFit
-      ? anchorTopLeft.dy - maxHeight - gap
-      : anchorTopLeft.dy + anchorSize.height + gap;
-
+  final double anchorTop = anchorTopLeft.dy;
+  // 底锚定：卡片底部固定在 anchorTop - gap（按钮顶部），与测试锚点 top 对齐
+  // 真实高度由 AnimatedSize 200ms 平滑过渡，首帧不再用 maxHeight 420 错位
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (overlayContext) => _PopoverHost(
       left: left,
-      initialTop: initialTop,
+      anchorTop: anchorTop,
       maxHeight: maxHeight,
       gap: gap,
       screenWidth: screenW,
-      anchorBottom: anchorTopLeft.dy + anchorSize.height,
       close: entry.remove,
       builder: builder,
     ),
@@ -61,21 +57,19 @@ Future<void> showCupertinoPopover({
 class _PopoverHost extends StatefulWidget {
   const _PopoverHost({
     required this.left,
-    required this.initialTop,
+    required this.anchorTop,
     required this.maxHeight,
     required this.gap,
     required this.screenWidth,
-    required this.anchorBottom,
     required this.close,
     required this.builder,
   });
 
   final double left;
-  final double initialTop;
+  final double anchorTop;
   final double maxHeight;
   final double gap;
   final double screenWidth;
-  final double anchorBottom;
   final VoidCallback close;
   final Widget Function(BuildContext context, VoidCallback close) builder;
 
@@ -84,32 +78,9 @@ class _PopoverHost extends StatefulWidget {
 }
 
 class _PopoverHostState extends State<_PopoverHost> {
-  final GlobalKey _cardKey = GlobalKey();
-  double? _measuredHeight;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final box = _cardKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) return;
-      final height = box.size.height;
-      if (height != _measuredHeight) {
-        setState(() => _measuredHeight = height);
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final height = math.min(
-      _measuredHeight ?? widget.maxHeight,
-      widget.maxHeight,
-    );
-    final top = _measuredHeight == null
-        ? widget.initialTop
-        : _computeTop(height);
+    // 底锚定：卡片底部固定在 anchorBottom - gap，高度由内容自适应 + AnimatedSize 平滑
     return Stack(
       children: [
         // 全屏透明屏障：点击外部关闭。
@@ -121,33 +92,25 @@ class _PopoverHostState extends State<_PopoverHost> {
         ),
         Positioned(
           left: widget.left,
-          top: top,
+          bottom: MediaQuery.of(context).size.height - widget.anchorTop + widget.gap,
           width: math.min(widget.screenWidth - 16, 400),
-          child: _PopoverCard(
-            key: _cardKey,
-            close: widget.close,
-            child: widget.builder(context, widget.close),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: widget.maxHeight),
+            child: SingleChildScrollView(
+              child: _PopoverCard(
+                close: widget.close,
+                child: widget.builder(context, widget.close),
+              ),
+            ),
           ),
         ),
       ],
     );
   }
-
-  double _computeTop(double height) {
-    final screenTop = MediaQuery.of(context).padding.top + 8;
-    if (widget.initialTop >= screenTop) {
-      // 原计划向上弹：若真实高度比预算矮，向按钮方向贴近 gap。
-      final desired = widget.anchorBottom - height - widget.gap;
-      if (desired < screenTop) return screenTop;
-      return desired;
-    }
-    // 原计划向下弹：贴住按钮下方。
-    return widget.anchorBottom + widget.gap;
-  }
 }
 
 class _PopoverCard extends StatelessWidget {
-  const _PopoverCard({super.key, required this.close, required this.child});
+  const _PopoverCard({required this.close, required this.child});
 
   final VoidCallback close;
   final Widget child;

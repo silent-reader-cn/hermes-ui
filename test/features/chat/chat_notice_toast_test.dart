@@ -206,7 +206,7 @@ void main() {
       // 圆角 8 + 边框 separator
       final toast = tester.widget<Container>(find.byKey(const ValueKey('chat-notice-toast')));
       final deco = toast.decoration as BoxDecoration;
-      expect(deco.borderRadius, BorderRadius.circular(8));
+      expect(deco.borderRadius, BorderRadius.circular(10));
       expect(deco.border, isNotNull);
 
       // 13 次要色

@@ -126,9 +126,16 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
     final l10n = AppLocalizations.of(context);
     final async = ref.watch(savedPromptsControllerProvider);
 
+    // 覆盖式小 indicator：有数据时不替换整板，仅叠加顶部细线 loading
+    final hasData = async.valueOrNull != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (async.isLoading && hasData)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: CupertinoActivityIndicator(radius: 10),
+          ),
         Flexible(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 320),
@@ -240,28 +247,45 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
           child: CupertinoActivityIndicator(),
         ),
       ),
-      error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error.toString(),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: statusRedText.resolveFrom(context)),
-              ),
-              const SizedBox(height: 12),
-              CupertinoButton(
+      error: (error, _) {
+        // 有缓存数据时错误不替换整板，仅显示重试行（由上层覆盖式 indicator 处理）
+        // 无缓存才展示全板错误
+        if (async.valueOrNull != null && async.valueOrNull!.isNotEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: CupertinoButton(
                 key: const ValueKey('saved-prompts-retry'),
                 onPressed: () =>
                     ref.read(savedPromptsControllerProvider.notifier).refresh(),
                 child: Text(l10n.retry),
               ),
-            ],
+            ),
+          );
+        }
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: statusRedText.resolveFrom(context)),
+                ),
+                const SizedBox(height: 12),
+                CupertinoButton(
+                  key: const ValueKey('saved-prompts-retry'),
+                  onPressed: () =>
+                      ref.read(savedPromptsControllerProvider.notifier).refresh(),
+                  child: Text(l10n.retry),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import '../../chat/selection_provider.dart';
+import '../../chat/widgets/context_window_indicator.dart';
+import '../../chat/widgets/context_window_popover.dart';
 import '../../chat/widgets/selection_chips.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/status_colors.dart';
@@ -40,6 +42,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final TextEditingController _textController = TextEditingController();
   final GlobalKey _bookmarkKey = GlobalKey();
+  final GlobalKey _contextIndicatorKey = GlobalKey();
   bool _hasText = false;
 
   bool _uploading = false;
@@ -234,6 +237,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
+  Future<void> _showContextPopover() async {
+    final snapshot =
+        ref.read(chatControllerProvider(widget.sessionId)).contextWindowSnapshot;
+    if (snapshot == null || snapshot.percentage == null) return;
+    final currentModel =
+        ref.read(chatControllerProvider(widget.sessionId)).model;
+    await showCupertinoPopover(
+      context: context,
+      anchorKey: _contextIndicatorKey,
+      preferredWidth: 240,
+      builder: (popoverContext, close) => ContextWindowPopover(
+        sessionId: widget.sessionId,
+        snapshot: snapshot,
+        currentModel: currentModel,
+        onClose: close,
+      ),
+    );
+  }
+
   Future<void> _showModelPicker() async {
     final l10n = AppLocalizations.of(context);
     var models = ref.read(chatAvailableModelsProvider);
@@ -334,6 +356,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final interactive = widget.enabled;
     final pending = ref.watch(pendingSelectionsProvider(widget.sessionId));
     final canSendWithPending = pending.isNotEmpty;
+    final snapshot =
+        ref.watch(chatControllerProvider(widget.sessionId)).contextWindowSnapshot;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -451,6 +475,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   child: const Icon(
                     CupertinoIcons.slider_horizontal_3,
                     color: CupertinoColors.systemGrey,
+                  ),
+                ),
+                KeyedSubtree(
+                  key: _contextIndicatorKey,
+                  child: ContextWindowIndicator(
+                    snapshot: snapshot,
+                    onTap: _showContextPopover,
                   ),
                 ),
               ],

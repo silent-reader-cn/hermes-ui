@@ -133,6 +133,16 @@ class InjectedNoticeCard extends StatelessWidget {
         return CupertinoIcons.clock;
       case InjectedNoticeKind.mcp:
         return CupertinoIcons.cube_box;
+      case InjectedNoticeKind.continuationNetworkCut:
+      case InjectedNoticeKind.continuationOutputLimit:
+      case InjectedNoticeKind.continuationToolTooLarge:
+        return CupertinoIcons.arrow_2_circlepath;
+      case InjectedNoticeKind.codexNudge:
+        return CupertinoIcons.lightbulb;
+      case InjectedNoticeKind.gatewayRecovery:
+      case InjectedNoticeKind.sessionReset:
+      case InjectedNoticeKind.memoryRecall:
+        return CupertinoIcons.info_circle;
       case InjectedNoticeKind.none:
         return CupertinoIcons.command;
     }

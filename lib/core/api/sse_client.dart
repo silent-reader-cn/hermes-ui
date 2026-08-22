@@ -521,8 +521,9 @@ class SseEventDecoder {
     final map = _asMap(json);
     final rawEvent = map['event'];
     // DonePayload.event 缺失/畸形 → transportError（唯一视为 transportError 的）。
+    // 友好化：中英前缀由调用方 AppLocalizations.connectionErrorMalformedDone 统一，此处保留中文默认
     if (rawEvent is! Map<String, Object?>) {
-      return const TransportErrorSseEvent('流返回了畸形的完成事件。');
+      return const TransportErrorSseEvent('连接异常：完成事件格式异常');
     }
     final event = Map<String, Object?>.from(rawEvent);
     final rawUsage = event['usage'];

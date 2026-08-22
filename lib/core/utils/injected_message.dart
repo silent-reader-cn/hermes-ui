@@ -6,7 +6,7 @@ import '../models/chat_message.dart';
 /// Agent 代发注入消息分类器（spec §2）。
 ///
 /// 对齐 `D:\hermes-webui\static\ui.js` 的 `_formatProcessNoticeSummary`
-/// 并扩展到全量 10 类注入消息。所有 [RegExp] 均为预编译的 `static const`，
+/// 并扩展到全量 17 类注入消息。所有 [RegExp] 均为预编译的 `static const`，
 /// 禁止在 `build` 中编译。
 enum InjectedNoticeKind {
   backgroundProcess,
@@ -19,6 +19,13 @@ enum InjectedNoticeKind {
   skillBundle,
   skillAutoLoaded,
   mcp,
+  continuationNetworkCut,
+  continuationOutputLimit,
+  continuationToolTooLarge,
+  codexNudge,
+  gatewayRecovery,
+  sessionReset,
+  memoryRecall,
   none,
 }
 
@@ -55,9 +62,67 @@ class InjectedMessage {
     r'^\[SYSTEM:\s*',
     caseSensitive: false,
   );
+  static final RegExp _systemNotePrefixRegExp = RegExp(
+    r'^\[SYSTEM NOTE:\s*',
+    caseSensitive: false,
+  );
   static final RegExp _trailingBracketRegExp = RegExp(r'\]\s*$');
   static final RegExp _fallbackStatusRegExp = RegExp(
     r'Background process(?:\s+\S+)?\s+(.+?)(?:\s*\(.*)?\.?$',
+    caseSensitive: false,
+  );
+
+  // 新增 6+ 类型预编译（保持 build 零编译）
+  static final RegExp _continuationNetworkRegExp = RegExp(
+    r'previous response was cut off by a network error',
+    caseSensitive: false,
+  );
+  static final RegExp _continuationOutputRegExp = RegExp(
+    r'previous response was truncated by.*output',
+    caseSensitive: false,
+  );
+  static final RegExp _continuationToolRegExp = RegExp(
+    r'your previous tool call.*was too large',
+    caseSensitive: false,
+  );
+  static final RegExp _codexReasoningRegExp = RegExp(
+    r'contained only internal reasoning',
+    caseSensitive: false,
+  );
+  static final RegExp _codexContinueRegExp = RegExp(
+    r'continue now.*execute the required tool calls',
+    caseSensitive: false,
+  );
+  static final RegExp _gatewayRecoveryRegExp = RegExp(
+    r'previous turn was interrupted by.*gateway is now back online',
+    caseSensitive: false,
+  );
+  static final RegExp _gatewayPendingRegExp = RegExp(
+    r'a new message has arrived.*pending tool outputs',
+    caseSensitive: false,
+  );
+  static final RegExp _sessionSuspendedRegExp = RegExp(
+    r'previous session was stopped and suspended',
+    caseSensitive: false,
+  );
+  static final RegExp _sessionDailyRegExp = RegExp(
+    r'session was automatically reset by the daily schedule',
+    caseSensitive: false,
+  );
+  static final RegExp _sessionResumeExpiredRegExp = RegExp(
+    r'previous gateway session could not be recovered',
+    caseSensitive: false,
+  );
+  static final RegExp _sessionExpiredRegExp = RegExp(
+    r'previous session expired due to inactivity',
+    caseSensitive: false,
+  );
+  static final RegExp _firstContactRegExp = RegExp(
+    r"this is the user's very first message ever",
+    caseSensitive: false,
+  );
+  static final RegExp _memoryRecallRegExp = RegExp(
+    r'the following is recalled memory context',
     caseSensitive: false,
   );
 
@@ -93,8 +158,25 @@ class InjectedMessage {
   static bool _isInjectedNoticeText(String text) {
     final String t = text.trimLeft();
     if (t.isEmpty) return false;
-    if (!t.startsWith('[')) return false;
     final String lower = t.toLowerCase();
+    // 记忆上下文可被 <memory-context> 包裹，不一定以 [ 开头
+    if (_memoryRecallRegExp.hasMatch(lower)) return true;
+    if (lower.contains('recalled memory context')) return true;
+    // 裸提示（无 [System: 包裹的 dropped/empty nudge，极低误伤）
+    if (lower.contains(
+      'your previous turn indicated a tool call but none was included',
+    )) {
+      return true;
+    }
+    if (lower.contains(
+      'you just executed tool calls but returned an empty response',
+    )) {
+      return true;
+    }
+    if (!t.startsWith('[')) {
+      // 除记忆/裸 nudge 外，其余注入均以 [ 开头
+      return false;
+    }
     if (lower.startsWith('[important: background process')) return true;
     if (lower.startsWith('[important: you are running as a scheduled cron')) {
       return true;
@@ -106,6 +188,49 @@ class InjectedMessage {
       return true;
     }
     if (lower.startsWith('[system: background process')) return true;
+    // 全量 [System: / [System note: 白名单命中
+    if (lower.startsWith('[system:') || lower.startsWith('[system note:')) {
+      if (_continuationNetworkRegExp.hasMatch(lower) ||
+          _continuationOutputRegExp.hasMatch(lower) ||
+          _continuationToolRegExp.hasMatch(lower) ||
+          _codexReasoningRegExp.hasMatch(lower) ||
+          _codexContinueRegExp.hasMatch(lower) ||
+          _gatewayRecoveryRegExp.hasMatch(lower) ||
+          _gatewayPendingRegExp.hasMatch(lower) ||
+          _sessionSuspendedRegExp.hasMatch(lower) ||
+          _sessionDailyRegExp.hasMatch(lower) ||
+          _sessionResumeExpiredRegExp.hasMatch(lower) ||
+          _sessionExpiredRegExp.hasMatch(lower) ||
+          _firstContactRegExp.hasMatch(lower) ||
+          _memoryRecallRegExp.hasMatch(lower)) {
+        return true;
+      }
+      if (lower.contains('was cut off by a network error') ||
+          lower.contains('was truncated by the output') ||
+          lower.contains('was truncated by output') ||
+          (lower.contains('your previous tool call') &&
+              lower.contains('was too large')) ||
+          lower.contains('contained only internal reasoning') ||
+          (lower.contains('continue now') &&
+              lower.contains('execute the required tool calls')) ||
+          lower.contains('previous turn was interrupted by') ||
+          lower.contains('gateway is now back online') ||
+          (lower.contains('a new message has arrived') &&
+              lower.contains('pending tool outputs')) ||
+          lower.contains('ignore those pending results') ||
+          lower.contains('previous session was stopped') ||
+          lower.contains('automatically reset by the daily schedule') ||
+          lower.contains('could not be recovered after a restart') ||
+          lower.contains('session expired due to inactivity') ||
+          lower.contains('very first message ever') ||
+          lower.contains('recalled memory context') ||
+          lower.contains('was truncated by') ||
+          lower.contains('was cut off by')) {
+        return true;
+      }
+      // 未命中白名单的 [System: 视为用户手打，不折叠
+      return false;
+    }
     if (lower.startsWith('[important:')) {
       if (_containsAny(lower, const <String>[
         'background process',
@@ -138,6 +263,62 @@ class InjectedMessage {
     if (!isInjectedNotice(message)) return InjectedNoticeKind.none;
     final String content = message.content ?? '';
     final String lower = content.trimLeft().toLowerCase();
+
+    // 新增 6+ 类型优先（避免被 overflow 兜底吞掉）
+    if (_continuationNetworkRegExp.hasMatch(lower) ||
+        lower.contains('was cut off by a network error')) {
+      return InjectedNoticeKind.continuationNetworkCut;
+    }
+    if (_continuationOutputRegExp.hasMatch(lower) ||
+        (lower.contains('was truncated by') && lower.contains('output'))) {
+      return InjectedNoticeKind.continuationOutputLimit;
+    }
+    if (_continuationToolRegExp.hasMatch(lower) ||
+        (lower.contains('your previous tool call') &&
+            lower.contains('was too large'))) {
+      return InjectedNoticeKind.continuationToolTooLarge;
+    }
+    if (_codexReasoningRegExp.hasMatch(lower) ||
+        _codexContinueRegExp.hasMatch(lower) ||
+        lower.contains('contained only internal reasoning') ||
+        (lower.contains('continue now') &&
+            lower.contains('execute the required tool calls'))) {
+      return InjectedNoticeKind.codexNudge;
+    }
+    if (_gatewayRecoveryRegExp.hasMatch(lower) ||
+        _gatewayPendingRegExp.hasMatch(lower) ||
+        lower.contains('gateway is now back online') ||
+        lower.contains('previous turn was interrupted by') ||
+        (lower.contains('a new message has arrived') &&
+            lower.contains('pending tool outputs')) ||
+        lower.contains('ignore those pending results')) {
+      return InjectedNoticeKind.gatewayRecovery;
+    }
+    if (_sessionSuspendedRegExp.hasMatch(lower) ||
+        _sessionDailyRegExp.hasMatch(lower) ||
+        _sessionResumeExpiredRegExp.hasMatch(lower) ||
+        _sessionExpiredRegExp.hasMatch(lower) ||
+        _firstContactRegExp.hasMatch(lower) ||
+        lower.contains('previous session was stopped and suspended') ||
+        lower.contains('automatically reset by the daily schedule') ||
+        lower.contains('could not be recovered after a restart') ||
+        lower.contains('session expired due to inactivity') ||
+        lower.contains('very first message ever')) {
+      return InjectedNoticeKind.sessionReset;
+    }
+    if (_memoryRecallRegExp.hasMatch(lower) ||
+        lower.contains('recalled memory context')) {
+      return InjectedNoticeKind.memoryRecall;
+    }
+    // 裸 nudge（无 [ 前缀）也归 codex
+    if (lower.contains(
+          'your previous turn indicated a tool call but none was included',
+        ) ||
+        lower.contains(
+          'you just executed tool calls but returned an empty response',
+        )) {
+      return InjectedNoticeKind.codexNudge;
+    }
 
     if (lower.contains('background subagent delegations completed') ||
         lower.contains('background subagent')) {
@@ -197,6 +378,7 @@ class InjectedMessage {
   /// - 聚合：首行去前缀后截断 ≤64
   /// - Skill：`Skill · {skillName}`（引号内提取，bundle 追加 `bundle`）
   /// - Cron/MCP：固定标题
+  /// - 新增 6+ 类型：本地化固定标题（网络中断续写/输出截断续写/网关已恢复/会话已重置等）
   /// - 兜底：首行去 `[IMPORTANT:` 前缀后 ≤48
   static String extractSummary(
     ChatMessage message, [
@@ -223,6 +405,20 @@ class InjectedMessage {
       case InjectedNoticeKind.skillBundle:
       case InjectedNoticeKind.skillAutoLoaded:
         return _skillSummary(firstLine, kind, l10n);
+      case InjectedNoticeKind.continuationNetworkCut:
+        return _continuationNetworkTitle(l10n);
+      case InjectedNoticeKind.continuationOutputLimit:
+        return _continuationOutputTitle(l10n);
+      case InjectedNoticeKind.continuationToolTooLarge:
+        return _continuationToolTitle(l10n);
+      case InjectedNoticeKind.codexNudge:
+        return _codexTitle(l10n);
+      case InjectedNoticeKind.gatewayRecovery:
+        return _gatewayTitle(l10n);
+      case InjectedNoticeKind.sessionReset:
+        return _sessionResetTitle(l10n);
+      case InjectedNoticeKind.memoryRecall:
+        return _memoryTitle(l10n);
       case InjectedNoticeKind.overflow:
         return _firstLineStripped(firstLine, 48);
       case InjectedNoticeKind.none:
@@ -308,6 +504,7 @@ class InjectedMessage {
     String t = firstLine.trimLeft();
     t = t.replaceFirst(_importantPrefixRegExp, '');
     t = t.replaceFirst(_systemPrefixRegExp, '');
+    t = t.replaceFirst(_systemNotePrefixRegExp, '');
     t = t.replaceFirst(_trailingBracketRegExp, '');
     t = t.trim();
     if (t.length > limit) {
@@ -334,6 +531,41 @@ class InjectedMessage {
   static String _mcpTitle(AppLocalizations? l10n) {
     if (l10n == null) return 'MCP servers reloaded';
     return l10n.isEnglish ? 'MCP servers reloaded' : 'MCP 服务已重载';
+  }
+
+  static String _continuationNetworkTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Continue — network error';
+    return l10n.isEnglish ? 'Continue — network error' : '网络中断续写';
+  }
+
+  static String _continuationOutputTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Continue — output limit';
+    return l10n.isEnglish ? 'Continue — output limit' : '输出截断续写';
+  }
+
+  static String _continuationToolTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Continue — tool too large';
+    return l10n.isEnglish ? 'Continue — tool too large' : '工具调用过大续写';
+  }
+
+  static String _codexTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Continue execution';
+    return l10n.isEnglish ? 'Continue execution' : '继续执行';
+  }
+
+  static String _gatewayTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Gateway recovered';
+    return l10n.isEnglish ? 'Gateway recovered' : '网关已恢复';
+  }
+
+  static String _sessionResetTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Session reset';
+    return l10n.isEnglish ? 'Session reset' : '会话已重置';
+  }
+
+  static String _memoryTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Memory recall';
+    return l10n.isEnglish ? 'Memory recall' : '记忆上下文';
   }
 
   static String _statusCompleted(AppLocalizations? l10n) {
@@ -407,6 +639,27 @@ extension InjectedNoticeKindDisplay on InjectedNoticeKind {
       case InjectedNoticeKind.mcp:
         if (l10n == null) return 'MCP';
         return l10n.isEnglish ? 'MCP' : 'MCP';
+      case InjectedNoticeKind.continuationNetworkCut:
+        if (l10n == null) return 'Continue — network error';
+        return l10n.isEnglish ? 'Continue — network error' : '网络中断续写';
+      case InjectedNoticeKind.continuationOutputLimit:
+        if (l10n == null) return 'Continue — output limit';
+        return l10n.isEnglish ? 'Continue — output limit' : '输出截断续写';
+      case InjectedNoticeKind.continuationToolTooLarge:
+        if (l10n == null) return 'Continue — tool too large';
+        return l10n.isEnglish ? 'Continue — tool too large' : '工具调用过大续写';
+      case InjectedNoticeKind.codexNudge:
+        if (l10n == null) return 'Continue execution';
+        return l10n.isEnglish ? 'Continue execution' : '继续执行';
+      case InjectedNoticeKind.gatewayRecovery:
+        if (l10n == null) return 'Gateway recovered';
+        return l10n.isEnglish ? 'Gateway recovered' : '网关已恢复';
+      case InjectedNoticeKind.sessionReset:
+        if (l10n == null) return 'Session reset';
+        return l10n.isEnglish ? 'Session reset' : '会话已重置';
+      case InjectedNoticeKind.memoryRecall:
+        if (l10n == null) return 'Memory recall';
+        return l10n.isEnglish ? 'Memory recall' : '记忆上下文';
       case InjectedNoticeKind.overflow:
         if (l10n == null) return 'Notice';
         return l10n.isEnglish ? 'Notice' : '提示';

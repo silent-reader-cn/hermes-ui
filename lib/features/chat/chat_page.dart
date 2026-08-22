@@ -698,7 +698,7 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: CupertinoColors.systemRed.withValues(alpha: 0.1),
@@ -859,8 +859,8 @@ class _NoticeBanner extends StatelessWidget {
 ///
 /// - 2800ms 后自动 [onDismiss]（`Timer` 在 `State` 内持有，`dispose` 取消）。
 /// - 200ms `AnimatedOpacity` 淡入淡出；新 `message` 到达时旧定时被取消（`Key` 以 message 区分，同一时刻仅一条）。
-/// - 距输入栏 8px（`margin bottom 8`），不遮输入框；轻量视觉：`secondarySystemBackground` + `separator` 边框、圆角 8、13px 次要色文字、右上角 × 手动关闭。
-/// - 与 [_ErrorBanner] 分型：错误横幅（`statusRedText`）仍常驻，仅 toast 自动消失。
+/// - 距输入栏 8px（`margin bottom 8`），不遮输入框；轻量视觉：白/绿8%轻底 + label 500 + 18px 绿勾、圆角 10 + 细阴影。
+/// - 暗色 #2C2C2E/白92%字；与 [_ErrorBanner] 分型：错误横幅（`statusRedText`）仍常驻，仅 toast 自动消失。
 class _TransientNoticeToast extends StatefulWidget {
   const _TransientNoticeToast({
     required super.key,
@@ -928,6 +928,15 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
+    // 要求：白/绿8%轻底（浅色 white + systemGreen 8%）、深色 #2C2C2E
+    // 文字用 label 主色 500、18px 绿勾、圆角10+细阴影
+    // 浅色：Color(0xFFF0FAF2) ≈ 白 92% + 绿 8% 轻底效果
+    final bgColor = isDark
+        ? const Color(0xFF2C2C2E)
+        : const Color(0xFFF0FAF2);
+    final textColor = isDark
+        ? CupertinoColors.white.withValues(alpha: 0.92)
+        : CupertinoColors.label.resolveFrom(context);
     return AnimatedOpacity(
       key: const ValueKey('chat-notice-toast-opacity'),
       opacity: _visible ? 1 : 0,
@@ -937,20 +946,29 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
         margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF2C2C2E)
-              : CupertinoColors.secondarySystemBackground.resolveFrom(context),
-          borderRadius: BorderRadius.circular(8),
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: CupertinoColors.separator.resolveFrom(context),
+            color: isDark
+                ? CupertinoColors.systemGrey
+                    .resolveFrom(context)
+                    .withValues(alpha: 0.18)
+                : CupertinoColors.systemGreen.withValues(alpha: 0.18),
             width: 0.5,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.black.withValues(alpha: isDark ? 0.18 : 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             const Icon(
-              CupertinoIcons.checkmark_circle,
-              size: 16,
+              CupertinoIcons.checkmark_circle_fill,
+              size: 18,
               color: CupertinoColors.systemGreen,
             ),
             const SizedBox(width: 8),
@@ -959,7 +977,8 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
                 widget.message,
                 style: TextStyle(
                   fontSize: 13,
-                  color: secondaryText.resolveFrom(context),
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
                 ),
               ),
             ),

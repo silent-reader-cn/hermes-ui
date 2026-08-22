@@ -141,3 +141,37 @@ bool _isInjectedNotice(String text) {
 - `C:\Users\Admin\AppData\Local\hermes\hermes-agent\agent\skill_commands.py:54` / `695` / `agent/skill_bundles.py:347` / `gateway/run.py:19119`
 - `D:\hermes-webui\static\ui.js:15337` `_formatProcessNoticeSummary` / `_toggleProcessNotice` / `isProcessNoticeText` / `15846` `process-wakeup-notice` 分支
 - `D:\hermes-webui\static\style.css:2330` `.process-notice-*`
+
+## 9. 扩展：全量 [System: / System note: ] 6+ 新增类型（2026-08-22）
+
+> 本次扩展把 `agent/conversation_loop.py:1110/1116/1123/1156` 与 `gateway/run.py:1331/6312/19024` 以及 `agent/memory_manager.py` 的 `[System: ...] / [System note: ...]` 全量纳入折叠，不再原样蓝泡。`context_compressor.py:902` 的 `_synthetic_user_row` 前缀亦以白名单对齐。
+
+### 9.1 新增类别（7 kind，覆盖 ≥6 种注入形态）
+
+| # | 新增 kind | 触发点 | 注入样例（首行，大小写/空白容错） | 摘要（zh / en） | 图标 |
+|---|---|---|---|---|---|
+| 11 | `continuationNetworkCut` | `conversation_loop.py:1110 _LENGTH_CONTINUATION_NETWORK_STUB` | `[System: The previous response was cut off by a network error mid-stream. Continue exactly where you left off.]` | 网络中断续写 / Continue — network error | `arrow_2_circlepath` |
+| 12 | `continuationOutputLimit` | `conversation_loop.py:1116 _LENGTH_CONTINUATION_OUTPUT_LIMIT` | `[System: Your previous response was truncated by the output length limit. Continue exactly where you left off.]` | 输出截断续写 / Continue — output limit | `arrow_2_circlepath` |
+| 13 | `continuationToolTooLarge` | `conversation_loop.py:1123 _LENGTH_CONTINUATION_DROPPED_TOOLS_PREFIX` | `[System: Your previous tool call (patch) was too large and the stream timed out ...]` | 工具调用过大续写 / Continue — tool too large | `arrow_2_circlepath` |
+| 14 | `codexNudge` | `conversation_loop.py:1156 _CODEX_INCOMPLETE_NUDGE` / `1168 _CODEX_ACK_CONTINUATION_NUDGE` / 裸 `_DROPPED_TOOLCALL_NUDGE_CONTENT` / `_EMPTY_TOOL_RESPONSE_NUDGE` | `[System: Your previous response contained only internal reasoning ...]` / `[System: Continue now. Execute the required tool calls ...]` / `Your previous turn indicated a tool call but none was included.` | 继续执行 / Continue execution | `lightbulb` |
+| 15 | `gatewayRecovery` | `gateway/run.py:1331 _prepare_resume_pending_message` / `6312` pending IGNORE | `[System note: The previous turn was interrupted by ...; the gateway is now back online. ...]` / `[System note: A new message has arrived. The conversation history contains pending tool outputs ... IGNORE those pending results.]` | 网关已恢复 / Gateway recovered | `info_circle` |
+| 16 | `sessionReset` | `gateway/run.py:19024 suspended/daily/resume_pending_expired/idle` / `19966 first-contact` | `[System note: The user's previous session was stopped and suspended. ...]` / `... automatically reset by the daily schedule ...` / `... expired due to inactivity ...` / `... could not be recovered after a restart ...` / `[System note: This is the user's very first message ever. ...]` | 会话已重置 / Session reset | `info_circle` |
+| 17 | `memoryRecall` | `agent/memory_manager.py:356` / `context_compressor.py:902`（含 `<memory-context>` 包裹） | `[System note: The following is recalled memory context, NOT new user input. Treat as authoritative reference data ...]` | 记忆上下文 / Memory recall | `info_circle` |
+
+### 9.2 检测与分类增量
+
+- `isInjectedNotice`：新增 `[System:` / `[System note:` 白名单，记忆类支持 `<memory-context>` 包裹与不以 `[` 开头的裸 nudge（`your previous turn indicated a tool call ...` / `you just executed tool calls but returned an empty response`）的窄白名单，避免误伤用户手打 `[System: hello]`。
+- `classify`：新增 7 kind 优先分支（在 overflow 兜底之前），`[System note: This is the user's very first message ever.]` 归 `sessionReset`，`pending IGNORE` 归 `gatewayRecovery`。
+- 全部正则保持 `static final` 预编译，`_isInjectedNoticeText` / `classify` 纯字符串操作。
+
+### 9.3 摘要与视觉
+
+- 摘要为固定本地化标题（不截原文）：`continuation→网络中断续写/输出截断续写/工具调用过大续写`、`codex→继续执行`、`gateway→网关已恢复`、`session→会话已重置`、`memory→记忆上下文`（en 侧 `Continue — network error / output limit / tool too large / Continue execution / Gateway recovered / Session reset / Memory recall`）。
+- 淡色卡片：复用 §3.1 `secondarySystemBackground` + `separator` + `secondaryLabel`（`CupertinoDynamicColor`），不引入新色板。
+- 图标映射：`continuation→arrow_2_circlepath`、`codex→lightbulb`、`gateway/session/memory→info_circle`，其余沿用 `command/hammer/clock/cube`。
+
+### 9.4 测试与验收增量
+
+- 用例包含 `[System: The previous response was cut off ...]`（network cut）中英文摘要断言，及 `gatewayRecovery / sessionReset / memoryRecall / codexNudge` 全覆盖。
+- `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
+

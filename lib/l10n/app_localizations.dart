@@ -221,6 +221,20 @@ class AppLocalizations {
       isEnglish ? 'Compress when usage is high' : '上下文较高时建议压缩';
   String get compressing => isEnglish ? 'Compressing…' : '压缩中…';
   String get unavailable => isEnglish ? 'Unavailable' : '暂无数据';
+  // Context window indicator + popover (contextWindow* prefix)
+  String get contextWindowUsage =>
+      isEnglish ? 'Context usage' : '上下文使用量';
+  String get contextWindowUsageLoading =>
+      isEnglish ? 'Context usage loading' : '上下文使用量加载中';
+  String get contextWindowCurrentModel =>
+      isEnglish ? 'Current model' : '当前模型';
+  String get contextWindowFollowServerDefault =>
+      isEnglish ? 'Follow server default' : '跟随服务器默认';
+  String get contextWindowCompressNow =>
+      isEnglish ? 'Compress now to free context' : '立即压缩以释放上下文';
+  String get contextWindowCompressHint =>
+      isEnglish ? 'Compress to free up space →' : '压缩以释放空间 →';
+  String get contextWindowClose => isEnglish ? 'Close' : '关闭';
   String get modelLabel => isEnglish ? 'Model' : '模型';
   String get addAttachment => isEnglish ? 'Add Attachment' : '添加附件';
   String get sessionIsReadOnly => isEnglish ? 'This session is read-only' : '此会话为只读';
@@ -814,6 +828,12 @@ class AppLocalizations {
   String get auxTasks => isEnglish ? 'Task Bindings' : '任务绑定';
   String get loadingAuxiliaryModels => isEnglish ? 'Loading auxiliary models…' : '正在加载辅助模型…';
   String get auxiliaryModelsLoadFailed => isEnglish ? 'Failed to load auxiliary models' : '辅助模型加载失败';
+
+  // Malformed event friendly prefix (sse_client 525)
+  String get connectionErrorPrefix => isEnglish ? 'Connection error:' : '连接异常：';
+  String connectionErrorWithDetail(String detail) => '$connectionErrorPrefix $detail';
+  String get connectionErrorMalformedDone =>
+      isEnglish ? 'Connection error: malformed completion event' : '连接异常：完成事件格式异常';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
