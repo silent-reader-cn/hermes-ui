@@ -507,6 +507,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
               detail.pendingUserMessage?.trim().isNotEmpty == true ||
               detail.pendingAttachments?.isNotEmpty == true,
           parentSessionId: detail.parentSessionId,
+          contextWindowSnapshot: ContextWindowSnapshot(
+            contextLength: detail.contextLength,
+            thresholdTokens: detail.thresholdTokens,
+            lastPromptTokens: detail.lastPromptTokens,
+            inputTokens: detail.inputTokens,
+            outputTokens: detail.outputTokens,
+            estimatedCost: detail.estimatedCost,
+          ),
           responseCompletionNeedsTranscriptRefresh: false,
           isViewingCachedData: false,
           isShowingOfflineCache: false,

@@ -5,12 +5,17 @@ import 'package:flutter/cupertino.dart';
 import '../../../core/models/context_window_snapshot.dart';
 import '../../../l10n/app_localizations.dart';
 
-/// 30px 环形进度指示器（Swift: ContextWindowIndicatorView）。
+/// 28px 环形进度指示器（对齐 WebUI 手机端圆环原型 static/ui.js _syncCtxIndicator）。
 ///
-/// - 视觉：stroke 3、起始 -90°、ring 30、命中 44。
-/// - 颜色：track 白16%/黑12%、progress 白92%/黑82%。
-/// - 中心：9pt w600，百分比或“·”。
-/// - a11y：label/value、命中 44、禁用态。
+/// WebUI 原型：width 34 / ring 24 / r 9.75 / stroke 3 / center 15 / font 8 w600，
+/// 阈值 ctx-mid>50 ctx-high>75 变色（muted → warning 橙 → error 红）。
+/// Flutter 对齐：
+/// - ringSize 28（与输入栏 send 图标 28 视觉统一），stroke 3、start -90° 不变。
+/// - <=50 中性（白92%/黑82%）、50-75 warning 橙、>75 error 红（systemOrange/Red 装饰可直用）。
+/// - 中心 8pt w600，'·' 与百分比一致色（互动时 label、不可用时 secondaryLabel）。
+/// - track 白 0.12 / 黑 0.12（WebUI dark 0.12），对齐静止轨迹透明度。
+/// - 可点击性 snapshot!=null 即可弹出（百分比为 null 时显示 · 且展示 Unavailable）。
+/// - a11y label/value、命中 44、深浅色适配；Semantics enabled 与 onPressed 同步。
 class ContextWindowIndicator extends StatelessWidget {
   const ContextWindowIndicator({
     super.key,
@@ -21,25 +26,42 @@ class ContextWindowIndicator extends StatelessWidget {
   final ContextWindowSnapshot? snapshot;
   final VoidCallback? onTap;
 
-  static const double ringSize = 30;
+  static const double ringSize = 28;
   static const double tapTargetSize = 44;
 
   @override
   Widget build(BuildContext context) {
     final percentage = snapshot?.percentage;
-    final isInteractive = percentage != null;
-    final pct = isInteractive ? (percentage * 100).round().clamp(0, 100) : null;
-    final label = isInteractive ? '$pct' : '·';
+    // 任务：isInteractive 改为 snapshot!=null，无数据仍可点击展示 Unavailable。
+    final isInteractive = snapshot != null;
+    final pct = percentage == null
+        ? null
+        : (percentage * 100).round().clamp(0, 100);
+    // 无百分比时显示 '·'（WebUI hasPromptTok?String(pct):'·'），与百分比同样式。
+    final label = pct != null ? '$pct' : '·';
     final brightness = CupertinoTheme.of(context).brightness ??
         MediaQuery.platformBrightnessOf(context);
     final isDark = brightness == Brightness.dark;
+    // track 对齐 WebUI：light rgba(0,0,0,0.12) / dark rgba(255,255,255,0.12)
     final trackColor = isDark
-        ? CupertinoColors.white.withValues(alpha: 0.16)
+        ? CupertinoColors.white.withValues(alpha: 0.12)
         : CupertinoColors.black.withValues(alpha: 0.12);
-    final progressColor = isDark
+    final neutralProgress = isDark
         ? CupertinoColors.white.withValues(alpha: 0.92)
         : CupertinoColors.black.withValues(alpha: 0.82);
-    final textColor = isInteractive
+    Color progressColor;
+    if (pct == null) {
+      progressColor = neutralProgress;
+    } else if (pct > 75) {
+      progressColor = CupertinoColors.systemRed.resolveFrom(context);
+    } else if (pct > 50) {
+      progressColor = CupertinoColors.systemOrange.resolveFrom(context);
+    } else {
+      progressColor = neutralProgress;
+    }
+    // 中心文字：8pt w600，'·' 与百分比一致色；无百分比时 secondaryLabel
+    final hasPct = pct != null;
+    final textColor = hasPct
         ? CupertinoColors.label.resolveFrom(context)
         : CupertinoColors.secondaryLabel.resolveFrom(context);
     final l10n = AppLocalizations.of(context);
@@ -61,7 +83,7 @@ class ContextWindowIndicator extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 8,
               fontWeight: FontWeight.w600,
               color: textColor,
               decoration: TextDecoration.none,
@@ -84,7 +106,7 @@ class ContextWindowIndicator extends StatelessWidget {
       label: isInteractive
           ? l10n.contextWindowUsage
           : l10n.contextWindowUsageLoading,
-      value: isInteractive ? '$pct percent' : '',
+      value: hasPct ? '$pct percent' : '',
       child: CupertinoButton(
         key: const ValueKey('chat-context-indicator-button'),
         padding: EdgeInsets.zero,

@@ -484,6 +484,7 @@ class ChatState {
     ChatStreamState? stream,
     ChatPendingActionState? pendingAction,
     ContextWindowSnapshot? contextWindowSnapshot,
+    bool clearContextWindowSnapshot = false,
     bool? responseCompletionNeedsTranscriptRefresh,
     int? streamingScrollTrigger,
   }) {
@@ -528,8 +529,9 @@ class ChatState {
       lastSteerHint: clearLastSteerHint ? null : (lastSteerHint ?? this.lastSteerHint),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
-      contextWindowSnapshot:
-          contextWindowSnapshot ?? this.contextWindowSnapshot,
+      contextWindowSnapshot: clearContextWindowSnapshot
+          ? null
+          : (contextWindowSnapshot ?? this.contextWindowSnapshot),
       responseCompletionNeedsTranscriptRefresh:
           responseCompletionNeedsTranscriptRefresh ??
               this.responseCompletionNeedsTranscriptRefresh,

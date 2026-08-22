@@ -6,11 +6,12 @@ import '../../../core/utils/context_window_formatter.dart';
 import '../../../l10n/app_localizations.dart';
 import '../chat_providers.dart';
 
-/// 上下文详情弹层（Swift: ContextWindowPopover）。
+/// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
 ///
 /// 宽 240、圆角 18、背景 secondarySystemBackground + separator 边框。
 /// 内容：tokensLabel / Divider / InfoRows(input/output/threshold/cost)
 /// + currentModel + 压缩按钮 + 模型列表 + 关闭。
+/// 阈值行对齐 WebUI：`Auto-compress at 64.0K (50%)`；无阈值显示 Unavailable。
 class ContextWindowPopover extends ConsumerStatefulWidget {
   const ContextWindowPopover({
     super.key,
@@ -44,6 +45,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final outputLabel = ContextWindowFormatter.outputTokensLabel(snapshot);
     final thresholdLabel = ContextWindowFormatter.thresholdLabel(snapshot);
     final costLabel = ContextWindowFormatter.costLabel(snapshot);
+
+    // 对齐 WebUI 阈值语义：标题为阈值详情，无阈值时已被 formatter 归为 Unavailable
+    // WebUI: `Auto-compress at ${_fmtTokens(threshold)} (${pct}%)`
 
     // Compress threshold (web: ≥75 filled, 50-75 secondary, <50 disabled).
     final isHigh = pctInt != null && pctInt >= 75;

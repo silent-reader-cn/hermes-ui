@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,7 +10,6 @@ import '../../chat/widgets/selection_chips.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/cupertino_popover.dart';
-import '../../../core/api/api_client_server_panels.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
@@ -240,7 +237,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   Future<void> _showContextPopover() async {
     final snapshot =
         ref.read(chatControllerProvider(widget.sessionId)).contextWindowSnapshot;
-    if (snapshot == null || snapshot.percentage == null) return;
+    if (snapshot == null) return;
     final currentModel =
         ref.read(chatControllerProvider(widget.sessionId)).model;
     await showCupertinoPopover(
@@ -254,92 +251,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         onClose: close,
       ),
     );
-  }
-
-  Future<void> _showModelPicker() async {
-    final l10n = AppLocalizations.of(context);
-    var models = ref.read(chatAvailableModelsProvider);
-    try {
-      final raw = await ref.read(apiClientProvider).modelsLive();
-      final liveModels = _extractModelIDs(raw);
-      if (liveModels.isNotEmpty) models = liveModels;
-    } catch (_) {
-      // Keep the cached/test catalog when the live endpoint fails.
-    }
-    if (!mounted) return;
-    unawaited(
-      showCupertinoModalPopup<void>(
-        context: context,
-        builder: (context) => CupertinoActionSheet(
-          title: Text(l10n.selectModel),
-          actions: [
-            CupertinoActionSheetAction(
-              key: const ValueKey('chat-model-default'),
-              onPressed: () {
-                ref
-                    .read(chatControllerProvider(widget.sessionId).notifier)
-                    .selectModel(null);
-                Navigator.of(context).pop();
-              },
-              child: Text(l10n.followServerDefault),
-            ),
-            for (final model in models)
-              CupertinoActionSheetAction(
-                key: ValueKey('chat-model-$model'),
-                onPressed: () {
-                  ref
-                      .read(chatControllerProvider(widget.sessionId).notifier)
-                      .selectModel(model);
-                  Navigator.of(context).pop();
-                },
-                child: Text(model),
-              ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<String> _extractModelIDs(Object? raw) {
-    if (raw is! Map) return const [];
-    final values = <String>[];
-    void add(Object? value) {
-      if (value is String &&
-          value.trim().isNotEmpty &&
-          !values.contains(value)) {
-        values.add(value.trim());
-      } else if (value is Map) {
-        final id = value['id'] ?? value['model'] ?? value['name'];
-        if (id is String &&
-            id.trim().isNotEmpty &&
-            !values.contains(id.trim())) {
-          values.add(id.trim());
-        }
-      }
-    }
-
-    final map = Map<Object?, Object?>.from(raw);
-    final models = map['models'];
-    if (models is List) {
-      for (final value in models) {
-        add(value);
-      }
-    }
-    final groups = map['groups'];
-    if (groups is List) {
-      for (final group in groups) {
-        if (group is Map && group['models'] is List) {
-          for (final value in group['models'] as List) {
-            add(value);
-          }
-        }
-      }
-    }
-    return values;
   }
 
   @override
@@ -390,6 +301,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       ? const CupertinoActivityIndicator()
                       : const Icon(
                           CupertinoIcons.plus_circle,
+                          size: 22,
                           color: CupertinoColors.systemGrey,
                         ),
                 ),
@@ -404,6 +316,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     padding: EdgeInsets.zero,
                     child: const Icon(
                       CupertinoIcons.bookmark,
+                      size: 22,
                       color: CupertinoColors.systemGrey,
                     ),
                   ),
@@ -440,6 +353,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     padding: EdgeInsets.zero,
                     child: const Icon(
                       CupertinoIcons.arrow_right_circle,
+                      size: 22,
                       color: CupertinoColors.activeBlue,
                     ),
                   ),
@@ -450,6 +364,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     padding: EdgeInsets.zero,
                     child: const Icon(
                       CupertinoIcons.stop_circle,
+                      size: 22,
                       color: CupertinoColors.systemRed,
                     ),
                   ),
@@ -464,19 +379,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     padding: EdgeInsets.zero,
                     child: const Icon(
                       CupertinoIcons.arrow_up_circle,
+                      size: 22,
                       color: CupertinoColors.activeBlue,
                     ),
                   ),
-                AccessibleButton(
-                  key: const ValueKey('chat-model-button'),
-                  label: l10n.selectModel,
-                  onPressed: interactive ? _showModelPicker : null,
-                  padding: EdgeInsets.zero,
-                  child: const Icon(
-                    CupertinoIcons.slider_horizontal_3,
-                    color: CupertinoColors.systemGrey,
-                  ),
-                ),
                 KeyedSubtree(
                   key: _contextIndicatorKey,
                   child: ContextWindowIndicator(

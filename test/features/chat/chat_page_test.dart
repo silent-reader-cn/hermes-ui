@@ -163,10 +163,15 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets('模型选择器：选择后发送带 explicit_model_pick', (tester) async {
+  testWidgets('模型选择器：经上下文圆环弹层选择后发送带 explicit_model_pick', (tester) async {
     final api = _FakeChatApi();
     api.sessionResult = {
-      'session': {'session_id': 's1', 'messages': const []},
+      'session': {
+        'session_id': 's1',
+        'messages': const [],
+        'context_length': 128000,
+        'last_prompt_tokens': 1000,
+      },
     };
     await tester.pumpWidget(
       ProviderScope(
@@ -183,12 +188,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byKey(const ValueKey('chat-model-button')));
+    // 新入口：点击上下文圆环 → 弹出含模型列表的详情弹层
+    await tester.tap(find.byKey(const ValueKey('chat-context-indicator-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('gpt-5'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('chat-model-gpt-5')));
+    await tester.tap(find.text('gpt-5'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
