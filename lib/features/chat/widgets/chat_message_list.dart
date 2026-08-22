@@ -13,6 +13,7 @@ import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
+import '../../settings/injected_notice_settings.dart';
 import 'message_highlight.dart';
 
 /// 消息列表（ListView.builder + 稳定 renderId key + 自动滚动跟随）。
@@ -38,6 +39,7 @@ class ChatMessageList extends ConsumerStatefulWidget {
 class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   final ScrollController _controller = ScrollController();
   final GlobalKey _highlightKey = GlobalKey();
+  final Set<String> _expandedNoticeIds = <String>{};
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -338,6 +340,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   @override
   Widget build(BuildContext context) {
     final sessionId = widget.sessionId;
+    final collapseEnabled = ref.watch(
+      injectedNoticeSettingsProvider.select((s) => s.collapseInjectedNotices),
+    );
     final transcript = ref.watch(transcriptMessagesProvider(sessionId));
     final streaming = ref.watch(streamingMessageProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
@@ -405,6 +410,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         final reasoning = reasoningGroups
             .where((g) => g.anchorMessageId == entry.message.messageId)
             .toList();
+        final noticeId = entry.message.id;
+        final expanded = _expandedNoticeIds.contains(noticeId);
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onLongPress: () => _showMessageActions(entry.message),
@@ -420,10 +427,21 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
                   _highlightTargetId != null &&
                   entry.message.id == _highlightTargetId,
               child: ChatMessageBubble(
-                key: ValueKey(entry.renderId),
+                key: ValueKey(entry.message.id),
                 message: entry.message,
                 toolGroups: groups,
                 reasoningGroups: reasoning,
+                collapseInjectedEnabled: collapseEnabled,
+                injectedExpanded: expanded,
+                onToggleInjected: () {
+                  setState(() {
+                    if (_expandedNoticeIds.contains(noticeId)) {
+                      _expandedNoticeIds.remove(noticeId);
+                    } else {
+                      _expandedNoticeIds.add(noticeId);
+                    }
+                  });
+                },
               ),
             ),
           ),

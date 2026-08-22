@@ -6,10 +6,12 @@ import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
+import '../../../core/utils/injected_message.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
 import 'tool_call_card.dart';
 
@@ -18,7 +20,9 @@ import 'tool_call_card.dart';
 /// - user：右对齐蓝色气泡，content 去 `[Attached files: …]` 标记，附件条渲染；
 /// - assistant：左对齐，Markdown 渲染（支持 MEDIA: 与内联媒体）+ 工具卡片（锚定本消息）+ reasoning 折叠块 + tps 徽标；
 /// - local_notice：notice 卡片；
-/// - local_assistant：普通 assistant 气泡。
+/// - local_assistant：普通 assistant 气泡；
+/// - injected_notice：当 role in {user,system} 且命中 [InjectedMessage.isInjectedNotice]
+///   时直接透传 [InjectedNoticeCard]（受控优先，无透传时内部兜底），见 spec §2.1。
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
     super.key,
@@ -28,6 +32,9 @@ class ChatMessageBubble extends StatelessWidget {
     this.baseUrl,
     this.sessionId,
     this.customHeaders,
+    this.injectedExpanded,
+    this.onToggleInjected,
+    this.collapseInjectedEnabled = true,
   });
 
   final ChatMessage message;
@@ -47,10 +54,29 @@ class ChatMessageBubble extends StatelessWidget {
   /// 可选请求头。
   final Map<String, String>? customHeaders;
 
+  /// 注入卡片受控展开态（由 [ChatMessageList] 传入，保持滚动复用不丢状态）。
+  final bool? injectedExpanded;
+
+  /// 注入卡片切换回调（由 [ChatMessageList] 传入）。
+  final VoidCallback? onToggleInjected;
+
+  /// 是否启用注入卡片折叠（受设置开关控制，OFF 时退化为普通气泡）。
+  final bool collapseInjectedEnabled;
+
   @override
   Widget build(BuildContext context) {
     final role = message.role;
     if (role == 'local_notice') return _NoticeCard(message: message);
+    if (collapseInjectedEnabled && InjectedMessage.isInjectedNotice(message)) {
+      if (injectedExpanded != null && onToggleInjected != null) {
+        return InjectedNoticeCard(
+          message: message,
+          expanded: injectedExpanded!,
+          onToggle: onToggleInjected!,
+        );
+      }
+      return _FallbackInjectedNoticeCard(message: message);
+    }
     final isUser = role == 'user';
 
     String? effectiveBaseUrl = baseUrl;
@@ -147,7 +173,6 @@ class _UserContent extends StatelessWidget {
     final parsedDisplay = hasMediaMarker
         ? ChatMediaParser.parseMediaMarkers(display)
         : display;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -311,6 +336,31 @@ class _NoticeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 注入通知兜底卡片（无受控展开态时内部 State 兜底，保持受控优先）。
+class _FallbackInjectedNoticeCard extends StatefulWidget {
+  const _FallbackInjectedNoticeCard({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  State<_FallbackInjectedNoticeCard> createState() =>
+      _FallbackInjectedNoticeCardState();
+}
+
+class _FallbackInjectedNoticeCardState
+    extends State<_FallbackInjectedNoticeCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InjectedNoticeCard(
+      message: widget.message,
+      expanded: _expanded,
+      onToggle: () => setState(() => _expanded = !_expanded),
     );
   }
 }

@@ -368,6 +368,26 @@ class AppLocalizations {
   String get expandText => isEnglish ? 'Show More' : '展开全文';
   String get collapseText => isEnglish ? 'Show Less' : '收起';
 
+  // Injected notice collapse (agent-injected-message-cards-spec §4)
+  String get collapseInjectedNoticesLabel =>
+      isEnglish ? 'Collapse system notices' : '折叠系统通知';
+  String get collapseInjectedNoticesDescription => isEnglish
+      ? 'Fold agent-injected notices (background processes, skills, cron, MCP) into compact cards'
+      : '将后台进程/技能/定时任务/MCP 等系统通知折叠为紧凑卡片';
+  String get injectedNoticeTitleBackgroundProcess =>
+      isEnglish ? 'Background process' : '后台进程';
+  String get injectedNoticeTitleSkill => isEnglish ? 'Skill' : '技能';
+  String get injectedNoticeTitleCron =>
+      isEnglish ? 'Scheduled task' : '定时任务';
+  String get injectedNoticeTitleMcp =>
+      isEnglish ? 'MCP' : 'MCP';
+  String get injectedNoticeShowOutput =>
+      isEnglish ? 'Show output' : '展开';
+  String get injectedNoticeHideOutput =>
+      isEnglish ? 'Hide output' : '收起';
+  String get injectedNoticeExpand => injectedNoticeShowOutput;
+  String get injectedNoticeCollapse => injectedNoticeHideOutput;
+
   // ---------------------------------------------------------------------------
   // 7. Workspace (Files)
   // ---------------------------------------------------------------------------

@@ -834,6 +834,11 @@ void main() {
       );
       await pumpPage(tester, container);
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-extensions')),
+      );
+      await tester.pumpAndSettle();
+
       // 进入扩展二级页
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
       await tester.pumpAndSettle();
@@ -858,6 +863,11 @@ void main() {
         activeId: 'c1',
       );
       await pumpPage(tester, container);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-extensions')),
+      );
+      await tester.pumpAndSettle();
 
       // 进入扩展二级页
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
@@ -901,6 +911,11 @@ void main() {
         activeId: 'c1',
       );
       await pumpPage(tester, container);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-extensions')),
+      );
+      await tester.pumpAndSettle();
 
       // 进入扩展二级页
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));

@@ -19,6 +19,7 @@ import '../../l10n/app_localizations.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
+import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
 
@@ -89,6 +90,19 @@ class _AppearanceSection extends ConsumerWidget {
                 },
               ),
             ),
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-collapse-injected-notices'),
+          title: Text(l10n.collapseInjectedNoticesLabel),
+          subtitle: Text(l10n.collapseInjectedNoticesDescription),
+          trailing: CupertinoSwitch(
+            value: ref.watch(injectedNoticeSettingsProvider).collapseInjectedNotices,
+            onChanged: (value) {
+              unawaited(
+                ref.read(injectedNoticeSettingsProvider.notifier).setCollapse(value),
+              );
+            },
           ),
         ),
       ],
