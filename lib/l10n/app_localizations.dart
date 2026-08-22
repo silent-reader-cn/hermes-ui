@@ -547,6 +547,9 @@ class AppLocalizations {
   String get modelsSection => isEnglish ? 'Models' : '模型';
   String get tokensLast14Days => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
   String get recent14DaysTokens => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
+  String get tokensTodayChartTitle => isEnglish ? 'Today\'s Tokens' : '今日令牌';
+  String tokensDailyChartTitle(int days) => isEnglish ? 'Tokens in Last $days Days' : '近 $days 天令牌';
+  String get tokensAllTimeChartTitle => isEnglish ? 'All Tokens' : '全部令牌';
   String get activity => isEnglish ? 'Activity' : '活动';
   String get activitySection => isEnglish ? 'Activity' : '活动';
   String get mostActiveDay => isEnglish ? 'Most Active Day' : '最活跃的一天';

@@ -224,6 +224,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   // -------------------------------------------------------------------------
 
   void _toggleExpanded(SkillSummary skill) {
+    if (!skillHasDetail(skill)) return;
     final name = skillDisplayName(skill);
     setState(() {
       if (!_expandedNames.remove(name)) {
@@ -256,6 +257,14 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   }
 }
 
+/// 是否存在可展开的本地详情（path 或 relatedSkills 任一非空）。
+bool skillHasDetail(SkillSummary skill) {
+  final path = skill.path?.trim();
+  if (path != null && path.isNotEmpty) return true;
+  final related = skill.relatedSkills ?? const <String>[];
+  return related.any((e) => e.trim().isNotEmpty);
+}
+
 String _skillsGroupTitle(BuildContext context, String rawTitle) {
   final l10n = AppLocalizations.of(context);
   switch (rawTitle) {
@@ -284,7 +293,7 @@ class _SkillRow extends ConsumerWidget {
 
   final SkillSummary skill;
   final bool expanded;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -300,10 +309,11 @@ class _SkillRow extends ConsumerWidget {
             .valueOrNull
             ?.isBusy(skill.name ?? '') ??
         false;
+    final hasDetail = skillHasDetail(skill);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: hasDetail ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -334,16 +344,18 @@ class _SkillRow extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            expanded
-                                ? CupertinoIcons.chevron_down
-                                : CupertinoIcons.chevron_right,
-                            size: 14,
-                            color: CupertinoColors.tertiaryLabel.resolveFrom(
-                              context,
+                          if (hasDetail) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              expanded
+                                  ? CupertinoIcons.chevron_down
+                                  : CupertinoIcons.chevron_right,
+                              size: 14,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       if (description != null) ...[
@@ -392,7 +404,7 @@ class _SkillRow extends ConsumerWidget {
                 ),
               ],
             ),
-            if (expanded)
+            if (expanded && hasDetail)
               _SkillDetail(
                 key: ValueKey('skills-detail-${skillDisplayName(skill)}'),
                 skill: skill,
@@ -423,20 +435,6 @@ class _SkillDetail extends StatelessWidget {
         .map((name) => name.trim())
         .where((name) => name.isNotEmpty)
         .toList();
-    final hasDetail = (path != null && path.isNotEmpty) || related.isNotEmpty;
-
-    if (!hasDetail) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(
-          l10n.noMoreDetailsForSkill,
-          style: TextStyle(
-            fontSize: 13,
-            color: secondaryText.resolveFrom(context),
-          ),
-        ),
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),

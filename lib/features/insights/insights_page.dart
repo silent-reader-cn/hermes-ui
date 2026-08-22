@@ -4,11 +4,11 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
 import '../../core/utils/accessibility.dart';
-import '../../app/theme/status_colors.dart';
-import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
@@ -126,17 +126,17 @@ class InsightsPage extends ConsumerWidget {
             ),
             _MetricTile(
               title: l10n.metricInputTokens,
-              value: _formatNumber(response.totalInputTokens),
+              value: formatTokensCompact(response.totalInputTokens),
               icon: CupertinoIcons.arrow_down_circle,
             ),
             _MetricTile(
               title: l10n.metricOutputTokens,
-              value: _formatNumber(response.totalOutputTokens),
+              value: formatTokensCompact(response.totalOutputTokens),
               icon: CupertinoIcons.arrow_up_circle,
             ),
             _MetricTile(
               title: l10n.metricTotalTokens,
-              value: _formatNumber(response.totalTokens),
+              value: formatTokensCompact(response.totalTokens),
               icon: CupertinoIcons.sum,
             ),
             _MetricTile(
@@ -153,30 +153,21 @@ class InsightsPage extends ConsumerWidget {
             if (response.totalCacheReadTokens != null)
               _MetricTile(
                 title: l10n.metricCacheReadTokens,
-                value: _formatNumber(response.totalCacheReadTokens),
+                value: formatTokensCompact(response.totalCacheReadTokens),
                 icon: CupertinoIcons.arrow_counterclockwise_circle,
               ),
           ],
         ),
       ),
-      if (_modelBreakdowns(response).isNotEmpty)
-        SliverToBoxAdapter(
-          child: CupertinoListSection.insetGrouped(
-            header: Text(l10n.models),
-            children: [
-              for (final model in _modelBreakdowns(response))
-                _ModelBreakdownTile(model: model),
-            ],
-          ),
-        ),
       if (_recentDailyTokens(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
-            header: Text(l10n.tokensLast14Days),
+            header: Text(_dailyChartTitle(context, timeframe, response)),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                child: _DailyTokensBarChart(days: _recentDailyTokens(response)),
+                child:
+                    _DailyTokensBarChart(days: _recentDailyTokens(response)),
               ),
             ],
           ),
@@ -214,6 +205,16 @@ class InsightsPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+            ],
+          ),
+        ),
+      if (_modelBreakdowns(response).isNotEmpty)
+        SliverToBoxAdapter(
+          child: CupertinoListSection.insetGrouped(
+            header: Text(l10n.models),
+            children: [
+              for (final model in _modelBreakdowns(response))
+                _ModelBreakdownTile(model: model),
             ],
           ),
         ),
@@ -257,7 +258,10 @@ class InsightsPage extends ConsumerWidget {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -379,6 +383,22 @@ String _insightsTimeframeTitle(
   }
 }
 
+String _dailyChartTitle(
+  BuildContext context,
+  InsightsTimeframe timeframe,
+  InsightsResponse response,
+) {
+  final l10n = AppLocalizations.of(context);
+  final days = response.periodDays ?? timeframe.serverDays;
+  if (timeframe == InsightsTimeframe.today) {
+    return l10n.tokensTodayChartTitle;
+  }
+  if (timeframe == InsightsTimeframe.allTime) {
+    return l10n.tokensAllTimeChartTitle;
+  }
+  return l10n.tokensDailyChartTitle(days);
+}
+
 // ---------------------------------------------------------------------------
 // 指标行
 // ---------------------------------------------------------------------------
@@ -416,13 +436,12 @@ class _ModelBreakdownTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final share = model.displayShare;
-    final title = model.model?.isNotEmpty == true
-        ? model.model!
-        : l10n.unknownModel;
+    final title =
+        model.model?.isNotEmpty == true ? model.model! : l10n.unknownModel;
     return CupertinoListTile(
       title: Text(title),
       subtitle: Text(
-        l10n.modelTokensSubtitle(formatInsightsNumber(model.totalTokens)),
+        l10n.modelTokensSubtitle(formatTokensCompact(model.totalTokens)),
       ),
       trailing: share == null
           ? null
@@ -439,16 +458,24 @@ class _ModelBreakdownTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 近 14 天令牌柱状图
+// 近期令牌柱状图（可点击详情 + hover 高亮 + 深色 tooltip）
 // ---------------------------------------------------------------------------
 
-class _DailyTokensBarChart extends StatelessWidget {
+class _DailyTokensBarChart extends StatefulWidget {
   const _DailyTokensBarChart({required this.days});
 
   final List<InsightsDailyToken> days;
 
   @override
+  State<_DailyTokensBarChart> createState() => _DailyTokensBarChartState();
+}
+
+class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
+  int _touchedIndex = -1;
+
+  @override
   Widget build(BuildContext context) {
+    final days = widget.days;
     final maxTokens = days.fold<int>(
       0,
       (max, day) => day.totalTokens > max ? day.totalTokens : max,
@@ -463,7 +490,43 @@ class _DailyTokensBarChart extends StatelessWidget {
           alignment: BarChartAlignment.spaceAround,
           maxY: safeMax.toDouble(),
           minY: 0,
-          barTouchData: const BarTouchData(enabled: false),
+          barTouchData: BarTouchData(
+            enabled: true,
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => const Color(0xCC1C1C1E),
+              tooltipPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 6,
+              ),
+              tooltipMargin: 8,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                final day = days[group.x];
+                final date = day.date ?? '-';
+                final tokens = formatTokensCompact(day.totalTokens);
+                return BarTooltipItem(
+                  '$date\n$tokens',
+                  const TextStyle(
+                    color: CupertinoColors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
+            ),
+            touchCallback: (event, response) {
+              final spot = response?.spot;
+              final newIndex = spot?.touchedBarGroupIndex ?? -1;
+              if (newIndex != _touchedIndex) {
+                setState(() => _touchedIndex = newIndex);
+              }
+              if (event is FlTapUpEvent && spot != null) {
+                final idx = spot.touchedBarGroupIndex;
+                if (idx >= 0 && idx < days.length) {
+                  _showDayDetail(days[idx]);
+                }
+              }
+            },
+          ),
           gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
@@ -492,8 +555,13 @@ class _DailyTokensBarChart extends StatelessWidget {
                 barRods: [
                   BarChartRodData(
                     toY: days[i].totalTokens.toDouble(),
-                    color: CupertinoColors.systemBlue,
+                    color: i == _touchedIndex
+                        ? const Color(0xFF004999)
+                        : CupertinoColors.systemBlue,
                     width: 10,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(3),
+                    ),
                   ),
                 ],
               ),
@@ -505,6 +573,7 @@ class _DailyTokensBarChart extends StatelessWidget {
 
   Widget _bottomTitle(double value, TitleMeta meta, BuildContext context) {
     final index = value.toInt();
+    final days = widget.days;
     if (index < 0 || index >= days.length) {
       return const SizedBox.shrink();
     }
@@ -536,6 +605,70 @@ class _DailyTokensBarChart extends StatelessWidget {
     }
     return date.length <= 5 ? date : date.substring(date.length - 5);
   }
+
+  void _showDayDetail(InsightsDailyToken day) {
+    final l10n = AppLocalizations.of(context);
+    final date = day.date ?? l10n.unknown;
+    unawaited(
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text(date),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow(
+                  l10n.metricInputTokens,
+                  formatTokensCompact(day.inputTokens),
+                ),
+                _detailRow(
+                  l10n.metricOutputTokens,
+                  formatTokensCompact(day.outputTokens),
+                ),
+                _detailRow(
+                  l10n.metricTotalTokens,
+                  formatTokensCompact(day.totalTokens),
+                ),
+                _detailRow(
+                  l10n.metricSessions,
+                  formatInsightsNumber(day.sessions),
+                ),
+                _detailRow(
+                  l10n.metricEstimatedCost,
+                  formatInsightsCost(day.cost),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -552,6 +685,21 @@ String formatInsightsNumber(int? value) {
     buffer.write(digits[i]);
   }
   return value < 0 ? '-$buffer' : buffer.toString();
+}
+
+/// 紧凑令牌格式化：≥1M 用 M 单位（保留 2 位去尾零），否则千分位（null → '—'）。
+String formatTokensCompact(int? value) {
+  if (value == null) return '—';
+  if (value.abs() >= 1000000) {
+    final sign = value < 0 ? '-' : '';
+    final absValue = value.abs();
+    final text = (absValue / 1e6)
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+    return '$sign${text}M';
+  }
+  return formatInsightsNumber(value);
 }
 
 /// 费用格式化：保留最多 4 位小数，去掉末尾 0（null → '—'）。

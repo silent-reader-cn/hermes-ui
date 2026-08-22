@@ -1242,10 +1242,11 @@ Map<String, String> _projectNameMap(WidgetRef ref) {
   };
 }
 
-/// 筛选底部弹层：状态（全部 / 已归档）+ 渠道 chips + 项目 chips。
+/// 筛选底部弹层：会话 / 渠道 / 项目 三段等宽 insetGrouped 列表。
 ///
-/// 由头部「会话」右侧向下箭头（[ValueKey('session-list-filter-trigger')]）
-/// 打开，替代原先常驻界面的筛选栏，释放列表纵向空间。
+/// 三段统一为 [CupertinoListSection.insetGrouped] 列表视觉（等宽、同边距），
+/// 渠道与项目不再用 Wrap/chip 居中，改为纵向 [_SheetOptionRow] 单选列表；
+/// 外层用 [ClipRRect]+[DecoratedBox] 紧凑布局，去掉底部白条与多余 padding。
 class _SessionFilterSheet extends ConsumerWidget {
   const _SessionFilterSheet({required this.state, required this.onSelect});
 
@@ -1259,147 +1260,176 @@ class _SessionFilterSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = state.filterMode;
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final sheetBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
+    final headerStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: secondaryText.resolveFrom(context),
+      letterSpacing: 0.3,
+    );
 
-    return SafeArea(
-      top: false,
-      child: Container(
+    return ClipRRect(
+      borderRadius: sheetRadius,
+      child: DecoratedBox(
         key: const ValueKey('session-filter-sheet'),
-        decoration: BoxDecoration(
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l10n.filterSessions,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  AccessibleButton(
-                    key: const ValueKey('session-filter-sheet-close'),
-                    label: l10n.close,
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(36, 36),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Icon(
-                      CupertinoIcons.xmark_circle_fill,
-                      size: 22,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        decoration: BoxDecoration(color: sheetBg),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+                child: Row(
                   children: [
-                    CupertinoListSection.insetGrouped(
-                      header: Text(l10n.sessions),
-                      children: [
-                        _SheetOptionRow(
-                          key: const ValueKey('sheet-filter-all'),
-                          label: l10n.all,
-                          selected: mode == SessionListFilterMode.all,
-                          onTap: () =>
-                              onSelect(SessionListFilterMode.all, null),
+                    Expanded(
+                      child: Text(
+                        l10n.filterSessions,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
                         ),
-                        _SheetOptionRow(
-                          key: const ValueKey('sheet-filter-archived'),
-                          label:
-                              '${l10n.archived}${_archivedCountLabelFor(state)}',
-                          selected: mode == SessionListFilterMode.archived,
-                          onTap: () =>
-                              onSelect(SessionListFilterMode.archived, null),
-                        ),
-                        if (mode != SessionListFilterMode.all &&
-                            mode != SessionListFilterMode.archived)
-                          _SheetOptionRow(
-                            key: const ValueKey('sheet-filter-clear'),
-                            label: l10n.clearFilter,
-                            selected: false,
-                            onTap: () =>
-                                onSelect(SessionListFilterMode.all, null),
-                          ),
-                      ],
+                      ),
                     ),
-                    if (state.sourceLabels.isNotEmpty)
-                      CupertinoListSection.insetGrouped(
-                        header: Text(l10n.channels),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final label in state.sourceLabels)
-                                  _SheetChip(
-                                    key: ValueKey('filter-chip-$label'),
-                                    label: label,
-                                    selected:
-                                        mode == SessionListFilterMode.source &&
-                                        state.filterValue == label,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.source,
-                                      label,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
+                    AccessibleButton(
+                      key: const ValueKey('session-filter-sheet-close'),
+                      label: l10n.close,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(36, 36),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Icon(
+                        CupertinoIcons.xmark_circle_fill,
+                        size: 22,
+                        color: CupertinoColors.secondaryLabel,
                       ),
-                    if (projects.isNotEmpty)
-                      CupertinoListSection.insetGrouped(
-                        header: Text(l10n.projects),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final project in projects)
-                                  _SheetChip(
-                                    key: ValueKey('project-chip-${project.id}'),
-                                    label: project.name ?? l10n.untitledProject,
-                                    selected:
-                                        mode == SessionListFilterMode.project &&
-                                        state.filterValue == project.id,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.project,
-                                      project.id,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      CupertinoListSection.insetGrouped(
+                        key: const ValueKey('filter-section-sessions'),
+                        header: Text(l10n.sessions, style: headerStyle),
+                        backgroundColor: CupertinoColors
+                            .secondarySystemGroupedBackground
+                            .resolveFrom(context),
+                        separatorColor: CupertinoColors.separator.resolveFrom(
+                          context,
+                        ),
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        children: [
+                          _SheetOptionRow(
+                            key: const ValueKey('sheet-filter-all'),
+                            label: l10n.all,
+                            selected: mode == SessionListFilterMode.all,
+                            onTap: () =>
+                                onSelect(SessionListFilterMode.all, null),
+                          ),
+                          _SheetOptionRow(
+                            key: const ValueKey('sheet-filter-archived'),
+                            label:
+                                '${l10n.archived}${_archivedCountLabelFor(state)}',
+                            selected: mode == SessionListFilterMode.archived,
+                            onTap: () =>
+                                onSelect(SessionListFilterMode.archived, null),
+                          ),
+                          if (mode != SessionListFilterMode.all &&
+                              mode != SessionListFilterMode.archived)
+                            _SheetOptionRow(
+                              key: const ValueKey('sheet-filter-clear'),
+                              label: l10n.clearFilter,
+                              selected: false,
+                              onTap: () =>
+                                  onSelect(SessionListFilterMode.all, null),
+                            ),
+                        ],
+                      ),
+                      if (state.sourceLabels.isNotEmpty)
+                        CupertinoListSection.insetGrouped(
+                          key: const ValueKey('filter-section-channels'),
+                          header: Text(l10n.channels, style: headerStyle),
+                          backgroundColor: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          separatorColor: CupertinoColors.separator.resolveFrom(
+                            context,
+                          ),
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          children: [
+                            for (final label in state.sourceLabels)
+                              _SheetOptionRow(
+                                key: ValueKey('filter-chip-$label'),
+                                label: label,
+                                selected:
+                                    mode == SessionListFilterMode.source &&
+                                    state.filterValue == label,
+                                onTap: () => onSelect(
+                                  SessionListFilterMode.source,
+                                  label,
+                                ),
+                              ),
+                          ],
+                        ),
+                      if (projects.isNotEmpty)
+                        CupertinoListSection.insetGrouped(
+                          key: const ValueKey('filter-section-projects'),
+                          header: Text(l10n.projects, style: headerStyle),
+                          backgroundColor: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          separatorColor: CupertinoColors.separator.resolveFrom(
+                            context,
+                          ),
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          children: [
+                            for (final project in projects)
+                              _SheetOptionRow(
+                                key: ValueKey('project-chip-${project.id}'),
+                                label:
+                                    project.name ?? l10n.untitledProject,
+                                selected:
+                                    mode == SessionListFilterMode.project &&
+                                    state.filterValue == project.id,
+                                onTap: () => onSelect(
+                                  SessionListFilterMode.project,
+                                  project.id,
+                                ),
+                              ),
+                          ],
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1411,7 +1441,10 @@ class _SessionFilterSheet extends ConsumerWidget {
   }
 }
 
-/// 筛选弹层中的单选行（全部 / 已归档 / 清除筛选）。
+/// 筛选弹层中的单选行（会话 / 渠道 / 项目 共用）。
+///
+/// 选中态：左侧 activeBlue 浅底 pill + 文字 activeBlue 加粗，右侧 checkmark；
+/// 未选中：常规 label 文字 + separator 0.5 分割。
 class _SheetOptionRow extends StatelessWidget {
   const _SheetOptionRow({
     super.key,
@@ -1426,55 +1459,32 @@ class _SheetOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeBlue = CupertinoColors.activeBlue.resolveFrom(context);
     return CupertinoListTile(
-      title: Text(label),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      backgroundColor: selected
+          ? activeBlue.withValues(alpha: 0.10)
+          : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+              context,
+            ),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          color: selected ? activeBlue : CupertinoColors.label.resolveFrom(context),
+        ),
+      ),
       trailing: selected
-          ? const Icon(
+          ? Icon(
               CupertinoIcons.checkmark_alt,
-              size: 20,
-              color: CupertinoColors.activeBlue,
+              size: 18,
+              color: activeBlue,
             )
           : null,
       onTap: onTap,
-    );
-  }
-}
-
-/// 筛选弹层中的渠道 / 项目 chip。
-class _SheetChip extends StatelessWidget {
-  const _SheetChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? CupertinoColors.activeBlue.resolveFrom(context)
-              : CupertinoColors.systemGrey5.resolveFrom(context),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: selected
-                ? CupertinoColors.white
-                : CupertinoColors.label.resolveFrom(context),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -125,7 +125,13 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           AdaptiveSliverNavigationBar(
             title: l10n.files,
             showMiddleOnNarrow: true,
-            leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
+            // 返回回会话列表 '/' 兜底。
+            // 窄屏从会话列表 push 进入时栈为 [/, /workspace/:sid]，canPop 为
+            // true 由 canPop/pop 返回 / 无需 fallback；仅当直进深链或桌面刷新
+            // 后栈仅 [/workspace/:sid]，canPop false 时 fallback 应回 '/' 而
+            // 非 '/chat/:sid'（后者在从 /workspaces 管理页 push 进来等场景与
+            // “返回会话列表”预期偏离）。
+            leading: const AppBackButton(fallback: '/'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

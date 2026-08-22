@@ -77,7 +77,13 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
           AdaptiveSliverNavigationBar(
             title: l10n.workspacesTitle,
             showMiddleOnNarrow: true,
-            leading: const AppBackButton(fallback: '/settings'),
+            // 返回回会话列表 '/' 兜底。
+            // 窄屏从会话列表 push 进入时栈为 [/, /workspaces]，canPop true 时
+            // 由 AppBackButton.canPop/pop 返回 /；仅当直进深链或刷新后栈仅
+            // [/workspaces]、canPop false 时 go(fallback) 才生效，此时
+            // fallback 必须为 '/' 才能回到会话列表，写死 '/settings' 导致
+            // 窄屏返回误跳设置页（本文件分区 bug 根因）。
+            leading: const AppBackButton(fallback: '/'),
             trailing: CupertinoButton(
               key: const ValueKey('workspaces-add'),
               padding: EdgeInsets.zero,

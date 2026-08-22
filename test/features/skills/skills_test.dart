@@ -79,6 +79,26 @@ void main() {
       expect(buildSkillGroups([buildSkill('a')], query: '  '), hasLength(1));
     });
 
+    test('skillHasDetail：仅 path 或 relatedSkills 非空才为 true', () {
+      expect(skillHasDetail(buildSkill('plain')), isFalse);
+      expect(skillHasDetail(buildSkill('ws-path', path: '  ')), isFalse);
+      expect(
+        skillHasDetail(buildSkill('ws-related', relatedSkills: ['  ', ''])),
+        isFalse,
+      );
+      expect(skillHasDetail(buildSkill('p', path: '/a/b')), isTrue);
+      expect(
+        skillHasDetail(buildSkill('r', relatedSkills: ['alpha'])),
+        isTrue,
+      );
+      expect(
+        skillHasDetail(
+          buildSkill('both', path: '/p', relatedSkills: ['x']),
+        ),
+        isTrue,
+      );
+    });
+
     test('搜索：名称 / 描述 / 分类 / 标签任一命中，大小写不敏感', () {
       final skills = [
         buildSkill('bug-finder', description: '查找并修复 bug', tags: ['debug']),
@@ -543,13 +563,77 @@ void main() {
       expect(find.text('未找到相关技能'), findsOneWidget);
     });
 
-    testWidgets('无详情技能展开：显示占位文案', (tester) async {
+    testWidgets('无详情技能：不显示 chevron 且点击不展开', (tester) async {
       final api = FakeSkillsApi(skills: [buildSkill('plain')]);
       await pumpSkillsPage(tester, api);
 
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-plain')),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-plain')),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsNothing,
+      );
       await tester.tap(find.byKey(const ValueKey('skills-row-plain')));
       await tester.pump();
-      expect(find.text('该技能没有更多详情'), findsOneWidget);
+      expect(find.text('该技能没有更多详情'), findsNothing);
+      expect(find.textContaining('路径'), findsNothing);
+      expect(find.textContaining('相关技能'), findsNothing);
+    });
+
+    testWidgets('有 path 详情技能：显示 chevron 且可展开收起', (tester) async {
+      final api = FakeSkillsApi(
+        skills: [buildSkill('with-path', path: '/skills/with-path')],
+      );
+      await pumpSkillsPage(tester, api);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-with-path')),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('skills-row-with-path')));
+      await tester.pump();
+      expect(find.text('路径：/skills/with-path'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-with-path')),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('skills-row-with-path')));
+      await tester.pump();
+      expect(find.textContaining('路径'), findsNothing);
+    });
+
+    testWidgets('有 relatedSkills 详情技能：显示 chevron 且可展开', (tester) async {
+      final api = FakeSkillsApi(
+        skills: [
+          buildSkill('with-related', relatedSkills: ['alpha', 'beta']),
+        ],
+      );
+      await pumpSkillsPage(tester, api);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-with-related')),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('skills-row-with-related')));
+      await tester.pump();
+      expect(find.text('相关技能：alpha、beta'), findsOneWidget);
     });
 
     testWidgets('刷新按钮：重新拉取列表', (tester) async {

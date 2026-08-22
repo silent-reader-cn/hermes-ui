@@ -302,4 +302,57 @@ void main() {
       expect(service, isNotNull);
     });
   });
+
+  group('prepareTrayIconFile ICO 分支', () {
+    test('写入 .ico 资产时保留 ICO 字节与 .ico 后缀', () async {
+      final tempDir = Directory.systemTemp.createTempSync('tray_ico_test_');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      // 最小合法 ICO 头：保留字 0 + 类型 1 + 数量 1，后续 16 字节目录项
+      // 这里仅验证字节透传能力，不要求图像合法
+      final icoBytes = Uint8List.fromList([
+        0x00, 0x00, // reserved
+        0x01, 0x00, // type = 1 (ICO)
+        0x01, 0x00, // count = 1
+        0x10, 0x10, 0x00, 0x00, 0x01, 0x00, 0x04, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00,
+      ]);
+      final fakeBundle = _FakeAssetBundle(icoBytes);
+
+      final iconPath = await prepareTrayIconFile(
+        assetBundle: fakeBundle,
+        tempDir: tempDir,
+        assetPath: 'assets/branding/tray_icon.ico',
+        fileName: 'hermex_tray_icon.ico',
+      );
+
+      expect(iconPath.endsWith('.ico'), isTrue);
+      final file = File(iconPath);
+      expect(file.existsSync(), isTrue);
+      expect(file.absolute.path, iconPath);
+      expect(await file.readAsBytes(), icoBytes);
+    });
+
+    test('返回路径为绝对路径', () async {
+      final tempDir = Directory.systemTemp.createTempSync('tray_abs_test_');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+      final fakeBundle = _FakeAssetBundle(Uint8List.fromList([0x00, 0x01]));
+      final iconPath = await prepareTrayIconFile(
+        assetBundle: fakeBundle,
+        tempDir: tempDir,
+        assetPath: 'assets/branding/tray_icon.ico',
+        fileName: 'hermex_tray_icon.ico',
+      );
+      expect(File(iconPath).isAbsolute, isTrue);
+    });
+  });
 }
