@@ -49,56 +49,54 @@ class AdaptiveActionMenu {
     String? title,
     String cancelLabel = '取消',
     Key? cancelKey,
+    double preferredWidth = 220,
+    double minWidth = 180,
+    double? maxWidth,
   }) async {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     if (isWide) {
       await showCupertinoPopover(
         context: context,
         anchorKey: anchorKey,
+        preferredWidth: preferredWidth,
+        minWidth: minWidth,
+        maxWidth: maxWidth,
         builder: (popoverContext, close) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (title != null && title.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.secondaryLabel,
+          return IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (title != null && title.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
                     ),
                   ),
-                ),
-              if (title != null && title.isNotEmpty)
-                Container(
-                  height: 0.5,
-                  color: CupertinoColors.separator.resolveFrom(popoverContext),
-                ),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final item in items)
-                        _PopoverRow(
-                          key: item.key,
-                          label: item.label,
-                          isDestructive: item.isDestructive,
-                          isDefault: item.isDefault,
-                          onTap: () {
-                            close();
-                            item.onPressed();
-                          },
-                        ),
-                    ],
+                if (title != null && title.isNotEmpty)
+                  Container(
+                    height: 0.5,
+                    color: CupertinoColors.separator.resolveFrom(popoverContext),
                   ),
-                ),
-              ),
-            ],
+                for (final item in items)
+                  _PopoverRow(
+                    key: item.key,
+                    label: item.label,
+                    isDestructive: item.isDestructive,
+                    isDefault: item.isDefault,
+                    onTap: () {
+                      close();
+                      item.onPressed();
+                    },
+                  ),
+              ],
+            ),
           );
         },
       );

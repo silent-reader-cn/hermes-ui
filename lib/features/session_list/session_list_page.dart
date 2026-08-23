@@ -727,9 +727,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         context,
         anchorKey: anchorKey,
         items: items,
-        title: _displayTitle(context, session),
+        title: null,
         cancelLabel: l10n.cancel,
         cancelKey: const ValueKey('session-action-cancel'),
+        preferredWidth: 220,
+        minWidth: 180,
       ),
     );
   }

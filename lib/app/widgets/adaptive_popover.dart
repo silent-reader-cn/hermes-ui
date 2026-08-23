@@ -42,6 +42,8 @@ Future<void> showAdaptivePopover({
   required GlobalKey anchorKey,
   required Widget Function(BuildContext context, VoidCallback close) builder,
   double preferredWidth = 360,
+  double? minWidth,
+  double? maxWidth,
   double? preferredHeight,
   PopoverPlacement placement = PopoverPlacement.auto,
   PopoverAlign align = PopoverAlign.end,
@@ -77,7 +79,11 @@ Future<void> showAdaptivePopover({
   final safeLeft = safeMargin;
   final safeRight = screenW - safeMargin;
 
-  final effectiveWidth = math.min(preferredWidth, screenW - safeMargin * 2);
+  final maxAllowedWidth = math.max(0.0, screenW - safeMargin * 2);
+  final effectiveMaxWidth = math.min(maxWidth ?? preferredWidth, maxAllowedWidth);
+  final effectiveMinWidth =
+      minWidth != null ? math.min(minWidth, effectiveMaxWidth) : null;
+  final effectiveWidth = math.min(preferredWidth, maxAllowedWidth);
 
   // 横向对齐：计算 left 并 clamp。
   double left;
@@ -140,9 +146,13 @@ Future<void> showAdaptivePopover({
       left: left,
       anchorRect: anchorRect,
       effectiveWidth: effectiveWidth,
+      minWidth: effectiveMinWidth,
+      maxWidth: effectiveMaxWidth,
       screenWidth: screenW,
       screenHeight: screenH,
       placement: resolved,
+      align: align,
+      offset: offset,
       gap: gap,
       verticalOffset: verticalOffset,
       maxHeight: maxHeight,
@@ -177,9 +187,13 @@ class _AdaptivePopoverHost extends StatefulWidget {
     required this.left,
     required this.anchorRect,
     required this.effectiveWidth,
+    this.minWidth,
+    this.maxWidth,
     required this.screenWidth,
     required this.screenHeight,
     required this.placement,
+    required this.align,
+    required this.offset,
     required this.gap,
     required this.verticalOffset,
     required this.maxHeight,
@@ -192,9 +206,13 @@ class _AdaptivePopoverHost extends StatefulWidget {
   final double left;
   final Rect anchorRect;
   final double effectiveWidth;
+  final double? minWidth;
+  final double? maxWidth;
   final double screenWidth;
   final double screenHeight;
   final PopoverPlacement placement;
+  final PopoverAlign align;
+  final Offset offset;
   final double gap;
   final double verticalOffset;
   final double maxHeight;
@@ -211,27 +229,64 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
   @override
   Widget build(BuildContext context) {
     final isTop = widget.placement == PopoverPlacement.top;
-    // 计算弹层位置：top 弹层用 bottom 锚定，bottom 弹层用 top 锚定。
-    // 这样高度由内容自适应，无需预先测量。
+    const safeMargin = 8.0;
+    final top = isTop
+        ? null
+        : widget.anchorRect.bottom + widget.gap + widget.verticalOffset;
+    final bottom = isTop
+        ? widget.screenHeight -
+            widget.anchorRect.top +
+            widget.gap -
+            widget.verticalOffset
+        : null;
+
     Widget positioned;
-    if (isTop) {
-      // 顶部：底部贴在锚点顶部 - gap + offset
-      final bottom = widget.screenHeight -
-          widget.anchorRect.top +
-          widget.gap -
-          widget.verticalOffset;
-      positioned = Positioned(
-        left: widget.left,
-        bottom: bottom,
-        width: widget.effectiveWidth,
-        child: _constrainedCard(),
-      );
+    if (widget.minWidth != null) {
+      if (widget.align == PopoverAlign.end) {
+        final minW = widget.minWidth!;
+        final rawRight =
+            widget.screenWidth - widget.anchorRect.right - widget.offset.dx;
+        final right = rawRight
+            .clamp(
+              safeMargin,
+              math.max(safeMargin, widget.screenWidth - safeMargin - minW),
+            )
+            .toDouble();
+        positioned = Positioned(
+          right: right,
+          top: top,
+          bottom: bottom,
+          child: _constrainedCard(),
+        );
+      } else if (widget.align == PopoverAlign.start) {
+        final minW = widget.minWidth!;
+        final rawLeft = widget.anchorRect.left + widget.offset.dx;
+        final left = rawLeft
+            .clamp(
+              safeMargin,
+              math.max(safeMargin, widget.screenWidth - safeMargin - minW),
+            )
+            .toDouble();
+        positioned = Positioned(
+          left: left,
+          top: top,
+          bottom: bottom,
+          child: _constrainedCard(),
+        );
+      } else {
+        positioned = Positioned(
+          left: widget.left,
+          top: top,
+          bottom: bottom,
+          width: widget.effectiveWidth,
+          child: _constrainedCard(),
+        );
+      }
     } else {
-      // 底部：顶部贴在锚点底部 + gap + offset
-      final top = widget.anchorRect.bottom + widget.gap + widget.verticalOffset;
       positioned = Positioned(
         left: widget.left,
         top: top,
+        bottom: bottom,
         width: widget.effectiveWidth,
         child: _constrainedCard(),
       );
@@ -255,7 +310,11 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
 
   Widget _constrainedCard() {
     return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: widget.maxHeight),
+      constraints: BoxConstraints(
+        minWidth: widget.minWidth ?? 0.0,
+        maxWidth: widget.maxWidth ?? widget.effectiveWidth,
+        maxHeight: widget.maxHeight,
+      ),
       child: SingleChildScrollView(
         child: _PopoverCard(
           child: widget.builder(context, widget.close),

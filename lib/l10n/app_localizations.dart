@@ -270,6 +270,42 @@ class AppLocalizations {
   String get runningStatus => isEnglish ? 'Running' : '运行中';
   String get toolFailedStatus => isEnglish ? 'Failed' : '失败';
   String get toolRunningStatus => isEnglish ? 'Running' : '运行中';
+  String get noTools => isEnglish ? 'No tools' : '无工具';
+
+  /// 本地化工具名称（chat / tool_call 聚合）。
+  String localizeToolName(String name) {
+    final key = name.trim().toLowerCase();
+    switch (key) {
+      case 'terminal':
+      case 'exec':
+      case 'shell':
+      case 'bash':
+        return isEnglish ? 'Terminal' : '终端';
+      case 'read':
+      case 'read_file':
+      case 'readfile':
+        return isEnglish ? 'Read File' : '读取文件';
+      case 'write':
+      case 'write_file':
+      case 'writefile':
+        return isEnglish ? 'Write File' : '写入文件';
+      case 'patch':
+      case 'apply_patch':
+        return isEnglish ? 'Apply Patch' : '应用补丁';
+      case 'search':
+      case 'grep':
+      case 'glob':
+        return isEnglish ? 'Search' : '搜索';
+      case 'web_search':
+      case 'web_fetch':
+      case 'websearch':
+      case 'webfetch':
+        return isEnglish ? 'Web Search' : '联网搜索';
+      default:
+        final trimmed = name.trim();
+        return trimmed.isEmpty ? (isEnglish ? 'Tool' : '工具') : trimmed;
+    }
+  }
   String get imageLoadFailed => isEnglish ? 'Failed to load image' : '图片加载失败';
   String get mediaDownload => isEnglish ? 'Download' : '下载';
   String get mediaAudio => isEnglish ? 'Audio' : '音频';
