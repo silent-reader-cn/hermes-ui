@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -390,17 +391,84 @@ void main() {
       expect(api.fetchCount, 2);
     });
 
-    testWidgets('柱状图可交互：enabled=true 且带深色 tooltip', (tester) async {
-      final api = FakeInsightsApi(response: sampleResponse());
-      await pumpInsightsPage(tester, api);
-      await tester.scrollUntilVisible(find.byType(BarChart), 200);
-      expect(find.byType(BarChart), findsOneWidget);
-      final barChart = tester.widget<BarChart>(find.byType(BarChart));
-      expect(barChart.data.barTouchData.enabled, isTrue);
-      expect(barChart.data.barTouchData.touchTooltipData, isNotNull);
-      // 选中高亮：touchCallback 存在
-      expect(barChart.data.barTouchData.touchCallback, isNotNull);
-    });
+    testWidgets(
+      '柱状图可交互：handleBuiltInTouches=false（不展示 tooltip，仅保留 touchCallback 与弹窗）',
+      (tester) async {
+        final api = FakeInsightsApi(response: sampleResponse());
+        await pumpInsightsPage(tester, api);
+        await tester.scrollUntilVisible(find.byType(BarChart), 200);
+        expect(find.byType(BarChart), findsOneWidget);
+        final barChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(barChart.data.barTouchData.enabled, isTrue);
+        expect(barChart.data.barTouchData.handleBuiltInTouches, isFalse);
+        expect(barChart.data.barTouchData.touchCallback, isNotNull);
+
+        final touchCallback = barChart.data.barTouchData.touchCallback!;
+
+        // 1. 模拟 hover/触摸高亮变色
+        touchCallback(
+          const FlPointerHoverEvent(PointerHoverEvent()),
+          BarTouchResponse(
+            touchLocation: Offset.zero,
+            touchChartCoordinate: Offset.zero,
+            spot: BarTouchedSpot(
+              barChart.data.barGroups[1],
+              1,
+              barChart.data.barGroups[1].barRods[0],
+              0,
+              null,
+              -1,
+              const FlSpot(1, 150),
+              Offset.zero,
+            ),
+          ),
+        );
+        await tester.pump();
+        final hoveredChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(
+          hoveredChart.data.barGroups[1].barRods[0].color,
+          const Color(0xFF004999),
+        );
+
+        // 移出后恢复默认蓝
+        touchCallback(const FlPointerExitEvent(PointerExitEvent()), null);
+        await tester.pump();
+        final unhoveredChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(
+          unhoveredChart.data.barGroups[1].barRods[0].color,
+          CupertinoColors.systemBlue,
+        );
+
+        // 2. 模拟点击柱子弹出详情 CupertinoAlertDialog（不被容器截断）
+        touchCallback(
+          FlTapUpEvent(TapUpDetails(kind: PointerDeviceKind.touch)),
+          BarTouchResponse(
+            touchLocation: Offset.zero,
+            touchChartCoordinate: Offset.zero,
+            spot: BarTouchedSpot(
+              barChart.data.barGroups[1],
+              1,
+              barChart.data.barGroups[1].barRods[0],
+              0,
+              null,
+              -1,
+              const FlSpot(1, 150),
+              Offset.zero,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+        expect(find.text('2026-08-16'), findsOneWidget);
+        expect(find.text(r'$0.01'), findsOneWidget);
+
+        // 点击 "好" 关闭弹窗
+        await tester.tap(find.text('好'));
+        await tester.pumpAndSettle();
+        expect(find.byType(CupertinoAlertDialog), findsNothing);
+      },
+    );
 
     testWidgets('标题随时间范围动态：today → 今日令牌', (tester) async {
       final api = FakeInsightsApi(response: sampleResponse());
