@@ -5,14 +5,14 @@ import 'package:flutter/cupertino.dart';
 import '../../../core/models/context_window_snapshot.dart';
 import '../../../l10n/app_localizations.dart';
 
-/// 28px 环形进度指示器（对齐 WebUI 手机端圆环原型 static/ui.js _syncCtxIndicator）。
+/// 22px 环形进度指示器（对齐 WebUI 手机端圆环原型 static/ui.js _syncCtxIndicator）。
 ///
 /// WebUI 原型：width 34 / ring 24 / r 9.75 / stroke 3 / center 15 / font 8 w600，
 /// 阈值 ctx-mid>50 ctx-high>75 变色（muted → warning 橙 → error 红）。
 /// Flutter 对齐：
-/// - ringSize 28（与输入栏 send 图标 28 视觉统一），stroke 3、start -90° 不变。
+/// - ringSize 22（与输入栏 send 图标 22 视觉统一），stroke 2.5、start -90° 不变。
 /// - <=50 中性（白92%/黑82%）、50-75 warning 橙、>75 error 红（systemOrange/Red 装饰可直用）。
-/// - 中心 8pt w600，'·' 与百分比一致色（互动时 label、不可用时 secondaryLabel）。
+/// - 中心 7pt w600，'·' 与百分比一致色（互动时 label、不可用时 secondaryLabel）。
 /// - track 白 0.12 / 黑 0.12（WebUI dark 0.12），对齐静止轨迹透明度。
 /// - 可点击性 snapshot!=null 即可弹出（百分比为 null 时显示 · 且展示 Unavailable）。
 /// - a11y label/value、命中 44、深浅色适配；Semantics enabled 与 onPressed 同步。
@@ -26,7 +26,7 @@ class ContextWindowIndicator extends StatelessWidget {
   final ContextWindowSnapshot? snapshot;
   final VoidCallback? onTap;
 
-  static const double ringSize = 28;
+  static const double ringSize = 22;
   static const double tapTargetSize = 44;
 
   @override
@@ -59,7 +59,7 @@ class ContextWindowIndicator extends StatelessWidget {
     } else {
       progressColor = neutralProgress;
     }
-    // 中心文字：8pt w600，'·' 与百分比一致色；无百分比时 secondaryLabel
+    // 中心文字：7pt w600，'·' 与百分比一致色；无百分比时 secondaryLabel
     final hasPct = pct != null;
     final textColor = hasPct
         ? CupertinoColors.label.resolveFrom(context)
@@ -83,7 +83,7 @@ class ContextWindowIndicator extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 8,
+              fontSize: 7,
               fontWeight: FontWeight.w600,
               color: textColor,
               decoration: TextDecoration.none,
@@ -131,7 +131,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const strokeWidth = 3.0;
+    const strokeWidth = 2.5;
     final radius = (size.width - strokeWidth) / 2;
     final center = Offset(size.width / 2, size.height / 2);
     final trackPaint = Paint()
