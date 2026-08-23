@@ -472,5 +472,60 @@ void main() {
       expect(find.byType(MarkdownBody), findsOneWidget);
       expect(find.text('粗体项目说明'), findsOneWidget);
     });
+
+    testWidgets(
+      '分区头副文案样式瘦身：字数与更新时间显式 12pt、w400、secondaryText、Flexible 省略',
+      (tester) async {
+        final mtime =
+            DateTime.now()
+                .subtract(const Duration(hours: 1))
+                .millisecondsSinceEpoch /
+            1000;
+        final api = FakeMemoryApi(
+          response: MemoryResponse(
+            memory: '测试笔记内容',
+            memoryMtime: mtime,
+            projectContext: '测试项目上下文内容',
+            projectContextMtime: mtime,
+          ),
+        );
+        await pumpMemoryPage(tester, api);
+
+        // 默认处于项目上下文 tab
+        final pcCharCountFinder = find.text('9 字');
+        final pcModifiedFinder = find.text('1 小时前更新');
+        expect(pcCharCountFinder, findsOneWidget);
+        expect(pcModifiedFinder, findsOneWidget);
+
+        final pcCharCountText = tester.widget<Text>(pcCharCountFinder);
+        expect(pcCharCountText.style?.fontSize, 12);
+        expect(pcCharCountText.style?.fontWeight, FontWeight.w400);
+        expect(pcCharCountText.overflow, TextOverflow.ellipsis);
+
+        final pcModifiedText = tester.widget<Text>(pcModifiedFinder);
+        expect(pcModifiedText.style?.fontSize, 12);
+        expect(pcModifiedText.style?.fontWeight, FontWeight.w400);
+        expect(pcModifiedText.overflow, TextOverflow.ellipsis);
+
+        // 切换到 memory tab 验证 _MemorySectionHeader
+        await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+        await tester.pump();
+
+        final memCharCountFinder = find.text('6 字');
+        final memModifiedFinder = find.text('1 小时前更新');
+        expect(memCharCountFinder, findsOneWidget);
+        expect(memModifiedFinder, findsOneWidget);
+
+        final memCharCountText = tester.widget<Text>(memCharCountFinder);
+        expect(memCharCountText.style?.fontSize, 12);
+        expect(memCharCountText.style?.fontWeight, FontWeight.w400);
+        expect(memCharCountText.overflow, TextOverflow.ellipsis);
+
+        final memModifiedText = tester.widget<Text>(memModifiedFinder);
+        expect(memModifiedText.style?.fontSize, 12);
+        expect(memModifiedText.style?.fontWeight, FontWeight.w400);
+        expect(memModifiedText.overflow, TextOverflow.ellipsis);
+      },
+    );
   });
 }

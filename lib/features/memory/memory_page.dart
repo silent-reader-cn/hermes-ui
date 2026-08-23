@@ -358,6 +358,11 @@ String _memorySectionEmptyMessage(BuildContext context, MemorySection section) {
   }
 }
 
+const TextStyle _metaStyle = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w400,
+);
+
 /// 记忆分区头：图标 + 标题 + 字数 + 相对修改时间。
 class _MemorySectionHeader extends StatelessWidget {
   const _MemorySectionHeader({
@@ -374,6 +379,8 @@ class _MemorySectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
+    final metaColor = secondaryText.resolveFrom(context);
+    final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -390,15 +397,21 @@ class _MemorySectionHeader extends StatelessWidget {
           ),
           const Spacer(),
           if (charCount > 0)
-            Text(
-              '$charCount ${l10n.memoryCharUnit}',
-              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            Flexible(
+              child: Text(
+                '$charCount ${l10n.memoryCharUnit}',
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
           if (modified != null) ...[
-            const SizedBox(width: 6),
-            Text(
-              modified,
-              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            if (charCount > 0) const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                modified,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
           ],
         ],
@@ -543,6 +556,8 @@ class _ProjectContextHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
+    final metaColor = secondaryText.resolveFrom(context);
+    final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -559,18 +574,24 @@ class _ProjectContextHeader extends StatelessWidget {
           ),
           const Spacer(),
           if (charCount > 0)
-            Text(
-              '$charCount ${l10n.memoryCharUnit}',
-              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            Flexible(
+              child: Text(
+                '$charCount ${l10n.memoryCharUnit}',
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
           if (modified != null) ...[
-            const SizedBox(width: 6),
-            Text(
-              modified,
-              style: TextStyle(color: secondaryText.resolveFrom(context)),
+            if (charCount > 0) const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                modified,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
-            const SizedBox(width: 8),
           ],
+          if (charCount > 0 || modified != null) const SizedBox(width: 8),
           const Icon(
             CupertinoIcons.lock_fill,
             size: 13,
