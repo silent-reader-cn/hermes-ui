@@ -1142,16 +1142,7 @@ class _SessionRowState extends State<_SessionRow> {
                           color: CupertinoColors.secondaryLabel,
                         ),
                       ],
-                      if (widget.session.hasPendingUserMessage == true) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          l10n.pendingInput,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: CupertinoColors.systemOrange,
-                          ),
-                        ),
-                      ],
+
                     ],
                   ),
                   if (metadata != null) ...[
