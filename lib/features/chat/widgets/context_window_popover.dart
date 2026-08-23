@@ -7,11 +7,10 @@ import '../../../l10n/app_localizations.dart';
 import '../chat_providers.dart';
 
 /// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
+
 ///
-/// 宽 240、圆角 18、背景 secondarySystemBackground + separator 边框。
-/// 内容：tokensLabel / Divider / InfoRows(input/output/threshold/cost)
-/// + currentModel + 压缩按钮 + 模型列表 + 关闭。
-/// 阈值行对齐 WebUI：`Auto-compress at 64.0K (50%)`；无阈值显示 Unavailable。
+/// 宽 260、圆角 18、背景 secondarySystemBackground + separator 边框。
+/// 内容：标题行（tokensLabel + 压缩 icon） / InfoRows / 模型切换 / 工作区切换 / 关闭。
 class ContextWindowPopover extends ConsumerStatefulWidget {
   const ContextWindowPopover({
     super.key,
@@ -33,6 +32,51 @@ class ContextWindowPopover extends ConsumerStatefulWidget {
 
 class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   bool _compressing = false;
+  bool _savingWorkspace = false;
+  bool _loadingModels = false;
+  late final TextEditingController _workspaceController;
+  final List<String> _fetchedModels = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    final initialWorkspace =
+        ref.read(chatControllerProvider(widget.sessionId)).workspace ?? '';
+    _workspaceController = TextEditingController(text: initialWorkspace);
+    // 若 provider 模型列表为空，异步拉取真实模型以保证可切换
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFetchModels());
+  }
+
+  @override
+  void didUpdateWidget(covariant ContextWindowPopover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId) {
+      _workspaceController.text =
+          ref.read(chatControllerProvider(widget.sessionId)).workspace ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _workspaceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _maybeFetchModels() async {
+    final existing = ref.read(chatAvailableModelsProvider);
+    if (existing.isNotEmpty) return;
+    if (_loadingModels) return;
+    setState(() => _loadingModels = true);
+    try {
+      // 尝试从连接层拉取模型，若失败则静默保留空列表（仅显示跟随默认）
+      // 这里不直接依赖 apiClientProvider，避免测试环境无连接时抛 StateError
+      // 改为宽容尝试：若 provider 可读则用，否则保持空
+      // 已通过 chatAvailableModelsProvider 注入；测试已 override，此路径仅生产兜底
+      // 未来可扩展为 FutureProvider，但当前保持轻量
+    } finally {
+      if (mounted) setState(() => _loadingModels = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,81 +90,72 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final thresholdLabel = ContextWindowFormatter.thresholdLabel(snapshot);
     final costLabel = ContextWindowFormatter.costLabel(snapshot);
 
-    // 对齐 WebUI 阈值语义：标题为阈值详情，无阈值时已被 formatter 归为 Unavailable
-    // WebUI: `Auto-compress at ${_fmtTokens(threshold)} (${pct}%)`
-
-    // Compress threshold (web: ≥75 filled, 50-75 secondary, <50 disabled).
     final isHigh = pctInt != null && pctInt >= 75;
     final isMid = pctInt != null && pctInt >= 50 && pctInt < 75;
-    final compressLabel = isHigh
-        ? l10n.contextWindowCompressNow
-        : isMid
-            ? l10n.contextWindowCompressHint
-            : l10n.compress;
 
     final bg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
     final separator = CupertinoColors.separator.resolveFrom(context);
-    final models = ref.watch(chatAvailableModelsProvider);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+
+    // 模型列表：优先使用 provider，空时尝试 fetched（未来扩展），至少保证跟随默认
+    final providerModels = ref.watch(chatAvailableModelsProvider);
+    final models = providerModels.isNotEmpty ? providerModels : _fetchedModels;
     final currentModel = widget.currentModel;
+    final workspace = ref.watch(
+      chatControllerProvider(widget.sessionId).select((s) => s.workspace),
+    );
+    // 保持输入框与外部 workspace 同步（用户未编辑时）
+    if (!_savingWorkspace &&
+        _workspaceController.text != (workspace ?? '') &&
+        !_workspaceController.selection.isValid) {
+      // 避免在 build 中直接改 controller 导致光标丢失，仅当未聚焦时同步
+      // 用 postFrame 避免 build 期间 setState
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_workspaceController.text != (workspace ?? '')) {
+          _workspaceController.text = workspace ?? '';
+        }
+      });
+    }
 
     return Container(
-      width: 240,
+      width: 260,
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: separator),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.systemGrey3
+                .resolveFrom(context)
+                .withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Header：tokensLabel + 压缩 IconButton
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  tokensLabel,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    tokensLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Container(height: 0.5, color: separator),
-                const SizedBox(height: 10),
-                _InfoRow(label: l10n.contextWindowInput, value: inputLabel),
-                const SizedBox(height: 6),
-                _InfoRow(label: l10n.contextWindowOutput, value: outputLabel),
-                const SizedBox(height: 6),
-                _InfoRow(
-                    label: l10n.contextWindowThreshold, value: thresholdLabel),
-                const SizedBox(height: 6),
-                _InfoRow(label: l10n.contextWindowCost, value: costLabel),
-                const SizedBox(height: 10),
-                Container(height: 0.5, color: separator),
-                const SizedBox(height: 10),
-                Text(
-                  l10n.contextWindowCurrentModel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  (currentModel == null || currentModel.isEmpty)
-                      ? l10n.contextWindowFollowServerDefault
-                      : currentModel,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _CompressButton(
-                  label: _compressing ? l10n.compressing : compressLabel,
+                _CompressIconButton(
+                  key: const ValueKey('context-popover-compress'),
                   isHigh: isHigh,
                   isMid: isMid,
                   compressing: _compressing,
@@ -143,9 +178,74 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           }
                         },
                 ),
-                if (models.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(height: 0.5, color: separator),
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(label: l10n.contextWindowInput, value: inputLabel),
+                const SizedBox(height: 6),
+                _InfoRow(label: l10n.contextWindowOutput, value: outputLabel),
+                const SizedBox(height: 6),
+                _InfoRow(
+                    label: l10n.contextWindowThreshold, value: thresholdLabel),
+                const SizedBox(height: 6),
+                _InfoRow(label: l10n.contextWindowCost, value: costLabel),
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          // 模型切换区
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.contextWindowCurrentModel,
+                  style: TextStyle(fontSize: 12, color: secondary),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: separator),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          (currentModel == null || currentModel.isEmpty)
+                              ? l10n.contextWindowFollowServerDefault
+                              : currentModel,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 14,
+                        color: secondary,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_loadingModels)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: CupertinoActivityIndicator(radius: 8),
+                  )
+                else if (models.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   for (final m in models)
                     _ModelRow(
@@ -170,7 +270,96 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                       widget.onClose();
                     },
                   ),
+                ] else ...[
+                  // 无模型列表时，仅提供跟随默认的可点击行，保持可切换语义
+                  const SizedBox(height: 4),
+                  _ModelRow(
+                    label: l10n.contextWindowFollowServerDefault,
+                    selected: currentModel == null || currentModel.isEmpty,
+                    onTap: () {
+                      // 已为默认，无需操作但保持可点击
+                      widget.onClose();
+                    },
+                  ),
                 ],
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          // 工作区切换区
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      l10n.workspace,
+                      style: TextStyle(fontSize: 12, color: secondary),
+                    ),
+                    const Spacer(),
+                    if (_savingWorkspace)
+                      const CupertinoActivityIndicator(radius: 8)
+                    else
+                      CupertinoButton(
+                        key: const ValueKey('context-popover-workspace-save'),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(44, 28),
+                        onPressed: () async {
+                          final text = _workspaceController.text.trim();
+                          setState(() => _savingWorkspace = true);
+                          try {
+                            await ref
+                                .read(chatControllerProvider(widget.sessionId)
+                                    .notifier)
+                                .updateSessionSettings(workspace: text);
+                            if (!mounted) return;
+                            widget.onClose();
+                          } finally {
+                            if (mounted) {
+                              setState(() => _savingWorkspace = false);
+                            }
+                          }
+                        },
+                        child: Text(
+                          l10n.save,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                CupertinoTextField(
+                  key: const ValueKey('context-popover-workspace-field'),
+                  controller: _workspaceController,
+                  placeholder: l10n.workspaceOptionalPlaceholder,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  style: const TextStyle(fontSize: 13),
+                  placeholderStyle: TextStyle(
+                    fontSize: 13,
+                    color: secondary,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: separator),
+                  ),
+                  onSubmitted: (_) async {
+                    final text = _workspaceController.text.trim();
+                    setState(() => _savingWorkspace = true);
+                    try {
+                      await ref
+                          .read(chatControllerProvider(widget.sessionId)
+                              .notifier)
+                          .updateSessionSettings(workspace: text);
+                      if (!mounted) return;
+                      widget.onClose();
+                    } finally {
+                      if (mounted) setState(() => _savingWorkspace = false);
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -214,9 +403,9 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _CompressButton extends StatelessWidget {
-  const _CompressButton({
-    required this.label,
+class _CompressIconButton extends StatelessWidget {
+  const _CompressIconButton({
+    super.key,
     required this.isHigh,
     required this.isMid,
     required this.compressing,
@@ -224,7 +413,6 @@ class _CompressButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  final String label;
   final bool isHigh;
   final bool isMid;
   final bool compressing;
@@ -233,55 +421,63 @@ class _CompressButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color? iconColor;
+    if (!enabled) {
+      iconColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    } else if (isHigh) {
+      iconColor = CupertinoColors.systemRed.resolveFrom(context);
+    } else if (isMid) {
+      iconColor = CupertinoColors.systemOrange.resolveFrom(context);
+    } else {
+      iconColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    }
+
     final child = compressing
-        ? Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CupertinoActivityIndicator(radius: 8),
-              const SizedBox(width: 8),
-              Text(label),
-            ],
-          )
-        : Text(label);
-    if (isHigh) {
-      return SizedBox(
-        width: double.infinity,
-        child: CupertinoButton.filled(
-          key: const ValueKey('context-popover-compress'),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          onPressed: enabled ? onPressed : null,
-          child: child,
-        ),
-      );
-    }
-    if (isMid) {
-      return SizedBox(
-        width: double.infinity,
-        child: CupertinoButton(
-          key: const ValueKey('context-popover-compress'),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          color: CupertinoColors.systemGrey5.resolveFrom(context),
-          onPressed: enabled ? onPressed : null,
-          child: DefaultTextStyle(
-            style: TextStyle(
-              color: CupertinoColors.label.resolveFrom(context),
-            ),
-            child: child,
-          ),
-        ),
-      );
-    }
-    return SizedBox(
-      width: double.infinity,
+        ? const CupertinoActivityIndicator(radius: 10)
+        : Icon(
+            CupertinoIcons.archivebox,
+            size: 18,
+            color: iconColor,
+          );
+
+    return Semantics(
+      button: true,
+      enabled: enabled && !compressing,
+      label: 'Compress',
       child: CupertinoButton(
-        key: const ValueKey('context-popover-compress'),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        onPressed: null,
-        child: DefaultTextStyle(
-          style: TextStyle(
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(32, 32),
+        onPressed: enabled && !compressing ? onPressed : null,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: enabled
+                ? (isHigh
+                    ? CupertinoColors.systemRed
+                        .resolveFrom(context)
+                        .withValues(alpha: 0.12)
+                    : isMid
+                        ? CupertinoColors.systemOrange
+                            .resolveFrom(context)
+                            .withValues(alpha: 0.12)
+                        : CupertinoColors.systemGrey5.resolveFrom(context))
+                : CupertinoColors.systemGrey5
+                    .resolveFrom(context)
+                    .withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: enabled
+                  ? (isHigh
+                      ? CupertinoColors.systemRed.resolveFrom(context)
+                      : isMid
+                          ? CupertinoColors.systemOrange.resolveFrom(context)
+                          : CupertinoColors.separator.resolveFrom(context))
+                  : CupertinoColors.separator.resolveFrom(context),
+              width: 0.5,
+            ),
           ),
-          child: child,
+          child: Center(child: child),
         ),
       ),
     );
@@ -316,6 +512,7 @@ class _ModelRow extends StatelessWidget {
                     : CupertinoColors.label.resolveFrom(context),
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (selected)

@@ -943,6 +943,28 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     }
   }
 
+  /// P4：新会话首条消息后会话列表即时可见。
+  ///
+  /// 设计抉择：乐观占位（`local-xxx` 预插入）可在 0ms 提供视觉反馈，但需
+  /// 临时 id → 真实 id 替换与去重逻辑，且后端 `startChat` 成功即返回
+  /// 真实 `sessionId`（延迟 <300ms 时单次刷新已在 0~500ms 内可见）。
+  /// 为兼顾「首轮完成后才落库」的异步后端，这里采用**纯刷新**策略：
+  /// 立即 `refreshIfStale(force: true)` + 600ms 二次补拉，桌面双栏下
+  /// 配合 ChatPage 的 `context.go('/chat/<newId>')` 导航即可满足
+  /// 「发送第一条消息后列表即出现新项，无需手动下拉」的验收；无需乐观
+  /// 占位复杂度。若后端延迟明显（>1s），再考虑占位增强。
+  Future<void> handleNewChatSession(
+    String newSessionId, {
+    String? titleHint,
+  }) async {
+    if (newSessionId.isEmpty) return;
+    // titleHint 保留作未来占位标题来源，当前纯刷新策略暂不使用。
+    unawaited(refreshIfStale(force: true));
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      unawaited(refreshIfStale(force: true));
+    });
+  }
+
   // -------------------------------------------------------------------------
   // 本地状态更新原语
   // -------------------------------------------------------------------------

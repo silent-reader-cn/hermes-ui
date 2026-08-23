@@ -13,6 +13,8 @@ import '../../core/models/json_value.dart';
 import '../../core/models/session.dart';
 import '../../core/models/tool_call.dart';
 import '../../core/utils/uuid.dart';
+import '../../core/connections/connection_providers.dart';
+import '../session_list/session_list_providers.dart';
 import 'chat_models.dart';
 import 'chat_providers.dart';
 import 'chat_server_api.dart';
@@ -71,6 +73,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// loadYoloState 一次性守卫（页面每次 build 都会触发，仅首次真正拉取）。
   bool _yoloLoaded = false;
+
+  /// P4：新会话创建后待通过 done/stream_end 二次刷新的会话 id 集合。
+  ///
+  /// 仅用于「首轮完成后才落库」的异步后端：startChat 阶段已做立即+600ms
+  /// 双次补拉，若服务端仍未落库，则在 done/stream_end 成功收尾时再做一次
+  /// 强制刷新，避免用户需手动下拉。
+  final Set<String> _pendingNewSessionIds = {};
 
   DateTime _now() => ref.read(chatClockProvider)();
 
@@ -297,6 +306,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
       setNotice('会话已压缩');
       await loadMessages();
+      // 对齐 Swift：用压缩摘要的 token 估算覆盖 snapshot 的 lastPromptTokens
+      final estimate = response.summary?.compressedTokenEstimate;
+      if (estimate != null && estimate > 0) {
+        final prev = state.contextWindowSnapshot;
+        if (prev != null) {
+          state = state.copyWith(
+            contextWindowSnapshot: prev.replacingTokensUsed(estimate),
+          );
+        } else {
+          state = state.copyWith(
+            contextWindowSnapshot: ContextWindowSnapshot(
+              lastPromptTokens: estimate,
+              contextLength: prev?.contextLength,
+              thresholdTokens: prev?.thresholdTokens,
+            ),
+          );
+        }
+      }
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -491,12 +518,71 @@ class ChatController extends FamilyNotifier<ChatState, String> {
               detail.messageCount! > state.messages.length + fresh.length,
         );
       } else {
+        // 全量重载：需同步工具/思考卡片状态，避免自动刷新把折叠入口弄没
+        // - 服务端已含工具信息（persistedToolCalls 非空或消息内 tool 元数据）→ 以服务端为准
+        // - 否则本地已归档/实时组保留并在末尾兜底渲染（即使全部完成也保留入口，初始折叠）
+        final persistedToolCalls = detail.toolCalls ?? const <PersistedToolCall>[];
+        final newOffset = detail.messagesOffset ?? 0;
+        // 尝试从服务端 transcript 重建
+        final serverDerivedGroups = ToolCallGroup.groups(
+          persistedToolCalls: persistedToolCalls,
+          messages: loaded,
+          messageOffset: newOffset,
+        );
+        List<ToolCallGroup> nextCompletedGroups;
+        List<ToolCall> nextLiveToolCalls = state.liveToolCalls;
+        String nextLiveReasoning = state.liveReasoningText;
+        List<ReasoningGroup> nextCompletedReasoning = state.completedReasoningGroups;
+        final hasServerTools = persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
+        if (hasServerTools) {
+          // 以服务端为准，清空实时（已归档到服务端）
+          nextCompletedGroups = serverDerivedGroups;
+          nextLiveToolCalls = const [];
+          // 推理：live 推理若有残留且流已结束，归档到已完成（服务端无推理持久化）
+          if (state.liveReasoningText.isNotEmpty) {
+            final anchor = state.stream.reasoningAnchorMessageId ??
+                state.stream.streamingAssistantMessageId ??
+                _lastAssistantMessageId(loaded);
+            nextCompletedReasoning = [
+              ...state.completedReasoningGroups,
+              ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
+            ];
+            nextLiveReasoning = '';
+          }
+        } else {
+          // 服务端无工具信息 → 保留本地已归档 + 归档实时（如有）
+          if (state.liveToolCalls.isNotEmpty) {
+            final anchor = state.stream.toolCallAnchorMessageId ??
+                state.stream.streamingAssistantMessageId ??
+                _lastAssistantMessageId(loaded);
+            final liveGroup = ToolCallGroup.live(
+              anchorMessageID: anchor,
+              toolCalls: List<ToolCall>.of(state.liveToolCalls),
+            );
+            nextCompletedGroups = ToolCallGroup.merging(
+              primaryGroups: state.completedToolCallGroups,
+              fallbackGroups: [liveGroup],
+            );
+            nextLiveToolCalls = const [];
+          } else {
+            nextCompletedGroups = state.completedToolCallGroups;
+          }
+          if (state.liveReasoningText.isNotEmpty) {
+            final anchor = state.stream.reasoningAnchorMessageId ??
+                state.stream.streamingAssistantMessageId ??
+                _lastAssistantMessageId(loaded);
+            nextCompletedReasoning = [
+              ...state.completedReasoningGroups,
+              ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
+            ];
+            nextLiveReasoning = '';
+          }
+        }
         state = state.copyWith(
           messages: loaded,
           messagesOffset: detail.messagesOffset ?? 0,
           hasOlderMessages:
-              detail.messageCount != null &&
-              detail.messageCount! > loaded.length,
+              detail.messageCount != null && detail.messageCount! > loaded.length,
           displayTitle: _resolveTitle(detail),
           workspace: detail.workspace ?? state.workspace,
           model: detail.model ?? state.model,
@@ -514,7 +600,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             inputTokens: detail.inputTokens,
             outputTokens: detail.outputTokens,
             estimatedCost: detail.estimatedCost,
+            tokensPerSecond: state.stream.liveTokensPerSecond ??
+                state.contextWindowSnapshot?.tokensPerSecond,
           ),
+          completedToolCallGroups: nextCompletedGroups,
+          liveToolCalls: nextLiveToolCalls,
+          completedReasoningGroups: nextCompletedReasoning,
+          liveReasoningText: nextLiveReasoning,
           responseCompletionNeedsTranscriptRefresh: false,
           isViewingCachedData: false,
           isShowingOfflineCache: false,
@@ -678,7 +770,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (sessionId != null &&
           sessionId.isNotEmpty &&
           state.sessionId.isEmpty) {
-        state = state.copyWith(sessionId: sessionId);
+        final newSessionId = sessionId;
+        state = state.copyWith(sessionId: newSessionId);
+        _onNewSessionCreated(newSessionId, text);
       }
       _beginStream(streamId);
       return true;
@@ -1263,6 +1357,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       state = state.copyWith(
         stream: state.stream.copyWith(liveTokensPerSecond: tps),
       );
+      // 同步更新 snapshot 的 tps，确保 popover 阈值色与 indicator 一致
+      // 且即使仅有 metering 也能实时更新 cost/tps 相关行。
+      final prev = state.contextWindowSnapshot;
+      if (prev != null) {
+        state = state.copyWith(
+          contextWindowSnapshot: prev.replacingTokensPerSecond(tps),
+        );
+      } else {
+        // 无历史 snapshot 时，用 tps 创建空壳（至少保留 tps 可展示）
+        state = state.copyWith(
+          contextWindowSnapshot: ContextWindowSnapshot(tokensPerSecond: tps),
+        );
+      }
     }
   }
 
@@ -1343,9 +1450,63 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _applyCompletedStreamSession(rawSession, currentStreamingId);
     }
     final rawUsage = event.usage;
-    final snapshot = event.usageSnapshot ??
+    ContextWindowSnapshot? snapshot = event.usageSnapshot ??
         (rawUsage != null ? ContextWindowSnapshot.fromJson(rawUsage) : null);
+    // 若 usage 缺失关键字段，尝试从 session detail 或历史 snapshot 回退补齐
     if (snapshot != null) {
+      final prev = state.contextWindowSnapshot;
+      final detailFallback = hasCompletedTranscript
+          ? SessionDetail.fromJson(rawSession!) // ignore: unnecessary_non_null_assertion
+          : null;
+      // 回退 contextLength / threshold / tokens
+      final merged = ContextWindowSnapshot(
+        contextLength: snapshot.contextLength ??
+            detailFallback?.contextLength ??
+            prev?.contextLength,
+        thresholdTokens: snapshot.thresholdTokens ??
+            detailFallback?.thresholdTokens ??
+            prev?.thresholdTokens,
+        lastPromptTokens: snapshot.lastPromptTokens ??
+            detailFallback?.lastPromptTokens ??
+            prev?.lastPromptTokens,
+        inputTokens: snapshot.inputTokens ??
+            detailFallback?.inputTokens ??
+            prev?.inputTokens,
+        outputTokens: snapshot.outputTokens ??
+            detailFallback?.outputTokens ??
+            prev?.outputTokens,
+        estimatedCost: snapshot.estimatedCost ??
+            detailFallback?.estimatedCost ??
+            prev?.estimatedCost,
+        tokensPerSecond: snapshot.tokensPerSecond ?? prev?.tokensPerSecond,
+      );
+      // 若回退后仍有有效百分比，则使用合并后；否则保留原始
+      snapshot = merged;
+    } else if (hasCompletedTranscript) {
+      // usage 缺失但有完整 transcript：直接从 session detail 构建
+      // ignore: unnecessary_non_null_assertion
+      final detail = SessionDetail.fromJson(rawSession!);
+      snapshot = ContextWindowSnapshot(
+        contextLength: detail.contextLength,
+        thresholdTokens: detail.thresholdTokens,
+        lastPromptTokens: detail.lastPromptTokens,
+        inputTokens: detail.inputTokens,
+        outputTokens: detail.outputTokens,
+        estimatedCost: detail.estimatedCost,
+        tokensPerSecond: state.contextWindowSnapshot?.tokensPerSecond,
+      );
+      // 若回退的 tps 存在，同步到 snapshot
+      final prevTps = state.stream.liveTokensPerSecond ??
+          state.contextWindowSnapshot?.tokensPerSecond;
+      if (prevTps != null && snapshot.tokensPerSecond == null) {
+        snapshot = snapshot.replacingTokensPerSecond(prevTps);
+      }
+    }
+    if (snapshot != null &&
+        (snapshot.contextLength != null ||
+            snapshot.inputTokens != null ||
+            snapshot.lastPromptTokens != null ||
+            snapshot.tokensPerSecond != null)) {
       state = state.copyWith(contextWindowSnapshot: snapshot);
       final tps = snapshot.tokensPerSecond;
       if (tps != null && tps.isFinite && tps > 0) {
@@ -1358,6 +1519,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     // 回合完成（done）：通知 hook（仅后台发通知，见 notifications feature）。
     _notifyTurnCompleted();
+    _triggerSessionListRefreshForCompleted(state.sessionId);
     unawaited(_writeCacheMessages(state.sessionId, state.messages));
   }
 
@@ -1385,6 +1547,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     final reasoningGroups = _archiveLiveReasoningToGroups();
     final title = detail.title?.trim();
+    // 同步上下文快照（对齐 Swift applyCompletedStreamSession）
+    final snapshotFromDetail = ContextWindowSnapshot(
+      contextLength: detail.contextLength,
+      thresholdTokens: detail.thresholdTokens,
+      lastPromptTokens: detail.lastPromptTokens,
+      inputTokens: detail.inputTokens,
+      outputTokens: detail.outputTokens,
+      estimatedCost: detail.estimatedCost,
+      tokensPerSecond: state.stream.liveTokensPerSecond ??
+          state.contextWindowSnapshot?.tokensPerSecond,
+    );
+    final hasSnapshotValues = snapshotFromDetail.contextLength != null ||
+        snapshotFromDetail.thresholdTokens != null ||
+        snapshotFromDetail.lastPromptTokens != null ||
+        snapshotFromDetail.inputTokens != null;
     state = state.copyWith(
       messages: merged,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
@@ -1407,6 +1584,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         clearReasoningAnchorMessageId: true,
       ),
     );
+    if (hasSnapshotValues) {
+      state = state.copyWith(contextWindowSnapshot: snapshotFromDetail);
+    }
   }
 
   /// 服务端 transcript 与本地合并：local- 乐观消息保留插回；本地流式内容
@@ -1595,6 +1775,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       // 回合完成（stream_end，done 未先到）：通知 hook。
       // done 已收尾时 wasCompleted 为 true，不会重复通知。
       _notifyTurnCompleted();
+      _triggerSessionListRefreshForCompleted(state.sessionId);
     }
     _finishStream();
     unawaited(_writeCacheMessages(state.sessionId, state.messages));
@@ -1707,6 +1888,43 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } on ApiException {
       // 标题补拉失败静默。
     }
+  }
+
+  void _onNewSessionCreated(String newSessionId, String hint) {
+    _pendingNewSessionIds.add(newSessionId);
+    // Guard: no active connection in tests/offline -> skip list refresh (avoid "尚未配置服务器连接" throw).
+    try {
+      final active = ref.read(activeConnectionProvider);
+      if (active == null) return;
+    } catch (_) {
+      return;
+    }
+    try {
+      final notifier = ref.read(sessionListControllerProvider.notifier);
+      unawaited(
+        notifier
+            .handleNewChatSession(newSessionId, titleHint: hint)
+            .catchError((_) {}),
+      );
+    } catch (_) {
+      // Provider 未就绪（如无激活连接）时静默，列表会在下次进入时拉取。
+    }
+  }
+
+  void _triggerSessionListRefreshForCompleted(String sessionId) {
+    if (sessionId.isEmpty) return;
+    if (!_pendingNewSessionIds.contains(sessionId)) return;
+    _pendingNewSessionIds.remove(sessionId);
+    try {
+      final active = ref.read(activeConnectionProvider);
+      if (active == null) return;
+    } catch (_) {
+      return;
+    }
+    try {
+      final notifier = ref.read(sessionListControllerProvider.notifier);
+      unawaited(notifier.refreshIfStale(force: true).catchError((_) {}));
+    } catch (_) {}
   }
 
   // -------------------------------------------------------------------------
@@ -2080,6 +2298,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       ),
     );
     _markProgress();
+  }
+
+  String? _lastAssistantMessageId(List<ChatMessage> messages) {
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (m.role == 'assistant' && m.messageId != null) return m.messageId;
+    }
+    return null;
   }
 
   String _resolveTitle(SessionDetail detail) {

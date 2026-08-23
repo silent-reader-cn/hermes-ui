@@ -15,6 +15,7 @@ import 'message_bubble.dart';
 import '../../settings/injected_notice_settings.dart';
 import 'message_highlight.dart';
 import 'steer_banner.dart';
+import 'tool_call_card.dart';
 
 /// 消息列表（ListView.builder + 稳定 renderId key + 自动滚动跟随）。
 ///
@@ -498,113 +499,112 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               .where((g) => g.anchorMessageId == streaming.messageId)
               .toList();
 
-    var itemCount = transcript.length;
-    if (streaming != null) itemCount++;
-    if (phase == ChatPhase.sending) itemCount++;
     final steerHintText = (steerHint ?? '').trim();
     final showSteerBanner =
         phase == ChatPhase.steered && steerHintText.isNotEmpty;
     final showQueuedBanner = queuedMessages.isNotEmpty;
+    // 落地兜底：transcript 为空但已归档的工具/思考组非空时，仍在末尾渲染入口
+    final needFallback = transcript.isEmpty &&
+        streaming == null &&
+        phase != ChatPhase.sending &&
+        (toolGroups.isNotEmpty || reasoningGroups.isNotEmpty);
+
+    var itemCount = transcript.length;
+    if (streaming != null) itemCount++;
+    if (phase == ChatPhase.sending) itemCount++;
     if (showSteerBanner) itemCount++;
     if (showQueuedBanner) itemCount++;
+    if (needFallback) itemCount++;
 
     return ListView.builder(
       controller: _controller,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: itemCount,
       itemBuilder: (context, index) {
-        // 尾部顺序：… transcript | queued | steer | streaming | sending
-        // transcript 占 0..n-1，其后依次为 queued/steer/streaming/sending。
-        final n = transcript.length;
-        if (showSteerBanner || showQueuedBanner) {
-          if (index < n) {
-            // transcript 区：落到下方统一处理
-          } else {
-            var tail = index - n;
-            if (showQueuedBanner) {
-              if (tail == 0) {
-                return QueuedBanner(
-                  count: queuedMessages.length,
-                  preview: queuedMessages.first,
-                );
-              }
-              tail--;
-            }
-            if (showSteerBanner) {
-              if (tail == 0) {
-                return SteerBanner(text: steerHintText);
-              }
-              tail--;
-            }
-            if (streaming != null) {
-              if (tail == 0) {
-                return _StreamingBubble(
-                  message: streaming,
-                  toolGroups: streamingTools,
-                  reasoningGroups: streamingReasoning,
-                );
-              }
-              tail--;
-            }
-            if (phase == ChatPhase.sending) {
-              if (tail == 0) return const _SendingIndicator();
-              tail--;
-            }
-            if (tail < 0) return const SizedBox.shrink();
-          }
-        }
-        if (phase == ChatPhase.sending && index == itemCount - 1) {
-          return const _SendingIndicator();
-        }
-        if (streaming != null &&
-            index == itemCount - (phase == ChatPhase.sending ? 2 : 1)) {
-          return _StreamingBubble(
-            message: streaming,
-            toolGroups: streamingTools,
-            reasoningGroups: streamingReasoning,
-          );
-        }
-        final entry = transcript[index];
-        final groups = toolGroups
-            .where((g) => g.anchorMessageID == entry.message.messageId)
-            .toList();
-        final reasoning = reasoningGroups
-            .where((g) => g.anchorMessageId == entry.message.messageId)
-            .toList();
-        final noticeId = entry.message.id;
-        final expanded = _expandedNoticeIds.contains(noticeId);
-        final isHighlightTarget =
-            _highlightTargetRenderId != null &&
-            entry.renderId == _highlightTargetRenderId;
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPress: () => _showMessageActions(entry.message),
-          onSecondaryTapDown: (_) => _showMessageActions(entry.message),
-          child: KeyedSubtree(
-            key: isHighlightTarget ? _highlightKey : null,
-            child: SearchMessageHighlight(
-              highlight: isHighlightTarget,
-              child: ChatMessageBubble(
-                key: ValueKey(entry.renderId),
-                message: entry.message,
-                toolGroups: groups,
-                reasoningGroups: reasoning,
-                collapseInjectedEnabled: collapseEnabled,
-                injectedExpanded: expanded,
-                onToggleInjected: () {
-                  if (!mounted) return;
-                  setState(() {
-                    if (_expandedNoticeIds.contains(noticeId)) {
-                      _expandedNoticeIds.remove(noticeId);
-                    } else {
-                      _expandedNoticeIds.add(noticeId);
-                    }
-                  });
-                },
+        // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
+        if (index < transcript.length) {
+          final entry = transcript[index];
+          final groups = toolGroups
+              .where((g) => g.anchorMessageID == entry.message.messageId)
+              .toList();
+          final reasoning = reasoningGroups
+              .where((g) => g.anchorMessageId == entry.message.messageId)
+              .toList();
+          final noticeId = entry.message.id;
+          final expanded = _expandedNoticeIds.contains(noticeId);
+          final isHighlightTarget =
+              _highlightTargetRenderId != null &&
+              entry.renderId == _highlightTargetRenderId;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () => _showMessageActions(entry.message),
+            onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+            child: KeyedSubtree(
+              key: isHighlightTarget ? _highlightKey : null,
+              child: SearchMessageHighlight(
+                highlight: isHighlightTarget,
+                child: ChatMessageBubble(
+                  key: ValueKey(entry.renderId),
+                  message: entry.message,
+                  toolGroups: groups,
+                  reasoningGroups: reasoning,
+                  collapseInjectedEnabled: collapseEnabled,
+                  injectedExpanded: expanded,
+                  onToggleInjected: () {
+                    if (!mounted) return;
+                    setState(() {
+                      if (_expandedNoticeIds.contains(noticeId)) {
+                        _expandedNoticeIds.remove(noticeId);
+                      } else {
+                        _expandedNoticeIds.add(noticeId);
+                      }
+                    });
+                  },
+                ),
               ),
             ),
-          ),
-        );
+          );
+        }
+        var tail = index - transcript.length;
+        if (showQueuedBanner) {
+          if (tail == 0) {
+            return QueuedBanner(
+              count: queuedMessages.length,
+              preview: queuedMessages.first,
+            );
+          }
+          tail--;
+        }
+        if (showSteerBanner) {
+          if (tail == 0) {
+            return SteerBanner(text: steerHintText);
+          }
+          tail--;
+        }
+        if (streaming != null) {
+          if (tail == 0) {
+            return _StreamingBubble(
+              message: streaming,
+              toolGroups: streamingTools,
+              reasoningGroups: streamingReasoning,
+            );
+          }
+          tail--;
+        }
+        if (phase == ChatPhase.sending) {
+          if (tail == 0) return const _SendingIndicator();
+          tail--;
+        }
+        if (needFallback) {
+          if (tail == 0) {
+            return _FallbackToolReasoningCards(
+              toolGroups: toolGroups,
+              reasoningGroups: reasoningGroups,
+            );
+          }
+          tail--;
+        }
+        return const SizedBox.shrink();
       },
     );
   }
@@ -648,9 +648,9 @@ class _StreamingBubble extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   l10n.thinkingIndicator,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -681,15 +681,125 @@ class _SendingIndicator extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   l10n.sendingIndicator,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 落地兜底：transcript 为空但已归档的工具/思考组非空时，末尾独立渲染入口
+class _FallbackToolReasoningCards extends StatelessWidget {
+  const _FallbackToolReasoningCards({
+    required this.toolGroups,
+    required this.reasoningGroups,
+  });
+
+  final List<ToolCallGroup> toolGroups;
+  final List<ReasoningGroup> reasoningGroups;
+
+  @override
+  Widget build(BuildContext context) {
+    // 复用与 assistant 气泡相同的 horizontal 12 外边距，内层卡片自带间距
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final group in reasoningGroups)
+            _FallbackReasoningBlock(group: group),
+          for (final group in toolGroups) ToolCallGroupCard(group: group),
+        ],
+      ),
+    );
+  }
+}
+
+class _FallbackReasoningBlock extends StatefulWidget {
+  const _FallbackReasoningBlock({required this.group});
+
+  final ReasoningGroup group;
+
+  @override
+  State<_FallbackReasoningBlock> createState() => _FallbackReasoningBlockState();
+}
+
+class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final text = widget.group.text.trim();
+    if (text.isEmpty) return const SizedBox.shrink();
+    final summary = text.replaceAll(RegExp(r'\s+'), ' ');
+    final preview = summary.length > 80 ? '${summary.substring(0, 80)}…' : summary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: GestureDetector(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey5.resolveFrom(context),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_right,
+                    size: 12,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    l10n.thinkingLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_expanded)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

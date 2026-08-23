@@ -97,6 +97,8 @@ class ChatMessageBubble extends StatelessWidget {
     // 双栏外壳下 MediaQuery.width 是整个窗口宽，而气泡实际可用宽度是
     // 「窗口宽 − 侧栏宽」。用 LayoutBuilder 取真实槽位宽，避免 0.78 比例
     // 在电脑端双栏里超出屏幕（right overflow）。
+    // user 保持 0.78 右对齐气泡；assistant 为 full-width（可用宽度 − 水平 padding），
+    // 文本与卡片撑满，仅左右 12px 对齐 padding。
     return LayoutBuilder(
       builder: (context, constraints) {
         // 会话样式（对齐 WebUI 惯例，深浅色一致）：
@@ -106,43 +108,46 @@ class ChatMessageBubble extends StatelessWidget {
         //   又显形，视觉上深浅不一致；改按 WebUI 惯例统一「user 有泡、
         //   assistant 无泡」后，深浅模式样式天然一致（正文/代码块/卡片
         //   各有自身的色块与间距承载层级）。
-        final bubble = Container(
-          key: const ValueKey('chat-message-bubble'),
-          constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
-          padding: isUser
-              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 9)
-              : EdgeInsets.zero,
-          decoration: isUser
-              ? BoxDecoration(
-                  color: CupertinoColors.activeBlue.resolveFrom(context),
-                  borderRadius: BorderRadius.circular(16),
-                )
-              : null,
-          child: isUser
-              ? _UserContent(
-                  message: message,
-                  baseUrl: effectiveBaseUrl,
-                  sessionId: sessionId,
-                  customHeaders: effectiveHeaders,
-                )
-              : _AssistantContent(
-                  message: message,
-                  toolGroups: toolGroups,
-                  reasoningGroups: reasoningGroups,
-                  baseUrl: effectiveBaseUrl,
-                  sessionId: sessionId,
-                  customHeaders: effectiveHeaders,
-                ),
-        );
+        if (isUser) {
+          final bubble = Container(
+            key: const ValueKey('chat-message-bubble'),
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: CupertinoColors.activeBlue.resolveFrom(context),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: _UserContent(
+              message: message,
+              baseUrl: effectiveBaseUrl,
+              sessionId: sessionId,
+              customHeaders: effectiveHeaders,
+            ),
+          );
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              // Flexible 确保气泡被限制在行内（非 flex 子项在 unbounded
+              // 链上会忽略自身 maxWidth，导致长文气泡顶出右侧）。
+              children: [Flexible(child: bubble)],
+            ),
+          );
+        }
+        // assistant: full width, constrained to 可用宽度 − 水平 padding，仅左右 12px 对齐
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: Row(
-            mainAxisAlignment: isUser
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            // Flexible 确保气泡被限制在行内（非 flex 子项在 unbounded
-            // 链上会忽略自身 maxWidth，导致长文气泡顶出右侧）。
-            children: [Flexible(child: bubble)],
+          child: SizedBox(
+            key: const ValueKey('chat-message-bubble'),
+            width: double.infinity,
+            child: _AssistantContent(
+              message: message,
+              toolGroups: toolGroups,
+              reasoningGroups: reasoningGroups,
+              baseUrl: effectiveBaseUrl,
+              sessionId: sessionId,
+              customHeaders: effectiveHeaders,
+            ),
           ),
         );
       },
@@ -289,9 +294,9 @@ class _AssistantContent extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               '${message.turnTps!.toStringAsFixed(1)} tok/s',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: CupertinoColors.secondaryLabel,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
           ),
@@ -349,9 +354,9 @@ class _NoticeCard extends StatelessWidget {
               child: Text(
                 message.content ?? '',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: CupertinoColors.label,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
             ),
@@ -430,15 +435,15 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                         ? CupertinoIcons.chevron_down
                         : CupertinoIcons.chevron_right,
                     size: 12,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     l10n.thinkingLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.secondaryLabel,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -447,9 +452,9 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                       preview,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
                       ),
                     ),
                   ),
@@ -460,10 +465,10 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       height: 1.4,
-                      color: CupertinoColors.label,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                 ),

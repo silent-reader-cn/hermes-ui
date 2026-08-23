@@ -79,6 +79,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // P4：新会话首条消息后 URL 从 /chat("") → /chat/<newId> 替换，避免刷新丢会话。
+    // 监听与 widget.sessionId 绑定的 controller 的 sessionId 变化；widget 本身
+    // 的 sessionId 为空串时代表新会话页，待真实 id 回来后立即 go 替换，左侧
+    // SessionList 在 ChatController._onNewSessionCreated 中已触发强制刷新，
+    // 桌面双栏下右侧切到新路由后左侧列表保持不丢选中态并高亮新项。
+    ref.listen<ChatState>(
+      chatControllerProvider(widget.sessionId),
+      (previous, next) {
+        final prevId = previous?.sessionId ?? widget.sessionId;
+        final nextId = next.sessionId;
+        if (widget.sessionId.isEmpty && prevId.isEmpty && nextId.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (!context.mounted) return;
+            context.go('/chat/$nextId');
+          });
+        }
+      },
+    );
     final state = ref.watch(chatControllerProvider(widget.sessionId));
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
     return CupertinoPageScaffold(

@@ -1139,9 +1139,21 @@ class SessionDetail {
       isReadOnly: lossyBool(json, 'is_read_only'),
       pendingUserMessage: lossyString(json, 'pending_user_message'),
       pendingAttachments: optJsonValueList(json, 'pending_attachments'),
-      contextLength: lossyInt(json, 'context_length'),
-      thresholdTokens: lossyInt(json, 'threshold_tokens'),
-      lastPromptTokens: lossyInt(json, 'last_prompt_tokens'),
+      contextLength: firstKey(json, [
+            'context_length',
+            'contextLength',
+          ], lossyInt) ??
+          lossyInt(json, 'context_length'),
+      thresholdTokens: firstKey(json, [
+            'threshold_tokens',
+            'thresholdTokens',
+          ], lossyInt) ??
+          lossyInt(json, 'threshold_tokens'),
+      lastPromptTokens: firstKey(json, [
+            'last_prompt_tokens',
+            'lastPromptTokens',
+          ], lossyInt) ??
+          lossyInt(json, 'last_prompt_tokens'),
       messages: _decodeMessagesTolerantly(json),
       toolCalls: _decodeToolCallsTolerantly(json),
       messagesTruncated: firstKey(json, [
