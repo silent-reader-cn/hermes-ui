@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +22,7 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
       skills: true,
       insights: false,
       workspaces: true,
+      memory: false,
     );
   }
 }
@@ -35,6 +36,7 @@ class _AllVisibleVisibilityNotifier extends SessionEntryVisibilityController {
       skills: true,
       insights: true,
       workspaces: true,
+      memory: true,
     );
   }
 }
@@ -48,6 +50,7 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       skills: false,
       insights: false,
       workspaces: false,
+      memory: false,
     );
   }
 }
@@ -91,7 +94,7 @@ class _DestinationStub extends StatelessWidget {
 
 void main() {
   group('SessionListUtilityRows 独立组件测试', () {
-    testWidgets('默认渲染 3 个入口（看板与记忆默认隐藏）', (tester) async {
+    testWidgets('默认渲染 5 个入口（看板默认隐藏，记忆默认显示）', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: CupertinoApp(
@@ -100,12 +103,12 @@ void main() {
         ),
       );
 
-      // 默认 3 个入口文本（看板与记忆默认关闭）
+      // 默认 5 个入口文本（看板默认关闭，记忆默认开启）
       expect(find.text('任务'), findsOneWidget);
       expect(find.text('看板'), findsNothing);
       expect(find.text('工作区'), findsOneWidget);
       expect(find.text('技能'), findsOneWidget);
-      expect(find.text('记忆'), findsNothing);
+      expect(find.text('记忆'), findsOneWidget);
       expect(find.text('统计'), findsOneWidget);
 
       // 入口 Key
@@ -127,7 +130,7 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('session-list-utility-memory')),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('session-list-utility-insights')),
@@ -135,7 +138,7 @@ void main() {
       );
     });
 
-    testWidgets('显式全开时渲染 5 个入口（含看板与工作区）', (tester) async {
+    testWidgets('显式全开时渲染 6 个入口（含看板与记忆）', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -150,8 +153,13 @@ void main() {
       );
 
       expect(find.text('看板'), findsOneWidget);
+      expect(find.text('记忆'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('session-list-utility-kanban')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-memory')),
         findsOneWidget,
       );
     });
@@ -162,6 +170,7 @@ void main() {
       var workspacesCalled = false;
       var skillsCalled = false;
       var insightsCalled = false;
+      var memoryCalled = false;
 
       await tester.pumpWidget(
         ProviderScope(
@@ -178,6 +187,7 @@ void main() {
                 onTapWorkspaces: () => workspacesCalled = true,
                 onTapSkills: () => skillsCalled = true,
                 onTapInsights: () => insightsCalled = true,
+                onTapMemory: () => memoryCalled = true,
               ),
             ),
           ),
@@ -213,6 +223,12 @@ void main() {
       );
       await tester.pump();
       expect(insightsCalled, isTrue);
+
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-utility-memory')),
+      );
+      await tester.pump();
+      expect(memoryCalled, isTrue);
     });
 
     testWidgets('可访问性语义：每个按钮具备 Semantics 标签', (tester) async {
@@ -265,9 +281,18 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.label == '记忆',
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('按显隐配置过滤入口：关闭任务与统计，仅渲染其余 2 个', (tester) async {
+    testWidgets('按显隐配置过滤入口：关闭任务/统计/记忆，仅渲染其余 3 个', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -311,7 +336,7 @@ void main() {
       );
     });
 
-    testWidgets('5 个功能入口全关时组件返回 SizedBox.shrink()（不渲染容器）', (tester) async {
+    testWidgets('功能入口全关时组件返回 SizedBox.shrink()（不渲染容器）', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -469,11 +494,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 默认 4 个开启的入口项（任务/工作区/技能/统计，看板默认关闭）
+      // 默认开启的入口项（任务/工作区/技能/统计/记忆，看板默认关闭）
       expect(find.byKey(const ValueKey('narrow-nav-tasks')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-workspaces')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-skills')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-insights')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('narrow-nav-tasks')));
@@ -496,6 +522,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('narrow-nav-kanban')));
       await tester.pumpAndSettle();
 
@@ -617,6 +644,11 @@ void main() {
             path: '/skills',
             builder: (_, _) =>
                 const _DestinationStub(title: 'SkillsDestination'),
+          ),
+          GoRoute(
+            path: '/memory',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'MemoryDestination'),
           ),
           GoRoute(
             path: '/insights',

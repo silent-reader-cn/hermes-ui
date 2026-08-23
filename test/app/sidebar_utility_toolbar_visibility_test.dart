@@ -23,6 +23,8 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
       kanban: true,
       skills: true,
       insights: true,
+      workspaces: true,
+      memory: true,
     );
   }
 }
@@ -35,6 +37,8 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       kanban: false,
       skills: false,
       insights: false,
+      workspaces: false,
+      memory: false,
     );
   }
 }
@@ -76,7 +80,7 @@ void main() {
   ];
 
   group('SidebarUtilityToolbar 显隐与过滤测试', () {
-    testWidgets('默认全开时展示全部 6 个入口（含设置，记忆入口已移至设置页）', (tester) async {
+    testWidgets('默认全开时展示全部入口（含记忆与设置）', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: CupertinoApp(
@@ -108,11 +112,11 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-memory')),
-        findsNothing,
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-insights')),
+        find.byKey(const ValueKey('sidebar-utility-memory')),
         findsOneWidget,
       );
       expect(
@@ -155,11 +159,11 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-memory')),
-        findsNothing,
+        find.byKey(const ValueKey('sidebar-utility-insights')),
+        findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-insights')),
+        find.byKey(const ValueKey('sidebar-utility-memory')),
         findsOneWidget,
       );
       expect(
@@ -168,7 +172,7 @@ void main() {
       );
     });
 
-    testWidgets('5 个功能入口全关时工具条仅保留设置入口', (tester) async {
+    testWidgets('功能入口全关时工具条仅保留设置入口', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -194,15 +198,19 @@ void main() {
         findsNothing,
       );
       expect(
+        find.byKey(const ValueKey('sidebar-utility-workspaces')),
+        findsNothing,
+      );
+      expect(
         find.byKey(const ValueKey('sidebar-utility-skills')),
         findsNothing,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-memory')),
+        find.byKey(const ValueKey('sidebar-utility-insights')),
         findsNothing,
       );
       expect(
-        find.byKey(const ValueKey('sidebar-utility-insights')),
+        find.byKey(const ValueKey('sidebar-utility-memory')),
         findsNothing,
       );
       // 设置入口恒显：桌面端唯一设置入口收口在工具条

@@ -11,6 +11,7 @@ import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../onboarding/onboarding_providers.dart';
+import '../settings/cron_visibility_settings.dart';
 
 /// 会话列表所需的最小服务器 API 面（sessions 域 18 个端点中的 9 个）。
 ///
@@ -1159,7 +1160,7 @@ final sessionListVisibleSessionsProvider = Provider<List<SessionSummary>>((
 final sessionListRefreshingProvider = Provider<bool>((ref) =>
     ref.watch(sessionListControllerProvider).valueOrNull?.refreshing == true);
 
-/// 会话分区（定时 / 置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
+/// 会话分区（置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
 final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   final visible = ref.watch(sessionListVisibleSessionsProvider);
   final query = ref
@@ -1170,38 +1171,36 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   if (isSearching) {
     return [SessionListSection(title: '搜索结果', sessions: visible)];
   }
-  return buildSessionSections(visible);
+  final showCron = ref.watch(cronVisibilityProvider).showCron;
+  return buildSessionSections(visible, showCron: showCron);
 });
 
-/// 按类型与时间把会话分组为 定时 / 置顶 / 今天 / 昨天 / 更早（对齐 Hermex
-/// `SessionListViewModel.sections`），组内时间倒序；空组剔除。
+/// 按类型与时间把会话分组为 置顶 / 今天 / 昨天 / 更早，组内时间倒序；空组剔除。
 ///
 /// 分组规则：
-/// 1. 定时优先：`session.isCronSession == true` 抽离为独立的「定时」分区；
-///    即使 `pinned == true` 亦归入「定时」（蓝本中 cron 会话与置顶互斥语义，置顶专属于普通交互会话）。
+/// 1. 定时会话：当 [showCron] 为 false 时直接过滤忽略；当 [showCron] 为 true 时，
+///    不再独立成「定时」分区，而是融流按时间戳归入「今天」/「昨天」/「更早」（即使 pinned 也按时间归入）。
 /// 2. 置顶：非 cron 且 `pinned == true` 进入「置顶」分区。
-/// 3. 时间分区：非 cron 且非置顶按时间归入「今天」/「昨天」/「更早」。
+/// 3. 时间分区：非置顶会话（及开启 showCron 时的 cron 会话）按时间归入「今天」/「昨天」/「更早」。
 ///
 /// [now] 仅供测试注入固定参考时间；生产使用 [DateTime.now]。
 List<SessionListSection> buildSessionSections(
   List<SessionSummary> sessions, {
+  bool showCron = false,
   DateTime? now,
 }) {
   final reference = now ?? DateTime.now();
   final sorted = [...sessions]
     ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
-  final scheduled = <SessionSummary>[];
   final pinned = <SessionSummary>[];
   final today = <SessionSummary>[];
   final yesterday = <SessionSummary>[];
   final earlier = <SessionSummary>[];
   for (final session in sorted) {
-    // 定时会话优先独立归区：即使 pinned == true 也归入「定时」（蓝本中 cron 会话与置顶互斥语义）。
-    if (session.isCronSession) {
-      scheduled.add(session);
+    if (session.isCronSession && !showCron) {
       continue;
     }
-    if (session.pinned == true) {
+    if (session.pinned == true && !session.isCronSession) {
       pinned.add(session);
       continue;
     }
@@ -1222,8 +1221,6 @@ List<SessionListSection> buildSessionSections(
     }
   }
   return [
-    if (scheduled.isNotEmpty)
-      SessionListSection(title: '定时', sessions: scheduled),
     if (pinned.isNotEmpty) SessionListSection(title: '置顶', sessions: pinned),
     if (today.isNotEmpty) SessionListSection(title: '今天', sessions: today),
     if (yesterday.isNotEmpty)

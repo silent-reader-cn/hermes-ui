@@ -183,6 +183,16 @@ class SessionListEntriesSection extends ConsumerWidget {
             },
           ),
         ),
+        CupertinoListTile(
+          title: Text(l10n.memoryTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-memory'),
+            value: visibility.memory,
+            onChanged: (value) {
+              unawaited(controller.setVisible('memory', value));
+            },
+          ),
+        ),
       ],
     );
   }

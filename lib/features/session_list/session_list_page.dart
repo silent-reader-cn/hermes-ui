@@ -18,7 +18,6 @@ import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
-import 'scheduled_session_disclosure.dart';
 import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
@@ -426,90 +425,47 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty)
-          if (section.title == '定时')
-            SliverToBoxAdapter(
-              child: ScheduledSessionDisclosure(
-                title: _sectionTitle(context, section.title),
-                count: section.sessions.length,
-                children: [
-                  for (final session in section.sessions)
-                    _SessionRow(
-                      key: ValueKey(
-                        'session-row-${session.sessionId ?? session.id}',
-                      ),
-                      session: session,
-                      subtitleSettings: subtitleSettings,
-                      projectNames: projectNames,
-                      highlightQuery: isSearchMode
-                          ? state.searchQuery?.trim()
-                          : null,
-                      selectionMode: state.isSelectionMode,
-                      selected: state.selectedSessionIds.contains(
-                        session.sessionId ?? session.id,
-                      ),
-                      onTap: () => state.isSelectionMode
-                          ? ref
-                                .read(sessionListControllerProvider.notifier)
-                                .toggleSelection(
-                                  session.sessionId ?? session.id,
-                                )
-                          : _openSession(context, session),
-                      onLongPress: () => ref
-                          .read(sessionListControllerProvider.notifier)
-                          .toggleSelection(session.sessionId ?? session.id),
-                      onActions: state.isSelectionMode
-                          ? null
-                          : (anchorKey) => _showRowActions(
-                                context,
-                                session,
-                                anchorKey,
-                              ),
+          SliverToBoxAdapter(
+            child: CupertinoListSection.insetGrouped(
+              hasLeading: false,
+              header: Text(_sectionTitle(context, section.title)),
+              children: [
+                for (final session in section.sessions)
+                  _SessionRow(
+                    key: ValueKey(
+                      'session-row-${session.sessionId ?? session.id}',
                     ),
-                ],
-              ),
-            )
-          else
-            SliverToBoxAdapter(
-              child: CupertinoListSection.insetGrouped(
-                hasLeading: false,
-                header: Text(_sectionTitle(context, section.title)),
-                children: [
-                  for (final session in section.sessions)
-                    _SessionRow(
-                      key: ValueKey(
-                        'session-row-${session.sessionId ?? session.id}',
-                      ),
-                      session: session,
-                      subtitleSettings: subtitleSettings,
-                      projectNames: projectNames,
-                      highlightQuery: isSearchMode
-                          ? state.searchQuery?.trim()
-                          : null,
-                      selectionMode: state.isSelectionMode,
-                      selected: state.selectedSessionIds.contains(
-                        session.sessionId ?? session.id,
-                      ),
-                      onTap: () => state.isSelectionMode
-                          ? ref
-                                .read(sessionListControllerProvider.notifier)
-                                .toggleSelection(
-                                  session.sessionId ?? session.id,
-                                )
-                          : _openSession(context, session),
-                      onLongPress: () => ref
-                          .read(sessionListControllerProvider.notifier)
-                          .toggleSelection(session.sessionId ?? session.id),
-                      onActions: state.isSelectionMode
-                          ? null
-                          : (anchorKey) => _showRowActions(
-                                context,
-                                session,
-                                anchorKey,
-                              ),
+                    session: session,
+                    subtitleSettings: subtitleSettings,
+                    projectNames: projectNames,
+                    highlightQuery: isSearchMode
+                        ? state.searchQuery?.trim()
+                        : null,
+                    selectionMode: state.isSelectionMode,
+                    selected: state.selectedSessionIds.contains(
+                      session.sessionId ?? session.id,
                     ),
-                ],
-              ),
+                    onTap: () => state.isSelectionMode
+                        ? ref
+                              .read(sessionListControllerProvider.notifier)
+                              .toggleSelection(
+                                session.sessionId ?? session.id,
+                              )
+                        : _openSession(context, session),
+                    onLongPress: () => ref
+                        .read(sessionListControllerProvider.notifier)
+                        .toggleSelection(session.sessionId ?? session.id),
+                    onActions: state.isSelectionMode
+                        ? null
+                        : (anchorKey) => _showRowActions(
+                              context,
+                              session,
+                              anchorKey,
+                            ),
+                  ),
+              ],
             ),
+          ),
       if (state.hasMore)
         const SliverToBoxAdapter(
           child: Padding(

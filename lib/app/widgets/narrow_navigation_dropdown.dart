@@ -9,13 +9,13 @@ import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 import 'adaptive_action_menu.dart';
 
-/// 窄屏大标题右侧的快捷导航下拉按钮（TASK W3-2）。
+/// 窄屏大标题右侧的快捷导航下拉按钮（TASK W3-2 / W3）。
 ///
 /// 仅在窄屏（width < 900）大标题右侧展示，点击后通过 [AdaptiveActionMenu.show] 展开
-/// 下拉菜单，提供任务、看板、工作区、技能、统计 5 个功能模块的快捷跳转（受
+/// 下拉菜单，提供任务、看板、工作区、技能、统计、记忆 6 个功能模块的快捷跳转（受
 /// [SessionEntryVisibility] 控制显隐）。
 ///
-/// 当 5 个入口均处于隐藏状态（`showsAny == false`）时渲染为 [SizedBox.shrink]。
+/// 当所有入口均处于隐藏状态（`showsAny == false`）时渲染为 [SizedBox.shrink]。
 class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
   const NarrowNavigationDropdownButton({
     super.key,
@@ -77,6 +77,12 @@ class _NarrowNavigationDropdownButtonState
           key: const ValueKey('narrow-nav-insights'),
           label: l10n.insights,
           onPressed: () => context.go('/insights'),
+        ),
+      if (visibility.memory)
+        AdaptiveMenuItem(
+          key: const ValueKey('narrow-nav-memory'),
+          label: l10n.memoryTitle,
+          onPressed: () => context.go('/memory'),
         ),
     ];
 
