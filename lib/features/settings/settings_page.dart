@@ -25,8 +25,8 @@ import 'settings_subpages.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 首页分组：外观 / 服务器 / 模型 / 二级入口组（辅助模型、MCP、扩展、
-/// 会话列表入口、会话行信息、桌面）/ 记忆入口 / 工作区入口 / 关于。
+/// 首页分组：外观 / 服务器 / 模型 / 记忆入口 / 二级入口组（辅助模型、MCP、扩展、
+/// 会话列表入口、会话行信息、桌面）/ 关于。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -43,9 +43,8 @@ class SettingsPage extends ConsumerWidget {
           _AppearanceSection(),
           _ServerSection(),
           _ModelSection(),
-          _AdvancedSettingsSection(),
           _MemoryEntrySection(),
-          _WorkspacesEntrySection(),
+          _AdvancedSettingsSection(),
           _AboutSection(),
         ],
       ),
@@ -237,36 +236,6 @@ class _MemoryEntrySection extends ConsumerWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => context.go('/memory'),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 工作区管理入口
-// ---------------------------------------------------------------------------
-
-/// 工作区管理入口分组：工作区注册表（添加/重命名/移除 + 文件浏览），
-/// 点击进入 `/workspaces`。
-class _WorkspacesEntrySection extends ConsumerWidget {
-  const _WorkspacesEntrySection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    return CupertinoListSection(
-      children: [
-        CupertinoListTile(
-          key: const ValueKey('settings-workspaces-entry'),
-          title: Text(l10n.manageWorkspaces),
-          subtitle: Text(l10n.manageWorkspacesSubtitle),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => context.push('/workspaces'),
         ),
       ],
     );
