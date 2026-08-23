@@ -8,12 +8,13 @@ import 'session_entry_visibility.dart';
 
 /// 会话列表顶部工具行入口组件（对齐 Hermex SessionSidebarUtilityRows）。
 ///
-/// 提供 5 个核心功能模块的快捷跳转（记忆入口已移至设置页，工作区 2026-08-21 新增）：
+/// 提供 6 个核心功能模块的快捷跳转（任务、看板、工作区、技能、统计、记忆）：
 /// 1. 任务 (Tasks) → /tasks (CupertinoIcons.clock, 对齐 LucideCalendarClock)
 /// 2. 看板 (Kanban) → /kanban (CupertinoIcons.square_list, 对齐 LucideColumns3)
 /// 3. 工作区 (Workspaces) → /workspaces (CupertinoIcons.folder, 对齐 LucideFolder)
 /// 4. 技能 (Skills) → /skills (CupertinoIcons.hammer, 对齐 LucideHammer)
 /// 5. 统计 (Insights) → /insights (CupertinoIcons.chart_bar_square, 对齐 LucideChartColumnIncreasing)
+/// 6. 记忆 (Memory) → /memory (CupertinoIcons.bookmark)
 ///
 /// 视觉采用纯 Cupertino 风格，支持深浅色自适应及 VoiceOver 语义与触觉反馈。
 class SessionListUtilityRows extends ConsumerWidget {
@@ -24,6 +25,7 @@ class SessionListUtilityRows extends ConsumerWidget {
     this.onTapWorkspaces,
     this.onTapSkills,
     this.onTapInsights,
+    this.onTapMemory,
   });
 
   /// 任务入口自定义点击回调（为空时默认 context.go('/tasks')）。
@@ -40,6 +42,9 @@ class SessionListUtilityRows extends ConsumerWidget {
 
   /// 统计入口自定义点击回调（为空时默认 context.go('/insights')）。
   final VoidCallback? onTapInsights;
+
+  /// 记忆入口自定义点击回调（为空时默认 context.go('/memory')）。
+  final VoidCallback? onTapMemory;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -94,6 +99,15 @@ class SessionListUtilityRows extends ConsumerWidget {
           label: l10n.insights,
           route: '/insights',
           customCallback: onTapInsights,
+        ),
+      if (visibility.memory)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-memory'),
+          icon: CupertinoIcons.bookmark,
+          label: l10n.memory,
+          route: '/memory',
+          customCallback: onTapMemory,
         ),
     ];
 

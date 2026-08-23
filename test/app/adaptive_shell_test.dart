@@ -458,7 +458,7 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('sidebar-utility-memory')),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('sidebar-utility-insights')),

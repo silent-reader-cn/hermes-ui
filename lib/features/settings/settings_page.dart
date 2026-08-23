@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
@@ -19,13 +18,14 @@ import '../../l10n/app_localizations.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
+import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 首页分组：外观 / 服务器 / 模型 / 记忆入口 / 二级入口组（辅助模型、MCP、扩展、
+/// 首页分组：外观 / 服务器 / 模型 / 定时会话 / 二级入口组（辅助模型、MCP、扩展、
 /// 会话列表入口、会话行信息、桌面）/ 关于。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -43,7 +43,7 @@ class SettingsPage extends ConsumerWidget {
           _AppearanceSection(),
           _ServerSection(),
           _ModelSection(),
-          _MemoryEntrySection(),
+          _CronSection(),
           _AdvancedSettingsSection(),
           _AboutSection(),
         ],
@@ -213,29 +213,32 @@ class _AdvancedSettingsSection extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 记忆入口
+// 定时会话
 // ---------------------------------------------------------------------------
 
-/// 记忆入口分组：记忆页使用频率低，入口从会话工具行移至设置页
-/// （2026-08 主人指示），点击进入 `/memory`。
-class _MemoryEntrySection extends ConsumerWidget {
-  const _MemoryEntrySection();
+/// 定时会话显隐设置分组（TASK W3）。
+class _CronSection extends ConsumerWidget {
+  const _CronSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final showCron = ref.watch(cronVisibilityProvider).showCron;
     return CupertinoListSection(
       children: [
         CupertinoListTile(
-          key: const ValueKey('settings-memory-entry'),
-          title: Text(l10n.memoryTitle),
-          subtitle: Text(l10n.memoryEntrySubtitle),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
+          key: const ValueKey('settings-show-cron-sessions'),
+          title: Text(l10n.showCronSessionsTitle),
+          subtitle: Text(l10n.showCronSessionsSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-show-cron'),
+            value: showCron,
+            onChanged: (value) {
+              unawaited(
+                ref.read(cronVisibilityProvider.notifier).setShowCron(value),
+              );
+            },
           ),
-          onTap: () => context.go('/memory'),
         ),
       ],
     );

@@ -293,7 +293,7 @@ void main() {
       expect(find.text('1.0.0+1'), findsOneWidget);
     });
 
-    testWidgets('分组顺序：关于分组置底（三新板块在模型之后）', (tester) async {
+    testWidgets('分组顺序：关于分组置底（定时会话板块在模型之后）', (tester) async {
       final container = await makeContainer(
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
@@ -311,7 +311,7 @@ void main() {
         '_AppearanceSection',
         '_ServerSection',
         '_ModelSection',
-        '_MemoryEntrySection',
+        '_CronSection',
         '_AdvancedSettingsSection',
         '_AboutSection',
       ]);

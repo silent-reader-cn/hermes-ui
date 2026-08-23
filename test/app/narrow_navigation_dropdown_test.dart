@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +26,7 @@ class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
       skills: true,
       insights: false,
       workspaces: true,
+      memory: true,
     );
   }
 }
@@ -39,6 +40,7 @@ class _AllVisibleVisibilityNotifier extends SessionEntryVisibilityController {
       skills: true,
       insights: true,
       workspaces: true,
+      memory: true,
     );
   }
 }
@@ -52,6 +54,7 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       skills: false,
       insights: false,
       workspaces: false,
+      memory: false,
     );
   }
 }
@@ -116,6 +119,10 @@ void main() {
             path: '/insights',
             builder: (_, _) => const _PageStub(title: 'InsightsDestination'),
           ),
+          GoRoute(
+            path: '/memory',
+            builder: (_, _) => const _PageStub(title: 'MemoryDestination'),
+          ),
         ],
       );
 
@@ -156,7 +163,7 @@ void main() {
       expect(button.label, '快捷导航');
     });
 
-    testWidgets('点击展开菜单展示默认 4 项并可跳转 /tasks', (tester) async {
+    testWidgets('点击展开菜单展示默认项并可跳转 /tasks', (tester) async {
       await pumpDropdownButton(tester);
 
       await tester.tap(find.byKey(const ValueKey('narrow-nav-dropdown')));
@@ -166,6 +173,7 @@ void main() {
       expect(find.byKey(const ValueKey('narrow-nav-workspaces')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-skills')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-insights')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('narrow-nav-tasks')));
@@ -174,7 +182,7 @@ void main() {
       expect(find.text('body-TasksDestination'), findsOneWidget);
     });
 
-    testWidgets('全开配置下展示 5 项并可跳转 /kanban 与 /workspaces', (tester) async {
+    testWidgets('全开配置下展示全部 6 项并可跳转 /kanban 与 /workspaces', (tester) async {
       await pumpDropdownButton(
         tester,
         visibilityOverride: sessionEntryVisibilityProvider.overrideWith(
@@ -186,6 +194,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('narrow-nav-kanban')));
       await tester.pumpAndSettle();
 
@@ -207,6 +216,7 @@ void main() {
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-workspaces')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-skills')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-insights')), findsNothing);
     });
 

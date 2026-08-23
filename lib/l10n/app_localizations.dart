@@ -161,6 +161,11 @@ class AppLocalizations {
   String get untitledSession => isEnglish ? 'Untitled session' : '未命名会话';
   String messageCountLabel(int count) => isEnglish ? '$count messages' : '$count 条消息';
   String get scheduledSection => isEnglish ? 'Scheduled' : '定时';
+  String get showCronSessionsTitle =>
+      isEnglish ? 'Show Scheduled Sessions' : '显示定时会话';
+  String get showCronSessionsSubtitle => isEnglish
+      ? 'Display scheduled (cron) tasks in the session list'
+      : '在会话列表中显示定时任务会话';
   String get pinnedSection => isEnglish ? 'Pinned' : '置顶';
   String get todaySection => isEnglish ? 'Today' : '今天';
   String get yesterdaySection => isEnglish ? 'Yesterday' : '昨天';
