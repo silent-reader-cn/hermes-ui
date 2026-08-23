@@ -1,11 +1,13 @@
 import 'package:flutter/cupertino.dart';
 
 import '../shell/adaptive_shell.dart';
+import 'narrow_navigation_dropdown.dart';
 
 /// 宽屏自动收敛的 Cupertino 导航栏（Sliver 版）。
 ///
 /// - 窄屏（width < 900，手机）：保持系统 `CupertinoSliverNavigationBar`
-///   大标题模式（展开 ~96 / 收起 44），与既有手机端视觉完全一致；
+///   大标题模式（展开 ~96 / 收起 44），并在 trailing 区域提供快捷导航下拉按钮
+///   （[NarrowNavigationDropdownButton]），保证各个大标题页面间可互相快速切换；
 /// - 宽屏（width >= 900，桌面双栏）：收敛为 44pt 紧凑导航条
 ///   （`CupertinoNavigationBar`，不可随滚动收起），与左侧侧栏顶部的
 ///   [SidebarUtilityToolbar]（44px）高度对齐，消除双栏下内容区 Header
@@ -23,6 +25,7 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
     this.padding,
     this.bottom,
     this.showMiddleOnNarrow = false,
+    this.showNarrowNavigationDropdown = true,
   });
 
   /// 大标题 / 收起态中标题的共用文案。
@@ -46,6 +49,11 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
   /// 传 `true` 保持窄屏行为逐像素不变。
   final bool showMiddleOnNarrow;
 
+  /// 窄屏下是否在大标题右侧（trailing 区域）追加快捷导航下拉按钮（TASK W3-2）。
+  ///
+  /// 默认为 `true`；可显式传 `false` 关闭。
+  final bool showNarrowNavigationDropdown;
+
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
@@ -61,9 +69,27 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
         ),
       );
     }
+
+    Widget? effectiveTrailing = trailing;
+    if (showNarrowNavigationDropdown) {
+      const dropdown = NarrowNavigationDropdownButton();
+      if (trailing != null) {
+        effectiveTrailing = Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            dropdown,
+            trailing!,
+          ],
+        );
+      } else {
+        effectiveTrailing = dropdown;
+      }
+    }
+
     return CupertinoSliverNavigationBar(
       leading: leading,
-      trailing: trailing,
+      trailing: effectiveTrailing,
       padding: padding,
       bottom: bottom,
       // 窄屏：大标题模式，中标题仅在原页面本就存在时保留。
