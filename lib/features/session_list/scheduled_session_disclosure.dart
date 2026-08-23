@@ -128,6 +128,7 @@ class _ScheduledSessionDisclosureState
     if (_isExpanded) {
       return CupertinoListSection.insetGrouped(
         key: const ValueKey('scheduled-disclosure-section'),
+        hasLeading: false,
         header: _buildHeader(context),
         children: widget.children,
       );

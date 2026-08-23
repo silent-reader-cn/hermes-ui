@@ -158,6 +158,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     Widget rowsSection({required String header, required List<CronJob> jobs}) {
       return SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          hasLeading: false,
           header: Text('$header（${jobs.length}）'),
           children: [
             for (final job in jobs)
