@@ -201,6 +201,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-context-indicator-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    // 点击模型选择器触发按钮展开选项列表
+    await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+    await tester.pumpAndSettle();
     expect(find.text('gpt-5'), findsOneWidget);
 
     await tester.tap(find.text('gpt-5'));

@@ -175,7 +175,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void selectModel(String? model, {String? modelProvider}) {
     state = state.copyWith(
       model: model,
+      clearModel: model == null,
       modelProvider: modelProvider,
+      clearModelProvider: modelProvider == null,
       explicitModelPick: model != null,
     );
   }

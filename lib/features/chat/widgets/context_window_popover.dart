@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_client_server_panels.dart';
+import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/context_window_snapshot.dart';
 import '../../../core/utils/context_window_formatter.dart';
 import '../../../l10n/app_localizations.dart';
@@ -34,8 +37,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   bool _compressing = false;
   bool _savingWorkspace = false;
   bool _loadingModels = false;
+  bool _isExpanded = false;
   late final TextEditingController _workspaceController;
-  final List<String> _fetchedModels = const [];
+  List<String> _fetchedModels = const [];
 
   @override
   void initState() {
@@ -66,13 +70,32 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final existing = ref.read(chatAvailableModelsProvider);
     if (existing.isNotEmpty) return;
     if (_loadingModels) return;
+
+    final ApiClient client;
+    try {
+      client = ref.read(apiClientProvider);
+    } catch (_) {
+      // 处于测试环境或无激活连接时静默处理
+      return;
+    }
+
     setState(() => _loadingModels = true);
     try {
-      // 尝试从连接层拉取模型，若失败则静默保留空列表（仅显示跟随默认）
-      // 这里不直接依赖 apiClientProvider，避免测试环境无连接时抛 StateError
-      // 改为宽容尝试：若 provider 可读则用，否则保持空
-      // 已通过 chatAvailableModelsProvider 注入；测试已 override，此路径仅生产兜底
-      // 未来可扩展为 FutureProvider，但当前保持轻量
+      final response = await client.modelsLive();
+      final liveOptions = response.liveOptions;
+      if (!mounted) return;
+      final modelIds = <String>[];
+      for (final opt in liveOptions) {
+        final id = opt.id.trim();
+        if (id.isNotEmpty && !modelIds.contains(id)) {
+          modelIds.add(id);
+        }
+      }
+      setState(() {
+        _fetchedModels = modelIds;
+      });
+    } catch (_) {
+      // 网络请求失败静默保留空列表（仅显示跟随服务器默认）
     } finally {
       if (mounted) setState(() => _loadingModels = false);
     }
@@ -210,78 +233,125 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   style: TextStyle(fontSize: 12, color: secondary),
                 ),
                 const SizedBox(height: 6),
-                Container(
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemBackground.resolveFrom(context),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: separator),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          (currentModel == null || currentModel.isEmpty)
-                              ? l10n.contextWindowFollowServerDefault
-                              : currentModel,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                Semantics(
+                  button: true,
+                  label: l10n.selectModel,
+                  child: CupertinoButton(
+                    key: const ValueKey('context-popover-model-trigger'),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      setState(() => _isExpanded = !_isExpanded);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemBackground
+                            .resolveFrom(context),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: separator),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (currentModel == null || currentModel.isEmpty)
+                                  ? l10n.contextWindowFollowServerDefault
+                                  : currentModel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: CupertinoColors.label
+                                    .resolveFrom(context),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 8),
+                          AnimatedRotation(
+                            turns: _isExpanded ? 0.5 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              CupertinoIcons.chevron_down,
+                              size: 14,
+                              color: secondary,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        CupertinoIcons.chevron_down,
-                        size: 14,
-                        color: secondary,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                if (_loadingModels)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: CupertinoActivityIndicator(radius: 8),
-                  )
-                else if (models.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  for (final m in models)
-                    _ModelRow(
-                      label: m,
-                      selected: m == currentModel,
-                      onTap: () {
-                        ref
-                            .read(chatControllerProvider(widget.sessionId)
-                                .notifier)
-                            .selectModel(m);
-                        widget.onClose();
-                      },
-                    ),
-                  _ModelRow(
-                    label: l10n.contextWindowFollowServerDefault,
-                    selected: currentModel == null || currentModel.isEmpty,
-                    onTap: () {
-                      ref
-                          .read(
-                              chatControllerProvider(widget.sessionId).notifier)
-                          .selectModel(null);
-                      widget.onClose();
-                    },
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(
+                    width: double.infinity,
+                    height: 0,
                   ),
-                ] else ...[
-                  // 无模型列表时，仅提供跟随默认的可点击行，保持可切换语义
-                  const SizedBox(height: 4),
-                  _ModelRow(
-                    label: l10n.contextWindowFollowServerDefault,
-                    selected: currentModel == null || currentModel.isEmpty,
-                    onTap: () {
-                      // 已为默认，无需操作但保持可点击
-                      widget.onClose();
-                    },
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _loadingModels
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: CupertinoActivityIndicator(radius: 8),
+                            ),
+                          )
+                        : ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 160),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (final m in models)
+                                    _ModelRow(
+                                      key: ValueKey('context-popover-model-$m'),
+                                      label: m,
+                                      selected: m == currentModel,
+                                      onTap: () {
+                                        ref
+                                            .read(
+                                              chatControllerProvider(
+                                                widget.sessionId,
+                                              ).notifier,
+                                            )
+                                            .selectModel(m);
+                                        setState(() => _isExpanded = false);
+                                        widget.onClose();
+                                      },
+                                    ),
+                                  _ModelRow(
+                                    key: const ValueKey(
+                                      'context-popover-model-default',
+                                    ),
+                                    label:
+                                        l10n.contextWindowFollowServerDefault,
+                                    selected: currentModel == null ||
+                                        currentModel.isEmpty,
+                                    onTap: () {
+                                      ref
+                                          .read(
+                                            chatControllerProvider(
+                                              widget.sessionId,
+                                            ).notifier,
+                                          )
+                                          .selectModel(null);
+                                      setState(() => _isExpanded = false);
+                                      widget.onClose();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                   ),
-                ],
+                  crossFadeState: _isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
               ],
             ),
           ),
@@ -486,6 +556,7 @@ class _CompressIconButton extends StatelessWidget {
 
 class _ModelRow extends StatelessWidget {
   const _ModelRow({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,
