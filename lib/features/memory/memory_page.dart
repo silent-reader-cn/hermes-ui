@@ -10,6 +10,7 @@ import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
 
@@ -254,6 +255,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 child: MarkdownBody(
                   data: content.trim(),
                   styleSheet: _buildMarkdownStyleSheet(context),
+                  builders: createAssistantMarkdownBuilders(context),
                 ),
               ),
             ),
@@ -484,6 +486,7 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
       child: MarkdownBody(
         data: trimmed,
         styleSheet: _buildMarkdownStyleSheet(context),
+        builders: createAssistantMarkdownBuilders(context),
       ),
     );
   }
@@ -529,6 +532,7 @@ MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
     listBullet: theme.textTheme.textStyle.copyWith(fontSize: 15, color: label),
     code: TextStyle(
       fontSize: 13,
+      height: 1.4,
       fontFamily: 'monospace',
       color: label,
       backgroundColor: grey5,

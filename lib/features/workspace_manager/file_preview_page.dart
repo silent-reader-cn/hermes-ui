@@ -14,6 +14,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
 import '../workspace/workspace_providers.dart';
@@ -540,9 +541,8 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                 key: const ValueKey('preview-markdown'),
                 data: content,
                 selectable: true,
-                styleSheet: MarkdownStyleSheet.fromCupertinoTheme(
-                  CupertinoTheme.of(context),
-                ),
+                styleSheet: buildAssistantMarkdownStyleSheet(context),
+                builders: createAssistantMarkdownBuilders(context),
               )
             else
               Text(

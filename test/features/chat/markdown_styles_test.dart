@@ -114,6 +114,7 @@ void main() {
           builder: (context) => MarkdownBody(
             data: '# 标题\n\n正文 **加粗** 与 `代码`。\n\n> 引用\n\n- 列表\n\n| a | b |\n|---|---|\n| 1 | 2 |',
             styleSheet: buildAssistantMarkdownStyleSheet(context),
+            builders: createAssistantMarkdownBuilders(context),
           ),
         ),
       ),
@@ -121,5 +122,254 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.textContaining('标题'), findsWidgets);
     expect(find.textContaining('加粗'), findsOneWidget);
+    expect(find.text('代码'), findsOneWidget);
+  });
+
+  group('行内代码 pill 样式专项测试', () {
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      final themeName = brightness == Brightness.light ? '浅色' : '深色';
+
+      testWidgets('assistant 行内代码 $themeName：pill 圆角 4、padding 水平 4 垂直 1、背景 grey5',
+          (tester) async {
+        late BuildContext capturedContext;
+        await tester.pumpWidget(
+          CupertinoApp(
+            theme: CupertinoThemeData(brightness: brightness),
+            home: Builder(
+              builder: (context) {
+                capturedContext = context;
+                return MarkdownBody(
+                  data: '这是 `Actions` 测试。',
+                  selectable: true,
+                  styleSheet: buildAssistantMarkdownStyleSheet(context),
+                  builders: createAssistantMarkdownBuilders(context),
+                );
+              },
+            ),
+          ),
+        );
+
+        final grey5 = CupertinoColors.systemGrey5.resolveFrom(capturedContext);
+        final label = CupertinoColors.label.resolveFrom(capturedContext);
+
+        // 查找渲染为 pill 的 Container
+        final containerFinder = find.ancestor(
+          of: find.text('Actions'),
+          matching: find.byType(Container),
+        );
+        expect(containerFinder, findsOneWidget);
+
+        final container = tester.widget<Container>(containerFinder);
+        final decoration = container.decoration as BoxDecoration?;
+        expect(decoration, isNotNull);
+        expect(decoration!.color, grey5);
+        expect(
+          decoration.borderRadius,
+          const BorderRadius.all(Radius.circular(kInlineCodeBorderRadius)),
+        );
+        expect(container.padding, kInlineCodePadding);
+
+        // 文本属性校验
+        final textWidget = tester.widget<Text>(find.text('Actions'));
+        expect(textWidget.style!.fontSize, 13);
+        expect(textWidget.style!.height, 1.4);
+        expect(textWidget.style!.fontFamily, 'monospace');
+        expect(textWidget.style!.color, label);
+        expect(textWidget.style!.backgroundColor, const Color(0x00000000));
+      });
+
+      testWidgets('user 行内代码 $themeName：pill 背景白 0.22、字色白', (tester) async {
+        await tester.pumpWidget(
+          CupertinoApp(
+            theme: CupertinoThemeData(brightness: brightness),
+            home: Builder(
+              builder: (context) {
+                return MarkdownBody(
+                  data: '用户输入 `ping -c 3` 命令',
+                  selectable: true,
+                  styleSheet: buildUserMarkdownStyleSheet(context),
+                  builders: createUserMarkdownBuilders(context),
+                );
+              },
+            ),
+          ),
+        );
+
+        final containerFinder = find.ancestor(
+          of: find.text('ping -c 3'),
+          matching: find.byType(Container),
+        );
+        expect(containerFinder, findsOneWidget);
+
+        final container = tester.widget<Container>(containerFinder);
+        final decoration = container.decoration as BoxDecoration?;
+        expect(decoration, isNotNull);
+        expect(
+          decoration!.color,
+          CupertinoColors.white.withValues(alpha: 0.22),
+        );
+        expect(
+          decoration.borderRadius,
+          const BorderRadius.all(Radius.circular(4.0)),
+        );
+        expect(container.padding, kInlineCodePadding);
+
+        final textWidget = tester.widget<Text>(find.text('ping -c 3'));
+        expect(textWidget.style!.color, CupertinoColors.white);
+        expect(textWidget.style!.backgroundColor, const Color(0x00000000));
+      });
+    }
+
+    testWidgets('块级代码与行内代码混合渲染：块级保留滚动条与 codeblockDecoration，行内保持 pill',
+        (tester) async {
+      late BuildContext capturedContext;
+      const markdown = '''
+前置行内 `inline1` 说明。
+
+```dart
+void main() {
+  print('hello');
+}
+```
+
+后置行内 `inline2` 说明。
+''';
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          theme: const CupertinoThemeData(brightness: Brightness.light),
+          home: Builder(
+            builder: (context) {
+              capturedContext = context;
+              return MarkdownBody(
+                data: markdown,
+                selectable: true,
+                styleSheet: buildAssistantMarkdownStyleSheet(context),
+                builders: createAssistantMarkdownBuilders(context),
+              );
+            },
+          ),
+        ),
+      );
+
+      final grey5 = CupertinoColors.systemGrey5.resolveFrom(capturedContext);
+
+      // inline1 与 inline2 均应渲染为 pill Container (padding 4,1, radius 4, bg grey5)
+      final inline1Container = tester.widget<Container>(
+        find.ancestor(
+          of: find.text('inline1'),
+          matching: find.byType(Container),
+        ),
+      );
+      expect(inline1Container.padding, kInlineCodePadding);
+      expect(
+        (inline1Container.decoration as BoxDecoration).borderRadius,
+        const BorderRadius.all(Radius.circular(4.0)),
+      );
+      expect((inline1Container.decoration as BoxDecoration).color, grey5);
+
+      final inline2Container = tester.widget<Container>(
+        find.ancestor(
+          of: find.text('inline2'),
+          matching: find.byType(Container),
+        ),
+      );
+      expect(inline2Container.padding, kInlineCodePadding);
+      expect((inline2Container.decoration as BoxDecoration).color, grey5);
+
+      // 块级代码应包含 SingleChildScrollView (横向滚动)
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.textContaining("print('hello');"), findsOneWidget);
+    });
+
+    testWidgets('同段落多处行内代码：全部转为 pill 且富文本不报错', (tester) async {
+      await tester.pumpWidget(
+        CupertinoApp(
+          theme: const CupertinoThemeData(brightness: Brightness.dark),
+          home: Builder(
+            builder: (context) => MarkdownBody(
+              data: '包含 `Alpha`、`Beta` 与 `Gamma` 三个行内 pill。',
+              styleSheet: buildAssistantMarkdownStyleSheet(context),
+              builders: createAssistantMarkdownBuilders(context),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Beta'), findsOneWidget);
+      expect(find.text('Gamma'), findsOneWidget);
+    });
+
+    testWidgets('无语言标记的围栏代码块与缩进代码块：正确识别为块级而不被误转为行内 pill', (tester) async {
+      const markdown = '''
+行内 `start` 开始。
+
+```
+untyped block line 1
+untyped block line 2
+```
+
+    indented block line 1
+    indented block line 2
+
+行内 `end` 结束。
+''';
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          theme: const CupertinoThemeData(brightness: Brightness.light),
+          home: Builder(
+            builder: (context) => MarkdownBody(
+              data: markdown,
+              styleSheet: buildAssistantMarkdownStyleSheet(context),
+              builders: createAssistantMarkdownBuilders(context),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+
+      // start 与 end 渲染为 pill
+      expect(
+        find.ancestor(of: find.text('start'), matching: find.byType(Container)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: find.text('end'), matching: find.byType(Container)),
+        findsOneWidget,
+      );
+
+      // 两个块级代码均通过 SingleChildScrollView 渲染
+      expect(find.byType(SingleChildScrollView), findsNWidgets(2));
+      expect(find.textContaining('untyped block line 1'), findsOneWidget);
+      expect(find.textContaining('indented block line 1'), findsOneWidget);
+    });
+
+    testWidgets('双反引号包裹的行内代码 `` `code` `` 正确渲染为 pill', (tester) async {
+      await tester.pumpWidget(
+        CupertinoApp(
+          theme: const CupertinoThemeData(brightness: Brightness.light),
+          home: Builder(
+            builder: (context) => MarkdownBody(
+              data: '测试 `` `embedded backtick` `` 行内代码',
+              styleSheet: buildAssistantMarkdownStyleSheet(context),
+              builders: createAssistantMarkdownBuilders(context),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.ancestor(
+          of: find.text('`embedded backtick`'),
+          matching: find.byType(Container),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }
