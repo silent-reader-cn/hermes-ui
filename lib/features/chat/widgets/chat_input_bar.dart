@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
@@ -13,11 +16,18 @@ import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
+import '../../../core/providers/clipboard_paste_provider.dart';
 import '../../../core/providers/file_picker_provider.dart';
 import '../../../core/utils/accessibility.dart';
+import '../../../core/utils/clipboard_paste.dart';
 import '../../../core/utils/file_picker.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
+
+/// 触发附件/图片粘贴意图（快捷键或右键菜单触发）。
+class PasteAttachmentIntent extends Intent {
+  const PasteAttachmentIntent();
+}
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
 ///
@@ -128,6 +138,82 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       await _showError(l10n.uploadFailed, _errorMessage(error));
     } finally {
       if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _handlePasteBytes(Uint8List bytes, String filename) async {
+    if (_uploading) return;
+    final l10n = AppLocalizations.of(context);
+    setState(() => _uploading = true);
+    try {
+      final client = ref.read(apiClientProvider);
+      await client.uploadFile(
+        sessionId: widget.sessionId,
+        data: bytes,
+        filename: filename,
+      );
+      if (!mounted) return;
+      await ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .send('📎 $filename');
+      await _showNotice(
+        l10n.uploadSuccess,
+        l10n.attachmentUploaded(filename),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await _showError(l10n.uploadFailed, _errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _handlePaste() async {
+    final phase = ref.read(chatPhaseProvider(widget.sessionId));
+    final isSending = phase == ChatPhase.sending;
+    if (!widget.enabled || isSending || _uploading) return;
+
+    final pasteService = ref.read(clipboardPasteServiceProvider);
+    PastedAttachment? attachment;
+    try {
+      attachment = await pasteService.readPastedAttachment();
+    } catch (_) {
+      attachment = null;
+    }
+
+    if (attachment != null) {
+      await _handlePasteBytes(attachment.bytes, attachment.filename);
+      return;
+    }
+
+    // 纯文本放行：从系统剪贴板读取文本并插入输入框光标处
+    await _pastePlainText();
+  }
+
+  Future<void> _pastePlainText() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final textToInsert = data?.text;
+    if (textToInsert == null || textToInsert.isEmpty) return;
+
+    final currentText = _textController.text;
+    final selection = _textController.selection;
+    final int start = selection.isValid ? selection.start : currentText.length;
+    final int end = selection.isValid ? selection.end : currentText.length;
+    final int min = start < end ? start : end;
+    final int max = start > end ? start : end;
+
+    final newText = currentText.replaceRange(min, max, textToInsert);
+    final newOffset = min + textToInsert.length;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newOffset),
+    );
+
+    final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
+    final canSendWithPending = pending.isNotEmpty;
+    final hasText = newText.trim().isNotEmpty || canSendWithPending;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
     }
   }
 
@@ -322,27 +408,74 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   ),
                 ),
                 Expanded(
-                  child: CupertinoTextField(
-                    key: const ValueKey('chat-input-field'),
-                    controller: _textController,
-                    placeholder: !interactive
-                        ? l10n.readOnlySessionPlaceholder
-                        : (isStreaming
-                              ? l10n.steerPromptPlaceholder
-                              : l10n.sendMessagePlaceholder),
-                    enabled: !isSending && interactive,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    onChanged: (value) {
-                      final hasText =
-                          value.trim().isNotEmpty || canSendWithPending;
-                      if (hasText != _hasText) {
-                        setState(() => _hasText = hasText);
-                      }
+                  child: Shortcuts(
+                    shortcuts: const <ShortcutActivator, Intent>{
+                      SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                          PasteAttachmentIntent(),
+                      SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+                          PasteAttachmentIntent(),
                     },
-                    onSubmitted: (_) => _submit(),
+                    child: Actions(
+                      actions: <Type, Action<Intent>>{
+                        PasteAttachmentIntent:
+                            CallbackAction<PasteAttachmentIntent>(
+                              onInvoke: (intent) {
+                                unawaited(_handlePaste());
+                                return null;
+                              },
+                            ),
+                        PasteTextIntent: CallbackAction<PasteTextIntent>(
+                          onInvoke: (intent) {
+                            unawaited(_handlePaste());
+                            return null;
+                          },
+                        ),
+                      },
+                      child: CupertinoTextField(
+                        key: const ValueKey('chat-input-field'),
+                        controller: _textController,
+                        placeholder: !interactive
+                            ? l10n.readOnlySessionPlaceholder
+                            : (isStreaming
+                                  ? l10n.steerPromptPlaceholder
+                                  : l10n.sendMessagePlaceholder),
+                        enabled: !isSending && !_uploading && interactive,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        contextMenuBuilder: (context, editableTextState) {
+                          final buttonItems = editableTextState
+                              .contextMenuButtonItems
+                              .map((item) {
+                                if (item.type == ContextMenuButtonType.paste) {
+                                  return ContextMenuButtonItem(
+                                    type: item.type,
+                                    label: item.label,
+                                    onPressed: () {
+                                      ContextMenuController.removeAny();
+                                      unawaited(_handlePaste());
+                                    },
+                                  );
+                                }
+                                return item;
+                              })
+                              .toList();
+                          return CupertinoAdaptiveTextSelectionToolbar.buttonItems(
+                            buttonItems: buttonItems,
+                            anchors: editableTextState.contextMenuAnchors,
+                          );
+                        },
+                        onChanged: (value) {
+                          final hasText =
+                              value.trim().isNotEmpty || canSendWithPending;
+                          if (hasText != _hasText) {
+                            setState(() => _hasText = hasText);
+                          }
+                        },
+                        onSubmitted: (_) => _submit(),
+                      ),
+                    ),
                   ),
                 ),
                 if (isStreaming) ...[
