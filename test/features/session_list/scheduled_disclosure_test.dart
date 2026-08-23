@@ -98,8 +98,8 @@ void main() {
       expect(find.text('定时'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
       // 折叠图标 chevron_right
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsNothing);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_right)), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_down)), findsNothing);
       // 子项收起不展示
       expect(find.text('会话 1'), findsNothing);
       expect(find.text('会话 2'), findsNothing);
@@ -144,8 +144,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(expansionEvents, [true]);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_down)), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_right)), findsNothing);
       expect(find.text('会话 A'), findsOneWidget);
       expect(find.text('会话 B'), findsOneWidget);
       expect(
@@ -160,8 +160,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(expansionEvents, [true, false]);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsNothing);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_right)), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_down)), findsNothing);
       expect(find.text('会话 A'), findsNothing);
       expect(find.text('会话 B'), findsNothing);
     });
@@ -181,7 +181,7 @@ void main() {
         ),
       );
 
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_down)), findsOneWidget);
       expect(find.text('直接可见会话'), findsOneWidget);
     });
   });
@@ -283,7 +283,7 @@ void main() {
       // 定时会话由于默认折叠，行内容不显示
       expect(find.text('每日自动同步'), findsNothing);
       expect(find.text('定时备份任务'), findsNothing);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_right)), findsOneWidget);
     });
 
     testWidgets('点击「定时」标题行 → 展开显示定时会话；再点击 → 收起', (tester) async {
@@ -307,7 +307,7 @@ void main() {
 
       // 展开后显示定时会话
       expect(find.text('每日自动同步'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_down)), findsOneWidget);
 
       // 再次点击收起
       await tester.tap(find.text('定时'));
@@ -315,7 +315,7 @@ void main() {
 
       // 收起后隐藏
       expect(find.text('每日自动同步'), findsNothing);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
+      expect(find.descendant(of: find.byType(ScheduledSessionDisclosure), matching: find.byIcon(CupertinoIcons.chevron_right)), findsOneWidget);
     });
 
     testWidgets('展开定时分区后点击会话行 → 跳转 /chat/:sessionId', (tester) async {

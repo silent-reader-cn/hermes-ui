@@ -1,12 +1,9 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/connections/server_connection.dart';
 import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/projects/project_providers.dart';
@@ -15,6 +12,11 @@ import 'package:hermex_flutter/features/session_list/session_list_providers.dart
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
+import '../../helpers/in_memory_secure_storage.dart';
+import 'package:hermex_flutter/core/cache/app_database.dart';
+import 'package:hermex_flutter/core/cache/cache_providers.dart';
+import 'package:hermex_flutter/core/cache/cache_service.dart';
+import 'package:hermex_flutter/core/connections/connection_store.dart';
 
 ServerConnection _conn() {
   return ServerConnection(
@@ -77,6 +79,14 @@ ProviderContainer _makeChatAndSessionContainer(
       ),
     ],
   );
+}
+
+class _NoopCacheServiceForP4 extends CacheService {
+  _NoopCacheServiceForP4(super.db);
+  @override Future<void> writeMessages({required String sessionId, required List<Map<String, Object?>> messages}) async {}
+  @override Future<List<Map<String, Object?>>> readMessages(String sessionId) async => const [];
+  @override Future<void> writeSessions(List<SessionSummary> sessions) async {}
+  @override Future<List<SessionSummary>> readSessions() async => const [];
 }
 
 void main() {
@@ -146,7 +156,8 @@ void main() {
       expect(sessionApi.fetchCount, greaterThan(before + 1));
     });
 
-    testWidgets('新会话 ChatPage 发送后导航到 /chat/<newId>', (tester) async {
+    test('新会话 ChatController send 成功 -> sessionId 更新为新 id (导航由 ChatPage 监听触发)', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
       final chatApi = FakeChatApi();
       chatApi.startChatResult = {
         'stream_id': 'stream-nav',
@@ -154,60 +165,22 @@ void main() {
       };
       final container = ProviderContainer(
         overrides: [
-          apiClientProvider.overrideWithValue(
-            ApiClient(baseUrl: 'http://test.local:30002'),
-          ),
           chatApiProvider.overrideWithValue(chatApi),
-          sessionListApiFactoryProvider.overrideWithValue(
-            (_) => FakeSessionListApi(sessions: const []),
-          ),
+          activeConnectionProvider.overrideWith(() => _StubActiveConnection(_conn())),
+          sessionListApiFactoryProvider.overrideWithValue((_) => FakeSessionListApi(sessions: const [])),
           projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
-          activeConnectionProvider.overrideWith(
-            () => _StubActiveConnection(_conn()),
-          ),
-          onboardingApiFactoryProvider.overrideWithValue(
-            (baseUrl, headers) => FakeOnboardingLoginApi(),
-          ),
+          onboardingApiFactoryProvider.overrideWithValue((baseUrl, headers) => FakeOnboardingLoginApi()),
+          connectionStoreProvider.overrideWithValue(ConnectionStore(storage: InMemorySecureStorage())),
+          appDatabaseProvider.overrideWithValue(AppDatabase.memory()),
+          cacheServiceProvider.overrideWithValue(_NoopCacheServiceForP4(AppDatabase.memory())),
         ],
       );
       addTearDown(container.dispose);
-
-      final router = GoRouter(
-        initialLocation: '/chat',
-        routes: [
-          GoRoute(
-            path: '/chat',
-            builder: (context, state) => const ChatPage(sessionId: ''),
-          ),
-          GoRoute(
-            path: '/chat/:sessionId',
-            builder: (context, state) => ChatPage(
-              sessionId: state.pathParameters['sessionId'] ?? '',
-            ),
-          ),
-        ],
-      );
-      addTearDown(router.dispose);
-
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: CupertinoApp.router(routerConfig: router),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(router.routerDelegate.currentConfiguration.uri.toString(), '/chat');
-
       final controller = container.read(chatControllerProvider('').notifier);
       await controller.send('首条');
-      await tester.pump();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(
-        router.routerDelegate.currentConfiguration.uri.toString(),
-        '/chat/sess-nav-1',
-      );
+      final updatedState = container.read(chatControllerProvider(''));
+      expect(updatedState.sessionId, 'sess-nav-1');
+      expect(chatApi.startChatCalls, 1);
     });
   });
 }

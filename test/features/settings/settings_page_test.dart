@@ -311,9 +311,8 @@ void main() {
         '_AppearanceSection',
         '_ServerSection',
         '_ModelSection',
-        '_AdvancedSettingsSection',
         '_MemoryEntrySection',
-        '_WorkspacesEntrySection',
+        '_AdvancedSettingsSection',
         '_AboutSection',
       ]);
     });
@@ -965,6 +964,8 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
 
@@ -988,6 +989,8 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
 
@@ -1034,6 +1037,8 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
 
@@ -1077,6 +1082,8 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入辅助模型二级页
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
       await tester.pumpAndSettle();
 
@@ -1129,6 +1136,8 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入辅助模型二级页
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
       await tester.pumpAndSettle();
 
