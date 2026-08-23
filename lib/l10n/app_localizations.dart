@@ -232,6 +232,14 @@ class AppLocalizations {
       isEnglish ? 'Current model' : '当前模型';
   String get contextWindowFollowServerDefault =>
       isEnglish ? 'Follow server default' : '跟随服务器默认';
+  String get selectWorkspace => isEnglish ? 'Select Workspace' : '选择工作区';
+  String get noWorkspacesAvailableHint => isEnglish
+      ? 'No workspaces available (can be added in Settings → Manage Workspaces)'
+      : '暂无可用工作区（可在设置→工作区管理中添加）';
+  String get followSessionDefaultWorkspace => isEnglish
+      ? 'No workspace / Follow session default'
+      : '未选择工作区 / 跟随会话默认';
+  String get manualInputWorkspace => isEnglish ? 'Manual input' : '手动输入';
   String get contextWindowCompressNow =>
       isEnglish ? 'Compress now to free context' : '立即压缩以释放上下文';
   String get contextWindowCompressHint =>
