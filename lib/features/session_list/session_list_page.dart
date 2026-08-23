@@ -13,6 +13,7 @@ import '../../core/models/session.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
+import '../../app/widgets/narrow_navigation_dropdown.dart';
 import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
@@ -131,6 +132,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       ? _buildSearchField()
                       : null,
                   actions: [
+                    if (!isWide && !isSearchMode)
+                      _buildNarrowNavigationAction(),
                     if (!isSearchMode) _buildFilterAction(state),
                     if (widget.showSettingsTrailing)
                       _buildSettingsOrDoneAction(state),
@@ -145,7 +148,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
               if (widget.showUtilityRows)
                 SliverToBoxAdapter(child: _buildSearchBar()),
-              if (widget.showUtilityRows && !isSearchMode)
+              if (widget.showUtilityRows && !isSearchMode && isWide)
                 const SliverToBoxAdapter(child: SessionListUtilityRows()),
               ..._buildContentSlivers(
                 async,
@@ -225,6 +228,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: _buildSearchField(),
+    );
+  }
+
+  /// 头部窄屏快捷导航下拉按钮（大标题右侧向下箭头，点击展开 5 个功能入口）。
+  Widget _buildNarrowNavigationAction() {
+    return const NarrowNavigationDropdownButton(
+      buttonKey: ValueKey('session-list-narrow-nav'),
     );
   }
 

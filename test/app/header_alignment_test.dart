@@ -90,17 +90,19 @@ void main() {
     await tester.pumpWidget(
       const CupertinoApp(
         localizationsDelegates: testDelegates,
-        home: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              AdaptiveSliverNavigationBar(
-                title: '技能',
-                leading: SizedBox.shrink(),
-              ),
-              SliverToBoxAdapter(
-                child: SizedBox(height: 1000, width: double.infinity),
-              ),
-            ],
+        home: ProviderScope(
+          child: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                AdaptiveSliverNavigationBar(
+                  title: '技能',
+                  leading: SizedBox.shrink(),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 1000, width: double.infinity),
+                ),
+              ],
+            ),
           ),
         ),
       ),

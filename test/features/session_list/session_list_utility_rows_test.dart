@@ -352,12 +352,16 @@ void main() {
     });
   });
 
-  group('SessionListPage 工具行集成测试与路由跳转', () {
+  group('SessionListPage 窄屏快捷导航集成测试与路由跳转（<900）', () {
     Future<GoRouter> pumpSessionListPage(
       WidgetTester tester, {
       FakeSessionListApi? api,
       Override? visibilityOverride,
     }) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final fakeApi =
           api ??
           FakeSessionListApi(
@@ -383,6 +387,11 @@ void main() {
             path: '/kanban',
             builder: (_, _) =>
                 const _DestinationStub(title: 'KanbanDestination'),
+          ),
+          GoRoute(
+            path: '/workspaces',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'WorkspacesDestination'),
           ),
           GoRoute(
             path: '/skills',
@@ -437,51 +446,43 @@ void main() {
       return router;
     }
 
-    testWidgets('会话列表页正常加载时，默认 3 个工具行入口可见（看板与记忆默认隐藏）', (tester) async {
+    testWidgets('窄屏下独立工具行不渲染，大标题右侧展示快捷导航下拉按钮', (tester) async {
       await pumpSessionListPage(tester);
 
+      // 窄屏收敛：不渲染横排 SessionListUtilityRows
       expect(
         find.byKey(const ValueKey('session-list-utility-rows')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-kanban')),
         findsNothing,
       );
+      // 大标题右侧渲染窄屏下拉按钮
       expect(
-        find.byKey(const ValueKey('session-list-utility-workspaces')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-skills')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-memory')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-insights')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
         findsOneWidget,
       );
     });
 
-    testWidgets('点击任务入口 → 跳转 /tasks', (tester) async {
+    testWidgets('点击窄屏下拉按钮展开菜单并跳转 /tasks', (tester) async {
       await pumpSessionListPage(tester);
 
       await tester.tap(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
       );
+      await tester.pumpAndSettle();
+
+      // 默认 4 个开启的入口项（任务/工作区/技能/统计，看板默认关闭）
+      expect(find.byKey(const ValueKey('narrow-nav-tasks')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-workspaces')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-skills')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-insights')), findsOneWidget);
+      expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('narrow-nav-tasks')));
       await tester.pumpAndSettle();
 
       expect(find.text('body-TasksDestination'), findsOneWidget);
     });
 
-    testWidgets('点击看板入口 → 跳转 /kanban', (tester) async {
+    testWidgets('全开配置下点击窄屏下拉菜单项 → 跳转 /kanban 与 /workspaces', (tester) async {
       await pumpSessionListPage(
         tester,
         visibilityOverride: sessionEntryVisibilityProvider.overrideWith(
@@ -490,40 +491,36 @@ void main() {
       );
 
       await tester.tap(
-        find.byKey(const ValueKey('session-list-utility-kanban')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
       );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('narrow-nav-kanban')));
       await tester.pumpAndSettle();
 
       expect(find.text('body-KanbanDestination'), findsOneWidget);
     });
 
-    testWidgets('点击技能入口 → 跳转 /skills', (tester) async {
+    testWidgets('点击技能与统计菜单项 → 跳转 /skills 与 /insights', (tester) async {
       await pumpSessionListPage(tester);
 
       await tester.tap(
-        find.byKey(const ValueKey('session-list-utility-skills')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
       );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('narrow-nav-skills')));
       await tester.pumpAndSettle();
 
       expect(find.text('body-SkillsDestination'), findsOneWidget);
     });
 
-    testWidgets('点击统计入口 → 跳转 /insights', (tester) async {
-      await pumpSessionListPage(tester);
-
-      await tester.tap(
-        find.byKey(const ValueKey('session-list-utility-insights')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('body-InsightsDestination'), findsOneWidget);
-    });
-
-    testWidgets('搜索模式下工具行隐藏，清空搜索后重新显示', (tester) async {
+    testWidgets('搜索模式下窄屏下拉按钮隐藏，清空搜索后重新显示', (tester) async {
       await pumpSessionListPage(tester);
 
       expect(
-        find.byKey(const ValueKey('session-list-utility-rows')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
         findsOneWidget,
       );
 
@@ -535,13 +532,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
 
-      // 搜索模式下工具行应该隐藏
+      // 搜索模式下下拉按钮隐藏
       expect(
-        find.byKey(const ValueKey('session-list-utility-rows')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
         findsNothing,
       );
 
@@ -553,52 +546,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
 
-      // 工具行恢复显示
+      // 下拉按钮恢复显示
       expect(
-        find.byKey(const ValueKey('session-list-utility-rows')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
         findsOneWidget,
       );
     });
 
-    testWidgets('会话列表页根据显隐配置仅展示开启的入口', (tester) async {
-      await pumpSessionListPage(
-        tester,
-        visibilityOverride: sessionEntryVisibilityProvider.overrideWith(
-          _FilteredVisibilityNotifier.new,
-        ),
-      );
-
-      expect(
-        find.byKey(const ValueKey('session-list-utility-rows')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-kanban')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-skills')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-memory')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-insights')),
-        findsNothing,
-      );
-    });
-
-    testWidgets('会话列表页在全关功能入口时整行不渲染', (tester) async {
+    testWidgets('全关功能入口时窄屏下拉按钮不渲染', (tester) async {
       await pumpSessionListPage(
         tester,
         visibilityOverride: sessionEntryVisibilityProvider.overrideWith(
@@ -611,28 +566,120 @@ void main() {
         findsNothing,
       );
       expect(
-        find.byKey(const ValueKey('session-list-utility-tasks')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-kanban')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-skills')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-memory')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('session-list-utility-insights')),
+        find.byKey(const ValueKey('session-list-narrow-nav')),
         findsNothing,
       );
     });
+  });
+
+  group('SessionListPage 宽屏工具行集成测试（>=900）', () {
+    Future<GoRouter> pumpWideSessionListPage(
+      WidgetTester tester, {
+      FakeSessionListApi? api,
+      Override? visibilityOverride,
+    }) async {
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final fakeApi =
+          api ??
+          FakeSessionListApi(
+            sessions: [
+              SessionSummary(
+                sessionId: 's-test-1',
+                title: '测试会话 1',
+                lastMessageAt: DateTime.now().millisecondsSinceEpoch / 1000,
+              ),
+            ],
+          );
+
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const SessionListPage()),
+          GoRoute(
+            path: '/tasks',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'TasksDestination'),
+          ),
+          GoRoute(
+            path: '/kanban',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'KanbanDestination'),
+          ),
+          GoRoute(
+            path: '/workspaces',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'WorkspacesDestination'),
+          ),
+          GoRoute(
+            path: '/skills',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'SkillsDestination'),
+          ),
+          GoRoute(
+            path: '/insights',
+            builder: (_, _) =>
+                const _DestinationStub(title: 'InsightsDestination'),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue((_) => fakeApi),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
+            ?visibilityOverride,
+          ],
+          child: CupertinoApp.router(routerConfig: router),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      return router;
+    }
+
+    testWidgets('宽屏下渲染独立工具行，不渲染大标题右侧下拉按钮', (tester) async {
+      await pumpWideSessionListPage(tester);
+
+      expect(
+        find.byKey(const ValueKey('session-list-utility-rows')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-narrow-nav')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('session-list-utility-tasks')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('宽屏下点击工具行任务入口 → 跳转 /tasks', (tester) async {
+      await pumpWideSessionListPage(tester);
+
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-utility-tasks')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('body-TasksDestination'), findsOneWidget);
+    });
 
     testWidgets('showUtilityRows=false 桌面模式：工具行不渲染，头部无大标题且为单行搜索框', (tester) async {
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
       final router = GoRouter(
         initialLocation: '/',
         routes: [
