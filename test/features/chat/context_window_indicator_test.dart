@@ -67,5 +67,36 @@ void main() {
       await tester.pump();
       expect(find.text('80'), findsOneWidget);
     });
+
+    testWidgets('尺寸对齐发送按钮图标 (ringSize=22, tapTargetSize=44, fontSize=7)', (tester) async {
+      expect(ContextWindowIndicator.ringSize, 22.0);
+      expect(ContextWindowIndicator.tapTargetSize, 44.0);
+
+      final snap = ContextWindowSnapshot.fromJson({
+        'context_length': 1000,
+        'last_prompt_tokens': 500,
+      });
+      await tester.pumpWidget(
+        wrap(ContextWindowIndicator(snapshot: snap, onTap: () {})),
+      );
+
+      final textWidget = tester.widget<Text>(find.text('50'));
+      expect(textWidget.style?.fontSize, 7.0);
+      expect(textWidget.style?.fontWeight, FontWeight.w600);
+
+      final ringBox = tester.widget<SizedBox>(
+        find.ancestor(
+          of: find.byType(CustomPaint),
+          matching: find.byType(SizedBox),
+        ).first,
+      );
+      expect(ringBox.width, 22.0);
+      expect(ringBox.height, 22.0);
+
+      final button = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('chat-context-indicator-button')),
+      );
+      expect(button.minimumSize, const Size(44.0, 44.0));
+    });
   });
 }
