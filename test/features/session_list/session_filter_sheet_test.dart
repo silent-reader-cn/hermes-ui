@@ -190,6 +190,41 @@ void main() {
       // 不应占满全屏（紧凑高度）
       expect(sheetBox.height, lessThan(600));
     });
+
+    testWidgets('分割线边距：三段 filter section 均配置 hasLeading: false（无 leading 图标缩进）', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '会话一', sourceLabel: 'telegram', projectId: 'p1'),
+          session('s2', '会话二', sourceLabel: 'qq', projectId: 'p2'),
+        ],
+      );
+      final projectApi = _FakeProjectApi(
+        projects: const [
+          ProjectSummary(projectId: 'p1', name: '项目一'),
+          ProjectSummary(projectId: 'p2', name: '项目二'),
+        ],
+      );
+      await pumpList(tester, api, projectApi: projectApi);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      final sessionsSection = tester.widget<CupertinoListSection>(
+        find.byKey(const ValueKey('filter-section-sessions')),
+      );
+      final channelsSection = tester.widget<CupertinoListSection>(
+        find.byKey(const ValueKey('filter-section-channels')),
+      );
+      final projectsSection = tester.widget<CupertinoListSection>(
+        find.byKey(const ValueKey('filter-section-projects')),
+      );
+
+      // hasLeading: false 时 additionalDividerMargin 应为 14.0（而非默认 hasLeading: true 的 42.0）
+      expect(sessionsSection.additionalDividerMargin, equals(14.0));
+      expect(channelsSection.additionalDividerMargin, equals(14.0));
+      expect(projectsSection.additionalDividerMargin, equals(14.0));
+    });
   });
 }
 

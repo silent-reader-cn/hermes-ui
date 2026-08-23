@@ -175,6 +175,7 @@ class InsightsPage extends ConsumerWidget {
       if (_hasActivity(response))
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            hasLeading: false,
             header: Text(l10n.activity),
             children: [
               if (_peakDay(response) != null)
@@ -211,6 +212,7 @@ class InsightsPage extends ConsumerWidget {
       if (_modelBreakdowns(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            hasLeading: false,
             header: Text(l10n.models),
             children: [
               for (final model in _modelBreakdowns(response))

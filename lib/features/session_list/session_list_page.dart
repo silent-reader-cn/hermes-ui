@@ -471,6 +471,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           else
             SliverToBoxAdapter(
               child: CupertinoListSection.insetGrouped(
+                hasLeading: false,
                 header: Text(_sectionTitle(context, section.title)),
                 children: [
                   for (final session in section.sessions)
@@ -1354,6 +1355,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                     children: [
                       CupertinoListSection.insetGrouped(
                         key: const ValueKey('filter-section-sessions'),
+                        hasLeading: false,
                         header: Text(l10n.sessions, style: headerStyle),
                         backgroundColor: CupertinoColors
                             .secondarySystemGroupedBackground
@@ -1398,6 +1400,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                       if (state.sourceLabels.isNotEmpty)
                         CupertinoListSection.insetGrouped(
                           key: const ValueKey('filter-section-channels'),
+                          hasLeading: false,
                           header: Text(l10n.channels, style: headerStyle),
                           backgroundColor: CupertinoColors
                               .secondarySystemGroupedBackground
@@ -1430,6 +1433,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                       if (projects.isNotEmpty)
                         CupertinoListSection.insetGrouped(
                           key: const ValueKey('filter-section-projects'),
+                          hasLeading: false,
                           header: Text(l10n.projects, style: headerStyle),
                           backgroundColor: CupertinoColors
                               .secondarySystemGroupedBackground

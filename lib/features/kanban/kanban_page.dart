@@ -718,6 +718,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
         _metadataRow(l10n.updatedAtLabel, Text(card.updatedAt!)),
     ];
     return CupertinoListSection.insetGrouped(
+      hasLeading: false,
       header: Text(l10n.info),
       children: rows,
     );
@@ -784,6 +785,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final l10n = AppLocalizations.of(context);
     final comments = state.comments;
     return CupertinoListSection.insetGrouped(
+      hasLeading: false,
       header: Text(l10n.commentsHeader(comments.length)),
       children: [
         if (comments.isEmpty)
