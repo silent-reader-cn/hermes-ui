@@ -13,6 +13,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../notifications/notification_providers.dart';
 import '../shared/app_back_button.dart';
 import 'chat_controller.dart';
 import 'chat_providers.dart';
@@ -44,28 +45,64 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with WidgetsBindingObserver {
   final GlobalKey _actionsKey = GlobalKey();
   String? _yoloLoadedFor;
+  Timer? _syncDebounceTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _ensureYoloLoaded();
+      _triggerSyncDebounced();
     });
+  }
+
+  @override
+  void dispose() {
+    _syncDebounceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _triggerSyncDebounced();
+    }
   }
 
   @override
   void didUpdateWidget(covariant ChatPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sessionId != widget.sessionId) {
+      _syncDebounceTimer?.cancel();
+      _syncDebounceTimer = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _ensureYoloLoaded();
+        _triggerSyncDebounced();
       });
     }
+  }
+
+  void _triggerSyncDebounced() {
+    if (widget.sessionId.isEmpty) return;
+    if (_syncDebounceTimer != null && _syncDebounceTimer!.isActive) {
+      return;
+    }
+    _syncDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _syncDebounceTimer = null;
+    });
+    unawaited(
+      ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .syncMissingMessages(),
+    );
   }
 
   void _ensureYoloLoaded() {
@@ -79,6 +116,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // 监听生命周期状态（Riverpod provider 驱动）
+    ref.listen<AppLifecycleState>(
+      appLifecycleStateProvider,
+      (previous, next) {
+        if (next == AppLifecycleState.resumed) {
+          _triggerSyncDebounced();
+        }
+      },
+    );
     // P4：新会话首条消息后 URL 从 /chat("") → /chat/<newId> 替换，避免刷新丢会话。
     // 监听与 widget.sessionId 绑定的 controller 的 sessionId 变化；widget 本身
     // 的 sessionId 为空串时代表新会话页，待真实 id 回来后立即 go 替换，左侧

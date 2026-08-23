@@ -15,6 +15,7 @@ import '../../core/models/tool_call.dart';
 import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
 import '../session_list/session_list_providers.dart';
+import 'chat_diff_merge.dart';
 import 'chat_models.dart';
 import 'chat_providers.dart';
 import 'chat_server_api.dart';
@@ -480,6 +481,43 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     await loadMessages(messageBefore: offset);
   }
 
+  /// 跨端/跨设备聊天记录同步补齐（diff patch 类 VDOM 思路）。
+  ///
+  /// 从服务器拉取最新消息并与本地 [state.messages] 进行 diff 合并，
+  /// 补全缺失消息、原地更新已变化消息，静默容错不弹全局错误。
+  Future<void> syncMissingMessages({int limit = 50}) async {
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty || _disposed) return;
+    final api = _api;
+    if (api == null) return;
+    // 若当前正在发送或流式接收中，避免与实时消息状态竞争
+    if (state.stream.activeStreamId != null ||
+        state.phase == ChatPhase.streaming ||
+        state.phase == ChatPhase.sending) {
+      return;
+    }
+    final gen = _generation;
+    try {
+      final response = await api.session(
+        sessionId: sessionId,
+        includeMessages: true,
+        messageLimit: limit,
+        expandRenderable: true,
+      );
+      if (_disposed || gen != _generation) return;
+      final detail = response.session;
+      if (detail == null) return;
+      final serverMessages = detail.messages ?? const <ChatMessage>[];
+      final mergedMessages = diffMergeMessages(
+        localMessages: state.messages,
+        serverMessages: serverMessages,
+      );
+      _applySessionDetail(detail: detail, mergedMessages: mergedMessages);
+    } on Object {
+      // 同步失败静默容错（不弹全局错误）
+    }
+  }
+
   /// 加载会话 transcript（冷启动 / 重载 / 分页）。
   Future<void> loadMessages({int? messageBefore}) async {
     final sessionId = state.sessionId;
@@ -504,10 +542,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             .map((m) => m.messageId)
             .whereType<String>()
             .toSet();
+        final existingFingerprints = state.messages
+            .where((m) => m.messageId == null)
+            .map((m) => '${m.role}:${m.timestamp}:${m.content}')
+            .toSet();
         final fresh = loaded
-            .where(
-              (m) => m.messageId == null || !existingIds.contains(m.messageId),
-            )
+            .where((m) {
+              if (m.messageId != null) {
+                return !existingIds.contains(m.messageId);
+              }
+              return !existingFingerprints
+                  .contains('${m.role}:${m.timestamp}:${m.content}');
+            })
             .toList();
         final fallbackOffset = state.messagesOffset - loaded.length;
         state = state.copyWith(
@@ -520,109 +566,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
               detail.messageCount! > state.messages.length + fresh.length,
         );
       } else {
-        // 全量重载：需同步工具/思考卡片状态，避免自动刷新把折叠入口弄没
-        // - 服务端已含工具信息（persistedToolCalls 非空或消息内 tool 元数据）→ 以服务端为准
-        // - 否则本地已归档/实时组保留并在末尾兜底渲染（即使全部完成也保留入口，初始折叠）
-        final persistedToolCalls = detail.toolCalls ?? const <PersistedToolCall>[];
-        final newOffset = detail.messagesOffset ?? 0;
-        // 尝试从服务端 transcript 重建
-        final serverDerivedGroups = ToolCallGroup.groups(
-          persistedToolCalls: persistedToolCalls,
-          messages: loaded,
-          messageOffset: newOffset,
+        // 全量重载：diff-merge 调和本地与服务端消息
+        // 若当前展示的是离线缓存回放数据，fresh 在线消息直接替换旧缓存
+        final local =
+            state.isViewingCachedData ? const <ChatMessage>[] : state.messages;
+        final mergedMessages = diffMergeMessages(
+          localMessages: local,
+          serverMessages: loaded,
         );
-        List<ToolCallGroup> nextCompletedGroups;
-        List<ToolCall> nextLiveToolCalls = state.liveToolCalls;
-        String nextLiveReasoning = state.liveReasoningText;
-        List<ReasoningGroup> nextCompletedReasoning = state.completedReasoningGroups;
-        final hasServerTools = persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
-        if (hasServerTools) {
-          // 以服务端为准，清空实时（已归档到服务端）
-          nextCompletedGroups = serverDerivedGroups;
-          nextLiveToolCalls = const [];
-          // 推理：live 推理若有残留且流已结束，归档到已完成（服务端无推理持久化）
-          if (state.liveReasoningText.isNotEmpty) {
-            final anchor = state.stream.reasoningAnchorMessageId ??
-                state.stream.streamingAssistantMessageId ??
-                _lastAssistantMessageId(loaded);
-            nextCompletedReasoning = [
-              ...state.completedReasoningGroups,
-              ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
-            ];
-            nextLiveReasoning = '';
-          }
-        } else {
-          // 服务端无工具信息 → 保留本地已归档 + 归档实时（如有）
-          if (state.liveToolCalls.isNotEmpty) {
-            final anchor = state.stream.toolCallAnchorMessageId ??
-                state.stream.streamingAssistantMessageId ??
-                _lastAssistantMessageId(loaded);
-            final liveGroup = ToolCallGroup.live(
-              anchorMessageID: anchor,
-              toolCalls: List<ToolCall>.of(state.liveToolCalls),
-            );
-            nextCompletedGroups = ToolCallGroup.merging(
-              primaryGroups: state.completedToolCallGroups,
-              fallbackGroups: [liveGroup],
-            );
-            nextLiveToolCalls = const [];
-          } else {
-            nextCompletedGroups = state.completedToolCallGroups;
-          }
-          if (state.liveReasoningText.isNotEmpty) {
-            final anchor = state.stream.reasoningAnchorMessageId ??
-                state.stream.streamingAssistantMessageId ??
-                _lastAssistantMessageId(loaded);
-            nextCompletedReasoning = [
-              ...state.completedReasoningGroups,
-              ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
-            ];
-            nextLiveReasoning = '';
-          }
-        }
-        state = state.copyWith(
-          messages: loaded,
-          messagesOffset: detail.messagesOffset ?? 0,
-          hasOlderMessages:
-              detail.messageCount != null && detail.messageCount! > loaded.length,
-          displayTitle: _resolveTitle(detail),
-          workspace: detail.workspace ?? state.workspace,
-          model: detail.model ?? state.model,
-          modelProvider: detail.modelProvider ?? state.modelProvider,
-          profile: detail.profile ?? state.profile,
-          isReadOnly: detail.readOnly == true || detail.isReadOnly == true,
-          hasPendingUserMessage:
-              detail.pendingUserMessage?.trim().isNotEmpty == true ||
-              detail.pendingAttachments?.isNotEmpty == true,
-          parentSessionId: detail.parentSessionId,
-          contextWindowSnapshot: ContextWindowSnapshot(
-            contextLength: detail.contextLength,
-            thresholdTokens: detail.thresholdTokens,
-            lastPromptTokens: detail.lastPromptTokens,
-            inputTokens: detail.inputTokens,
-            outputTokens: detail.outputTokens,
-            estimatedCost: detail.estimatedCost,
-            tokensPerSecond: state.stream.liveTokensPerSecond ??
-                state.contextWindowSnapshot?.tokensPerSecond,
-          ),
-          completedToolCallGroups: nextCompletedGroups,
-          liveToolCalls: nextLiveToolCalls,
-          completedReasoningGroups: nextCompletedReasoning,
-          liveReasoningText: nextLiveReasoning,
-          responseCompletionNeedsTranscriptRefresh: false,
-          isViewingCachedData: false,
-          isShowingOfflineCache: false,
-        );
-        unawaited(_writeCacheMessages(sessionId, loaded));
-        // 跨页面/杀进程恢复：会话已有活跃流 → 接管并重连。
-        final activeStreamId = detail.activeStreamId;
-        if (activeStreamId != null && activeStreamId.isNotEmpty) {
-          state = state.copyWith(
-            phase: ChatPhase.streaming,
-            stream: state.stream.copyWith(activeStreamId: activeStreamId),
-          );
-          unawaited(_reconnectIfNeeded());
-        }
+        _applySessionDetail(detail: detail, mergedMessages: mergedMessages);
       }
     } on ApiException catch (error) {
       if (_disposed || gen != _generation) return;
@@ -667,6 +619,118 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       state = state.copyWith(
         errorMessage: error.message,
       );
+    }
+  }
+
+  void _applySessionDetail({
+    required SessionDetail detail,
+    required List<ChatMessage> mergedMessages,
+  }) {
+    final persistedToolCalls =
+        detail.toolCalls ?? const <PersistedToolCall>[];
+    final newOffset = detail.messagesOffset ?? state.messagesOffset;
+    final serverDerivedGroups = ToolCallGroup.groups(
+      persistedToolCalls: persistedToolCalls,
+      messages: mergedMessages,
+      messageOffset: newOffset,
+    );
+    List<ToolCallGroup> nextCompletedGroups;
+    List<ToolCall> nextLiveToolCalls = state.liveToolCalls;
+    String nextLiveReasoning = state.liveReasoningText;
+    List<ReasoningGroup> nextCompletedReasoning =
+        state.completedReasoningGroups;
+    final hasServerTools =
+        persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
+    if (hasServerTools) {
+      nextCompletedGroups = serverDerivedGroups;
+      nextLiveToolCalls = const [];
+      if (state.liveReasoningText.isNotEmpty) {
+        final anchor = state.stream.reasoningAnchorMessageId ??
+            state.stream.streamingAssistantMessageId ??
+            _lastAssistantMessageId(mergedMessages);
+        nextCompletedReasoning = [
+          ...state.completedReasoningGroups,
+          ReasoningGroup(
+            anchorMessageId: anchor,
+            text: state.liveReasoningText,
+          ),
+        ];
+        nextLiveReasoning = '';
+      }
+    } else {
+      if (state.liveToolCalls.isNotEmpty) {
+        final anchor = state.stream.toolCallAnchorMessageId ??
+            state.stream.streamingAssistantMessageId ??
+            _lastAssistantMessageId(mergedMessages);
+        final liveGroup = ToolCallGroup.live(
+          anchorMessageID: anchor,
+          toolCalls: List<ToolCall>.of(state.liveToolCalls),
+        );
+        nextCompletedGroups = ToolCallGroup.merging(
+          primaryGroups: state.completedToolCallGroups,
+          fallbackGroups: [liveGroup],
+        );
+        nextLiveToolCalls = const [];
+      } else {
+        nextCompletedGroups = state.completedToolCallGroups;
+      }
+      if (state.liveReasoningText.isNotEmpty) {
+        final anchor = state.stream.reasoningAnchorMessageId ??
+            state.stream.streamingAssistantMessageId ??
+            _lastAssistantMessageId(mergedMessages);
+        nextCompletedReasoning = [
+          ...state.completedReasoningGroups,
+          ReasoningGroup(
+            anchorMessageId: anchor,
+            text: state.liveReasoningText,
+          ),
+        ];
+        nextLiveReasoning = '';
+      }
+    }
+    state = state.copyWith(
+      messages: mergedMessages,
+      messagesOffset: detail.messagesOffset ?? state.messagesOffset,
+      hasOlderMessages: detail.messageCount != null &&
+          detail.messageCount! > mergedMessages.length,
+      displayTitle: _resolveTitle(detail),
+      workspace: detail.workspace ?? state.workspace,
+      model: detail.model ?? state.model,
+      modelProvider: detail.modelProvider ?? state.modelProvider,
+      profile: detail.profile ?? state.profile,
+      isReadOnly: detail.readOnly == true || detail.isReadOnly == true,
+      hasPendingUserMessage:
+          detail.pendingUserMessage?.trim().isNotEmpty == true ||
+              detail.pendingAttachments?.isNotEmpty == true,
+      parentSessionId: detail.parentSessionId,
+      contextWindowSnapshot: ContextWindowSnapshot(
+        contextLength: detail.contextLength,
+        thresholdTokens: detail.thresholdTokens,
+        lastPromptTokens: detail.lastPromptTokens,
+        inputTokens: detail.inputTokens,
+        outputTokens: detail.outputTokens,
+        estimatedCost: detail.estimatedCost,
+        tokensPerSecond: state.stream.liveTokensPerSecond ??
+            state.contextWindowSnapshot?.tokensPerSecond,
+      ),
+      completedToolCallGroups: nextCompletedGroups,
+      liveToolCalls: nextLiveToolCalls,
+      completedReasoningGroups: nextCompletedReasoning,
+      liveReasoningText: nextLiveReasoning,
+      responseCompletionNeedsTranscriptRefresh: false,
+      isViewingCachedData: false,
+      isShowingOfflineCache: false,
+    );
+    unawaited(_writeCacheMessages(state.sessionId, mergedMessages));
+    final activeStreamId = detail.activeStreamId;
+    if (activeStreamId != null &&
+        activeStreamId.isNotEmpty &&
+        state.stream.activeStreamId == null) {
+      state = state.copyWith(
+        phase: ChatPhase.streaming,
+        stream: state.stream.copyWith(activeStreamId: activeStreamId),
+      );
+      unawaited(_reconnectIfNeeded());
     }
   }
 
@@ -2438,8 +2502,17 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (sessionId.isEmpty || messages.isEmpty) return;
     try {
       final cacheService = ref.read(cacheServiceProvider);
-      final takeCount = messages.length > 50 ? 50 : messages.length;
-      final recentMessages = messages.sublist(messages.length - takeCount);
+      final authoritative = messages.where((m) {
+        final id = m.messageId ?? m.id;
+        if (id.startsWith('local-') || id.startsWith('stream-')) {
+          return false;
+        }
+        return true;
+      }).toList();
+      if (authoritative.isEmpty) return;
+      final takeCount = authoritative.length > 50 ? 50 : authoritative.length;
+      final recentMessages =
+          authoritative.sublist(authoritative.length - takeCount);
       final maps = recentMessages.map(_messageToCacheJson).toList();
       await cacheService.writeMessages(
         sessionId: sessionId,
