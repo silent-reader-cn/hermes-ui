@@ -1,0 +1,342 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hermex_flutter/app/theme/status_colors.dart';
+import 'package:hermex_flutter/core/api/api_client.dart';
+import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/providers/clipboard_paste_provider.dart';
+import 'package:hermex_flutter/core/providers/file_picker_provider.dart';
+import 'package:hermex_flutter/core/utils/accessibility.dart';
+import 'package:hermex_flutter/core/utils/clipboard_paste.dart';
+import 'package:hermex_flutter/core/utils/file_picker.dart';
+import 'package:hermex_flutter/features/chat/chat_page.dart';
+import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermex_flutter/features/chat/widgets/chat_input_bar.dart';
+
+import '../../helpers/fake_chat_api.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Chat 输入框粘贴附件链路 Widget 测试', () {
+    testWidgets('Ctrl+V / PasteAttachmentIntent 粘贴图片：调用 uploadFile → 本地消息入流 + 成功弹窗', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(
+        result: (
+          bytes: Uint8List.fromList([137, 80, 78, 71, 10, 20]),
+          filename: 'screenshot.png',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) =>
+            ResponseBody.fromString('{"ok":true,"filename":"screenshot.png"}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      expect(inputFinder, findsOneWidget);
+
+      // 聚焦输入框并触发粘贴意图
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      // 发送 PasteAttachmentIntent 动作
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 断言 uploadFile 请求发出且参数正确
+      expect(adapter.requests.length, 1);
+      final req = adapter.requests.first;
+      expect(req.uri.path, '/api/upload');
+      final bodyStr = utf8.decode(req.data as Uint8List, allowMalformed: true);
+      expect(bodyStr, contains('name="session_id"\r\n\r\ns1'));
+      expect(bodyStr, contains('filename="screenshot.png"'));
+
+      // 断言聊天流中追加本地消息
+      expect(chatApi.startChatCalls, 1);
+      expect(chatApi.lastSentText, '📎 screenshot.png');
+      expect(find.text('📎 screenshot.png'), findsOneWidget);
+
+      // 断言成功提示对话框出现
+      expect(find.text('上传成功'), findsOneWidget);
+      expect(find.text('附件「screenshot.png」已上传。'), findsOneWidget);
+
+      // 关闭弹窗
+      await tester.tap(find.text('好'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('上传成功'), findsNothing);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('PasteTextIntent 粘贴文件：调用 uploadFile → 本地消息入流 + 成功弹窗', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(
+        result: (
+          bytes: Uint8List.fromList([1, 2, 3, 4]),
+          filename: 'document.pdf',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) =>
+            ResponseBody.fromString('{"ok":true,"filename":"document.pdf"}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      // 触发 PasteTextIntent（系统粘贴 / 右键菜单默认意图）
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteTextIntent(SelectionChangedCause.keyboard),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.requests.length, 1);
+      expect(chatApi.lastSentText, '📎 document.pdf');
+      expect(find.text('上传成功'), findsOneWidget);
+
+      await tester.tap(find.text('好'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _unmount(tester);
+    });
+
+    testWidgets('纯文本粘贴放行：pasteService 返回 null 时插入文本到输入框，不发起上传', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(result: null);
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      // 预置系统剪贴板文本
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return {'text': 'Hello from clipboard!'};
+          }
+          return null;
+        },
+      );
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      // 触发 PasteAttachmentIntent
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 断言没有调用 uploadFile
+      expect(adapter.requests, isEmpty);
+      expect(chatApi.startChatCalls, 0);
+
+      // 断言输入框内文本为剪贴板文本
+      final textField = tester.widget<CupertinoTextField>(inputFinder);
+      expect(textField.controller?.text, 'Hello from clipboard!');
+
+      // 断言发送按钮变为可用
+      final sendBtn = find.byKey(const ValueKey('chat-send-button'));
+      final sendWidget = tester.widget<AccessibleButton>(sendBtn);
+      expect(sendWidget.onPressed, isNotNull);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('粘贴上传失败路径：uploadFile 抛错 → 弹出失败提示对话框且包含 statusRedText 错误信息', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(
+        result: (
+          bytes: Uint8List.fromList([1, 2, 3]),
+          filename: 'corrupt.png',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"error":"上传超时"}', 500),
+      );
+      final client = _buildClient(adapter);
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.requests.length, 1);
+      expect(chatApi.startChatCalls, 0);
+
+      // 断言失败弹窗
+      expect(find.text('上传失败'), findsOneWidget);
+      final errorFinder = find.text('服务器返回 HTTP 500。');
+      expect(errorFinder, findsOneWidget);
+      final errorWidget = tester.widget<Text>(errorFinder);
+      expect(
+        errorWidget.style?.color,
+        statusRedText.resolveFrom(tester.element(find.byType(CupertinoApp))),
+      );
+
+      await tester.tap(find.text('好'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _unmount(tester);
+    });
+
+    testWidgets('只读/禁用会话中忽略粘贴', (tester) async {
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const [], 'is_read_only': true},
+      };
+      final pasteService = FakeClipboardPasteService(
+        result: (
+          bytes: Uint8List.fromList([1, 2, 3]),
+          filename: 'photo.png',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.requests, isEmpty);
+      expect(chatApi.startChatCalls, 0);
+
+      await _unmount(tester);
+    });
+  });
+}
+
+Future<void> _pumpPage(
+  WidgetTester tester, {
+  required FakeChatApi chatApi,
+  required ClipboardPasteService pasteService,
+  required ApiClient apiClient,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        chatApiProvider.overrideWithValue(chatApi),
+        filePickerServiceProvider.overrideWithValue(FakeFilePickerService()),
+        clipboardPasteServiceProvider.overrideWithValue(pasteService),
+        apiClientProvider.overrideWithValue(apiClient),
+      ],
+      child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+}
+
+Future<void> _unmount(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+}
+
+ApiClient _buildClient(_RecordingAdapter adapter) {
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
+  dio.httpClientAdapter = adapter;
+  final publicDio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
+  publicDio.httpClientAdapter = adapter;
+  return ApiClient(
+    baseUrl: 'http://test.local:30002',
+    dio: dio,
+    publicMediaDio: publicDio,
+  );
+}
+
+class _RecordingAdapter implements HttpClientAdapter {
+  _RecordingAdapter({required this.responder});
+
+  final ResponseBody Function(RequestOptions options) responder;
+  final List<RequestOptions> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return responder(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
