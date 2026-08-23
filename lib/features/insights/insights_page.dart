@@ -458,7 +458,7 @@ class _ModelBreakdownTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 近期令牌柱状图（可点击详情 + hover 高亮 + 深色 tooltip）
+// 近期令牌柱状图（可点击弹窗详情 + hover/触摸高亮，已去掉悬浮 tooltip）
 // ---------------------------------------------------------------------------
 
 class _DailyTokensBarChart extends StatefulWidget {
@@ -492,27 +492,7 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
           minY: 0,
           barTouchData: BarTouchData(
             enabled: true,
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => const Color(0xCC1C1C1E),
-              tooltipPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 6,
-              ),
-              tooltipMargin: 8,
-              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                final day = days[group.x];
-                final date = day.date ?? '-';
-                final tokens = formatTokensCompact(day.totalTokens);
-                return BarTooltipItem(
-                  '$date\n$tokens',
-                  const TextStyle(
-                    color: CupertinoColors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                );
-              },
-            ),
+            handleBuiltInTouches: false,
             touchCallback: (event, response) {
               final spot = response?.spot;
               final newIndex = spot?.touchedBarGroupIndex ?? -1;
