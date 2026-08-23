@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../l10n/app_localizations.dart';
 import '../utils/equality.dart';
 import '../utils/lossy_json.dart';
 import '../utils/uuid.dart';
@@ -171,6 +172,31 @@ class ToolCallGroup {
     if (uniqueNames.length == 1) return 'Activity: 1 tool';
     final visible = uniqueNames.take(3).join(', ');
     final remaining = uniqueNames.length - uniqueNames.length.clamp(0, 3);
+    if (remaining > 0) return '$visible, +$remaining';
+    return visible;
+  }
+
+  /// 本地化的活动摘要：显示频次前 3 的工具及调用次数（如 `读取文件 ×3, 终端 ×1`），剩余种类用 `+N` 兜底。
+  String localizedActivityTitle(AppLocalizations l10n) {
+    if (toolCalls.isEmpty) return l10n.noTools;
+    final counts = <String, int>{};
+    final initialIndex = <String, int>{};
+    for (var i = 0; i < toolCalls.length; i++) {
+      final name = l10n.localizeToolName(toolCalls[i].displayName);
+      initialIndex.putIfAbsent(name, () => initialIndex.length);
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final entries = counts.entries.toList()
+      ..sort((a, b) {
+        final cmp = b.value.compareTo(a.value);
+        if (cmp != 0) return cmp;
+        return (initialIndex[a.key] ?? 0).compareTo(initialIndex[b.key] ?? 0);
+      });
+    final visible = entries
+        .take(3)
+        .map((e) => '${e.key} \u00D7${e.value}')
+        .join(', ');
+    final remaining = entries.length - 3;
     if (remaining > 0) return '$visible, +$remaining';
     return visible;
   }

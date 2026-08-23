@@ -22,6 +22,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final call = widget.call;
     final content = ToolCallDisplayContent.of(call);
     final failed = call.isError == true;
@@ -69,7 +70,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    call.displayName,
+                    l10n.localizeToolName(call.displayName),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -267,7 +268,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    group.activityTitle,
+                    group.localizedActivityTitle(l10n),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
