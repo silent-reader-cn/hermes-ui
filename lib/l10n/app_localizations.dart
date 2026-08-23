@@ -115,6 +115,8 @@ class AppLocalizations {
   // 2. Session List
   // ---------------------------------------------------------------------------
   String get sessions => isEnglish ? 'Sessions' : '会话';
+  String get utilityNavigation => isEnglish ? 'Navigation' : '快捷导航';
+  String get switchDestination => isEnglish ? 'Switch destination' : '切换目的地';
   String get doneSelecting => isEnglish ? 'Done' : '完成选择';
   String get newSession => isEnglish ? 'New Session' : '新建会话';
   String get searchSessions => isEnglish ? 'Search sessions' : '搜索会话';
