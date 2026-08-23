@@ -2,8 +2,9 @@ library;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 
-/// 聊天气泡 Markdown 样式（chat_spec.md §6.3 Markdown 渲染）。
+/// 聊天气泡与正文 Markdown 样式（chat_spec.md §6.3 Markdown 渲染）。
 ///
 /// 从 `MarkdownStyleSheet.fromCupertinoTheme` 继承基底结构（标题/列表等的
 /// 布局常量），但**全部文本样式显式重写**：
@@ -24,6 +25,15 @@ const double kMarkdownBodyFontSize = 15.0;
 
 /// 加粗字重：MiSans Medium（500/600 均映射 Medium 字形，不触发伪粗体）。
 const FontWeight kMarkdownStrongWeight = FontWeight.w600;
+
+/// 行内代码 pill 默认圆角：4px。
+const double kInlineCodeBorderRadius = 4.0;
+
+/// 行内代码 pill 默认内边距：水平 4px，垂直 1px（轻量留白，不抬高行高）。
+const EdgeInsetsGeometry kInlineCodePadding = EdgeInsets.symmetric(
+  horizontal: 4.0,
+  vertical: 1.0,
+);
 
 TextStyle _body({
   required Color color,
@@ -153,5 +163,161 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
     tableBody: _body(color: white, size: 14),
     tableBorder: TableBorder.all(color: white.withValues(alpha: 0.4), width: 0.5),
     checkbox: _body(color: white),
+  );
+}
+
+/// 行内代码 `code` 块 pill 样式构建器。
+///
+/// 将行内 `code` 渲染为带轻量圆角和内边距的 pill 块（[WidgetSpan] 包裹的 [Container]），
+/// 解决原生 `TextStyle.backgroundColor` 无 padding、紧贴文字且无圆角的问题。
+///
+/// 机制说明：
+/// 1. 通过 AST 属性与换行特征识别并放行 `<pre>` 块级代码（保留其 [Scrollbar] 与 [codeblockDecoration]）；
+/// 2. 对行内 `code` 生成 [WidgetSpan] 并居中对齐（[PlaceholderAlignment.middle]）；
+/// 3. 返回 [Text.rich] 供 `flutter_markdown` 的 `_mergeInlineChildren` 归并进段落富文本中，
+///    保持 [SelectableText] 统一可选/复制能力与正常行高。
+class InlineCodeElementBuilder extends MarkdownElementBuilder {
+  InlineCodeElementBuilder({
+    this.backgroundColor,
+    this.textStyle,
+    this.padding = kInlineCodePadding,
+    this.borderRadius = const BorderRadius.all(
+      Radius.circular(kInlineCodeBorderRadius),
+    ),
+  });
+
+  /// pill 背景色（未传时从 preferredStyle?.backgroundColor 或 systemGrey5 获取）。
+  final Color? backgroundColor;
+
+  /// 文字样式（未传时从 preferredStyle 或 13pt monospace 基准派生）。
+  final TextStyle? textStyle;
+
+  /// pill 内部留白。
+  final EdgeInsetsGeometry padding;
+
+  /// pill 圆角。
+  final BorderRadiusGeometry borderRadius;
+
+  /// 判断当前 AST 元素是否为 `<pre>` 块级代码中的 `<code>`。
+  ///
+  /// CommonMark / GFM 规范中：
+  /// - 块级代码（Fenced/Indented）恒以换行符 `\n` 结尾或携带 `language-*` class / metadata 属性；
+  /// - 行内代码（Inline code span）规范要求内部换行均转换为单个空格，且无 class/metadata 属性。
+  bool _isCodeBlock(md.Element element) {
+    if (element.attributes.containsKey('class') ||
+        element.attributes.containsKey('data-metadata')) {
+      return true;
+    }
+    final text = element.textContent;
+    return text.contains('\n') || text.endsWith('\n');
+  }
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    if (element.tag == 'code') {
+      if (_isCodeBlock(element)) {
+        // 处于代码块 (<pre>) 内部，放行给默认 codeblock 渲染管道
+        return null;
+      }
+
+      final color = backgroundColor ??
+          preferredStyle?.backgroundColor ??
+          CupertinoColors.systemGrey5.resolveFrom(context);
+
+      final baseStyle = preferredStyle ??
+          textStyle ??
+          TextStyle(
+            fontSize: 13,
+            height: 1.4,
+            fontFamily: 'monospace',
+            color: CupertinoColors.label.resolveFrom(context),
+          );
+
+      // 将内层文本背景置为透明，避免与外层 pill Container 背景重复叠加
+      final innerTextStyle = baseStyle.copyWith(
+        backgroundColor: const Color(0x00000000),
+      );
+
+      final text = element.textContent;
+
+      return Text.rich(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: borderRadius,
+            ),
+            child: Text(
+              text,
+              style: innerTextStyle,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return null;
+  }
+}
+
+/// 创建通用 Markdown 元素构建器映射表（注册 code 标签以支持行内 pill）。
+Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
+  BuildContext context, {
+  Color? codeBackgroundColor,
+  TextStyle? codeTextStyle,
+  EdgeInsetsGeometry codePadding = kInlineCodePadding,
+  BorderRadiusGeometry codeBorderRadius = const BorderRadius.all(
+    Radius.circular(kInlineCodeBorderRadius),
+  ),
+}) {
+  final builder = InlineCodeElementBuilder(
+    backgroundColor: codeBackgroundColor,
+    textStyle: codeTextStyle,
+    padding: codePadding,
+    borderRadius: codeBorderRadius,
+  );
+  return <String, MarkdownElementBuilder>{
+    'code': builder,
+  };
+}
+
+/// assistant / memory 等正文场景 Markdown 构建器（灰色 pill 底色）。
+Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
+  BuildContext context,
+) {
+  final label = CupertinoColors.label.resolveFrom(context);
+  final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
+  return createMarkdownElementBuilders(
+    context,
+    codeBackgroundColor: grey5,
+    codeTextStyle: TextStyle(
+      fontSize: 13,
+      height: 1.4,
+      fontFamily: 'monospace',
+      color: label,
+    ),
+  );
+}
+
+/// user 气泡场景 Markdown 构建器（蓝底半透明白 pill 底色）。
+Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
+  BuildContext context,
+) {
+  return createMarkdownElementBuilders(
+    context,
+    codeBackgroundColor: CupertinoColors.white.withValues(alpha: 0.22),
+    codeTextStyle: const TextStyle(
+      fontSize: 13,
+      height: 1.4,
+      fontFamily: 'monospace',
+      color: CupertinoColors.white,
+    ),
   );
 }

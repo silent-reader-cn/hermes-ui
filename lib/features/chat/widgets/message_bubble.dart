@@ -198,6 +198,7 @@ class _UserContent extends StatelessWidget {
               data: parsedDisplay,
               selectable: true,
               styleSheet: buildUserMarkdownStyleSheet(context),
+              builders: createUserMarkdownBuilders(context),
               // ignore: deprecated_member_use
               imageBuilder: (uri, title, alt) {
                 return ChatInlineMediaWidget(
@@ -276,6 +277,7 @@ class _AssistantContent extends StatelessWidget {
             data: parsedContent,
             selectable: true,
             styleSheet: buildAssistantMarkdownStyleSheet(context),
+            builders: createAssistantMarkdownBuilders(context),
             // ignore: deprecated_member_use
             imageBuilder: (uri, title, alt) {
               return ChatInlineMediaWidget(
