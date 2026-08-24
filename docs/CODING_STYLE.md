@@ -26,6 +26,8 @@ API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002）。
 | 安全存储 | flutter_secure_storage 11.x | API Key 凭据 |
 | 桌面能力 | window_manager / tray_manager / hotkey_manager | 窗口/托盘/快捷键 |
 | 通知 | flutter_local_notifications 22.3.x | Android 后台通知 |
+| 媒体/文件 | media_kit + media_kit_video + media_kit_libs_video + file_picker 12.x | 音视频预览、附件选择 |
+| 剪贴板 | super_clipboard 0.1.x | 粘贴附件/文本 |
 | 图表 | fl_chart 1.2.x | Insights |
 | 字体 | MiSans Regular/Medium | 见 `AGENTS.md` §5 |
 
@@ -36,13 +38,13 @@ API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002）。
 ```
 lib/
 ├── main.dart / driver_main.dart / l10n/
-├── app/         # app.dart / router.dart / deep_link.dart / shell/* / theme/*
-├── core/        # api/ / models/ / cache/ / connections/ / providers/ / utils/
-└── features/    # onboarding/session_list/chat/tasks/skills/memory/workspace*/kanban/insights/settings/git/prompts/projects/notifications/desktop/shared
-test/            # 镜像 lib/ 结构
-assets/branding/ + assets/fonts/
-tools/fake_gateway/ + tools/icon_pipeline/
-docs/specs/ + docs/PROTOCOL_NOTES.md 等
+├── app/         # app.dart / router.dart / deep_link.dart / shell/* / theme/* / widgets/*(6)
+├── core/        # api/(12域+基础设施) / models/(28) / cache/(8) / connections/ / providers/(2) / utils/(10)
+└── features/    # 17 个：onboarding/session_list/chat/tasks/skills/memory/workspace/workspace_manager/kanban/insights/settings/git/prompts/projects/notifications/desktop/shared — 详见 AGENTS.md §3-§3.1 统一叫法表
+test/            # 镜像 lib/ 结构（~80+ 文件）
+assets/branding/(hermes-agent-icon-1024 + tray_icon.ico/16/32) + assets/fonts/(MiSans 2 + LICENSE/OFL)
+tools/fake_gateway/(main+smoke_test+requirements) + tools/icon_pipeline/
+docs/specs/(11+1 backend-api-details) + docs/PROTOCOL_NOTES.md 等 — 详见 AGENTS.md §3
 ```
 
 ## 4. Dart 代码风格（强制）
@@ -63,7 +65,7 @@ docs/specs/ + docs/PROTOCOL_NOTES.md 等
 
 - 主题：`cupertino_theme.dart` → `buildCupertinoTheme`，主色 `0xFF007AFF`，字体 `MiSans`，`barBackgroundColor` 跟随 scaffold 不透明
 - 状态色：`status_colors.dart` 全部 `CupertinoDynamicColor` 且 WCAG AA ≥4.5:1（statusGreen/Orange/Blue/Grey/Teal/Red + secondaryText），禁直接用 systemGreen/Orange/Red 作文字色
-- 外壳：`DESIGN.md` 定义 `kAdaptiveBreakpoint = 900`，宽屏 320px 侧栏 + 1px separator；详见 `AGENTS.md` §5 与 `DESIGN.md`
+- 外壳：`DESIGN.md` 定义 `kAdaptiveBreakpoint = 900`，宽屏 320px 侧栏 + 1px separator；路由表以 `lib/app/router.dart` 为准：`/` `/chat` `/chat/:id` `/settings` `/tasks` `/skills` `/memory` `/workspace/:id` `/workspaces` `/kanban` `/git/:id` `/insights` 进壳，`/onboarding` 独立；统一叫法见 `AGENTS.md` §3.1；详见 `AGENTS.md` §5 与 `DESIGN.md`
 
 ## 6. 模型与 API 约定（对齐 Hermex 容错策略）
 

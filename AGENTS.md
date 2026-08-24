@@ -29,69 +29,112 @@ API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002，经 frp 暴
 | 本地持久化 | shared_preferences 2.5.x + path_provider | 轻量配置、窗口记忆等 |
 | 桌面能力 | window_manager + tray_manager + hotkey_manager | 窗口记忆、系统托盘、全局快捷键 |
 | 通知 | flutter_local_notifications 22.3.x | Android 后台回合通知 |
-| 媒体 | media_kit + media_kit_video + file_picker | 音视频预览、附件选择 |
+| 媒体/文件 | media_kit 1.2.x + media_kit_video 2.0.x + media_kit_libs_video + file_picker 12.x | 音视频预览、附件选择 |
+| 剪贴板 | super_clipboard 0.1.x | 粘贴附件/文本（clipboard_paste） |
 | 图表 | fl_chart 1.2.x | Insights 统计 |
 | 字体 | MiSans (Regular/Medium) | 见 §5 样式规范 |
 | 测试 | flutter_test + mocktail + fake_async + golden_toolkit + build_runner/drift_dev | 单元/widget/契约/金照 |
 
 > 完整依赖以 `pubspec.yaml` 为准；新增依赖需对齐本表选型，不得私自引入 Material 体系或替代状态管理方案。
 
-## 3. 目录结构（以实盘为准）
+## 3. 目录结构（以实盘为准，2026-08-24 快照）
 
 ```
 lib/
-├── main.dart
-├── driver_main.dart
+├── main.dart / driver_main.dart
 ├── l10n/app_localizations.dart
 ├── app/
-│   ├── app.dart                    # 壳：CupertinoApp + 主题 + 本地化
-│   ├── router.dart                 # go_router + ShellRoute
-│   ├── deep_link.dart
+│   ├── app.dart / router.dart / deep_link.dart
 │   ├── shell/                      # 自适应双栏外壳（DESIGN.md）
 │   │   ├── adaptive_shell.dart
 │   │   ├── session_sidebar.dart
 │   │   ├── sidebar_utility_toolbar.dart
 │   │   ├── sidebar_resize_handle.dart
 │   │   └── empty_detail_pane.dart
-│   └── theme/
-│       ├── cupertino_theme.dart
-│       ├── status_colors.dart
-│       └── theme_provider.dart
+│   ├── theme/
+│   │   ├── cupertino_theme.dart
+│   │   ├── status_colors.dart
+│   │   └── theme_provider.dart
+│   └── widgets/                    # 通用 Cupertino 弹层/菜单/导航
+│       ├── adaptive_action_menu.dart
+│       ├── adaptive_popover.dart
+│       ├── adaptive_sliver_navigation_bar.dart
+│       ├── cupertino_popover.dart
+│       ├── narrow_navigation_dropdown.dart
+│       └── popover_dropdown.dart
 ├── core/
-│   ├── api/                        # ApiClient + 10 域扩展 + endpoints/sse/ws/cookie/header/errors
-│   │   ├── api_client*.dart
-│   │   ├── endpoints.dart
-│   │   ├── sse_client.dart
-│   │   ├── ws_client.dart
-│   │   ├── cookie_store.dart
-│   │   └── custom_header.dart
-│   ├── models/                     # 24+ 数据模型（手写 fromJson/toJson 容错）
-│   ├── cache/                      # drift 数据库 + cache/media_cache
-│   ├── connections/                # 多服务器连接与切换
-│   ├── providers/                  # file_picker 等跨域 provider
-│   └── utils/                      # accessibility/lossy_json/equality/uuid/...
-└── features/
-    ├── onboarding/  session_list/  chat/  tasks/  skills/
-    ├── memory/  workspace/  workspace_manager/  kanban/  insights/  settings/
-    ├── git/  prompts/  projects/  notifications/  desktop/  shared/
+│   ├── api/                        # ApiClient + 12 域扩展 + 基础设施
+│   │   ├── api_client.dart + api_client_chat/cron/extensions/git/kanban/mcp/memory_skills/prompts/server_panels/sessions/upload/workspace.dart
+│   │   ├── api_exception.dart / cookie_store.dart / custom_header.dart
+│   │   └── endpoints.dart / sse_client.dart / ws_client.dart
+│   ├── models/                     # 28 数据模型（手写 fromJson/toJson 容错）
+│   │   └── approval/auxiliary_model/chat_message/clarification/context_window_snapshot/cron/extensions/git_workspace/goal/insights/json_value/kanban/mcp/memory/message_attachment/model_favorite/saved_prompt/server_account/server_catalog/server_info/session/skills/slash_skill_formatter/tool_call/transcribe_response/turn_file_change/upload_response/workspace.dart
+│   ├── cache/                      # drift 数据库（app_database*.dart + cache_service/media_cache_service/cache_providers）
+│   ├── connections/                # 多服务器连接与切换（server_connection/connection_store/connection_providers）
+│   ├── providers/                  # 跨域 provider（file_picker_provider/clipboard_paste_provider）
+│   └── utils/                      # 工具（accessibility/lossy_json/equality/uuid/selected_context/injected_message/context_window_formatter/clipboard_paste/file_picker/attachment_audio_detection）
+└── features/                       # 17 个 feature，各成目录，Provider 与页面同目录；跨 feature 复用进 shared/
+    ├── onboarding/       # 引导页/连接向导（/onboarding 独立全屏）
+    ├── session_list/     # 会话列表（/，8 文件：page/header/utility_rows/disclosure/entry_visibility/subtitle_settings/auto_refresh/providers）
+    ├── chat/             # 聊天（/chat*，23 文件：page/controller/state/models/providers/server_api/selection_provider + widgets/*）
+    ├── tasks/            # 定时任务（/tasks）
+    ├── skills/           # 技能（/skills）
+    ├── memory/           # 记忆（/memory）
+    ├── workspace/        # 会话工作区（/workspace/:sessionId，单会话文件）
+    ├── workspace_manager/# 工作区管理（/workspaces，注册表级 5 文件：page/api/providers/add_sheet/preview）
+    ├── kanban/           # 看板（/kanban）
+    ├── insights/         # 洞察/用量（/insights）
+    ├── settings/         # 设置（/settings，10 文件：page/providers/subpages + 6 子区 profile/extensions/mcp/auxiliary_models/cron_visibility/injected_notice/tool_group）
+    ├── git/              # Git 面板（/git/:sessionId，4 文件：page/api/providers/branch_tree）
+    ├── prompts/          # 提示词库（无独立路由，Chat 输入栏 Sheet）
+    ├── projects/         # 项目（无独立路由，列表顶部 Picker Sheet）
+    ├── notifications/    # 通知（无路由，后台服务 3 文件）
+    ├── desktop/          # 桌面能力（无路由，6 文件：window_memory/title/tray/shortcuts/lifecycle/settings）
+    └── shared/           # 共享组件（app_back_button 等跨 feature 复用）
 
-test/                               # 镜像 lib/ 结构（单元 + widget + 契约）
+test/                               # 镜像 lib/ 结构（~80+ 文件：app/* + core/api+cache+connections+models+utils + features/*）
 assets/
-├── branding/                       # hermes 图标、托盘图标
-└── fonts/  MiSans-Regular.ttf / MiSans-Medium.ttf
-tool/                               # Flutter tool 扩展（预留）
+├── branding/                       # hermes-agent-icon-1024.png + tray_icon.ico / tray_icon_16.png / tray_icon_32.png
+└── fonts/  MiSans-Regular.ttf / MiSans-Medium.ttf (+ LICENSE/OFL.txt)
 tools/
-├── fake_gateway/  main.py + smoke_test.py  # 契约模拟服务器
+├── fake_gateway/  main.py + smoke_test.py + requirements.txt  # 契约模拟服务器
 └── icon_pipeline/ generate_icons.py
 docs/
 ├── CODING_STYLE.md                 # 本文档精简备份（同源，AGENTS.md 为准）
 ├── PROTOCOL_NOTES.md               # SSE/WS 协议笔记
-├── QA.md / RELEASE.md / auto_reauth_spec.md / cache_audit_report.md
-└── specs/  api_spec.md / app_shell_spec.md / chat_spec.md / models_spec.md ...
-.reference/hermex-src/              # 蓝本只读参考，不进仓库
+├── QA.md / RELEASE.md / auto_reauth_spec.md / cache_audit_report.md / PLAN-session-gaps-phase2-2026-08.md
+└── specs/  11 规格 + 1 目录：agent-injected-message-cards/api_spec/app_shell_spec/backend-api-catalog(+backend-api-details/)/chat_spec/models_spec/saved-prompts/selected-context/session-auto-refresh/settings-extensions-mcp-aux/workspace_manager_spec
+.reference/hermex-src/              # 蓝本只读参考，不进仓库（HermesMobile: Features 12 / Models 23 / Networking 22 + Config/Auth/...）
 ```
 
 > 新增 feature 必须在 `lib/features/<name>/` 下自成目录，Provider 与页面同目录；跨 feature 复用进 `features/shared/`。
+
+### 3.1 统一叫法表（界面/功能 ↔ 路由 ↔ 目录 ↔ 蓝本对照）
+
+> 日常叫法统一用「中文名」，代码/路由/目录用「英文名」。窄屏/宽屏、外壳组件亦定死，避免「首页/列表页/文件/空间」混叫。
+
+| # | 统一叫法 | 路由 | Flutter 目录 | Hermex 蓝本 `Features/*` | 职责一句话 |
+|---|---|---|---|---|---|
+| 1 | **引导页/连接向导** Onboarding | `/onboarding` 独立全屏不进壳 | `features/onboarding/` | `Onboarding` | 填 baseUrl、登录、自定义 Header、保存并激活连接 |
+| 2 | **会话列表** Session List | `/` 进壳，宽屏左栏常驻 | `features/session_list/` | `SessionList` | 搜索/筛选/分页/置顶/归档/删除/分支/批量操作、项目过滤入口 |
+| 3 | **聊天** Chat | `/chat`、`/chat/:sessionId?q=&match=` | `features/chat/` + `widgets/` | `Chat` | SSE 流式消息、审批/澄清/工具调用、上下文圆环、媒体气泡、深链高亮定位 |
+| 4 | **定时任务** Tasks | `/tasks` | `features/tasks/` | `Tasks` | Cron 列表/创建/启停/删除 |
+| 5 | **技能** Skills | `/skills` | `features/skills/` | `Skills` | Slash Skills 管理 |
+| 6 | **记忆** Memory | `/memory` | `features/memory/` | `Memory` | 记忆条目 CRUD |
+| 7 | **会话工作区** Workspace | `/workspace/:sessionId` | `features/workspace/` | `Workspace` | 单会话文件浏览/上传/预览 |
+| 8 | **工作区管理** Workspace Manager | `/workspaces` | `features/workspace_manager/` | `Workspace` 拆出 | 注册表级多工作区管理 + 文件预览页 |
+| 9 | **看板** Kanban | `/kanban` | `features/kanban/` | `Kanban` | WS 事件流看板 |
+| 10 | **洞察/用量** Insights | `/insights` | `features/insights/` | `Insights` | fl_chart 用量统计 |
+| 11 | **设置** Settings | `/settings` | `features/settings/` | `Settings` | 档案/模型/扩展/MCP/辅助模型/注入提示等 6 子区 |
+| 12 | **Git 面板** Git | `/git/:sessionId` | `features/git/` | `Workspace` 内嵌 | 分支树/状态 |
+| 13 | **提示词库** Saved Prompts | 无独立路由，Chat 输入栏 Sheet | `features/prompts/` | Chat 内 | 收藏提示词 |
+| 14 | **项目** Projects | 无独立路由，列表顶部 Picker Sheet | `features/projects/` | SessionList 关联 | 项目筛选/切换 |
+| 15 | **通知** Notifications | 无路由，后台服务 | `features/notifications/` | `LiveActivities` 对位 | Android 后台回合完成通知 |
+| 16 | **桌面能力** Desktop | 无路由 | `features/desktop/` | — | window_manager / tray_manager / hotkey_manager |
+| 17 | **共享组件** Shared | — | `features/shared/` | `Shared` | 跨 feature 复用（AppBackButton 等） |
+
+**外壳叫法定死：** `AdaptiveShell` 自适应外壳 / `SessionSidebar` 会话侧边栏 / `SidebarUtilityToolbar` 侧边栏工具条 / `SidebarResizeHandle` 拖拽手柄 / `EmptyDetailPane` 空态占位 / 断点 `kAdaptiveBreakpoint = 900`。
+**禁止混叫：** 不说“首页/主页/列表页”混指会话列表；不说“文件/空间”混指工作区——`/workspace/:id` 叫**会话工作区**，`/workspaces` 叫**工作区管理**。
 
 ## 4. Dart 代码风格（强制）
 
@@ -148,8 +191,8 @@ avoid_dynamic_calls: false  # 容错解码刻意放宽
 
 - 自适应阈值：`kAdaptiveBreakpoint = 900.0`，`MediaQuery.sizeOf(context).width >= 900` 为宽屏（`DESIGN.md` §2，避开 Flutter 测试默认 800×600 视口）
 - 宽屏：`AdaptiveShell` → 左 320px `SessionSidebar`（工具条 + 完整 `SessionListPage` + 1px separator）+ 右 `Expanded` 内容区；窄屏直接透传 `child`
-- 路由进壳：`/`、`/chat*`、`/tasks`、`/kanban`、`/skills`、`/memory`、`/insights`、`/settings`、`/workspace/*`、`/git/*` 进 `ShellRoute`；`/onboarding` 顶层独立
-- 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`tray_icon*.png/.ico`
+- 路由进壳（`router.dart` 为准，`ShellRoute` 内）：`/`、`/chat`、`/chat/:sessionId`、`/settings`、`/tasks`、`/skills`、`/memory`、`/workspace/:sessionId`、`/workspaces`、`/kanban`、`/git/:sessionId`、`/insights`；`/onboarding` 顶层独立不进壳（`DESIGN.md` §4）
+- 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`tray_icon.ico` / `tray_icon_16.png` / `tray_icon_32.png`
 
 ### 5.4 无障碍与本地化
 
