@@ -1181,7 +1181,7 @@ class _SessionRowState extends State<_SessionRow> {
         !text.toLowerCase().contains(query.toLowerCase())) {
       return Text(
         text,
-        maxLines: 2,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: style,
       );
@@ -1212,7 +1212,7 @@ class _SessionRowState extends State<_SessionRow> {
     }
     return Text.rich(
       TextSpan(style: style, children: spans),
-      maxLines: 2,
+      maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
   }

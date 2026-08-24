@@ -315,8 +315,8 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
         maxWidth: widget.maxWidth ?? widget.effectiveWidth,
         maxHeight: widget.maxHeight,
       ),
-      child: SingleChildScrollView(
-        child: _PopoverCard(
+      child: _PopoverCard(
+        child: SingleChildScrollView(
           child: widget.builder(context, widget.close),
         ),
       ),
