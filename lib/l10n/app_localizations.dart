@@ -299,27 +299,111 @@ class AppLocalizations {
       case 'exec':
       case 'shell':
       case 'bash':
+      case 'cmd':
+      case 'powershell':
+      case 'zsh':
         return isEnglish ? 'Terminal' : '终端';
+      case 'skill_view':
+      case 'view_skill':
+        return isEnglish ? 'Skill View' : '查看技能';
+      case 'skill':
+        return isEnglish ? 'Skill' : '技能';
+      case 'execute_code':
+      case 'exec_code':
+      case 'code_execution':
+      case 'run_code':
+        return isEnglish ? 'Execute Code' : '执行代码';
+      case 'todo_write':
+      case 'write_todo':
+      case 'todo_update':
+        return isEnglish ? 'Todo Write' : '写入待办';
+      case 'todo':
+      case 'task':
+        return isEnglish ? 'Todo' : '待办';
+      case 'search_files':
+      case 'file_search':
+        return isEnglish ? 'Search Files' : '搜索文件';
       case 'read':
       case 'read_file':
       case 'readfile':
+      case 'view_file':
+      case 'viewfile':
+      case 'cat':
         return isEnglish ? 'Read File' : '读取文件';
       case 'write':
       case 'write_file':
       case 'writefile':
+      case 'write_to_file':
+      case 'create_file':
         return isEnglish ? 'Write File' : '写入文件';
       case 'patch':
       case 'apply_patch':
+      case 'applypatch':
+      case 'replace_file_content':
+      case 'edit_file':
+      case 'editfile':
+      case 'str_replace':
         return isEnglish ? 'Apply Patch' : '应用补丁';
+      case 'memory':
+      case 'memory_write':
+      case 'memory_read':
+        return isEnglish ? 'Memory' : '记忆';
+      case 'web_search':
+      case 'websearch':
+        return isEnglish ? 'Web Search' : '联网搜索';
+      case 'web_extract':
+      case 'webextract':
+      case 'web_fetch':
+      case 'webfetch':
+      case 'read_url_content':
+      case 'fetch_web':
+        return isEnglish ? 'Web Fetch' : '网页提取';
+      case 'skill_manage':
+      case 'skillmanage':
+        return isEnglish ? 'Skill Manage' : '技能管理';
+      case 'cronjob':
+      case 'cron_job':
+      case 'cron':
+        return isEnglish ? 'Cron Job' : '定时任务';
+      case 'send_message':
+      case 'sendmessage':
+      case 'send_msg':
+        return isEnglish ? 'Send Message' : '发送消息';
+      case 'browser_navigate':
+      case 'browsernavigate':
+      case 'browser_action':
+      case 'browser':
+      case 'browse':
+        return isEnglish ? 'Browser' : '浏览器导航';
+      case 'vision_analyze':
+      case 'visionanalyze':
+      case 'vision':
+        return isEnglish ? 'Vision Analyze' : '视觉分析';
+      case 'subagent_progress':
+      case 'subagentprogress':
+        return isEnglish ? 'Subagent Progress' : '子代理进度';
+      case 'delegate_task':
+      case 'delegate-task':
+      case 'delegatetask':
+      case 'invoke_subagent':
+        return isEnglish ? 'Delegate Task' : '委派任务';
+      case 'agent':
+      case 'subagent':
+      case 'sub_agent':
+        return isEnglish ? 'Agent' : '智能体';
       case 'search':
       case 'grep':
-      case 'glob':
+      case 'grep_search':
+      case 'ripgrep':
         return isEnglish ? 'Search' : '搜索';
-      case 'web_search':
-      case 'web_fetch':
-      case 'websearch':
-      case 'webfetch':
-        return isEnglish ? 'Web Search' : '联网搜索';
+      case 'glob':
+        return isEnglish ? 'Glob' : '文件检索';
+      case 'list_dir':
+      case 'listdir':
+      case 'list_files':
+      case 'find_by_name':
+      case 'find':
+        return isEnglish ? 'List Files' : '文件列表';
       default:
         final trimmed = name.trim();
         return trimmed.isEmpty ? (isEnglish ? 'Tool' : '工具') : trimmed;

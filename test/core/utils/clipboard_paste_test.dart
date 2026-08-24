@@ -213,6 +213,16 @@ void main() {
       expect(result, isNull);
     });
 
+    test('图片或文件读取为空 bytes 时返回 null', () async {
+      final reader = FakeClipboardDataReader(
+        values: {
+          Formats.png: Uint8List(0),
+        },
+      );
+      final result = await readPastedAttachment(customReader: reader);
+      expect(result, isNull);
+    });
+
     test('FakeClipboardPasteService / PlatformClipboardPasteService 行为', () async {
       final fake = FakeClipboardPasteService(
         result: (bytes: Uint8List.fromList([1, 2]), filename: 'fake.png'),

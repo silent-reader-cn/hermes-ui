@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/connections/connection_providers.dart';
 import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
+import 'memory_api.dart';
 import 'memory_providers.dart';
 
 enum _MemoryTab { memory, user, soul, projectContext }
@@ -32,6 +34,81 @@ class MemoryPage extends ConsumerStatefulWidget {
 
 class _MemoryPageState extends ConsumerState<MemoryPage> {
   _MemoryTab _selectedTab = _MemoryTab.projectContext;
+  bool _isEditing = false;
+  late final TextEditingController _editController = TextEditingController();
+  bool _isSaving = false;
+  String? _saveError;
+
+  @override
+  void dispose() {
+    _editController.dispose();
+    super.dispose();
+  }
+
+  void _startEditing(String content) {
+    setState(() {
+      _isEditing = true;
+      _saveError = null;
+      _editController.text = content.trim();
+    });
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _isEditing = false;
+      _saveError = null;
+    });
+  }
+
+  Future<void> _save(MemorySection section) async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+    try {
+      final api = ref.read(memoryApiFactoryProvider)(
+        ref.read(apiClientProvider),
+      );
+      final text = _editController.text;
+      final response = await api.writeMemory(
+        section: section.name,
+        content: text,
+      );
+      if (response.ok == false &&
+          response.error != null &&
+          response.error!.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _saveError = response.error;
+            _isSaving = false;
+          });
+        }
+        return;
+      }
+      await ref.read(memoryControllerProvider.notifier).refresh();
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _isSaving = false;
+        });
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _saveError = error.message;
+          _isSaving = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saveError = error.toString();
+          _isSaving = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,8 +191,12 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     child: CupertinoSlidingSegmentedControl<_MemoryTab>(
                       groupValue: activeTab,
                       onValueChanged: (tab) {
-                        if (tab != null) {
-                          setState(() => _selectedTab = tab);
+                        if (tab != null && tab != activeTab) {
+                          setState(() {
+                            _selectedTab = tab;
+                            _isEditing = false;
+                            _saveError = null;
+                          });
                         }
                       },
                       children: {
@@ -190,14 +271,25 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             section: MemorySection.memory,
             mtime: response.memoryMtime,
             charCount: content.trim().length,
+            isEditing: _isEditing,
+            onEdit: () => _startEditing(content),
           ),
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: _MemorySectionBody(
-                section: MemorySection.memory,
-                content: content,
-              ),
+              child: _isEditing
+                  ? _MemorySectionEditBody(
+                      controller: _editController,
+                      isSaving: _isSaving,
+                      error: _saveError,
+                      section: MemorySection.memory,
+                      onSave: () => unawaited(_save(MemorySection.memory)),
+                      onCancel: _cancelEditing,
+                    )
+                  : _MemorySectionBody(
+                      section: MemorySection.memory,
+                      content: content,
+                    ),
             ),
           ],
         );
@@ -208,14 +300,25 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             section: MemorySection.user,
             mtime: response.userMtime,
             charCount: content.trim().length,
+            isEditing: _isEditing,
+            onEdit: () => _startEditing(content),
           ),
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: _MemorySectionBody(
-                section: MemorySection.user,
-                content: content,
-              ),
+              child: _isEditing
+                  ? _MemorySectionEditBody(
+                      controller: _editController,
+                      isSaving: _isSaving,
+                      error: _saveError,
+                      section: MemorySection.user,
+                      onSave: () => unawaited(_save(MemorySection.user)),
+                      onCancel: _cancelEditing,
+                    )
+                  : _MemorySectionBody(
+                      section: MemorySection.user,
+                      content: content,
+                    ),
             ),
           ],
         );
@@ -226,14 +329,25 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             section: MemorySection.soul,
             mtime: response.soulMtime,
             charCount: content.trim().length,
+            isEditing: _isEditing,
+            onEdit: () => _startEditing(content),
           ),
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: _MemorySectionMarkdownBody(
-                section: MemorySection.soul,
-                content: content,
-              ),
+              child: _isEditing
+                  ? _MemorySectionEditBody(
+                      controller: _editController,
+                      isSaving: _isSaving,
+                      error: _saveError,
+                      section: MemorySection.soul,
+                      onSave: () => unawaited(_save(MemorySection.soul)),
+                      onCancel: _cancelEditing,
+                    )
+                  : _MemorySectionMarkdownBody(
+                      section: MemorySection.soul,
+                      content: content,
+                    ),
             ),
           ],
         );
@@ -365,17 +479,21 @@ const TextStyle _metaStyle = TextStyle(
   fontWeight: FontWeight.w400,
 );
 
-/// 记忆分区头：图标 + 标题 + 字数 + 相对修改时间。
+/// 记忆分区头：图标 + 标题 + 字数 + 相对修改时间 + 编辑按钮。
 class _MemorySectionHeader extends StatelessWidget {
   const _MemorySectionHeader({
     required this.section,
     required this.mtime,
     required this.charCount,
+    this.isEditing = false,
+    this.onEdit,
   });
 
   final MemorySection section;
   final double? mtime;
   final int charCount;
+  final bool isEditing;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +534,17 @@ class _MemorySectionHeader extends StatelessWidget {
               ),
             ),
           ],
+          if (onEdit != null && !isEditing) ...[
+            const SizedBox(width: 8),
+            AccessibleButton(
+              key: ValueKey('memory-edit-${section.name}'),
+              label: l10n.edit,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(28, 28),
+              onPressed: onEdit,
+              child: const Icon(CupertinoIcons.pencil, size: 16),
+            ),
+          ],
         ],
       ),
     );
@@ -430,6 +559,86 @@ class _MemorySectionHeader extends StatelessWidget {
       case MemorySection.soul:
         return CupertinoIcons.sparkles;
     }
+  }
+}
+
+/// 分区编辑表单：CupertinoTextField + 错误提示 + 保存/取消按钮。
+class _MemorySectionEditBody extends StatelessWidget {
+  const _MemorySectionEditBody({
+    required this.controller,
+    required this.isSaving,
+    required this.error,
+    required this.section,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  final TextEditingController controller;
+  final bool isSaving;
+  final String? error;
+  final MemorySection section;
+  final VoidCallback onSave;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return _AdaptiveViewportScrollable(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoTextField(
+            key: ValueKey('memory-edit-input-${section.name}'),
+            controller: controller,
+            minLines: 6,
+            maxLines: 14,
+            placeholder: _memorySectionEmptyMessage(context, section),
+            autofocus: true,
+            enabled: !isSaving,
+            style: const TextStyle(fontSize: 15, height: 1.4),
+            padding: const EdgeInsets.all(12),
+          ),
+          if (error != null && error!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              CupertinoButton(
+                key: const ValueKey('memory-edit-cancel'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                onPressed: isSaving ? null : onCancel,
+                child: Text(l10n.cancel),
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton.filled(
+                key: const ValueKey('memory-edit-save'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                onPressed: isSaving ? null : onSave,
+                child: isSaving
+                    ? const CupertinoActivityIndicator(radius: 8)
+                    : Text(l10n.save),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

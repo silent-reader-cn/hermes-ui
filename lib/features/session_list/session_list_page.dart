@@ -1118,30 +1118,25 @@ class _SessionRowState extends State<_SessionRow> {
                   if (metadata != null || hasIcons) ...[
                     const SizedBox(height: 2),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: metadata != null
-                              ? _highlightedSpan(
-                                  context,
-                                  metadata,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: secondaryColor,
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                        if (hasIcons) ...[
-                          const SizedBox(width: 6),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (var i = 0; i < iconWidgets.length; i++) ...[
-                                if (i > 0) const SizedBox(width: 4),
-                                iconWidgets[i],
-                              ],
-                            ],
+                        if (metadata != null)
+                          Flexible(
+                            child: _highlightedSpan(
+                              context,
+                              metadata,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: secondaryColor,
+                              ),
+                            ),
                           ),
+                        if (hasIcons) ...[
+                          if (metadata != null) const SizedBox(width: 6),
+                          for (var i = 0; i < iconWidgets.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 4),
+                            iconWidgets[i],
+                          ],
                         ],
                       ],
                     ),

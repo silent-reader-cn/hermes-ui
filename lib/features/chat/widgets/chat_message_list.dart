@@ -13,6 +13,7 @@ import '../../chat/chat_state.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import '../../settings/injected_notice_settings.dart';
+import '../../settings/tool_group_settings.dart';
 import 'message_highlight.dart';
 import 'steer_banner.dart';
 import 'tool_call_card.dart';
@@ -460,6 +461,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final collapseEnabled = ref.watch(
       injectedNoticeSettingsProvider.select((s) => s.collapseInjectedNotices),
     );
+    final coalesce = ref.watch(toolGroupCoalesceProvider);
     final transcript = ref.watch(transcriptMessagesProvider(sessionId));
     final streaming = ref.watch(streamingMessageProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
@@ -471,6 +473,28 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final queuedMessages = ref.watch(
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
     );
+
+    final entryToolGroups = <String, List<ToolCallGroup>>{};
+    final mountedGroupIds = <String>{};
+    for (final entry in transcript) {
+      final msgId = entry.message.messageId;
+      final anchorId = entry.anchorId;
+      final matched = <ToolCallGroup>[];
+      for (final g in toolGroups) {
+        if (!coalesce && mountedGroupIds.contains(g.id)) {
+          continue;
+        }
+        final isMatch = (msgId != null && msgId.isNotEmpty && g.anchorMessageID == msgId) ||
+            (g.anchorMessageID != null && g.anchorMessageID == anchorId);
+        if (isMatch) {
+          matched.add(g);
+          if (!coalesce) {
+            mountedGroupIds.add(g.id);
+          }
+        }
+      }
+      entryToolGroups[entry.renderId] = matched;
+    }
 
     // 初始定位与搜索定位均以 postFrame 调度，避免 build 期间同步 markNeedsBuild
     // 或在 dependents 未就绪时触发 listen 副作用。
@@ -503,8 +527,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final showSteerBanner =
         phase == ChatPhase.steered && steerHintText.isNotEmpty;
     final showQueuedBanner = queuedMessages.isNotEmpty;
-    // 落地兜底：transcript 为空但已归档的工具/思考组非空时，仍在末尾渲染入口
-    final needFallback = transcript.isEmpty &&
+    // 落地兜底：仅在 coalesce==true 或 transcript 为空且无可挂载 anchor 时才渲染聚合视图
+    final needFallback = coalesce &&
+        transcript.isEmpty &&
         streaming == null &&
         phase != ChatPhase.sending &&
         (toolGroups.isNotEmpty || reasoningGroups.isNotEmpty);
@@ -524,12 +549,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
         if (index < transcript.length) {
           final entry = transcript[index];
-          final groups = toolGroups
-              .where((g) =>
-                  g.anchorMessageID == entry.message.messageId ||
-                  (g.anchorMessageID != null &&
-                      g.anchorMessageID == entry.anchorId))
-              .toList();
+          final groups = entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
           final reasoning = reasoningGroups
               .where((g) =>
                   g.anchorMessageId == entry.message.messageId ||

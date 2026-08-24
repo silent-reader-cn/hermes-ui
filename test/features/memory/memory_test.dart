@@ -527,5 +527,286 @@ void main() {
         expect(memModifiedText.overflow, TextOverflow.ellipsis);
       },
     );
+
+    testWidgets('进入编辑态：点击编辑按钮 → 隐藏 Markdown / Text，显示 CupertinoTextField', (
+      tester,
+    ) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: '现有笔记内容',
+          user: '资深开发者',
+          soul: '乐于助人',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      // 默认项目上下文 tab，切换到我的笔记 tab
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+
+      expect(find.text('现有笔记内容'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('memory-edit-memory')),
+        findsOneWidget,
+      );
+
+      // 点击编辑按钮
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      // 进入编辑态：显示输入框、保存、取消按钮，原有只读 Text 不再展示
+      expect(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('memory-edit-save')), findsOneWidget);
+      expect(find.byKey(const ValueKey('memory-edit-cancel')), findsOneWidget);
+
+      final textField = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+      );
+      expect(textField.controller?.text, '现有笔记内容');
+    });
+
+    testWidgets('保存成功：提交 writeMemory → refresh → 退出编辑态并渲染新内容', (
+      tester,
+    ) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: '原笔记',
+          user: '原用户',
+          soul: '原灵魂',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      // 输入新内容
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        '更新后的笔记',
+      );
+
+      // 保存成功后准备新 response
+      api.response = const MemoryResponse(
+        memory: '更新后的笔记',
+        user: '原用户',
+        soul: '原灵魂',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+
+      // 验证 API 调用
+      expect(api.writeCalls, hasLength(1));
+      expect(api.writeCalls.first.section, 'memory');
+      expect(api.writeCalls.first.content, '更新后的笔记');
+
+      // 退出编辑态，展示新内容
+      expect(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        findsNothing,
+      );
+      expect(find.text('更新后的笔记'), findsOneWidget);
+    });
+
+    testWidgets('保存失败：保留编辑态 + 不丢用户输入 + 输入框下方显示错误', (
+      tester,
+    ) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: '原笔记',
+          user: '原用户',
+          soul: '原灵魂',
+        ),
+      );
+      api.writeError = HttpException(403, null, message: '写入权限不足');
+      await pumpMemoryPage(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        '尝试修改的内容',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+
+      // 保持编辑态，输入框内容不丢
+      expect(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        findsOneWidget,
+      );
+      final textField = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+      );
+      expect(textField.controller?.text, '尝试修改的内容');
+
+      // 显示错误信息
+      expect(find.text('写入权限不足'), findsOneWidget);
+
+      // 修复错误后重试
+      api.writeError = null;
+      api.response = const MemoryResponse(
+        memory: '尝试修改的内容',
+        user: '原用户',
+        soul: '原灵魂',
+      );
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        findsNothing,
+      );
+      expect(find.text('尝试修改的内容'), findsOneWidget);
+    });
+
+    testWidgets('取消编辑：丢弃修改并回到只读态', (tester) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: '保持原样',
+          user: '原用户',
+          soul: '原灵魂',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        '乱写的内容',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('memory-edit-cancel')));
+      await tester.pump();
+
+      // 退出编辑态且未调用 writeMemory
+      expect(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        findsNothing,
+      );
+      expect(api.writeCalls, isEmpty);
+      expect(find.text('保持原样'), findsOneWidget);
+    });
+
+    testWidgets('空态分区也可编辑：从占位状态直接进入空白编辑并保存', (tester) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: null,
+          user: '用户画像',
+          soul: '智能体灵魂',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+
+      // 空态显示占位文案
+      expect(find.text('暂无笔记'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('memory-edit-memory')),
+        findsOneWidget,
+      );
+
+      // 点编辑进入空白输入
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      final textField = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+      );
+      expect(textField.controller?.text, '');
+
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+        '第一条笔记',
+      );
+
+      api.response = const MemoryResponse(
+        memory: '第一条笔记',
+        user: '用户画像',
+        soul: '智能体灵魂',
+      );
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('第一条笔记'), findsOneWidget);
+      expect(find.text('暂无笔记'), findsNothing);
+    });
+
+    testWidgets('用户画像与智能体灵魂分区同样支持编辑与保存', (tester) async {
+      final api = FakeMemoryApi(
+        response: const MemoryResponse(
+          memory: '笔记',
+          user: '开发者',
+          soul: '# 原始灵魂',
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      // 用户画像编辑
+      await tester.tap(find.byKey(const ValueKey('memory-tab-user')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('memory-edit-user')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-user')),
+        '资深架构师',
+      );
+      api.response = const MemoryResponse(
+        memory: '笔记',
+        user: '资深架构师',
+        soul: '# 原始灵魂',
+      );
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.writeCalls.last.section, 'user');
+      expect(api.writeCalls.last.content, '资深架构师');
+      expect(find.text('资深架构师'), findsOneWidget);
+
+      // 智能体灵魂编辑
+      await tester.tap(find.byKey(const ValueKey('memory-tab-soul')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('memory-edit-soul')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-edit-input-soul')),
+        '# 新灵魂\n- 细心严谨',
+      );
+      api.response = const MemoryResponse(
+        memory: '笔记',
+        user: '资深架构师',
+        soul: '# 新灵魂\n- 细心严谨',
+      );
+      await tester.tap(find.byKey(const ValueKey('memory-edit-save')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.writeCalls.last.section, 'soul');
+      expect(api.writeCalls.last.content, '# 新灵魂\n- 细心严谨');
+      expect(find.text('新灵魂'), findsOneWidget);
+      expect(find.text('细心严谨'), findsOneWidget);
+    });
   });
 }

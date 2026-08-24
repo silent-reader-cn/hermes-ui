@@ -50,13 +50,6 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   late final TextEditingController _workspaceController;
   List<String> _fetchedModels = const [];
 
-  final LayerLink _modelLink = LayerLink();
-  final LayerLink _workspaceLink = LayerLink();
-  final OverlayPortalController _modelPortalController =
-      OverlayPortalController();
-  final OverlayPortalController _workspacePortalController =
-      OverlayPortalController();
-
   @override
   void initState() {
     super.initState();
@@ -77,12 +70,6 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       _workspaceController.text =
           ref.read(chatControllerProvider(widget.sessionId)).workspace ?? '';
       _workspacesFetched = false;
-      if (_modelPortalController.isShowing) {
-        _modelPortalController.hide();
-      }
-      if (_workspacePortalController.isShowing) {
-        _workspacePortalController.hide();
-      }
       _isExpanded = false;
       _workspaceDropdownExpanded = false;
       _manualInputExpanded = false;
@@ -158,9 +145,6 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   Future<void> _selectWorkspace(String? path) async {
     final text = path?.trim() ?? '';
     _workspaceController.text = text;
-    if (_workspacePortalController.isShowing) {
-      _workspacePortalController.hide();
-    }
     setState(() {
       _savingWorkspace = true;
       _workspaceDropdownExpanded = false;
@@ -248,356 +232,191 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
 
     return SizedBox(
       width: 260,
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header：tokensLabel + 压缩 IconButton
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        tokensLabel,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+          // Header：tokensLabel + 压缩 IconButton
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    tokensLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
-                    _CompressIconButton(
-                      key: const ValueKey('context-popover-compress'),
-                      isHigh: isHigh,
-                      isMid: isMid,
-                      compressing: _compressing,
-                      enabled: pctInt != null && pctInt > 0,
-                      onPressed: _compressing
-                          ? null
-                          : () async {
-                              setState(() => _compressing = true);
-                              try {
-                                final ok = await ref
-                                    .read(chatControllerProvider(widget.sessionId)
-                                        .notifier)
-                                    .compressSession();
-                                if (!mounted) return;
-                                if (ok) widget.onClose();
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _compressing = false);
-                                }
-                              }
-                            },
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              Container(height: 0.5, color: separator),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _InfoRow(label: l10n.contextWindowInput, value: inputLabel),
-                    const SizedBox(height: 6),
-                    _InfoRow(label: l10n.contextWindowOutput, value: outputLabel),
-                    const SizedBox(height: 6),
-                    _InfoRow(
-                      label: l10n.contextWindowThreshold,
-                      value: thresholdLabel,
-                    ),
-                    const SizedBox(height: 6),
-                    _InfoRow(label: l10n.contextWindowCost, value: costLabel),
-                  ],
-                ),
-              ),
-              Container(height: 0.5, color: separator),
-              // 模型切换区
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.contextWindowCurrentModel,
-                      style: TextStyle(fontSize: 12, color: secondary),
-                    ),
-                    const SizedBox(height: 6),
-                    Semantics(
-                      button: true,
-                      label: l10n.selectModel,
-                      child: CupertinoButton(
-                        key: const ValueKey('context-popover-model-trigger'),
-                        padding: EdgeInsets.zero,
-                        onPressed: () {
-                          if (_modelPortalController.isShowing) {
-                            _modelPortalController.hide();
-                            setState(() => _isExpanded = false);
-                          } else {
-                            if (_workspacePortalController.isShowing) {
-                              _workspacePortalController.hide();
+                _CompressIconButton(
+                  key: const ValueKey('context-popover-compress'),
+                  isHigh: isHigh,
+                  isMid: isMid,
+                  compressing: _compressing,
+                  enabled: pctInt != null && pctInt > 0,
+                  onPressed: _compressing
+                      ? null
+                      : () async {
+                          setState(() => _compressing = true);
+                          try {
+                            final ok = await ref
+                                .read(
+                                  chatControllerProvider(
+                                    widget.sessionId,
+                                  ).notifier,
+                                )
+                                .compressSession();
+                            if (!mounted) return;
+                            if (ok) widget.onClose();
+                          } finally {
+                            if (mounted) {
+                              setState(() => _compressing = false);
                             }
-                            setState(() {
-                              _workspaceDropdownExpanded = false;
-                              _manualInputExpanded = false;
-                              _isExpanded = true;
-                            });
-                            _modelPortalController.show();
                           }
                         },
-                        child: CompositedTransformTarget(
-                          link: _modelLink,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemBackground
-                                  .resolveFrom(context),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: separator),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    (currentModel == null || currentModel.isEmpty)
-                                        ? l10n.contextWindowFollowServerDefault
-                                        : currentModel,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: CupertinoColors.label
-                                          .resolveFrom(context),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                AnimatedRotation(
-                                  turns: _isExpanded ? 0.5 : 0.0,
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Icon(
-                                    CupertinoIcons.chevron_down,
-                                    size: 14,
-                                    color: secondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-              Container(height: 0.5, color: separator),
-              // 工作区切换区
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          l10n.workspace,
-                          style: TextStyle(fontSize: 12, color: secondary),
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(label: l10n.contextWindowInput, value: inputLabel),
+                const SizedBox(height: 6),
+                _InfoRow(label: l10n.contextWindowOutput, value: outputLabel),
+                const SizedBox(height: 6),
+                _InfoRow(
+                  label: l10n.contextWindowThreshold,
+                  value: thresholdLabel,
+                ),
+                const SizedBox(height: 6),
+                _InfoRow(label: l10n.contextWindowCost, value: costLabel),
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          // 模型切换区
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.contextWindowCurrentModel,
+                  style: TextStyle(fontSize: 12, color: secondary),
+                ),
+                const SizedBox(height: 6),
+                Semantics(
+                  button: true,
+                  label: l10n.selectModel,
+                  child: CupertinoButton(
+                    key: const ValueKey('context-popover-model-trigger'),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      setState(() {
+                        if (_isExpanded) {
+                          _isExpanded = false;
+                        } else {
+                          _isExpanded = true;
+                          _workspaceDropdownExpanded = false;
+                          _manualInputExpanded = false;
+                        }
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemBackground.resolveFrom(
+                          context,
                         ),
-                        const Spacer(),
-                        if (_savingWorkspace)
-                          const CupertinoActivityIndicator(radius: 8)
-                        else
-                          CupertinoButton(
-                            key: const ValueKey(
-                              'context-popover-workspace-manual-toggle',
-                            ),
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(36, 24),
-                            onPressed: () {
-                              setState(() {
-                                _manualInputExpanded = !_manualInputExpanded;
-                                if (_manualInputExpanded) {
-                                  if (_workspacePortalController.isShowing) {
-                                    _workspacePortalController.hide();
-                                  }
-                                  if (_modelPortalController.isShowing) {
-                                    _modelPortalController.hide();
-                                  }
-                                  _workspaceDropdownExpanded = false;
-                                  _isExpanded = false;
-                                }
-                              });
-                            },
-                            child: Text(
-                              _manualInputExpanded
-                                  ? l10n.cancel
-                                  : l10n.manualInputWorkspace,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Semantics(
-                      button: true,
-                      label: l10n.selectWorkspace,
-                      child: CupertinoButton(
-                        key: const ValueKey('context-popover-workspace-trigger'),
-                        padding: EdgeInsets.zero,
-                        onPressed: () {
-                          if (_workspacePortalController.isShowing) {
-                            _workspacePortalController.hide();
-                            setState(() => _workspaceDropdownExpanded = false);
-                          } else {
-                            if (_modelPortalController.isShowing) {
-                              _modelPortalController.hide();
-                            }
-                            setState(() {
-                              _isExpanded = false;
-                              _manualInputExpanded = false;
-                              _workspaceDropdownExpanded = true;
-                            });
-                            _workspacePortalController.show();
-                          }
-                        },
-                        child: CompositedTransformTarget(
-                          link: _workspaceLink,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemBackground
-                                  .resolveFrom(context),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: separator),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    currentWorkspaceLabel,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color:
-                                          CupertinoColors.label.resolveFrom(context),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                AnimatedRotation(
-                                  turns: _workspaceDropdownExpanded ? 0.5 : 0.0,
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Icon(
-                                    CupertinoIcons.chevron_down,
-                                    size: 14,
-                                    color: secondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: separator),
                       ),
-                    ),
-                    if (_manualInputExpanded) ...[
-                      const SizedBox(height: 8),
-                      Row(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
                         children: [
                           Expanded(
-                            child: CupertinoTextField(
-                              key: const ValueKey(
-                                'context-popover-workspace-field',
-                              ),
-                              controller: _workspaceController,
-                              placeholder: l10n.workspaceOptionalPlaceholder,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              style: const TextStyle(fontSize: 13),
-                              placeholderStyle: TextStyle(
+                            child: Text(
+                              (currentModel == null || currentModel.isEmpty)
+                                  ? l10n.contextWindowFollowServerDefault
+                                  : currentModel,
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: secondary,
+                                fontWeight: FontWeight.w500,
+                                color: CupertinoColors.label.resolveFrom(
+                                  context,
+                                ),
                               ),
-                              decoration: BoxDecoration(
-                                color: CupertinoColors.systemBackground
-                                    .resolveFrom(context),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: separator),
-                              ),
-                              onSubmitted: (_) => _saveManualWorkspace(),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
-                          CupertinoButton(
-                            key: const ValueKey('context-popover-workspace-save'),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            minimumSize: const Size(44, 28),
-                            onPressed:
-                                _savingWorkspace ? null : _saveManualWorkspace,
-                            child: Text(
-                              l10n.save,
-                              style: const TextStyle(fontSize: 13),
+                          AnimatedRotation(
+                            turns: _isExpanded ? 0.5 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              CupertinoIcons.chevron_down,
+                              size: 14,
+                              color: secondary,
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
-              ),
-              Container(height: 0.5, color: separator),
-              CupertinoButton(
-                key: const ValueKey('context-popover-close'),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                onPressed: widget.onClose,
-                child: Text(l10n.contextWindowClose),
-              ),
-            ],
-          ),
-          OverlayPortal(
-            controller: _modelPortalController,
-            overlayChildBuilder: (overlayContext) {
-              return Positioned(
-                left: 16,
-                top: 216,
-                child: PopoverDropdownCard(
-                  child: _loadingModels
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10),
-                            child: CupertinoActivityIndicator(radius: 8),
-                          ),
-                        )
-                      : ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 160),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final m in models)
+                if (_isExpanded) ...[
+                  const SizedBox(height: 6),
+                  PopoverDropdownCard(
+                    width: double.infinity,
+                    child: _loadingModels
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: CupertinoActivityIndicator(radius: 8),
+                            ),
+                          )
+                        : ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 160),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (final m in models)
+                                    _ModelRow(
+                                      key: ValueKey('context-popover-model-$m'),
+                                      label: m,
+                                      selected: m == currentModel,
+                                      onTap: () {
+                                        setState(() => _isExpanded = false);
+                                        ref
+                                            .read(
+                                              chatControllerProvider(
+                                                widget.sessionId,
+                                              ).notifier,
+                                            )
+                                            .selectModel(m);
+                                        widget.onClose();
+                                      },
+                                    ),
                                   _ModelRow(
-                                    key: ValueKey('context-popover-model-$m'),
-                                    label: m,
-                                    selected: m == currentModel,
+                                    key: const ValueKey(
+                                      'context-popover-model-default',
+                                    ),
+                                    label:
+                                        l10n.contextWindowFollowServerDefault,
+                                    selected: currentModel == null ||
+                                        currentModel.isEmpty,
                                     onTap: () {
-                                      _modelPortalController.hide();
                                       setState(() => _isExpanded = false);
                                       ref
                                           .read(
@@ -605,108 +424,246 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                               widget.sessionId,
                                             ).notifier,
                                           )
-                                          .selectModel(m);
+                                          .selectModel(null);
                                       widget.onClose();
                                     },
                                   ),
-                                _ModelRow(
-                                  key: const ValueKey(
-                                    'context-popover-model-default',
-                                  ),
-                                  label:
-                                      l10n.contextWindowFollowServerDefault,
-                                  selected: currentModel == null ||
-                                      currentModel.isEmpty,
-                                  onTap: () {
-                                    _modelPortalController.hide();
-                                    setState(() => _isExpanded = false);
-                                    ref
-                                        .read(
-                                          chatControllerProvider(
-                                            widget.sessionId,
-                                          ).notifier,
-                                        )
-                                        .selectModel(null);
-                                    widget.onClose();
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                ),
-              );
-            },
-            child: const SizedBox.shrink(),
-          ),
-          OverlayPortal(
-            controller: _workspacePortalController,
-            overlayChildBuilder: (overlayContext) {
-              return Positioned(
-                left: 16,
-                top: 304,
-                child: PopoverDropdownCard(
-                  child: _loadingWorkspaces
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10),
-                            child: CupertinoActivityIndicator(radius: 8),
-                          ),
-                        )
-                      : ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 160),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_workspaces.isNotEmpty) ...[
-                                  for (final w in _workspaces)
-                                    _WorkspaceRow(
-                                      key: ValueKey(
-                                        'workspace-item-${w.path}',
-                                      ),
-                                      label: (w.name != null &&
-                                              w.name!.trim().isNotEmpty)
-                                          ? '${w.path} — ${w.name}'
-                                          : (w.path ?? ''),
-                                      selected: currentWorkspace == w.path,
-                                      onTap: () => _selectWorkspace(w.path),
-                                    ),
-                                  _WorkspaceRow(
-                                    key: const ValueKey('workspace-item-default'),
-                                    label: l10n.followSessionDefaultWorkspace,
-                                    selected: currentWorkspace == null ||
-                                        currentWorkspace.trim().isEmpty,
-                                    onTap: () => _selectWorkspace(null),
-                                  ),
-                                ] else ...[
-                                  _WorkspaceRow(
-                                    key: const ValueKey('workspace-item-default'),
-                                    label: l10n.followSessionDefaultWorkspace,
-                                    selected: currentWorkspace == null ||
-                                        currentWorkspace.trim().isEmpty,
-                                    onTap: () => _selectWorkspace(null),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Text(
-                                      l10n.noWorkspacesAvailableHint,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: secondary,
-                                      ),
-                                    ),
-                                  ),
                                 ],
-                              ],
+                              ),
                             ),
                           ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          // 工作区切换区
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      l10n.workspace,
+                      style: TextStyle(fontSize: 12, color: secondary),
+                    ),
+                    const Spacer(),
+                    if (_savingWorkspace)
+                      const CupertinoActivityIndicator(radius: 8)
+                    else
+                      CupertinoButton(
+                        key: const ValueKey(
+                          'context-popover-workspace-manual-toggle',
                         ),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(36, 24),
+                        onPressed: () {
+                          setState(() {
+                            _manualInputExpanded = !_manualInputExpanded;
+                            if (_manualInputExpanded) {
+                              _workspaceDropdownExpanded = false;
+                              _isExpanded = false;
+                            }
+                          });
+                        },
+                        child: Text(
+                          _manualInputExpanded
+                              ? l10n.cancel
+                              : l10n.manualInputWorkspace,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                  ],
                 ),
-              );
-            },
-            child: const SizedBox.shrink(),
+                const SizedBox(height: 6),
+                Semantics(
+                  button: true,
+                  label: l10n.selectWorkspace,
+                  child: CupertinoButton(
+                    key: const ValueKey('context-popover-workspace-trigger'),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      setState(() {
+                        if (_workspaceDropdownExpanded) {
+                          _workspaceDropdownExpanded = false;
+                        } else {
+                          _workspaceDropdownExpanded = true;
+                          _isExpanded = false;
+                          _manualInputExpanded = false;
+                        }
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemBackground.resolveFrom(
+                          context,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: separator),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              currentWorkspaceLabel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: CupertinoColors.label.resolveFrom(
+                                  context,
+                                ),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          AnimatedRotation(
+                            turns: _workspaceDropdownExpanded ? 0.5 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              CupertinoIcons.chevron_down,
+                              size: 14,
+                              color: secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (_workspaceDropdownExpanded) ...[
+                  const SizedBox(height: 6),
+                  PopoverDropdownCard(
+                    width: double.infinity,
+                    child: _loadingWorkspaces
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: CupertinoActivityIndicator(radius: 8),
+                            ),
+                          )
+                        : ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 160),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_workspaces.isNotEmpty) ...[
+                                    for (final w in _workspaces)
+                                      _WorkspaceRow(
+                                        key: ValueKey(
+                                          'workspace-item-${w.path}',
+                                        ),
+                                        label: (w.name != null &&
+                                                w.name!.trim().isNotEmpty)
+                                            ? '${w.path} — ${w.name}'
+                                            : (w.path ?? ''),
+                                        selected: currentWorkspace == w.path,
+                                        onTap: () => _selectWorkspace(w.path),
+                                      ),
+                                    _WorkspaceRow(
+                                      key: const ValueKey(
+                                        'workspace-item-default',
+                                      ),
+                                      label:
+                                          l10n.followSessionDefaultWorkspace,
+                                      selected: currentWorkspace == null ||
+                                          currentWorkspace.trim().isEmpty,
+                                      onTap: () => _selectWorkspace(null),
+                                    ),
+                                  ] else ...[
+                                    _WorkspaceRow(
+                                      key: const ValueKey(
+                                        'workspace-item-default',
+                                      ),
+                                      label:
+                                          l10n.followSessionDefaultWorkspace,
+                                      selected: currentWorkspace == null ||
+                                          currentWorkspace.trim().isEmpty,
+                                      onTap: () => _selectWorkspace(null),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Text(
+                                        l10n.noWorkspacesAvailableHint,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: secondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+                if (_manualInputExpanded) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CupertinoTextField(
+                          key: const ValueKey(
+                            'context-popover-workspace-field',
+                          ),
+                          controller: _workspaceController,
+                          placeholder: l10n.workspaceOptionalPlaceholder,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          style: const TextStyle(fontSize: 13),
+                          placeholderStyle: TextStyle(
+                            fontSize: 13,
+                            color: secondary,
+                          ),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBackground.resolveFrom(
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: separator),
+                          ),
+                          onSubmitted: (_) => _saveManualWorkspace(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      CupertinoButton(
+                        key: const ValueKey('context-popover-workspace-save'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        minimumSize: const Size(44, 28),
+                        onPressed:
+                            _savingWorkspace ? null : _saveManualWorkspace,
+                        child: Text(
+                          l10n.save,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: separator),
+          CupertinoButton(
+            key: const ValueKey('context-popover-close'),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            onPressed: widget.onClose,
+            child: Text(l10n.contextWindowClose),
           ),
         ],
       ),
@@ -837,7 +794,8 @@ class _ModelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoButton(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      alignment: Alignment.centerLeft,
       onPressed: onTap,
       child: Row(
         children: [
@@ -884,7 +842,8 @@ class _WorkspaceRow extends StatelessWidget {
       button: true,
       selected: selected,
       child: CupertinoButton(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        alignment: Alignment.centerLeft,
         onPressed: onTap,
         child: Row(
           children: [
@@ -894,8 +853,8 @@ class _WorkspaceRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: selected
-                      ? CupertinoColors.activeBlue.resolveFrom(context)
-                      : CupertinoColors.label.resolveFrom(context),
+                    ? CupertinoColors.activeBlue.resolveFrom(context)
+                    : CupertinoColors.label.resolveFrom(context),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -913,3 +872,4 @@ class _WorkspaceRow extends StatelessWidget {
     );
   }
 }
+

@@ -165,7 +165,7 @@ final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
   sessionId,
 ) {
   final state = ref.watch(chatControllerProvider(sessionId));
-  ref.watch(toolGroupCoalesceProvider);
+  final coalesce = ref.watch(toolGroupCoalesceProvider);
   final live = state.liveToolCalls.isEmpty
       ? const <ToolCallGroup>[]
       : [
@@ -176,7 +176,13 @@ final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
             toolCalls: state.liveToolCalls,
           ),
         ];
-  return [...state.completedToolCallGroups, ...live];
+  final raw = [...state.completedToolCallGroups, ...live];
+  if (!coalesce || raw.length <= 1) return raw;
+  return ToolCallGroup.coalescingByAssistantTurn(
+    raw,
+    messages: state.messages,
+    messageOffset: state.messagesOffset,
+  );
 });
 
 /// 推理组（已归档 + 实时组合）。

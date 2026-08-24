@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
 import 'package:hermex_flutter/app/theme/theme_provider.dart';
+import 'package:hermex_flutter/app/widgets/adaptive_sliver_navigation_bar.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
@@ -214,9 +215,10 @@ void main() {
   /// 挂载设置页（CupertinoApp 提供 Directionality / 主题）并等异步加载完成。
   Future<void> pumpPage(
     WidgetTester tester,
-    ProviderContainer container,
-  ) async {
-    tester.view.physicalSize = const Size(800, 1200);
+    ProviderContainer container, {
+    Size size = const Size(800, 1200),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
     await tester.pumpWidget(
@@ -304,11 +306,14 @@ void main() {
       );
       await pumpPage(tester, container);
 
-      final listView = tester.widget<ListView>(find.byType(ListView));
-      final childrenDelegate =
-          listView.childrenDelegate as SliverChildListDelegate;
-      final typeNames = childrenDelegate.children
-          .map((w) => w.runtimeType.toString())
+      final customScrollView = tester.widget<CustomScrollView>(
+        find.byKey(const ValueKey('settings-scroll')),
+      );
+      final slivers = customScrollView.slivers;
+      expect(slivers.first, isA<AdaptiveSliverNavigationBar>());
+      final boxAdapters = slivers.whereType<SliverToBoxAdapter>().toList();
+      final typeNames = boxAdapters
+          .map((w) => w.child.runtimeType.toString())
           .toList();
       expect(typeNames, [
         '_AppearanceSection',
@@ -1224,6 +1229,76 @@ void main() {
         // 返回设置页
         await tester.tap(find.byType(CupertinoNavigationBarBackButton));
         await tester.pumpAndSettle();
+      }
+    });
+  });
+
+  group('设置页滚动与双击回顶', () {
+    testWidgets('CustomScrollView 绑定滚动控制器，向下滚动后双击 title 回到顶部', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container, size: const Size(400, 600));
+
+      final scrollFinder = find.byKey(const ValueKey('settings-scroll'));
+      expect(scrollFinder, findsOneWidget);
+
+      final customScrollView = tester.widget<CustomScrollView>(scrollFinder);
+      final controller = customScrollView.controller;
+      expect(controller, isNotNull);
+      expect(controller!.offset, 0.0);
+
+      // 向下滚动 300px
+      await tester.drag(scrollFinder, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(controller.offset, greaterThan(100));
+
+      // 仅双击 title 回顶 — 直接触发 GestureDetector 的 onDoubleTap
+      // 窄屏下 largeTitle 与 middle 共存，用 GestureDetector 定位更可靠
+      final titleDetectorFinder = find.descendant(
+        of: find.byType(AdaptiveSliverNavigationBar),
+        matching: find.byWidgetPredicate(
+          (w) => w is GestureDetector && w.onDoubleTap != null,
+        ),
+      );
+      expect(titleDetectorFinder, findsWidgets);
+
+      final detector = tester.widget<GestureDetector>(titleDetectorFinder.first);
+      detector.onDoubleTap!.call();
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, 0.0);
+    });
+
+    testWidgets('点击/双击其他区域不触发回顶', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container, size: const Size(400, 600));
+
+      final scrollFinder = find.byKey(const ValueKey('settings-scroll'));
+      final customScrollView = tester.widget<CustomScrollView>(scrollFinder);
+      final controller = customScrollView.controller!;
+
+      // 向下滚动 300px
+      await tester.drag(scrollFinder, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      final offsetBefore = controller.offset;
+      expect(offsetBefore, greaterThan(100));
+
+      // 双击非 title 区域（如外观标题）
+      final appearanceFinder = find.text('外观');
+      if (appearanceFinder.evaluate().isNotEmpty) {
+        await tester.tap(appearanceFinder.first);
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(appearanceFinder.first);
+        await tester.pumpAndSettle();
+
+        expect(controller.offset, offsetBefore);
       }
     });
   });

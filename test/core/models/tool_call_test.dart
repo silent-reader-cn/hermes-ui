@@ -1,7 +1,9 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermex_flutter/core/models/chat_message.dart';
 import 'package:hermex_flutter/core/models/json_value.dart';
 import 'package:hermex_flutter/core/models/tool_call.dart';
+import 'package:hermex_flutter/l10n/app_localizations.dart';
 
 void main() {
   group('ToolCall（非 JSON 模型）', () {
@@ -86,45 +88,75 @@ void main() {
       expect(failed.hasFailedTool, true);
     });
 
-    test('live：id = live-tools-<anchor ?? unanchored>', () {
-      expect(
-        ToolCallGroup.live(anchorMessageID: 'a1', toolCalls: []).id,
-        'live-tools-a1',
+    test('localizedActivityTitle 本地化活动摘要', () {
+      final l10nZh = const AppLocalizations(Locale('zh'));
+      final l10nEn = const AppLocalizations(Locale('en'));
+
+      final emptyGroup = ToolCallGroup(toolCalls: const []);
+      expect(emptyGroup.localizedActivityTitle(l10nZh), '无工具');
+      expect(emptyGroup.localizedActivityTitle(l10nEn), 'No tools');
+
+      final group = ToolCallGroup(
+        toolCalls: [
+          ToolCall(name: 'read_file', isCompleted: true),
+          ToolCall(name: 'read_file', isCompleted: true),
+          ToolCall(name: 'read_file', isCompleted: true),
+          ToolCall(name: 'bash', isCompleted: true),
+          ToolCall(name: 'write_file', isCompleted: true),
+          ToolCall(name: 'execute_code', isCompleted: true),
+        ],
       );
-      expect(
-        ToolCallGroup.live(toolCalls: []).id,
-        'live-tools-unanchored',
-      );
+      // Top 3 distinct by frequency: 读取文件 ×3, 终端 ×1, 写入文件 ×1 (or 执行代码), then +1
+      expect(group.localizedActivityTitle(l10nZh), contains('读取文件 \u00D73'));
+      expect(group.localizedActivityTitle(l10nZh), contains('+1'));
+      expect(group.localizedActivityTitle(l10nEn), contains('Read File \u00D73'));
+      expect(group.localizedActivityTitle(l10nEn), contains('+1'));
     });
   });
 
   group('ToolCallGroup.groups 聚合', () {
-    test('groupsFromPersistedToolCalls：按 assistantMsgIdx 归组', () {
+    test('groupsFromPersistedToolCalls：coalesce=true 时按回合合并，coalesce=false 时保持一 anchor 一组', () {
       final messages = [
         const ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
         const ChatMessage(role: 'assistant', content: 'a', messageId: 'm1'),
         const ChatMessage(role: 'assistant', content: 'a', messageId: 'm2'),
       ];
-      final groups = ToolCallGroup.groups(
-        persistedToolCalls: [
-          const PersistedToolCall(
-            name: 'write_file',
-            tid: 'call_1',
-            assistantMsgIdx: 1,
-          ),
-          const PersistedToolCall(
-            name: 'read_file',
-            tid: 'call_2',
-            assistantMsgIdx: 2,
-          ),
-        ],
+      final persisted = [
+        const PersistedToolCall(
+          name: 'write_file',
+          tid: 'call_1',
+          assistantMsgIdx: 1,
+        ),
+        const PersistedToolCall(
+          name: 'read_file',
+          tid: 'call_2',
+          assistantMsgIdx: 2,
+        ),
+      ];
+
+      final coalesced = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
         messages: messages,
+        coalesce: true,
       );
-      expect(groups, hasLength(1));
-      expect(groups.single.anchorMessageID, 'm1');
-      expect(groups.single.toolCalls, hasLength(2));
-      expect(groups.single.toolCalls[0].id, 'call_1');
-      expect(groups.single.toolCalls[1].id, 'call_2');
+      expect(coalesced, hasLength(1));
+      expect(coalesced.single.anchorMessageID, 'm1');
+      expect(coalesced.single.toolCalls, hasLength(2));
+      expect(coalesced.single.toolCalls[0].id, 'call_1');
+      expect(coalesced.single.toolCalls[1].id, 'call_2');
+
+      final separated = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: messages,
+        coalesce: false,
+      );
+      expect(separated, hasLength(2));
+      expect(separated[0].anchorMessageID, 'm1');
+      expect(separated[0].toolCalls, hasLength(1));
+      expect(separated[0].toolCalls[0].id, 'call_1');
+      expect(separated[1].anchorMessageID, 'm2');
+      expect(separated[1].toolCalls, hasLength(1));
+      expect(separated[1].toolCalls[0].id, 'call_2');
     });
 
     test('无持久化调用时从消息元数据派生（OpenAI tool_calls）', () {

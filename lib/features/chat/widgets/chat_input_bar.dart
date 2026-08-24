@@ -198,10 +198,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     } catch (_) {
       attachment = null;
     }
-    if (attachment != null) {
-      try {
-        await _handlePasteBytes(attachment.bytes, attachment.filename);
-      } catch (_) {}
+    if (attachment != null && attachment.bytes.isNotEmpty) {
+      await _handlePasteBytes(attachment.bytes, attachment.filename);
       return;
     }
 
@@ -223,8 +221,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final int min = start < end ? start : end;
     final int max = start > end ? start : end;
 
-    final newText = currentText.replaceRange(min, max, textToInsert);
-    final newOffset = min + textToInsert.length;
+    final int clampedMin = min.clamp(0, currentText.length);
+    final int clampedMax = max.clamp(0, currentText.length);
+
+    final newText = currentText.replaceRange(clampedMin, clampedMax, textToInsert);
+    final newOffset = clampedMin + textToInsert.length;
     _textController.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: newOffset),
@@ -350,7 +351,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     await showCupertinoPopover(
       context: context,
       anchorKey: _contextIndicatorKey,
-      preferredWidth: 240,
+      preferredWidth: 260,
+      maxHeight: 520,
+      preferredHeight: 520,
       builder: (popoverContext, close) => ContextWindowPopover(
         sessionId: widget.sessionId,
         snapshot: snapshot,

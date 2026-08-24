@@ -26,6 +26,7 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
     this.bottom,
     this.showMiddleOnNarrow = false,
     this.showNarrowNavigationDropdown = true,
+    this.onTitleDoubleTap,
   });
 
   /// 大标题 / 收起态中标题的共用文案。
@@ -54,8 +55,23 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
   /// 默认为 `true`；可显式传 `false` 关闭。
   final bool showNarrowNavigationDropdown;
 
+  /// 双击标题回调（例如回顶：scrollController.animateTo(0, ...)）。
+  final VoidCallback? onTitleDoubleTap;
+
   @override
   Widget build(BuildContext context) {
+    Widget buildTitle(String text) {
+      final textWidget = Text(text);
+      if (onTitleDoubleTap != null) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onDoubleTap: onTitleDoubleTap,
+          child: textWidget,
+        );
+      }
+      return textWidget;
+    }
+
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     if (isWide) {
       // 桌面宽屏：44pt 固定紧凑导航条（SliverNavigationBar 不允许
@@ -64,7 +80,7 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
         child: CupertinoNavigationBar(
           leading: leading,
           trailing: trailing,
-          middle: Text(title),
+          middle: buildTitle(title),
           bottom: bottom,
         ),
       );
@@ -93,8 +109,8 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
       padding: padding,
       bottom: bottom,
       // 窄屏：大标题模式，中标题仅在原页面本就存在时保留。
-      middle: showMiddleOnNarrow ? Text(title) : null,
-      largeTitle: Text(title),
+      middle: showMiddleOnNarrow ? buildTitle(title) : null,
+      largeTitle: buildTitle(title),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
@@ -28,26 +29,55 @@ import 'tool_group_settings.dart';
 ///
 /// 首页分组：外观 / 对话 / 服务器 / 模型 / 定时会话 / 二级入口组（辅助模型、MCP、扩展、
 /// 会话列表入口、会话行信息、桌面）/ 关于。
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      unawaited(
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const AppBackButton(),
-        middle: Text(l10n.settingsTitle),
-      ),
-      child: ListView(
-        children: const [
-          _AppearanceSection(),
-          _ChatSection(),
-          _ServerSection(),
-          _ModelSection(),
-          _CronSection(),
-          _AdvancedSettingsSection(),
-          _AboutSection(),
+      child: CustomScrollView(
+        key: const ValueKey('settings-scroll'),
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          AdaptiveSliverNavigationBar(
+            title: l10n.settingsTitle,
+            leading: const AppBackButton(),
+            onTitleDoubleTap: _scrollToTop,
+          ),
+          const SliverToBoxAdapter(child: _AppearanceSection()),
+          const SliverToBoxAdapter(child: _ChatSection()),
+          const SliverToBoxAdapter(child: _ServerSection()),
+          const SliverToBoxAdapter(child: _ModelSection()),
+          const SliverToBoxAdapter(child: _CronSection()),
+          const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
+          const SliverToBoxAdapter(child: _AboutSection()),
         ],
       ),
     );

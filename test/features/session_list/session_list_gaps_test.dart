@@ -456,9 +456,91 @@ void main() {
       expect(lockIcon.color, expectedColor);
     });
 
-    testWidgets('无副标题元数据时（metadata==null）仍渲染副标题占位以展示图标', (tester) async {
+    testWidgets('短副标题：图标紧跟文字后 6px，不飘到最右侧', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeSessionListApi(
+        sessions: [
+          session(
+            's1',
+            '短标题',
+            pinned: true,
+            messageCount: 3,
+          ),
+        ],
+      );
+      await pumpList(tester, api);
+
+      final textFinder = find.text('3 条消息');
+      final pinFinder = find.byIcon(CupertinoIcons.pin_fill);
+      final actionFinder = find.byKey(const ValueKey('session-actions-s1'));
+
+      expect(textFinder, findsOneWidget);
+      expect(pinFinder, findsOneWidget);
+      expect(actionFinder, findsOneWidget);
+
+      final textRect = tester.getRect(textFinder);
+      final pinRect = tester.getRect(pinFinder);
+      final actionRect = tester.getRect(actionFinder);
+
+      // 图标紧跟文字后 6px（允许 1px 渲染浮点误差）
+      expect((pinRect.left - textRect.right - 6.0).abs(), lessThanOrEqualTo(1.0));
+      // 图标未被推到行最右侧（距右侧操作按钮有明显间隙）
+      expect(actionRect.left - pinRect.right, greaterThan(50.0));
+    });
+
+    testWidgets('长副标题截断：文字省略号后仍紧跟图标，图标不被挤掉', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        SessionRowSubtitleSettingsController.keyChannel: true,
+        SessionRowSubtitleSettingsController.keyEstimatedCost: true,
+        SessionRowSubtitleSettingsController.keyWorkspace: true,
+      });
+      final api = FakeSessionListApi(
+        sessions: [
+          session(
+            's1',
+            '长副标题会话测试省略截断',
+            pinned: true,
+            messageCount: 999,
+            sourceLabel: 'very-long-channel-name-for-testing-overflow',
+            cost: 999.99,
+            projectId: 'p1',
+          ),
+        ],
+      );
+      await pumpList(
+        tester,
+        api,
+        projectApi: _FakeProjectApi(
+          projects: const [
+            ProjectSummary(
+              projectId: 'p1',
+              name: '一个非常长的项目名称用来触发副标题行超宽截断',
+            ),
+          ],
+        ),
+      );
+
+      final pinFinder = find.byIcon(CupertinoIcons.pin_fill);
+      final actionFinder = find.byKey(const ValueKey('session-actions-s1'));
+
+      expect(pinFinder, findsOneWidget);
+      expect(actionFinder, findsOneWidget);
+
+      final pinRect = tester.getRect(pinFinder);
+      final actionRect = tester.getRect(actionFinder);
+
+      // 图标正常渲染（10px），在可视范围内且位于操作按钮左侧
+      expect(pinRect.width, 10.0);
+      expect(pinRect.right, lessThanOrEqualTo(actionRect.left));
+    });
+
+    testWidgets('无副标题元数据时（metadata==null）仍渲染副标题以展示图标', (tester) async {
       SharedPreferences.setMockInitialValues({
         SessionRowSubtitleSettingsController.keyMessageCount: false,
+        SessionRowSubtitleSettingsController.keyProjectName: false,
+        SessionRowSubtitleSettingsController.keyWorkspace: false,
+        SessionRowSubtitleSettingsController.keyChannel: false,
+        SessionRowSubtitleSettingsController.keyEstimatedCost: false,
       });
       final api = FakeSessionListApi(
         sessions: [

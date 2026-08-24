@@ -22,6 +22,15 @@ class FakeMemoryApi implements MemoryApi {
   /// `fetchMemory` 调用次数。
   int fetchCount = 0;
 
+  /// `writeMemory` 抛出的异常（非 null 时抛出）。
+  Object? writeError;
+
+  /// `writeMemory` 返回的响应。
+  MemoryWriteResponse writeResponse = const MemoryWriteResponse(ok: true);
+
+  /// `writeMemory` 调用记录列表：(section, content)。
+  final List<({String section, String content})> writeCalls = [];
+
   @override
   Future<MemoryResponse> fetchMemory() async {
     fetchCount++;
@@ -30,5 +39,16 @@ class FakeMemoryApi implements MemoryApi {
     final gate = fetchGate;
     if (gate != null) await gate.future;
     return response;
+  }
+
+  @override
+  Future<MemoryWriteResponse> writeMemory({
+    required String section,
+    required String content,
+  }) async {
+    writeCalls.add((section: section, content: content));
+    final error = writeError;
+    if (error != null) throw error;
+    return writeResponse;
   }
 }

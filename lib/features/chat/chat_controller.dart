@@ -108,7 +108,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _startWatchdog();
     ref.onDispose(_dispose);
     ref.listen(toolGroupCoalesceProvider, (prev, next) {
-      if (prev != next && state.messages.isNotEmpty) {
+      if (prev != next) {
         _recomputeToolGroups(next);
       }
     });

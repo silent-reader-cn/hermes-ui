@@ -228,6 +228,38 @@ void main() {
       expect(l10n.toolRunningStatus, '运行中');
     });
 
+    test('localizeToolName returns correct Chinese values', () {
+      expect(l10n.localizeToolName('terminal'), '终端');
+      expect(l10n.localizeToolName('bash'), '终端');
+      expect(l10n.localizeToolName('shell'), '终端');
+      expect(l10n.localizeToolName('skill_view'), '查看技能');
+      expect(l10n.localizeToolName('skill'), '技能');
+      expect(l10n.localizeToolName('execute_code'), '执行代码');
+      expect(l10n.localizeToolName('todo'), '待办');
+      expect(l10n.localizeToolName('todo_write'), '写入待办');
+      expect(l10n.localizeToolName('search_files'), '搜索文件');
+      expect(l10n.localizeToolName('read_file'), '读取文件');
+      expect(l10n.localizeToolName('write_file'), '写入文件');
+      expect(l10n.localizeToolName('patch'), '应用补丁');
+      expect(l10n.localizeToolName('memory'), '记忆');
+      expect(l10n.localizeToolName('web_search'), '联网搜索');
+      expect(l10n.localizeToolName('web_fetch'), '网页提取');
+      expect(l10n.localizeToolName('browser'), '浏览器导航');
+      expect(l10n.localizeToolName('browser_navigate'), '浏览器导航');
+      expect(l10n.localizeToolName('vision_analyze'), '视觉分析');
+      expect(l10n.localizeToolName('subagent_progress'), '子代理进度');
+      expect(l10n.localizeToolName('delegate_task'), '委派任务');
+      expect(l10n.localizeToolName('skill_manage'), '技能管理');
+      expect(l10n.localizeToolName('cronjob'), '定时任务');
+      expect(l10n.localizeToolName('send_message'), '发送消息');
+      expect(l10n.localizeToolName('web_extract'), '网页提取');
+      expect(l10n.localizeToolName('agent'), '智能体');
+      expect(l10n.localizeToolName('grep'), '搜索');
+      expect(l10n.localizeToolName('glob'), '文件检索');
+      expect(l10n.localizeToolName('unknown_custom_tool'), 'unknown_custom_tool');
+      expect(l10n.localizeToolName(''), '工具');
+    });
+
     test('Tasks strings return Chinese values', () {
       expect(l10n.cronTasks, '定时任务');
       expect(l10n.tasksTitle, '定时任务');
@@ -617,6 +649,38 @@ void main() {
         l10n.confirmDeleteServer('Alpha Server'),
         'Are you sure you want to delete "Alpha Server"?',
       );
+    });
+
+    test('localizeToolName returns correct English values', () {
+      expect(l10n.localizeToolName('terminal'), 'Terminal');
+      expect(l10n.localizeToolName('bash'), 'Terminal');
+      expect(l10n.localizeToolName('shell'), 'Terminal');
+      expect(l10n.localizeToolName('skill_view'), 'Skill View');
+      expect(l10n.localizeToolName('skill'), 'Skill');
+      expect(l10n.localizeToolName('execute_code'), 'Execute Code');
+      expect(l10n.localizeToolName('todo'), 'Todo');
+      expect(l10n.localizeToolName('todo_write'), 'Todo Write');
+      expect(l10n.localizeToolName('search_files'), 'Search Files');
+      expect(l10n.localizeToolName('read_file'), 'Read File');
+      expect(l10n.localizeToolName('write_file'), 'Write File');
+      expect(l10n.localizeToolName('patch'), 'Apply Patch');
+      expect(l10n.localizeToolName('memory'), 'Memory');
+      expect(l10n.localizeToolName('web_search'), 'Web Search');
+      expect(l10n.localizeToolName('web_fetch'), 'Web Fetch');
+      expect(l10n.localizeToolName('browser'), 'Browser');
+      expect(l10n.localizeToolName('browser_navigate'), 'Browser');
+      expect(l10n.localizeToolName('vision_analyze'), 'Vision Analyze');
+      expect(l10n.localizeToolName('subagent_progress'), 'Subagent Progress');
+      expect(l10n.localizeToolName('delegate_task'), 'Delegate Task');
+      expect(l10n.localizeToolName('skill_manage'), 'Skill Manage');
+      expect(l10n.localizeToolName('cronjob'), 'Cron Job');
+      expect(l10n.localizeToolName('send_message'), 'Send Message');
+      expect(l10n.localizeToolName('web_extract'), 'Web Fetch');
+      expect(l10n.localizeToolName('agent'), 'Agent');
+      expect(l10n.localizeToolName('grep'), 'Search');
+      expect(l10n.localizeToolName('glob'), 'Glob');
+      expect(l10n.localizeToolName('unknown_custom_tool'), 'unknown_custom_tool');
+      expect(l10n.localizeToolName(''), 'Tool');
     });
   });
 

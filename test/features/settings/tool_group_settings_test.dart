@@ -7,12 +7,16 @@ import 'package:hermex_flutter/core/connections/connection_store.dart';
 import 'package:hermex_flutter/core/models/chat_message.dart';
 import 'package:hermex_flutter/core/models/json_value.dart';
 import 'package:hermex_flutter/core/models/tool_call.dart';
+import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermex_flutter/features/chat/widgets/chat_message_list.dart';
+import 'package:hermex_flutter/features/chat/widgets/tool_call_card.dart';
 import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
 import 'package:hermex_flutter/features/settings/settings_page.dart';
 import 'package:hermex_flutter/features/settings/settings_providers.dart';
 import 'package:hermex_flutter/features/settings/tool_group_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../helpers/fake_chat_api.dart';
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_settings_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
@@ -175,12 +179,54 @@ void main() {
         messages: messages,
         coalesce: false,
       );
-      expect(nonCoalesced, hasLength(2));
-      expect(nonCoalesced[0].anchorMessageID, 'm1');
-      expect(nonCoalesced[0].toolCalls.single.id, 'call_1');
-      expect(nonCoalesced[1].anchorMessageID, 'm2');
-      expect(nonCoalesced[1].toolCalls.single.id, 'call_2');
+      // 连续无文本的工具调用即使在 coalesce=false 时也聚合（不被 text 打断的连续段）
+      expect(nonCoalesced, hasLength(1));
+      expect(nonCoalesced.single.anchorMessageID, 'm1');
+      expect(nonCoalesced.single.toolCalls, hasLength(2));
     });
+  });
+
+  test('coalesce=false 时被文本打断的连续工具应拆分为 2 组', () {
+    final messages = [
+      const ChatMessage(role: 'user', content: 'query', messageId: 'u1'),
+      const ChatMessage(
+        role: 'assistant',
+        messageId: 'm1',
+        content: 'has text',
+        toolCalls: [
+          JsonObject({
+            'id': JsonString('call_1'),
+            'function': JsonObject({
+              'name': JsonString('terminal'),
+              'arguments': JsonString('{}'),
+            }),
+          }),
+        ],
+      ),
+      const ChatMessage(
+        role: 'assistant',
+        messageId: 'm2',
+        toolCalls: [
+          JsonObject({
+            'id': JsonString('call_2'),
+            'function': JsonObject({
+              'name': JsonString('terminal'),
+              'arguments': JsonString('{}'),
+            }),
+          }),
+        ],
+      ),
+    ];
+
+    final nonCoalesced = ToolCallGroup.groups(
+      persistedToolCalls: const [],
+      messages: messages,
+      coalesce: false,
+    );
+    // m1 has text, so m2 should be separate group
+    expect(nonCoalesced, hasLength(2));
+    expect(nonCoalesced[0].anchorMessageID, 'm1');
+    expect(nonCoalesced[1].anchorMessageID, 'm2');
   });
 
   group('SettingsPage 对话分区 Widget 测试', () {
@@ -238,6 +284,117 @@ void main() {
 
       expect(container.read(toolGroupCoalesceProvider), isTrue);
       expect(prefs.getBool(kToolGroupCoalesceKey), isTrue);
+    });
+  });
+
+  group('ChatMessageList 工具按回合聚合与穿插渲染测试', () {
+    testWidgets('coalesce 开关控制多工具卡片的合并与穿插渲染，无 double 副本', (tester) async {
+      final fakeApi = FakeChatApi();
+      fakeApi.sessionResult = {
+        'session': {
+          'session_id': 'sess-tools-test',
+          'title': '测试工具分组',
+          'messages': [
+            {'role': 'user', 'content': '请执行操作', 'message_id': 'u1'},
+            {'role': 'assistant', 'content': '读取完毕', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': '写入完毕', 'message_id': 'm2'},
+          ],
+          'tool_calls': [
+            {
+              'name': 'read_file',
+              'snippet': 'Read content',
+              'tid': 'call_1',
+              'assistant_msg_idx': 1,
+            },
+            {
+              'name': 'write_file',
+              'snippet': 'Wrote content',
+              'tid': 'call_2',
+              'assistant_msg_idx': 2,
+            },
+          ],
+        },
+      };
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeApi),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageList(sessionId: 'sess-tools-test'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final element = tester.element(find.byType(ChatMessageList));
+      final container = ProviderScope.containerOf(element);
+
+      // 1. 默认 coalesce: true 模式下：同回合多个 assistant 消息的工具聚合为 1 张 ToolCallGroupCard 卡片
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+
+      // 2. 切换为 coalesce: false 模式：两个工具卡片分别挂载在各自 assistant 消息旁，共 2 张独立卡片，绝无 double 副本
+      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
+      expect(find.text('读取文件 \u00D71'), findsOneWidget);
+      expect(find.text('写入文件 \u00D71'), findsOneWidget);
+      // 确认无聚合卡片残余副本
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
+
+      // 3. 再次切换回 coalesce: true 模式：即时恢复为 1 张聚合卡片
+      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(true);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+
+      // 清理树与 Timer
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('coalesce: false 时空 transcript 不渲染 fallback 聚合卡片', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        kToolGroupCoalesceKey: false,
+      });
+
+      final fakeApi = FakeChatApi();
+      fakeApi.sessionResult = {
+        'session': {
+          'session_id': 'sess-empty-transcript',
+          'title': '空消息会话',
+          'messages': <Map<String, dynamic>>[],
+        },
+      };
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeApi),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageList(sessionId: 'sess-empty-transcript'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final element = tester.element(find.byType(ChatMessageList));
+      final container = ProviderScope.containerOf(element);
+      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ToolCallGroupCard), findsNothing);
+
+      // 清理树与 Timer
+      await tester.pumpWidget(const SizedBox());
     });
   });
 }

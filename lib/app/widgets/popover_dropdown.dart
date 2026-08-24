@@ -1,4 +1,4 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 
 /// 弹窗内部悬浮下拉卡片容器（用于模型选择、工作区选择等嵌入式下拉浮层）。
 ///
@@ -12,7 +12,7 @@ class PopoverDropdownCard extends StatelessWidget {
   });
 
   final Widget child;
-  final double width;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {

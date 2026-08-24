@@ -13,6 +13,12 @@ import '../../core/models/memory.dart';
 abstract interface class MemoryApi {
   /// GET /api/memory → 记忆分区内容。
   Future<MemoryResponse> fetchMemory();
+
+  /// POST /api/memory/write {section, content} → 记忆写入响应。
+  Future<MemoryWriteResponse> writeMemory({
+    required String section,
+    required String content,
+  });
 }
 
 /// [MemoryApi] 的生产实现：包 [ApiClient]，把 `Object?` JSON 解码为模型。
@@ -24,6 +30,14 @@ class MemoryApiClient implements MemoryApi {
   @override
   Future<MemoryResponse> fetchMemory() async {
     return _client.memory();
+  }
+
+  @override
+  Future<MemoryWriteResponse> writeMemory({
+    required String section,
+    required String content,
+  }) async {
+    return _client.writeMemory(section: section, content: content);
   }
 }
 

@@ -479,9 +479,23 @@ class ToolCallGroup {
       if (currentAnchorMessageID == null) {
         currentAnchorMessageID = anchor;
       } else if (anchor != currentAnchorMessageID) {
-        // Different assistant turn: flush previous, start new group
-        flushCurrentGroup();
-        currentAnchorMessageID = anchor;
+        // 连续工具聚合：若新消息与当前累计的最后一条都无可见文本，则视为同一连续段，不切分
+        final hasVisibleText = message.content?.trim().isNotEmpty == true;
+        // 查找当前段最后一条消息是否有可见文本（近似：若 currentAnchor 对应的消息有文本，则已是一段带文本的段落）
+        var currentHasText = false;
+        for (var k = messageIndex - 1; k >= 0; k--) {
+          if (TranscriptTurnClassifier.anchorID(messages[k], at: k, messageOffset: messageOffset) == currentAnchorMessageID) {
+            if (messages[k].content?.trim().isNotEmpty == true) {
+              currentHasText = true;
+            }
+            break;
+          }
+        }
+        if (hasVisibleText || currentHasText) {
+          flushCurrentGroup();
+          currentAnchorMessageID = anchor;
+        }
+        // 否则：连续无文本的工具调用，继续累加到同一分组
       }
       currentToolCalls += toolCalls;
     }

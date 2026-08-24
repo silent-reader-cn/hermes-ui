@@ -276,6 +276,223 @@ void main() {
 
       await _unmount(tester);
     });
+
+    testWidgets('pasteService 抛出异常时容错放行：静默捕获异常并插入系统纯文本，不弹错误弹窗', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      // 模拟 super_clipboard 读取异常（例如 Windows 平台通道报错）
+      final pasteService = FakeClipboardPasteService(
+        error: PlatformException(
+          code: 'UNAVAILABLE',
+          message: 'Clipboard unavailable',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      // 预置系统剪贴板文本
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return {'text': 'Fallback plain text'};
+          }
+          return null;
+        },
+      );
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 断言没有发起上传，不弹错误弹窗
+      expect(adapter.requests, isEmpty);
+      expect(find.text('上传失败'), findsNothing);
+      expect(find.text('选择文件失败'), findsNothing);
+
+      // 断言纯文本成功插入
+      final textField = tester.widget<CupertinoTextField>(inputFinder);
+      expect(textField.controller?.text, 'Fallback plain text');
+
+      await _unmount(tester);
+    });
+
+    testWidgets('pasteService 返回空 bytes 时放行纯文本：不发起上传，插入系统纯文本，不弹错误弹窗', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      // 模拟异常返回空 bytes 附件
+      final pasteService = FakeClipboardPasteService(
+        result: (
+          bytes: Uint8List(0),
+          filename: 'empty.png',
+        ),
+      );
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return {'text': 'Plain text when attachment empty'};
+          }
+          return null;
+        },
+      );
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.requests, isEmpty);
+      expect(find.text('上传失败'), findsNothing);
+
+      final textField = tester.widget<CupertinoTextField>(inputFinder);
+      expect(textField.controller?.text, 'Plain text when attachment empty');
+
+      await _unmount(tester);
+    });
+
+    testWidgets('纯文本粘贴选区替换与光标位置保持：替换选中部分并移动光标至末尾，更新 hasText', (
+      tester,
+    ) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(result: null);
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return {'text': 'Hermex'};
+          }
+          return null;
+        },
+      );
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      // 预先输入文本并选中部分
+      final textField = tester.widget<CupertinoTextField>(inputFinder);
+      textField.controller!.value = const TextEditingValue(
+        text: 'Hello World',
+        selection: TextSelection(baseOffset: 6, extentOffset: 11),
+      );
+      await tester.pump();
+
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(textField.controller?.text, 'Hello Hermex');
+      expect(
+        textField.controller?.selection,
+        const TextSelection.collapsed(offset: 12),
+      );
+
+      // 发送按钮可用
+      final sendBtn = find.byKey(const ValueKey('chat-send-button'));
+      final sendWidget = tester.widget<AccessibleButton>(sendBtn);
+      expect(sendWidget.onPressed, isNotNull);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('剪贴板为空或异常时静默放行：不弹错、不 crash', (tester) async {
+      final chatApi = FakeChatApi();
+      final pasteService = FakeClipboardPasteService(result: null);
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+      );
+      final client = _buildClient(adapter);
+
+      // 剪贴板为空
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return null;
+          }
+          return null;
+        },
+      );
+
+      await _pumpPage(
+        tester,
+        chatApi: chatApi,
+        pasteService: pasteService,
+        apiClient: client,
+      );
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.tap(inputFinder);
+      await tester.pump();
+
+      Actions.invoke(
+        tester.element(inputFinder),
+        const PasteAttachmentIntent(),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.requests, isEmpty);
+      expect(find.text('上传失败'), findsNothing);
+      expect(find.text('选择文件失败'), findsNothing);
+
+      final textField = tester.widget<CupertinoTextField>(inputFinder);
+      expect(textField.controller?.text, '');
+
+      await _unmount(tester);
+    });
   });
 }
 

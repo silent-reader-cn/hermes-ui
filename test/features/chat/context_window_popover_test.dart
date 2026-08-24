@@ -9,6 +9,7 @@ import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermex_flutter/features/chat/widgets/chat_input_bar.dart';
 import 'package:hermex_flutter/features/chat/widgets/context_window_popover.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -650,4 +651,284 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
     });
   });
 
+  group('ContextWindowPopover 宽屏与自适应外壳下的下拉锚点位置与互斥测试', () {
+    testWidgets('宽屏 1200 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器不飘到屏幕左侧', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final fakeChat = FakeChatApi();
+      fakeChat.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'workspace': '/home/user/my-project',
+          'model': 'gpt-4o',
+          'context_window_snapshot': {
+            'context_length': 128000,
+            'last_prompt_tokens': 1200,
+            'last_completion_tokens': 300,
+            'threshold_tokens': 100000,
+            'cost': '\$0.02',
+          },
+        },
+      };
+
+      final client = buildClient((options) {
+        if (options.path.contains('/api/workspaces')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'workspaces': [
+                {'path': '/home/user/my-project', 'name': 'My Project'},
+                {'path': '/home/user/other-project', 'name': 'Other Project'},
+              ],
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString('{}', 200);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(client),
+            chatAvailableModelsProvider.overrideWithValue(const [
+              'gpt-4o',
+              'claude-3-5-sonnet',
+            ]),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ChatInputBar(sessionId: 's1'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 点击上下文窗口指示器打开 popover
+      final indicatorFinder = find.byKey(
+        const ValueKey('chat-context-indicator-button'),
+      );
+      expect(indicatorFinder, findsOneWidget);
+      await tester.tap(indicatorFinder);
+      await tester.pumpAndSettle();
+
+      // 验证 popover 已展示
+      final modelTriggerFinder = find.byKey(
+        const ValueKey('context-popover-model-trigger'),
+      );
+      expect(modelTriggerFinder, findsOneWidget);
+      final modelTriggerTopLeft = tester.getTopLeft(modelTriggerFinder);
+
+      // 1. 点击模型触发器展开模型下拉
+      await tester.tap(modelTriggerFinder);
+      await tester.pumpAndSettle();
+
+      final modelOptionFinder = find.byKey(
+        const ValueKey('context-popover-model-gpt-4o'),
+      );
+      expect(modelOptionFinder, findsOneWidget);
+
+      final modelOptionTopLeft = tester.getTopLeft(modelOptionFinder);
+      // 验证下拉选项位于宽屏右侧内容区（>= 320），且紧贴模型触发器水平坐标，绝不飘到屏幕左侧（dx < 100）
+      expect(modelOptionTopLeft.dx, greaterThanOrEqualTo(320.0));
+      expect((modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(), lessThan(30.0));
+      // 验证工作区下拉处于收起状态（互斥）
+      expect(find.byKey(const ValueKey('workspace-item-default')), findsNothing);
+
+      // 2. 点击工作区触发器展开工作区下拉，模型下拉自动收起
+      final workspaceTriggerFinder = find.byKey(
+        const ValueKey('context-popover-workspace-trigger'),
+      );
+      expect(workspaceTriggerFinder, findsOneWidget);
+      await tester.ensureVisible(workspaceTriggerFinder);
+      await tester.pumpAndSettle();
+      final workspaceTriggerTopLeft = tester.getTopLeft(workspaceTriggerFinder);
+
+      await tester.tap(workspaceTriggerFinder);
+      await tester.pumpAndSettle();
+
+      // 验证模型下拉已收起
+      expect(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+        findsNothing,
+      );
+      // 验证工作区下拉项展示
+      final workspaceOptionFinder = find.byKey(
+        const ValueKey('workspace-item-/home/user/other-project'),
+      );
+      expect(workspaceOptionFinder, findsOneWidget);
+
+      final workspaceOptionTopLeft = tester.getTopLeft(workspaceOptionFinder);
+      // 验证工作区下拉选项位于宽屏右侧内容区（>= 320），且紧贴工作区触发器水平坐标，不飘到屏幕左侧
+      expect(workspaceOptionTopLeft.dx, greaterThanOrEqualTo(320.0));
+      expect(
+        (workspaceOptionTopLeft.dx - workspaceTriggerTopLeft.dx).abs(),
+        lessThan(30.0),
+      );
+
+      // 3. 点击手动输入切换按钮，工作区下拉自动收起，手动输入框展示
+      final manualToggleFinder = find.byKey(
+        const ValueKey('context-popover-workspace-manual-toggle'),
+      );
+      await tester.ensureVisible(manualToggleFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(manualToggleFinder);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('workspace-item-/home/user/other-project')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-field')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('窄屏 400 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final fakeChat = FakeChatApi();
+      fakeChat.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'workspace': '/home/user/proj',
+          'model': 'gpt-4o',
+          'context_window_snapshot': {
+            'context_length': 128000,
+            'last_prompt_tokens': 1200,
+            'last_completion_tokens': 300,
+            'threshold_tokens': 100000,
+            'cost': '\$0.02',
+          },
+        },
+      };
+
+      final client = buildClient((options) {
+        if (options.path.contains('/api/workspaces')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'workspaces': [
+                {'path': '/home/user/proj', 'name': 'Project'},
+              ],
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString('{}', 200);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(client),
+            chatAvailableModelsProvider.overrideWithValue(const [
+              'gpt-4o',
+              'claude-3-5-sonnet',
+            ]),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ChatInputBar(sessionId: 's1'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final indicatorFinder = find.byKey(
+        const ValueKey('chat-context-indicator-button'),
+      );
+      await tester.tap(indicatorFinder);
+      await tester.pumpAndSettle();
+
+      final modelTriggerFinder = find.byKey(
+        const ValueKey('context-popover-model-trigger'),
+      );
+      final modelTriggerTopLeft = tester.getTopLeft(modelTriggerFinder);
+
+      await tester.tap(modelTriggerFinder);
+      await tester.pumpAndSettle();
+
+      final modelOptionFinder = find.byKey(
+        const ValueKey('context-popover-model-gpt-4o'),
+      );
+      expect(modelOptionFinder, findsOneWidget);
+      final modelOptionTopLeft = tester.getTopLeft(modelOptionFinder);
+      expect(
+        (modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(),
+        lessThan(30.0),
+      );
+    });
+
+    testWidgets('多模型选项列表在 PopoverDropdownCard 内受到 maxHeight 约束且可滚动', (
+      tester,
+    ) async {
+      final fakeChat = FakeChatApi();
+      final manyModels = List.generate(20, (i) => 'model-v$i');
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            chatAvailableModelsProvider.overrideWithValue(manyModels),
+          ],
+          child: CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: Center(
+                child: ContextWindowPopover(
+                  sessionId: 's1',
+                  snapshot: testSnapshot,
+                  currentModel: 'model-v0',
+                  onClose: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.pumpAndSettle();
+
+      // 第一项可见
+      expect(find.byKey(const ValueKey('context-popover-model-model-v0')), findsOneWidget);
+      // 最后一项在初始可视区之外，可通过滚动找到
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('context-popover-model-model-v19')),
+        50.0,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('context-popover-model-model-v19')), findsOneWidget);
+    });
+  });
 }
