@@ -38,6 +38,9 @@ class ToolCall {
     return trimmedName;
   }
 
+  /// 提取关键参数摘要文本（纯文本，若无有效摘要返回 null）。
+  String? get summary => toolCallSummary(this);
+
   @override
   bool operator ==(Object other) {
     return other is ToolCall &&
@@ -893,3 +896,377 @@ class _TurnGroupBuilder {
     toolCalls += group.toolCalls;
   }
 }
+
+/// 从工具调用中提取关键参数摘要文本（纯文本，截断前最多 40 字符，无有效摘要返回 null）。
+String? toolCallSummary(ToolCall call) {
+  final args = call.args;
+  if (args != null && args.isNotEmpty) {
+    final rawName = call.name?.trim();
+    final toolName = ((rawName != null && rawName.isNotEmpty)
+            ? rawName
+            : (call.displayName != 'Tool' ? call.displayName : ''))
+        .toLowerCase();
+
+    // 1. 读文件类：read / read_file / cat / view
+    if (_isReadFileTool(toolName)) {
+      final summary = _extractFileSummary(args);
+      if (summary != null) return summary;
+    }
+
+    // 2. 写/编辑类：write / edit / str_replace / create
+    if (_isWriteFileTool(toolName)) {
+      final summary = _extractFileSummary(args);
+      if (summary != null) return summary;
+    }
+
+    // 3. 终端类：bash / shell / exec / terminal / run / run_command / command
+    if (_isTerminalTool(toolName)) {
+      final summary = _extractTerminalSummary(args);
+      if (summary != null) return summary;
+    }
+
+    // 4. 搜索类：grep / search / ripgrep / find
+    if (_isSearchTool(toolName)) {
+      final summary = _extractSearchSummary(args);
+      if (summary != null) return summary;
+    }
+
+    // 5. 列表类：glob / list / ls
+    if (_isListTool(toolName)) {
+      final summary = _extractListSummary(args);
+      if (summary != null) return summary;
+    }
+
+    // 6. todo/task 类：键含 todo/task/title/content
+    final todoSummary = _extractTodoSummary(args);
+    if (todoSummary != null) return todoSummary;
+
+    // 若 toolName 未匹配特定分类，也尝试常见参数名匹配
+    final fileSummary = _extractFileSummary(args);
+    if (fileSummary != null) return fileSummary;
+
+    final terminalSummary = _extractTerminalSummary(args);
+    if (terminalSummary != null) return terminalSummary;
+
+    final searchSummary = _extractSearchSummary(args);
+    if (searchSummary != null) return searchSummary;
+
+    final listSummary = _extractListSummary(args);
+    if (listSummary != null) return listSummary;
+
+    // 7. Generic fallback: 取 args 中第一个非空字符串值（JsonValue 转字符串），截断 40 字符
+    for (final entry in args.entries) {
+      final str = _jsonValueToDisplayString(entry.value);
+      if (str != null) {
+        final clean = _cleanSingleLine(str);
+        if (clean.isNotEmpty) {
+          return _truncate40(clean);
+        }
+      }
+    }
+  }
+
+  // 8. 若 args 为空或无有效值，fallback 到 call.preview?.trim()（去换行，截断 40）
+  final preview = call.preview;
+  if (preview != null && preview.trim().isNotEmpty) {
+    final clean = _cleanSingleLine(preview);
+    if (clean.isNotEmpty) {
+      return _truncate40(clean);
+    }
+  }
+
+  // 9. 返回 null 表示无摘要
+  return null;
+}
+
+/// ToolCall 摘要扩展。
+extension ToolCallSummaryExtension on ToolCall {
+  String? get callSummary => toolCallSummary(this);
+}
+
+bool _isReadFileTool(String toolName) {
+  return const {
+    'read',
+    'read_file',
+    'readfile',
+    'cat',
+    'view',
+    'view_file',
+    'viewfile',
+  }.contains(toolName) ||
+      toolName.startsWith('read_') ||
+      toolName.startsWith('view_');
+}
+
+bool _isWriteFileTool(String toolName) {
+  return const {
+    'write',
+    'write_file',
+    'writefile',
+    'edit',
+    'edit_file',
+    'editfile',
+    'str_replace',
+    'strreplace',
+    'create',
+    'create_file',
+    'createfile',
+    'patch',
+    'apply_patch',
+    'applypatch',
+    'write_to_file',
+    'replace_file_content',
+  }.contains(toolName) ||
+      toolName.startsWith('write_') ||
+      toolName.startsWith('edit_');
+}
+
+bool _isTerminalTool(String toolName) {
+  return const {
+    'bash',
+    'shell',
+    'exec',
+    'terminal',
+    'run',
+    'run_command',
+    'runcommand',
+    'command',
+    'cmd',
+    'zsh',
+    'powershell',
+  }.contains(toolName);
+}
+
+bool _isSearchTool(String toolName) {
+  return const {
+    'grep',
+    'search',
+    'ripgrep',
+    'find',
+    'find_by_name',
+    'grep_search',
+    'search_web',
+    'web_search',
+    'websearch',
+  }.contains(toolName);
+}
+
+bool _isListTool(String toolName) {
+  return const {
+    'glob',
+    'list',
+    'ls',
+    'list_dir',
+    'listdir',
+  }.contains(toolName);
+}
+
+String? _extractFileSummary(Map<String, JsonValue> args) {
+  final path = _findArgString(args, const [
+    'file_path',
+    'filepath',
+    'path',
+    'file',
+    'filename',
+    'target_file',
+    'targetfile',
+  ]);
+  if (path == null) return null;
+  final fileName = _extractFileName(path);
+  if (fileName.isEmpty) return null;
+  final suffix = _extractLineOrOffsetSuffix(args);
+  final combined = '$fileName$suffix';
+  return _truncate40(combined);
+}
+
+String? _extractTerminalSummary(Map<String, JsonValue> args) {
+  final cmd = _findArgString(args, const [
+    'command',
+    'cmd',
+    'commands',
+    'script',
+    'code',
+    'command_line',
+    'commandline',
+  ]);
+  if (cmd == null) return null;
+  final clean = _cleanSingleLine(cmd);
+  if (clean.isEmpty) return null;
+  return _truncate40(clean);
+}
+
+String? _extractSearchSummary(Map<String, JsonValue> args) {
+  final pattern = _findArgString(args, const [
+    'pattern',
+    'query',
+    'text',
+    'keyword',
+    'q',
+  ]);
+  final path = _findArgString(args, const [
+    'file_path',
+    'filepath',
+    'path',
+    'file',
+    'filename',
+    'directory',
+    'dir',
+    'search_directory',
+    'search_path',
+    'searchpath',
+    'searchdirectory',
+  ]);
+  final cleanPattern = pattern != null ? _cleanSingleLine(pattern) : null;
+  final cleanPath = path != null ? _extractFileName(path) : null;
+  if (cleanPattern != null && cleanPattern.isNotEmpty && cleanPath != null && cleanPath.isNotEmpty) {
+    return _truncate40('$cleanPattern $cleanPath');
+  } else if (cleanPattern != null && cleanPattern.isNotEmpty) {
+    return _truncate40(cleanPattern);
+  } else if (cleanPath != null && cleanPath.isNotEmpty) {
+    return _truncate40(cleanPath);
+  }
+  return null;
+}
+
+String? _extractListSummary(Map<String, JsonValue> args) {
+  final pattern = _findArgString(args, const [
+    'pattern',
+    'glob',
+    'filter',
+    'query',
+  ]);
+  final path = _findArgString(args, const [
+    'file_path',
+    'filepath',
+    'path',
+    'file',
+    'filename',
+    'directory',
+    'dir',
+    'directory_path',
+    'directorypath',
+    'search_directory',
+  ]);
+  final cleanPattern = pattern != null ? _cleanSingleLine(pattern) : null;
+  final cleanPath = path != null ? _extractFileName(path) : null;
+  if (cleanPattern != null && cleanPattern.isNotEmpty && cleanPath != null && cleanPath.isNotEmpty) {
+    return _truncate40('$cleanPattern $cleanPath');
+  } else if (cleanPattern != null && cleanPattern.isNotEmpty) {
+    return _truncate40(cleanPattern);
+  } else if (cleanPath != null && cleanPath.isNotEmpty) {
+    return _truncate40(cleanPath);
+  }
+  return null;
+}
+
+String? _extractTodoSummary(Map<String, JsonValue> args) {
+  for (final entry in args.entries) {
+    final lowerKey = entry.key.toLowerCase();
+    if (lowerKey.contains('todo') ||
+        lowerKey.contains('task') ||
+        lowerKey.contains('title') ||
+        lowerKey.contains('content')) {
+      final val = _jsonValueToDisplayString(entry.value);
+      if (val != null) {
+        final clean = _cleanSingleLine(val);
+        if (clean.isNotEmpty) {
+          return _truncate40(clean);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+String _extractFileName(String path) {
+  final normalized = path.trim().replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+  if (normalized.isEmpty) return path.trim();
+  final lastSlash = normalized.lastIndexOf('/');
+  if (lastSlash >= 0 && lastSlash < normalized.length - 1) {
+    return normalized.substring(lastSlash + 1);
+  }
+  return normalized;
+}
+
+String _extractLineOrOffsetSuffix(Map<String, JsonValue> args) {
+  final startVal = _findArgString(args, const [
+    'line_start',
+    'linestart',
+    'start_line',
+    'startline',
+    'start',
+  ]);
+  final endVal = _findArgString(args, const [
+    'line_end',
+    'lineend',
+    'end_line',
+    'endline',
+    'end',
+  ]);
+  if (startVal != null && endVal != null) {
+    return ':$startVal-$endVal';
+  } else if (startVal != null) {
+    return ':$startVal';
+  } else if (endVal != null) {
+    return ':$endVal';
+  }
+
+  final lineVal = _findArgString(args, const ['line', 'lines']);
+  if (lineVal != null) {
+    return ':$lineVal';
+  }
+
+  final offsetVal = _findArgString(args, const [
+    'offset',
+    'offset_start',
+    'offsetstart',
+  ]);
+  if (offsetVal != null) {
+    return ':$offsetVal';
+  }
+
+  final limitVal = _findArgString(args, const ['limit']);
+  if (limitVal != null) {
+    return ':$limitVal';
+  }
+
+  return '';
+}
+
+String? _findArgString(Map<String, JsonValue> args, List<String> candidateKeys) {
+  for (final targetKey in candidateKeys) {
+    final lowerTarget = targetKey.toLowerCase();
+    for (final entry in args.entries) {
+      if (entry.key.toLowerCase() == lowerTarget) {
+        final str = _jsonValueToDisplayString(entry.value);
+        if (str != null && str.trim().isNotEmpty) {
+          return str.trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+String? _jsonValueToDisplayString(JsonValue? val) {
+  if (val == null) return null;
+  return switch (val) {
+    JsonString(:final value) => value,
+    JsonNumber(:final value) => value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toString(),
+    JsonBool(:final value) => value ? 'true' : 'false',
+    JsonNull() => null,
+    JsonObject() => val.compactJsonString,
+    JsonArray() => val.compactJsonString,
+  };
+}
+
+String _cleanSingleLine(String text) {
+  return text.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+}
+
+String _truncate40(String text) {
+  return text.length > 40 ? text.substring(0, 40) : text;
+}
+

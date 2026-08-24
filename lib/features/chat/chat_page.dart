@@ -379,7 +379,6 @@ Future<void> _showSessionActions(
     context,
     anchorKey: actionsKey,
     items: items,
-    title: state.displayTitle,
     cancelLabel: l10n.cancel,
     cancelKey: const ValueKey('chat-action-cancel'),
   );

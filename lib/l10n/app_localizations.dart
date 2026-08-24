@@ -15,6 +15,10 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   String get ok => isEnglish ? 'OK' : '好';
   String get cancel => isEnglish ? 'Cancel' : '取消';
+  String get confirm => isEnglish ? 'Confirm' : '确定';
+  String get clear => isEnglish ? 'Clear' : '清空';
+  String get clearAll => isEnglish ? 'Clear All' : '全部清空';
+  String get copy => isEnglish ? 'Copy' : '复制';
   String get save => isEnglish ? 'Save' : '保存';
   String get create => isEnglish ? 'Create' : '创建';
   String get delete => isEnglish ? 'Delete' : '删除';
@@ -202,7 +206,7 @@ class AppLocalizations {
   String get approvalNeeded => isEnglish ? 'Approval Needed' : '需要审批';
   String get clarificationNeeded => isEnglish ? 'Clarification Needed' : '需要澄清';
   String queuedBannerMessage(int count) =>
-      isEnglish ? '已排队 $count 条消息，将在当前回复结束后自动发送' : '已排队 $count 条消息，将在当前回复结束后自动发送';
+      isEnglish ? '$count messages queued, will be sent automatically when current reply ends' : '已排队 $count 条消息，将在当前回复结束后自动发送';
   String get offlineCacheBanner =>
       isEnglish ? 'Offline cache mode. Content may not be up to date.' : '离线缓存模式，部分内容可能不是最新';
   String get dismissOfflineBanner => isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
@@ -277,8 +281,8 @@ class AppLocalizations {
       : '删除此消息之后的所有消息？此操作不可撤销。';
   String get truncate => isEnglish ? 'Truncate' : '截断';
   String get attachmentFallback => isEnglish ? 'Attachment' : '附件';
-  String get thinkingBlock => isEnglish ? 'Thinking' : 'Thinking';
-  String get thinkingLabel => isEnglish ? 'Thinking' : 'Thinking';
+  String get thinkingBlock => isEnglish ? 'Thinking' : '思考';
+  String get thinkingLabel => isEnglish ? 'Thinking' : '思考';
   String get runningDots => isEnglish ? 'Running…' : '运行中…';
   String get runningIndicator => isEnglish ? 'Running…' : '运行中…';
   String get failedStatus => isEnglish ? 'Failed' : '失败';

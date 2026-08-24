@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../selection_provider.dart';
 
 /// 待发选区条面板（规格 §4.3）.
@@ -15,6 +16,7 @@ class SelectionChipPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final pending = ref.watch(pendingSelectionsProvider(sessionId));
     if (pending.isEmpty) return const SizedBox.shrink();
 
@@ -41,7 +43,7 @@ class SelectionChipPanel extends ConsumerWidget {
                         .read(pendingSelectionsProvider(sessionId).notifier)
                         .clear(),
                     child: Text(
-                      '清空',
+                      l10n.clear,
                       style: TextStyle(
                         fontSize: 12,
                         color: CupertinoColors.secondaryLabel.resolveFrom(
@@ -161,11 +163,12 @@ class _SelectionChipCard extends ConsumerWidget {
     WidgetRef ref,
     PendingSelection sel,
   ) async {
+    final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: sel.name);
     final result = await showCupertinoDialog<String>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('重命名'),
+        title: Text(l10n.rename),
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
@@ -180,12 +183,12 @@ class _SelectionChipCard extends ConsumerWidget {
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('确定'),
+            child: Text(l10n.confirm),
           ),
         ],
       ),

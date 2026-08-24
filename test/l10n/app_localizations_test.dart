@@ -13,6 +13,10 @@ void main() {
     test('Common strings return Chinese values', () {
       expect(l10n.ok, '好');
       expect(l10n.cancel, '取消');
+      expect(l10n.confirm, '确定');
+      expect(l10n.clear, '清空');
+      expect(l10n.clearAll, '全部清空');
+      expect(l10n.copy, '复制');
       expect(l10n.save, '保存');
       expect(l10n.create, '创建');
       expect(l10n.delete, '删除');
@@ -214,8 +218,8 @@ void main() {
       );
       expect(l10n.truncate, '截断');
       expect(l10n.attachmentFallback, '附件');
-      expect(l10n.thinkingBlock, 'Thinking');
-      expect(l10n.thinkingLabel, 'Thinking');
+      expect(l10n.thinkingBlock, '思考');
+      expect(l10n.thinkingLabel, '思考');
       expect(l10n.runningDots, '运行中…');
       expect(l10n.runningIndicator, '运行中…');
       expect(l10n.failedStatus, '失败');
@@ -541,6 +545,10 @@ void main() {
     test('Common strings return English values', () {
       expect(l10n.ok, 'OK');
       expect(l10n.cancel, 'Cancel');
+      expect(l10n.confirm, 'Confirm');
+      expect(l10n.clear, 'Clear');
+      expect(l10n.clearAll, 'Clear All');
+      expect(l10n.copy, 'Copy');
       expect(l10n.save, 'Save');
       expect(l10n.create, 'Create');
       expect(l10n.delete, 'Delete');
@@ -572,6 +580,10 @@ void main() {
 
     test('Parameterized methods work in English', () {
       expect(l10n.selectedCount(4), 'Selected 4');
+      expect(
+        l10n.queuedBannerMessage(2),
+        '2 messages queued, will be sent automatically when current reply ends',
+      );
       expect(l10n.exportSuccess('Markdown'), 'Markdown exported successfully');
       expect(
         l10n.confirmDeleteSession('My Chat'),

@@ -145,12 +145,13 @@ void main() {
     // group header 已本地化为"终端 ×1"（双层默认收起，outer 收起时 inner 不在树）
     expect(find.textContaining('终端'), findsOneWidget);
     expect(find.text('bash'), findsNothing);
-    // 展开外层组 -> inner header 出现
+    // 展开外层组 -> inner header 出现（header 含摘要：终端 — ls -la）
     await tester.tap(find.textContaining('终端'));
     await tester.pump();
-    expect(find.text('bash'), findsOneWidget);
+    expect(find.textContaining('终端'), findsWidgets);
+    expect(find.textContaining('ls -la'), findsOneWidget);
     // 展开 inner 卡片详情
-    await tester.tap(find.text('bash'));
+    await tester.tap(find.textContaining('ls -la').first);
     await tester.pump();
     expect(find.textContaining('cmd: ls -la'), findsOneWidget);
     expect(find.text('运行中…'), findsOneWidget);

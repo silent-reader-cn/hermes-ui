@@ -228,4 +228,155 @@ void main() {
     expect(lookup.groups(anchorMessageID: null), hasLength(1));
     expect(lookup.groups(anchorMessageID: 'zz'), isEmpty);
   });
+
+  group('toolCallSummary', () {
+    test('读文件类：提取文件名与行/偏移后缀', () {
+      final call1 = ToolCall(
+        name: 'read_file',
+        args: {
+          'file_path': const JsonString('/Users/dev/project/src/main.dart'),
+          'line_start': const JsonNumber(10),
+          'line_end': const JsonNumber(50),
+        },
+      );
+      expect(call1.summary, 'main.dart:10-50');
+
+      final call2 = ToolCall(
+        name: 'read',
+        args: {
+          'path': const JsonString(r'C:\workspace\app\config.json'),
+          'offset': const JsonNumber(100),
+        },
+      );
+      expect(call2.summary, 'config.json:100');
+
+      final call3 = ToolCall(
+        name: 'view',
+        args: {
+          'filename': const JsonString('app.dart'),
+          'start_line': const JsonNumber(5),
+        },
+      );
+      expect(call3.summary, 'app.dart:5');
+
+      final call4 = ToolCall(
+        name: 'cat',
+        args: {'file': const JsonString('pubspec.yaml')},
+      );
+      expect(call4.summary, 'pubspec.yaml');
+    });
+
+    test('写/编辑类：提取文件名与行范围', () {
+      final call1 = ToolCall(
+        name: 'write_file',
+        args: {
+          'target_file': const JsonString('lib/features/chat/chat_page.dart'),
+        },
+      );
+      expect(call1.summary, 'chat_page.dart');
+
+      final call2 = ToolCall(
+        name: 'edit',
+        args: {
+          'filepath': const JsonString('/tmp/test.dart'),
+          'line_start': const JsonNumber(1),
+          'line_end': const JsonNumber(20),
+        },
+      );
+      expect(call2.summary, 'test.dart:1-20');
+
+      final call3 = ToolCall(
+        name: 'str_replace',
+        args: {
+          'path': const JsonString('README.md'),
+        },
+      );
+      expect(call3.summary, 'README.md');
+    });
+
+    test('终端类：提取命令去换行并截断 40 字符', () {
+      final call1 = ToolCall(
+        name: 'bash',
+        args: {'command': const JsonString('flutter test\n--coverage')},
+      );
+      expect(call1.summary, 'flutter test --coverage');
+
+      final longCmd = 'git commit -m "feat: very long commit message that exceeds 40 characters easily"';
+      final call2 = ToolCall(
+        name: 'exec',
+        args: {'cmd': JsonString(longCmd)},
+      );
+      expect(call2.summary, longCmd.substring(0, 40));
+    });
+
+    test('搜索类：pattern + path 组合', () {
+      final call1 = ToolCall(
+        name: 'grep',
+        args: {
+          'pattern': const JsonString('toolCallSummary'),
+          'path': const JsonString('lib/core/models/tool_call.dart'),
+        },
+      );
+      expect(call1.summary, 'toolCallSummary tool_call.dart');
+
+      final call2 = ToolCall(
+        name: 'search',
+        args: {'query': const JsonString('Flutter')},
+      );
+      expect(call2.summary, 'Flutter');
+    });
+
+    test('列表类：pattern + path', () {
+      final call1 = ToolCall(
+        name: 'glob',
+        args: {
+          'pattern': const JsonString('*.dart'),
+          'path': const JsonString('/src/lib'),
+        },
+      );
+      expect(call1.summary, '*.dart lib');
+
+      final call2 = ToolCall(
+        name: 'ls',
+        args: {'path': const JsonString('/Users/admin/docs')},
+      );
+      expect(call2.summary, 'docs');
+    });
+
+    test('todo/task 类：匹配键含 todo/task/title/content', () {
+      final call1 = ToolCall(
+        name: 'task_manager',
+        args: {'todo_title': const JsonString('Fix layout bug')},
+      );
+      expect(call1.summary, 'Fix layout bug');
+
+      final call2 = ToolCall(
+        name: 'note',
+        args: {'content': const JsonString('Meeting at 3pm')},
+      );
+      expect(call2.summary, 'Meeting at 3pm');
+    });
+
+    test('Generic fallback：未命中特定分类时取第一个非空字符串值', () {
+      final call = ToolCall(
+        name: 'unknown_tool',
+        args: {
+          'extra': const JsonNull(),
+          'message': const JsonString('Custom payload string'),
+        },
+      );
+      expect(call.summary, 'Custom payload string');
+    });
+
+    test('Preview fallback：args 为空时回退到 preview', () {
+      final call1 = ToolCall(
+        name: 'custom',
+        preview: '  Wrote 12 lines to file.txt \n  ',
+      );
+      expect(call1.summary, 'Wrote 12 lines to file.txt');
+
+      final call2 = ToolCall(name: 'custom');
+      expect(call2.summary, isNull);
+    });
+  });
 }

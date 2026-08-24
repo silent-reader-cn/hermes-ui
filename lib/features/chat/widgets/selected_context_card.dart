@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter/services.dart';
 
 import '../../../core/utils/selected_context.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// 已发送选中上下文卡片 — 对齐 WebUI `style.css:1399-1401` + 参照 `InjectedNoticeCard`.
 ///
@@ -22,13 +23,16 @@ class SelectedContextCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final separator = CupertinoColors.separator.resolveFrom(context);
     final bg =
         CupertinoColors.secondarySystemBackground.resolveFrom(context);
     final secondaryLabel =
         CupertinoColors.secondaryLabel.resolveFrom(context);
     final accent = CupertinoColors.activeBlue.resolveFrom(context);
-    final label = block.label.trim().isEmpty ? 'Context' : block.label.trim();
+    final label = block.label.trim().isEmpty
+        ? (l10n.isEnglish ? 'Context' : '上下文')
+        : block.label.trim();
     final quote = block.quote.replaceAll(RegExp(r'\s+$'), '');
 
     return Semantics(
@@ -150,6 +154,7 @@ class _CopyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       minimumSize: Size.zero,
@@ -166,7 +171,7 @@ class _CopyButton extends StatelessWidget {
             Icon(CupertinoIcons.doc_on_doc, size: 11, color: color),
             const SizedBox(width: 3),
             Text(
-              '复制',
+              l10n.copy,
               style: TextStyle(fontSize: 11, color: color),
             ),
           ],

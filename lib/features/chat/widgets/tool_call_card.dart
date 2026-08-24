@@ -22,6 +22,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final call = widget.call;
     final content = ToolCallDisplayContent.of(call);
     final failed = call.isError == true;
@@ -36,6 +37,17 @@ class _ToolCallCardState extends State<ToolCallCard> {
         : running
             ? CupertinoColors.activeBlue.resolveFrom(context).withValues(alpha: 0.08)
             : CupertinoColors.systemTeal.resolveFrom(context).withValues(alpha: 0.08);
+
+    final rawSummary = call.summary;
+    final String? summary;
+    if (rawSummary != null && rawSummary.isNotEmpty) {
+      summary = rawSummary.length > 36
+          ? '${rawSummary.substring(0, 33)}\u2026'
+          : rawSummary;
+    } else {
+      summary = null;
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -68,13 +80,30 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    call.displayName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: accentColor,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: l10n.localizeToolName(call.displayName),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: accentColor,
+                          ),
+                        ),
+                        if (summary != null)
+                          TextSpan(
+                            text: ' \u2014 $summary',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                            ),
+                          ),
+                      ],
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (call.isCompleted && call.duration != null)
@@ -225,6 +254,12 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
     final group = widget.group;
     final failed = group.hasFailedTool;
     final running = !group.isComplete;
+    final titleStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: CupertinoColors.label.resolveFrom(context),
+    );
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 6),
@@ -266,15 +301,24 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                   ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    group.localizedActivityTitle(l10n),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final title = _adaptiveActivityTitle(
+                        group: group,
+                        l10n: l10n,
+                        maxWidth: constraints.maxWidth,
+                        style: titleStyle,
+                        textScaler: MediaQuery.textScalerOf(context),
+                        textDirection: Directionality.maybeOf(context) ??
+                            TextDirection.ltr,
+                      );
+                      return Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
+                      );
+                    },
                   ),
                 ),
                 if (failed)
@@ -314,3 +358,71 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
     );
   }
 }
+
+/// 根据可用宽度自适应计算分组卡片标题。
+String _adaptiveActivityTitle({
+  required ToolCallGroup group,
+  required AppLocalizations l10n,
+  required double maxWidth,
+  required TextStyle style,
+  required TextScaler textScaler,
+  required TextDirection textDirection,
+}) {
+  if (group.toolCalls.isEmpty) return l10n.noTools;
+
+  final counts = <String, int>{};
+  final initialIndex = <String, int>{};
+  for (var i = 0; i < group.toolCalls.length; i++) {
+    final name = l10n.localizeToolName(group.toolCalls[i].displayName);
+    initialIndex.putIfAbsent(name, () => initialIndex.length);
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  final entries = counts.entries.toList()
+    ..sort((a, b) {
+      final cmp = b.value.compareTo(a.value);
+      if (cmp != 0) return cmp;
+      return (initialIndex[a.key] ?? 0).compareTo(initialIndex[b.key] ?? 0);
+    });
+
+  if (entries.isEmpty) return l10n.noTools;
+
+  bool fits(String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout(minWidth: 0, maxWidth: double.infinity);
+    return painter.width <= maxWidth;
+  }
+
+  // 循环尝试加入下一个 entry 的 "name ×count" 到 visible 列表
+  final visible = <String>[];
+  for (var i = 0; i < entries.length; i++) {
+    final entry = entries[i];
+    final itemText = '${entry.key} \u00D7${entry.value}';
+    final candidateVisible = [...visible, itemText];
+    final remaining = entries.length - candidateVisible.length;
+    final candidateString = remaining > 0
+        ? '${candidateVisible.join(', ')} \u2026'
+        : candidateVisible.join(', ');
+
+    if (fits(candidateString)) {
+      visible.add(itemText);
+    } else {
+      break;
+    }
+  }
+
+  if (visible.isNotEmpty) {
+    final remaining = entries.length - visible.length;
+    if (remaining > 0) {
+      return '${visible.join(', ')} \u2026';
+    }
+    return visible.join(', ');
+  }
+
+  // 兜底：若首个 entry 就超宽，则只显示首个 entry 的 name（不含 ×count）+ " …"
+  return '${entries.first.key} \u2026';
+}
+
