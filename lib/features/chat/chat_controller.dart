@@ -1282,11 +1282,23 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   String _currentStreamingContent() {
     final id = state.stream.streamingAssistantMessageId;
-    if (id == null) return '';
-    for (final message in state.messages) {
-      if (message.messageId == id) return message.content ?? '';
+    String base = '';
+    if (id != null) {
+      for (final message in state.messages) {
+        if (message.messageId == id) {
+          base = message.content ?? '';
+          break;
+        }
+      }
     }
-    return '';
+    // 包含待合并与待揭示队列，避免重连去重时把待吐内容误作新内容
+    if (state.pendingAssistantTokenChunks.isNotEmpty) {
+      base += state.pendingAssistantTokenChunks.join();
+    }
+    if (_revealQueue.isNotEmpty) {
+      base += _revealQueue.join();
+    }
+    return base;
   }
 
   /// interim_assistant：already_streamed 过滤 + 先 flush 再追加 + 分隔符规则。
@@ -2461,11 +2473,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
     }
     // 最大重叠扫描（existingContent 后缀 ∩ token 前缀，从大到小）。
+    // 修复：单字重叠（CJK 根/因等）会导致死循环重复，需 >=2 才算有效重叠
     final maxLen = existingContent.length < token.length
         ? existingContent.length
         : token.length;
     var overlap = 0;
     for (var len = maxLen; len > 0; len--) {
+      if (len == 1) continue; // 单字重叠不算，避免 CJK 单字误判
       if (existingContent.endsWith(token.substring(0, len))) {
         overlap = len;
         break;
