@@ -227,24 +227,30 @@ class ToolCallGroup {
     required List<PersistedToolCall> persistedToolCalls,
     required List<ChatMessage> messages,
     int? messageOffset,
+    bool coalesce = true,
   }) {
     final derivedGroups = _groupsFromMessageMetadata(messages, messageOffset);
-    if (persistedToolCalls.isEmpty) {
-      return coalescingByAssistantTurn(
-        derivedGroups,
-        messages: messages,
-        messageOffset: messageOffset,
-      );
+    final rawGroups = persistedToolCalls.isEmpty
+        ? derivedGroups
+        : merging(
+            primaryGroups: _groupsFromPersistedToolCalls(
+              persistedToolCalls,
+              messages,
+              messageOffset,
+            ),
+            fallbackGroups: derivedGroups,
+          );
+    if (!coalesce) {
+      return rawGroups.map((group) {
+        return ToolCallGroup(
+          id: group.id,
+          anchorMessageID: group.anchorMessageID,
+          toolCalls: _uniqueToolCalls(group.toolCalls),
+        );
+      }).toList();
     }
     return coalescingByAssistantTurn(
-      merging(
-        primaryGroups: _groupsFromPersistedToolCalls(
-          persistedToolCalls,
-          messages,
-          messageOffset,
-        ),
-        fallbackGroups: derivedGroups,
-      ),
+      rawGroups,
       messages: messages,
       messageOffset: messageOffset,
     );
@@ -465,7 +471,8 @@ class ToolCallGroup {
           );
       if (toolCalls.isEmpty) continue;
 
-      currentAnchorMessageID ??= TranscriptTurnClassifier.anchorID(
+      flushCurrentGroup();
+      currentAnchorMessageID = TranscriptTurnClassifier.anchorID(
         message,
         at: messageIndex,
         messageOffset: messageOffset,

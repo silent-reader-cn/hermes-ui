@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/tool_call.dart';
+import '../settings/tool_group_settings.dart';
 import 'chat_controller.dart';
 import 'chat_models.dart';
 import 'chat_server_api.dart';
@@ -158,12 +159,13 @@ final streamingMessageProvider = Provider.family<ChatMessage?, String>((
   return null;
 });
 
-/// 工具调用组（已归档 + 实时组合，按 assistant 回合分组）。
+/// 工具调用组（已归档 + 实时组合，按 assistant 回合分组或按消息穿插）。
 final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
   ref,
   sessionId,
 ) {
   final state = ref.watch(chatControllerProvider(sessionId));
+  ref.watch(toolGroupCoalesceProvider);
   final live = state.liveToolCalls.isEmpty
       ? const <ToolCallGroup>[]
       : [

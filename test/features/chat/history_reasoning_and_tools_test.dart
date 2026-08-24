@@ -192,7 +192,7 @@ void main() {
       expect(find.byIcon(CupertinoIcons.chevron_down), findsWidgets); // tool card chevron_down
       // 收起时 preview 与完整文本相同（80 字符内不截断），或预览显示截断版本
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      expect(find.text('read_file'), findsNothing); // 工具详情收起中
+      expect(find.byType(ToolCallCard), findsNothing); // 工具详情收起中（外层 GroupCard 折叠时内层 Card 不在树）
 
       // 2) 点击思考块展开（箭头朝下，完整文本渲染）
       await tester.tap(find.text('思考'));
@@ -209,7 +209,7 @@ void main() {
       await tester.tap(find.byType(ToolCallGroupCard));
       await tester.pumpAndSettle();
       expect(find.byType(ToolCallCard), findsOneWidget);
-      expect(find.textContaining('读取'), findsWidgets); // 工具卡片已展开（本地化后为 读取文件）
+      expect(find.textContaining('读取'), findsWidgets); // 工具卡片已展开（组标题+子卡片 header）
     });
 
     testWidgets('ChatPage 全链路：加载含 reasoning 与 toolCalls 的历史会话，气泡内可展开查看', (tester) async {

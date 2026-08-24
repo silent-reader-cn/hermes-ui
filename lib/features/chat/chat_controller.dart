@@ -15,6 +15,7 @@ import '../../core/models/tool_call.dart';
 import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
 import '../session_list/session_list_providers.dart';
+import '../settings/tool_group_settings.dart';
 import 'chat_diff_merge.dart';
 import 'chat_models.dart';
 import 'chat_providers.dart';
@@ -87,6 +88,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ChatWatchdogConfig get _watchdogConfig =>
       ref.read(chatWatchdogConfigProvider);
 
+  bool get _coalesceTools => ref.read(toolGroupCoalesceProvider);
+
+  List<PersistedToolCall>? _lastPersistedToolCalls;
+
   double _nowSeconds() => _now().millisecondsSinceEpoch / 1000;
 
   @override
@@ -102,6 +107,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealQueueStart = null;
     _startWatchdog();
     ref.onDispose(_dispose);
+    ref.listen(toolGroupCoalesceProvider, (prev, next) {
+      if (prev != next && state.messages.isNotEmpty) {
+        _recomputeToolGroups(next);
+      }
+    });
     if (sessionId.isNotEmpty) {
       // build 期间 state 未初始化，推迟到微任务再加载（读 state 安全）。
       scheduleMicrotask(() {
@@ -110,6 +120,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       });
     }
     return ChatState.initial(sessionId: sessionId);
+  }
+
+  void _recomputeToolGroups(bool coalesce) {
+    final serverDerivedGroups = ToolCallGroup.groups(
+      persistedToolCalls: _lastPersistedToolCalls ?? const [],
+      messages: state.messages,
+      messageOffset: state.messagesOffset,
+      coalesce: coalesce,
+    );
+    state = state.copyWith(completedToolCallGroups: serverDerivedGroups);
   }
 
   void _dispose() {
@@ -561,10 +581,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset);
         final persistedToolCalls =
             detail.toolCalls ?? const <PersistedToolCall>[];
+        _lastPersistedToolCalls = persistedToolCalls;
         final serverDerivedGroups = ToolCallGroup.groups(
           persistedToolCalls: persistedToolCalls,
           messages: allMessages,
           messageOffset: newOffset,
+          coalesce: _coalesceTools,
         );
         final nextToolGroups = ToolCallGroup.merging(
           primaryGroups: serverDerivedGroups,
@@ -627,10 +649,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             // readMessages 按 cachedAt 倒序返回，反转恢复时间正序
             cachedMessages = parsed.reversed.toList(growable: false);
           }
+          _lastPersistedToolCalls = const [];
           final serverDerivedGroups = ToolCallGroup.groups(
             persistedToolCalls: const [],
             messages: cachedMessages,
             messageOffset: 0,
+            coalesce: _coalesceTools,
           );
           final serverDerivedReasoning = ReasoningGroup.groups(
             messages: cachedMessages,
@@ -661,11 +685,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }) {
     final persistedToolCalls =
         detail.toolCalls ?? const <PersistedToolCall>[];
+    _lastPersistedToolCalls = persistedToolCalls;
     final newOffset = detail.messagesOffset ?? state.messagesOffset;
     final serverDerivedGroups = ToolCallGroup.groups(
       persistedToolCalls: persistedToolCalls,
       messages: mergedMessages,
       messageOffset: newOffset,
+      coalesce: _coalesceTools,
     );
     final serverDerivedReasoning = ReasoningGroup.groups(
       messages: mergedMessages,
@@ -711,13 +737,30 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       nextLiveReasoning = '';
     }
-    final nextCompletedReasoning = ReasoningGroup.merging(
+    var nextCompletedReasoning = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
       fallbackGroups: [
         ...state.completedReasoningGroups,
         ...liveReasoningList,
       ],
     );
+    // 历史思考归档：从已加载消息的 reasoning 字段提取，补入 completedReasoningGroups
+    final persistedReasoning = _reasoningGroupsFromMessages(
+      mergedMessages,
+      newOffset,
+    );
+    if (persistedReasoning.isNotEmpty) {
+      final existingAnchors = nextCompletedReasoning
+          .map((g) => '${g.anchorMessageId ?? ''}:${g.text}')
+          .toSet();
+      for (final g in persistedReasoning) {
+        final key = '${g.anchorMessageId ?? ''}:${g.text}';
+        if (!existingAnchors.contains(key)) {
+          nextCompletedReasoning = [...nextCompletedReasoning, g];
+        }
+      }
+    }
+
     state = state.copyWith(
       messages: mergedMessages,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
@@ -1643,10 +1686,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       currentStreamingId,
     );
     final persisted = detail.toolCalls ?? const <PersistedToolCall>[];
+    _lastPersistedToolCalls = persisted;
     final persistedGroups = ToolCallGroup.groups(
       persistedToolCalls: persisted,
       messages: merged,
       messageOffset: state.messagesOffset,
+      coalesce: _coalesceTools,
     );
     final liveGroups = _archiveLiveToolCallsToGroups();
     final groups = ToolCallGroup.merging(
@@ -2295,6 +2340,27 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   // -------------------------------------------------------------------------
   // 归档 / 辅助
   // -------------------------------------------------------------------------
+
+  /// 从消息列表的 reasoning 字段提取历史推理组（按 assistant 消息锚定）。
+  List<ReasoningGroup> _reasoningGroupsFromMessages(
+    List<ChatMessage> messages,
+    int messageOffset,
+  ) {
+    final groups = <ReasoningGroup>[];
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      final reasoning = msg.reasoning?.trim();
+      if (reasoning == null || reasoning.isEmpty) continue;
+      if (msg.role != 'assistant') continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        msg,
+        at: i,
+        messageOffset: messageOffset,
+      );
+      groups.add(ReasoningGroup(anchorMessageId: anchor, text: reasoning));
+    }
+    return groups;
+  }
 
   void _archiveLiveReasoningIfNeeded() {
     if (state.liveReasoningText.isEmpty) return;

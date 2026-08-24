@@ -216,6 +216,9 @@ void main() {
     WidgetTester tester,
     ProviderContainer container,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -309,6 +312,7 @@ void main() {
           .toList();
       expect(typeNames, [
         '_AppearanceSection',
+        '_ChatSection',
         '_ServerSection',
         '_ModelSection',
         '_CronSection',

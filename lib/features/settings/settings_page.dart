@@ -22,10 +22,11 @@ import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
+import 'tool_group_settings.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
-/// 首页分组：外观 / 服务器 / 模型 / 定时会话 / 二级入口组（辅助模型、MCP、扩展、
+/// 首页分组：外观 / 对话 / 服务器 / 模型 / 定时会话 / 二级入口组（辅助模型、MCP、扩展、
 /// 会话列表入口、会话行信息、桌面）/ 关于。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -41,6 +42,7 @@ class SettingsPage extends ConsumerWidget {
       child: ListView(
         children: const [
           _AppearanceSection(),
+          _ChatSection(),
           _ServerSection(),
           _ModelSection(),
           _CronSection(),
@@ -100,6 +102,40 @@ class _AppearanceSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(
                 ref.read(injectedNoticeSettingsProvider.notifier).setCollapse(value),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 对话
+// ---------------------------------------------------------------------------
+
+/// 对话设置分组：工具调用按回合聚合开关。
+class _ChatSection extends ConsumerWidget {
+  const _ChatSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final coalesce = ref.watch(toolGroupCoalesceProvider);
+    return CupertinoListSection.insetGrouped(
+      header: Text(l10n.chatSection),
+      children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-group-tools-by-turn'),
+          title: Text(l10n.groupToolsByTurn),
+          subtitle: Text(l10n.groupToolsByTurnDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-group-tools-by-turn'),
+            value: coalesce,
+            onChanged: (value) {
+              unawaited(
+                ref.read(toolGroupCoalesceProvider.notifier).setCoalesce(value),
               );
             },
           ),

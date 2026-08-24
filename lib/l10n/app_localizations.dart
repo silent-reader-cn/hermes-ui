@@ -726,6 +726,11 @@ class AppLocalizations {
   String get themeSystem => isEnglish ? 'System' : '跟随系统';
   String get themeLight => isEnglish ? 'Light' : '浅色';
   String get themeDark => isEnglish ? 'Dark' : '深色';
+  String get chatSection => isEnglish ? 'Chat' : '对话';
+  String get groupToolsByTurn => isEnglish ? 'Group tools by turn' : '工具按回合聚合';
+  String get groupToolsByTurnDesc => isEnglish
+      ? 'When disabled, tool panels are interleaved next to their corresponding responses'
+      : '关闭后工具折叠面板将穿插在对应回复旁';
   String get desktopSection => isEnglish ? 'Desktop' : '桌面';
   String get desktop => isEnglish ? 'Desktop' : '桌面';
   String get minimizeToTray => isEnglish ? 'Minimize to Tray' : '最小化到托盘';
