@@ -525,10 +525,16 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         if (index < transcript.length) {
           final entry = transcript[index];
           final groups = toolGroups
-              .where((g) => g.anchorMessageID == entry.message.messageId)
+              .where((g) =>
+                  g.anchorMessageID == entry.message.messageId ||
+                  (g.anchorMessageID != null &&
+                      g.anchorMessageID == entry.anchorId))
               .toList();
           final reasoning = reasoningGroups
-              .where((g) => g.anchorMessageId == entry.message.messageId)
+              .where((g) =>
+                  g.anchorMessageId == entry.message.messageId ||
+                  (g.anchorMessageId != null &&
+                      g.anchorMessageId == entry.anchorId))
               .toList();
           final noticeId = entry.message.id;
           final expanded = _expandedNoticeIds.contains(noticeId);

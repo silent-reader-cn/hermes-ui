@@ -67,6 +67,39 @@ void main() {
       expect(message.attachments![0].name, 'legacy_a.txt');
       expect(message.attachments![1].name, 'b.png');
     });
+
+    test('reasoning 多键名容错与 contentParts / thinking 标签提取', () {
+      final m1 = ChatMessage.fromJson({
+        'role': 'assistant',
+        'content': 'hello',
+        'reasoning_content': 'thought process 1',
+      });
+      expect(m1.reasoning, 'thought process 1');
+
+      final m2 = ChatMessage.fromJson({
+        'role': 'assistant',
+        'content': 'hello',
+        'thought': 'thought process 2',
+      });
+      expect(m2.reasoning, 'thought process 2');
+
+      final m3 = ChatMessage.fromJson({
+        'role': 'assistant',
+        'content': [
+          {'type': 'thinking', 'thinking': 'parts thinking'},
+          {'type': 'text', 'text': 'final text'},
+        ],
+      });
+      expect(m3.reasoning, 'parts thinking');
+      expect(m3.content, 'final text');
+
+      final m4 = ChatMessage.fromJson({
+        'role': 'assistant',
+        'content': '<thinking>\ntag thinking\n</thinking>\nclean answer',
+      });
+      expect(m4.reasoning, 'tag thinking');
+      expect(m4.content, 'clean answer');
+    });
   });
 
   group('ChatMessage.fromJson 畸形输入', () {

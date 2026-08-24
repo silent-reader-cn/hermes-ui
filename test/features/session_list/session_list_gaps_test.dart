@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermex_flutter/app/theme/status_colors.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/models/session.dart';
@@ -59,6 +60,7 @@ void main() {
     String id,
     String title, {
     bool archived = false,
+    bool pinned = false,
     String? sourceLabel,
     String? parentSessionId,
     bool readOnly = false,
@@ -70,6 +72,7 @@ void main() {
       sessionId: id,
       title: title,
       archived: archived,
+      pinned: pinned,
       sourceLabel: sourceLabel,
       parentSessionId: parentSessionId,
       readOnly: readOnly,
@@ -412,6 +415,69 @@ void main() {
       expect(find.textContaining('· \$1.25'), findsOneWidget);
       expect(find.textContaining('· qq'), findsOneWidget);
       expect(find.textContaining('迁移项目'), findsOneWidget);
+    });
+
+    testWidgets('置顶/分支/只读 图标置于副标题右侧，统一尺寸 10 与 secondaryText 灰色', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeSessionListApi(
+        sessions: [
+          session(
+            's1',
+            '全状态会话',
+            pinned: true,
+            parentSessionId: 'p0',
+            readOnly: true,
+            messageCount: 3,
+          ),
+        ],
+      );
+      await pumpList(tester, api);
+
+      final pinFinder = find.byIcon(CupertinoIcons.pin_fill);
+      final branchFinder = find.byIcon(CupertinoIcons.arrow_2_squarepath);
+      final lockFinder = find.byIcon(CupertinoIcons.lock_fill);
+
+      expect(pinFinder, findsOneWidget);
+      expect(branchFinder, findsOneWidget);
+      expect(lockFinder, findsOneWidget);
+
+      final pinIcon = tester.widget<Icon>(pinFinder);
+      final branchIcon = tester.widget<Icon>(branchFinder);
+      final lockIcon = tester.widget<Icon>(lockFinder);
+
+      expect(pinIcon.size, 10);
+      expect(branchIcon.size, 10);
+      expect(lockIcon.size, 10);
+
+      final context = tester.element(find.byType(SessionListPage));
+      final expectedColor = secondaryText.resolveFrom(context);
+      expect(pinIcon.color, expectedColor);
+      expect(branchIcon.color, expectedColor);
+      expect(lockIcon.color, expectedColor);
+    });
+
+    testWidgets('无副标题元数据时（metadata==null）仍渲染副标题占位以展示图标', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        SessionRowSubtitleSettingsController.keyMessageCount: false,
+      });
+      final api = FakeSessionListApi(
+        sessions: [
+          session(
+            's1',
+            '无元数据置顶会话',
+            pinned: true,
+          ),
+        ],
+      );
+      await pumpList(tester, api);
+
+      final pinFinder = find.byIcon(CupertinoIcons.pin_fill);
+      expect(pinFinder, findsOneWidget);
+
+      final pinIcon = tester.widget<Icon>(pinFinder);
+      expect(pinIcon.size, 10);
+      final context = tester.element(find.byType(SessionListPage));
+      expect(pinIcon.color, secondaryText.resolveFrom(context));
     });
   });
 

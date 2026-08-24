@@ -1053,6 +1053,33 @@ class _SessionRowState extends State<_SessionRow> {
       projectNames: widget.projectNames,
     );
     final isStreaming = _SessionRow._isStreaming(widget.session);
+    final secondaryColor = secondaryText.resolveFrom(context);
+    final pinned = widget.session.pinned == true;
+    final isBranched = widget.session.parentSessionId != null;
+    final readOnly = widget.session.readOnly == true ||
+        widget.session.isReadOnly == true;
+    final iconWidgets = <Widget>[
+      if (pinned)
+        Icon(
+          CupertinoIcons.pin_fill,
+          size: 10,
+          color: secondaryColor,
+        ),
+      if (isBranched)
+        Icon(
+          CupertinoIcons.arrow_2_squarepath,
+          size: 10,
+          color: secondaryColor,
+        ),
+      if (readOnly)
+        Icon(
+          CupertinoIcons.lock_fill,
+          size: 10,
+          color: secondaryColor,
+        ),
+    ];
+    final hasIcons = iconWidgets.isNotEmpty;
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
@@ -1086,43 +1113,37 @@ class _SessionRowState extends State<_SessionRow> {
                           style: const TextStyle(fontSize: 17),
                         ),
                       ),
-                      if (widget.session.pinned == true) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.pin_fill,
-                          size: 12,
-                          color: CupertinoColors.systemBlue,
-                        ),
-                      ],
-                      if (widget.session.parentSessionId != null) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.arrow_2_squarepath,
-                          size: 12,
-                          color: CupertinoColors.secondaryLabel,
-                        ),
-                      ],
-                      if (widget.session.readOnly == true ||
-                          widget.session.isReadOnly == true) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.lock_fill,
-                          size: 12,
-                          color: CupertinoColors.secondaryLabel,
-                        ),
-                      ],
-
                     ],
                   ),
-                  if (metadata != null) ...[
+                  if (metadata != null || hasIcons) ...[
                     const SizedBox(height: 2),
-                    _highlightedSpan(
-                      context,
-                      metadata,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: secondaryText.resolveFrom(context),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: metadata != null
+                              ? _highlightedSpan(
+                                  context,
+                                  metadata,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: secondaryColor,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        if (hasIcons) ...[
+                          const SizedBox(width: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (var i = 0; i < iconWidgets.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 4),
+                                iconWidgets[i],
+                              ],
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],

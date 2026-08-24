@@ -555,15 +555,37 @@ class ChatController extends FamilyNotifier<ChatState, String> {
                   .contains('${m.role}:${m.timestamp}:${m.content}');
             })
             .toList();
+        final allMessages = [...fresh, ...state.messages];
         final fallbackOffset = state.messagesOffset - loaded.length;
+        final newOffset =
+            detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset);
+        final persistedToolCalls =
+            detail.toolCalls ?? const <PersistedToolCall>[];
+        final serverDerivedGroups = ToolCallGroup.groups(
+          persistedToolCalls: persistedToolCalls,
+          messages: allMessages,
+          messageOffset: newOffset,
+        );
+        final nextToolGroups = ToolCallGroup.merging(
+          primaryGroups: serverDerivedGroups,
+          fallbackGroups: state.completedToolCallGroups,
+        );
+        final serverDerivedReasoning = ReasoningGroup.groups(
+          messages: allMessages,
+          messageOffset: newOffset,
+        );
+        final nextReasoningGroups = ReasoningGroup.merging(
+          primaryGroups: serverDerivedReasoning,
+          fallbackGroups: state.completedReasoningGroups,
+        );
         state = state.copyWith(
-          messages: [...fresh, ...state.messages],
-          messagesOffset:
-              detail.messagesOffset ??
-              (fallbackOffset < 0 ? 0 : fallbackOffset),
+          messages: allMessages,
+          messagesOffset: newOffset,
           hasOlderMessages:
               detail.messageCount != null &&
               detail.messageCount! > state.messages.length + fresh.length,
+          completedToolCallGroups: nextToolGroups,
+          completedReasoningGroups: nextReasoningGroups,
         );
       } else {
         // 全量重载：diff-merge 调和本地与服务端消息
@@ -605,8 +627,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             // readMessages 按 cachedAt 倒序返回，反转恢复时间正序
             cachedMessages = parsed.reversed.toList(growable: false);
           }
+          final serverDerivedGroups = ToolCallGroup.groups(
+            persistedToolCalls: const [],
+            messages: cachedMessages,
+            messageOffset: 0,
+          );
+          final serverDerivedReasoning = ReasoningGroup.groups(
+            messages: cachedMessages,
+            messageOffset: 0,
+          );
           state = state.copyWith(
             messages: cachedMessages,
+            completedToolCallGroups: serverDerivedGroups,
+            completedReasoningGroups: serverDerivedReasoning,
             isViewingCachedData: true,
             isShowingOfflineCache: true,
             clearErrorMessage: true,
@@ -634,29 +667,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messages: mergedMessages,
       messageOffset: newOffset,
     );
+    final serverDerivedReasoning = ReasoningGroup.groups(
+      messages: mergedMessages,
+      messageOffset: newOffset,
+    );
     List<ToolCallGroup> nextCompletedGroups;
     List<ToolCall> nextLiveToolCalls = state.liveToolCalls;
     String nextLiveReasoning = state.liveReasoningText;
-    List<ReasoningGroup> nextCompletedReasoning =
-        state.completedReasoningGroups;
     final hasServerTools =
         persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
     if (hasServerTools) {
       nextCompletedGroups = serverDerivedGroups;
       nextLiveToolCalls = const [];
-      if (state.liveReasoningText.isNotEmpty) {
-        final anchor = state.stream.reasoningAnchorMessageId ??
-            state.stream.streamingAssistantMessageId ??
-            _lastAssistantMessageId(mergedMessages);
-        nextCompletedReasoning = [
-          ...state.completedReasoningGroups,
-          ReasoningGroup(
-            anchorMessageId: anchor,
-            text: state.liveReasoningText,
-          ),
-        ];
-        nextLiveReasoning = '';
-      }
     } else {
       if (state.liveToolCalls.isNotEmpty) {
         final anchor = state.stream.toolCallAnchorMessageId ??
@@ -674,20 +696,28 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       } else {
         nextCompletedGroups = state.completedToolCallGroups;
       }
-      if (state.liveReasoningText.isNotEmpty) {
-        final anchor = state.stream.reasoningAnchorMessageId ??
-            state.stream.streamingAssistantMessageId ??
-            _lastAssistantMessageId(mergedMessages);
-        nextCompletedReasoning = [
-          ...state.completedReasoningGroups,
-          ReasoningGroup(
-            anchorMessageId: anchor,
-            text: state.liveReasoningText,
-          ),
-        ];
-        nextLiveReasoning = '';
-      }
     }
+
+    final liveReasoningList = <ReasoningGroup>[];
+    if (state.liveReasoningText.isNotEmpty) {
+      final anchor = state.stream.reasoningAnchorMessageId ??
+          state.stream.streamingAssistantMessageId ??
+          _lastAssistantMessageId(mergedMessages);
+      liveReasoningList.add(
+        ReasoningGroup(
+          anchorMessageId: anchor,
+          text: state.liveReasoningText,
+        ),
+      );
+      nextLiveReasoning = '';
+    }
+    final nextCompletedReasoning = ReasoningGroup.merging(
+      primaryGroups: serverDerivedReasoning,
+      fallbackGroups: [
+        ...state.completedReasoningGroups,
+        ...liveReasoningList,
+      ],
+    );
     state = state.copyWith(
       messages: mergedMessages,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
@@ -1611,7 +1641,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       primaryGroups: persistedGroups,
       fallbackGroups: liveGroups,
     );
-    final reasoningGroups = _archiveLiveReasoningToGroups();
+    final serverDerivedReasoning = ReasoningGroup.groups(
+      messages: merged,
+      messageOffset: state.messagesOffset,
+    );
+    final liveReasoning = _archiveLiveReasoningToGroups();
+    final reasoningGroups = ReasoningGroup.merging(
+      primaryGroups: serverDerivedReasoning,
+      fallbackGroups: liveReasoning,
+    );
     final title = detail.title?.trim();
     // 同步上下文快照（对齐 Swift applyCompletedStreamSession）
     final snapshotFromDetail = ContextWindowSnapshot(
@@ -2247,30 +2285,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   // -------------------------------------------------------------------------
 
   void _archiveLiveReasoningIfNeeded() {
-    final text = state.liveReasoningText;
-    if (text.isEmpty) return;
-    final anchor =
-        state.stream.reasoningAnchorMessageId ??
-        state.stream.streamingAssistantMessageId;
+    if (state.liveReasoningText.isEmpty) return;
+    final groups = _archiveLiveReasoningToGroups();
     state = state.copyWith(
       liveReasoningText: '',
-      completedReasoningGroups: [
-        ...state.completedReasoningGroups,
-        ReasoningGroup(anchorMessageId: anchor, text: text),
-      ],
+      completedReasoningGroups: groups,
     );
   }
 
   List<ReasoningGroup> _archiveLiveReasoningToGroups() {
-    final text = state.liveReasoningText;
-    if (text.isEmpty) return state.completedReasoningGroups;
+    if (state.liveReasoningText.isEmpty) return state.completedReasoningGroups;
     final anchor =
         state.stream.reasoningAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
-    return [
-      ...state.completedReasoningGroups,
-      ReasoningGroup(anchorMessageId: anchor, text: text),
-    ];
+    final group = ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText);
+    return ReasoningGroup.merging(
+      primaryGroups: state.completedReasoningGroups,
+      fallbackGroups: [group],
+    );
   }
 
   void _archiveLiveToolCallsIfNeeded() {

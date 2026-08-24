@@ -31,6 +31,73 @@ class ReasoningGroup {
 
   final String? anchorMessageId;
   final String text;
+
+  /// 从消息列表提取全部已归档推理段（按 assistant anchor 关联）。
+  static List<ReasoningGroup> groups({
+    required List<ChatMessage> messages,
+    int? messageOffset,
+  }) {
+    final groups = <ReasoningGroup>[];
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      final text = message.reasoning?.trim();
+      if (text == null || text.isEmpty) continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        message,
+        at: i,
+        messageOffset: messageOffset,
+      );
+      groups.add(ReasoningGroup(anchorMessageId: anchor, text: text));
+    }
+    return groups;
+  }
+
+  /// 主推理组 + 兜底推理组按 anchorMessageId 合并。
+  static List<ReasoningGroup> merging({
+    required List<ReasoningGroup> primaryGroups,
+    required List<ReasoningGroup> fallbackGroups,
+  }) {
+    final merged = List<ReasoningGroup>.from(primaryGroups);
+    final groupIndexesByAnchor = <String, int>{};
+    for (var i = 0; i < primaryGroups.length; i++) {
+      final anchor = primaryGroups[i].anchorMessageId;
+      if (anchor != null) groupIndexesByAnchor[anchor] = i;
+    }
+
+    for (final fallbackGroup in fallbackGroups) {
+      final anchor = fallbackGroup.anchorMessageId;
+      final groupIndex = anchor == null ? null : groupIndexesByAnchor[anchor];
+      if (groupIndex == null) {
+        if (anchor != null) {
+          groupIndexesByAnchor[anchor] = merged.length;
+        }
+        merged.add(fallbackGroup);
+        continue;
+      }
+
+      final existingGroup = merged[groupIndex];
+      if (existingGroup.text.trim().isEmpty &&
+          fallbackGroup.text.trim().isNotEmpty) {
+        merged[groupIndex] = fallbackGroup;
+      }
+    }
+    return merged;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ReasoningGroup &&
+        other.anchorMessageId == anchorMessageId &&
+        other.text == text;
+  }
+
+  @override
+  int get hashCode => Object.hash(anchorMessageId, text);
+
+  @override
+  String toString() =>
+      'ReasoningGroup(anchorMessageId: $anchorMessageId, text: $text)';
 }
 
 // ---------------------------------------------------------------------------

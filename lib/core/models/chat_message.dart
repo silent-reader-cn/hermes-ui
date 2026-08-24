@@ -26,14 +26,32 @@ class ChatMessage {
   factory ChatMessage.fromJson(Map<String, Object?> json) {
     final role = lossyString(json, 'role');
     final decodedContent = _decodeContentTolerantly(json);
-    final content = decodedContent.text;
+    var content = decodedContent.text;
     final timestamp = firstKey(json, ['_ts', 'timestamp'], lossyDouble);
     final messageId = lossyString(json, 'message_id');
     final name = lossyString(json, 'name');
     final toolCallId = lossyString(json, 'tool_call_id');
     final toolUseId = lossyString(json, 'tool_use_id');
     final toolCalls = optJsonValueList(json, 'tool_calls');
-    final reasoning = lossyString(json, 'reasoning');
+    var reasoning = firstKey(
+          json,
+          [
+            'reasoning',
+            'reasoning_content',
+            'reasoning_text',
+            'thought',
+            'thinking',
+          ],
+          lossyString,
+        ) ??
+        _reasoningFromParts(decodedContent.parts);
+    if (reasoning == null && role == 'assistant' && content != null) {
+      final extracted = _extractThinkingTag(content);
+      if (extracted.reasoning != null) {
+        reasoning = extracted.reasoning;
+        content = extracted.content;
+      }
+    }
     final turnTps = lossyDouble(json, '_turnTps');
     final decodedAttachments = _decodeAttachmentsTolerantly(json);
     return ChatMessage(
@@ -152,6 +170,43 @@ class ChatMessage {
         .join()
         .trim();
     return text.isEmpty ? null : text;
+  }
+
+  static String? _reasoningFromParts(List<JsonValue>? parts) {
+    if (parts == null || parts.isEmpty) return null;
+    final text = parts
+        .map((part) {
+          if (part is JsonObject) {
+            final type = part.value['type']?.stringValue?.toLowerCase();
+            if (type == 'thinking' || type == 'thought' || type == 'reasoning') {
+              return part.value['thinking']?.stringValue ??
+                  part.value['thought']?.stringValue ??
+                  part.value['text']?.stringValue ??
+                  part.value['content']?.stringValue;
+            }
+          }
+          return null;
+        })
+        .whereType<String>()
+        .join('\n')
+        .trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static ({String? content, String? reasoning}) _extractThinkingTag(String text) {
+    final match = RegExp(
+      r'<(?:thinking|thought)>([\s\S]*?)</(?:thinking|thought)>',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (match != null) {
+      final thinking = match.group(1)?.trim();
+      final clean = text.replaceRange(match.start, match.end, '').trim();
+      return (
+        content: clean.isEmpty ? null : clean,
+        reasoning: (thinking != null && thinking.isNotEmpty) ? thinking : null,
+      );
+    }
+    return (content: text, reasoning: null);
   }
 
   /// attachments 容错解码（对应 Swift `decodeAttachmentsTolerantly`）。

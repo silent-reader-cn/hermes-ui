@@ -111,11 +111,20 @@ final transcriptMessagesProvider =
         // rendered on their anchored assistant row even when its text is empty.
         final hasVisibleContent = message.content?.trim().isNotEmpty == true;
         final hasAttachments = message.attachments?.isNotEmpty == true;
+        final anchorId = TranscriptTurnClassifier.anchorID(
+          message,
+          at: i,
+          messageOffset: offset,
+        );
         final hasToolGroups = completedToolGroups.any(
-          (group) => group.anchorMessageID == message.messageId,
+          (group) =>
+              group.anchorMessageID == message.messageId ||
+              group.anchorMessageID == anchorId,
         );
         final hasReasoningGroups = completedReasoningGroups.any(
-          (group) => group.anchorMessageId == message.messageId,
+          (group) =>
+              group.anchorMessageId == message.messageId ||
+              group.anchorMessageId == anchorId,
         );
         if (!hasVisibleContent &&
             !hasAttachments &&
@@ -127,11 +136,7 @@ final transcriptMessagesProvider =
           TranscriptMessage(
             loadedIndex: i,
             renderId: 'transcript:${offset + i}',
-            anchorId: TranscriptTurnClassifier.anchorID(
-              message,
-              at: i,
-              messageOffset: offset,
-            ),
+            anchorId: anchorId,
             message: message,
           ),
         );
