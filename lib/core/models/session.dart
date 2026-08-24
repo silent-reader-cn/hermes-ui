@@ -330,7 +330,8 @@ class SessionBranchResponse {
       sessionId: sid ?? nestedSid,
       title: title ?? nestedTitle,
       parentSessionId: parentId ?? nestedParent,
-      error: lossyString(json, 'error') ??
+      error:
+          lossyString(json, 'error') ??
           (dataMap != null ? lossyString(dataMap, 'error') : null),
     );
   }
@@ -927,6 +928,80 @@ class SessionSummary {
 
   @override
   String toString() => 'SessionSummary(sessionId: $sessionId, title: $title)';
+
+  /// 复制并替换部分字段（手写容错，对齐项目其他模型的 copyWith 惯例）。
+  SessionSummary copyWith({
+    String? sessionId,
+    String? title,
+    String? workspace,
+    String? model,
+    String? modelProvider,
+    int? messageCount,
+    double? createdAt,
+    double? updatedAt,
+    double? lastMessageAt,
+    bool? pinned,
+    bool? archived,
+    String? projectId,
+    String? profile,
+    int? inputTokens,
+    int? outputTokens,
+    double? estimatedCost,
+    String? activeStreamId,
+    bool? isStreaming,
+    bool? isCliSession,
+    int? userMessageCount,
+    bool? hasPendingUserMessage,
+    double? pendingStartedAt,
+    String? worktreePath,
+    String? sourceTag,
+    String? rawSource,
+    String? sessionSource,
+    String? sourceLabel,
+    String? parentSessionId,
+    String? relationshipType,
+    bool? readOnly,
+    bool? isReadOnly,
+    String? matchType,
+    String? matchPreview,
+  }) {
+    return SessionSummary(
+      sessionId: sessionId ?? this.sessionId,
+      title: title ?? this.title,
+      workspace: workspace ?? this.workspace,
+      model: model ?? this.model,
+      modelProvider: modelProvider ?? this.modelProvider,
+      messageCount: messageCount ?? this.messageCount,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      pinned: pinned ?? this.pinned,
+      archived: archived ?? this.archived,
+      projectId: projectId ?? this.projectId,
+      profile: profile ?? this.profile,
+      inputTokens: inputTokens ?? this.inputTokens,
+      outputTokens: outputTokens ?? this.outputTokens,
+      estimatedCost: estimatedCost ?? this.estimatedCost,
+      activeStreamId: activeStreamId ?? this.activeStreamId,
+      isStreaming: isStreaming ?? this.isStreaming,
+      isCliSession: isCliSession ?? this.isCliSession,
+      userMessageCount: userMessageCount ?? this.userMessageCount,
+      hasPendingUserMessage:
+          hasPendingUserMessage ?? this.hasPendingUserMessage,
+      pendingStartedAt: pendingStartedAt ?? this.pendingStartedAt,
+      worktreePath: worktreePath ?? this.worktreePath,
+      sourceTag: sourceTag ?? this.sourceTag,
+      rawSource: rawSource ?? this.rawSource,
+      sessionSource: sessionSource ?? this.sessionSource,
+      sourceLabel: sourceLabel ?? this.sourceLabel,
+      parentSessionId: parentSessionId ?? this.parentSessionId,
+      relationshipType: relationshipType ?? this.relationshipType,
+      readOnly: readOnly ?? this.readOnly,
+      isReadOnly: isReadOnly ?? this.isReadOnly,
+      matchType: matchType ?? this.matchType,
+      matchPreview: matchPreview ?? this.matchPreview,
+    );
+  }
 }
 
 /// 自动化会话可见性配置（Swift `AutomatedSessionVisibility`）。纯 UI 配置类。
@@ -1064,9 +1139,21 @@ class SessionDetail {
       isReadOnly: lossyBool(json, 'is_read_only'),
       pendingUserMessage: lossyString(json, 'pending_user_message'),
       pendingAttachments: optJsonValueList(json, 'pending_attachments'),
-      contextLength: lossyInt(json, 'context_length'),
-      thresholdTokens: lossyInt(json, 'threshold_tokens'),
-      lastPromptTokens: lossyInt(json, 'last_prompt_tokens'),
+      contextLength: firstKey(json, [
+            'context_length',
+            'contextLength',
+          ], lossyInt) ??
+          lossyInt(json, 'context_length'),
+      thresholdTokens: firstKey(json, [
+            'threshold_tokens',
+            'thresholdTokens',
+          ], lossyInt) ??
+          lossyInt(json, 'threshold_tokens'),
+      lastPromptTokens: firstKey(json, [
+            'last_prompt_tokens',
+            'lastPromptTokens',
+          ], lossyInt) ??
+          lossyInt(json, 'last_prompt_tokens'),
       messages: _decodeMessagesTolerantly(json),
       toolCalls: _decodeToolCallsTolerantly(json),
       messagesTruncated: firstKey(json, [

@@ -12,7 +12,9 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
 import '../workspace/workspace_providers.dart';
@@ -342,9 +344,9 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       child: CustomScrollView(
         key: const ValueKey('preview-scroll'),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(widget.entry.name ?? l10n.unnamedFile),
-            middle: Text(widget.entry.name ?? l10n.unnamedFile),
+          AdaptiveSliverNavigationBar(
+            title: widget.entry.name ?? l10n.unnamedFile,
+            showMiddleOnNarrow: true,
             leading: const AppBackButton(),
             trailing: _DownloadButton(
               downloading: _downloading,
@@ -464,10 +466,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       sliver: SliverToBoxAdapter(
         child: Column(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.music_note_2,
               size: 64,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -495,7 +497,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     return Text(
       _formatFileSize(size),
       textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 12, color: secondaryText),
+      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
     );
   }
 
@@ -539,9 +541,8 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                 key: const ValueKey('preview-markdown'),
                 data: content,
                 selectable: true,
-                styleSheet: MarkdownStyleSheet.fromCupertinoTheme(
-                  CupertinoTheme.of(context),
-                ),
+                styleSheet: buildAssistantMarkdownStyleSheet(context),
+                builders: createAssistantMarkdownBuilders(context),
               )
             else
               Text(
@@ -568,7 +569,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join(' · '),
-      style: const TextStyle(fontSize: 12, color: secondaryText),
+      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
     );
   }
 
@@ -587,10 +588,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.doc_plaintext,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -601,7 +602,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             Text(
               l10n.previewUnavailableHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -626,10 +630,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -640,7 +644,10 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -768,7 +775,10 @@ class _MediaControlsState extends State<_MediaControls> {
   @override
   Widget build(BuildContext context) {
     final maxMs = _duration.inMilliseconds.toDouble();
-    final posMs = _position.inMilliseconds.toDouble().clamp(0, maxMs > 0 ? maxMs : 0);
+    final posMs = _position.inMilliseconds.toDouble().clamp(
+      0,
+      maxMs > 0 ? maxMs : 0,
+    );
     final hasDuration = maxMs > 0;
     return Column(
       children: [
@@ -788,7 +798,7 @@ class _MediaControlsState extends State<_MediaControls> {
               child: Icon(
                 _playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
                 size: 28,
-                color: CupertinoColors.activeBlue,
+                color: CupertinoColors.activeBlue.resolveFrom(context),
               ),
             ),
             Expanded(
@@ -800,7 +810,9 @@ class _MediaControlsState extends State<_MediaControls> {
                 onChanged: hasDuration
                     ? (value) {
                         unawaited(
-                          widget.player.seek(Duration(milliseconds: value.round())),
+                          widget.player.seek(
+                            Duration(milliseconds: value.round()),
+                          ),
                         );
                       }
                     : null,
@@ -815,11 +827,17 @@ class _MediaControlsState extends State<_MediaControls> {
             children: [
               Text(
                 _formatDuration(_position),
-                style: const TextStyle(fontSize: 12, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
               Text(
                 _formatDuration(_duration),
-                style: const TextStyle(fontSize: 12, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
             ],
           ),

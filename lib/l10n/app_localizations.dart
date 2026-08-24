@@ -115,6 +115,8 @@ class AppLocalizations {
   // 2. Session List
   // ---------------------------------------------------------------------------
   String get sessions => isEnglish ? 'Sessions' : '会话';
+  String get utilityNavigation => isEnglish ? 'Navigation' : '快捷导航';
+  String get switchDestination => isEnglish ? 'Switch destination' : '切换目的地';
   String get doneSelecting => isEnglish ? 'Done' : '完成选择';
   String get newSession => isEnglish ? 'New Session' : '新建会话';
   String get searchSessions => isEnglish ? 'Search sessions' : '搜索会话';
@@ -159,6 +161,11 @@ class AppLocalizations {
   String get untitledSession => isEnglish ? 'Untitled session' : '未命名会话';
   String messageCountLabel(int count) => isEnglish ? '$count messages' : '$count 条消息';
   String get scheduledSection => isEnglish ? 'Scheduled' : '定时';
+  String get showCronSessionsTitle =>
+      isEnglish ? 'Show Scheduled Sessions' : '显示定时会话';
+  String get showCronSessionsSubtitle => isEnglish
+      ? 'Display scheduled (cron) tasks in the session list'
+      : '在会话列表中显示定时任务会话';
   String get pinnedSection => isEnglish ? 'Pinned' : '置顶';
   String get todaySection => isEnglish ? 'Today' : '今天';
   String get yesterdaySection => isEnglish ? 'Yesterday' : '昨天';
@@ -212,6 +219,38 @@ class AppLocalizations {
   String get uploadFailed => isEnglish ? 'Upload Failed' : '上传失败';
   String get selectModel => isEnglish ? 'Select Model' : '选择模型';
   String get followServerDefault => isEnglish ? 'Follow Server Default' : '跟随服务器默认';
+  String get contextWindowTitle => isEnglish ? 'Context window' : '上下文窗口';
+  String get contextWindowInput => isEnglish ? 'Input' : '输入';
+  String get contextWindowOutput => isEnglish ? 'Output' : '输出';
+  String get contextWindowThreshold => isEnglish ? 'Threshold' : '阈值';
+  String get contextWindowCost => isEnglish ? 'Cost' : '费用';
+  String get compressHint =>
+      isEnglish ? 'Compress when usage is high' : '上下文较高时建议压缩';
+  String get compressing => isEnglish ? 'Compressing…' : '压缩中…';
+  String get unavailable => isEnglish ? 'Unavailable' : '暂无数据';
+  // Context window indicator + popover (contextWindow* prefix)
+  String get contextWindowUsage =>
+      isEnglish ? 'Context usage' : '上下文使用量';
+  String get contextWindowUsageLoading =>
+      isEnglish ? 'Context usage loading' : '上下文使用量加载中';
+  String get contextWindowCurrentModel =>
+      isEnglish ? 'Current model' : '当前模型';
+  String get contextWindowFollowServerDefault =>
+      isEnglish ? 'Follow server default' : '跟随服务器默认';
+  String get selectWorkspace => isEnglish ? 'Select Workspace' : '选择工作区';
+  String get noWorkspacesAvailableHint => isEnglish
+      ? 'No workspaces available (can be added in Settings → Manage Workspaces)'
+      : '暂无可用工作区（可在设置→工作区管理中添加）';
+  String get followSessionDefaultWorkspace => isEnglish
+      ? 'No workspace / Follow session default'
+      : '未选择工作区 / 跟随会话默认';
+  String get manualInputWorkspace => isEnglish ? 'Manual input' : '手动输入';
+  String get contextWindowCompressNow =>
+      isEnglish ? 'Compress now to free context' : '立即压缩以释放上下文';
+  String get contextWindowCompressHint =>
+      isEnglish ? 'Compress to free up space →' : '压缩以释放空间 →';
+  String get contextWindowClose => isEnglish ? 'Close' : '关闭';
+  String get modelLabel => isEnglish ? 'Model' : '模型';
   String get addAttachment => isEnglish ? 'Add Attachment' : '添加附件';
   String get sessionIsReadOnly => isEnglish ? 'This session is read-only' : '此会话为只读';
   String get readOnlySessionPlaceholder => isEnglish ? 'This session is read-only' : '此会话为只读';
@@ -246,6 +285,42 @@ class AppLocalizations {
   String get runningStatus => isEnglish ? 'Running' : '运行中';
   String get toolFailedStatus => isEnglish ? 'Failed' : '失败';
   String get toolRunningStatus => isEnglish ? 'Running' : '运行中';
+  String get noTools => isEnglish ? 'No tools' : '无工具';
+
+  /// 本地化工具名称（chat / tool_call 聚合）。
+  String localizeToolName(String name) {
+    final key = name.trim().toLowerCase();
+    switch (key) {
+      case 'terminal':
+      case 'exec':
+      case 'shell':
+      case 'bash':
+        return isEnglish ? 'Terminal' : '终端';
+      case 'read':
+      case 'read_file':
+      case 'readfile':
+        return isEnglish ? 'Read File' : '读取文件';
+      case 'write':
+      case 'write_file':
+      case 'writefile':
+        return isEnglish ? 'Write File' : '写入文件';
+      case 'patch':
+      case 'apply_patch':
+        return isEnglish ? 'Apply Patch' : '应用补丁';
+      case 'search':
+      case 'grep':
+      case 'glob':
+        return isEnglish ? 'Search' : '搜索';
+      case 'web_search':
+      case 'web_fetch':
+      case 'websearch':
+      case 'webfetch':
+        return isEnglish ? 'Web Search' : '联网搜索';
+      default:
+        final trimmed = name.trim();
+        return trimmed.isEmpty ? (isEnglish ? 'Tool' : '工具') : trimmed;
+    }
+  }
   String get imageLoadFailed => isEnglish ? 'Failed to load image' : '图片加载失败';
   String get mediaDownload => isEnglish ? 'Download' : '下载';
   String get mediaAudio => isEnglish ? 'Audio' : '音频';
@@ -367,6 +442,26 @@ class AppLocalizations {
   String get memoryCharUnit => isEnglish ? 'chars' : '字';
   String get expandText => isEnglish ? 'Show More' : '展开全文';
   String get collapseText => isEnglish ? 'Show Less' : '收起';
+
+  // Injected notice collapse (agent-injected-message-cards-spec §4)
+  String get collapseInjectedNoticesLabel =>
+      isEnglish ? 'Collapse system notices' : '折叠系统通知';
+  String get collapseInjectedNoticesDescription => isEnglish
+      ? 'Fold agent-injected notices (background processes, skills, cron, MCP) into compact cards'
+      : '将后台进程/技能/定时任务/MCP 等系统通知折叠为紧凑卡片';
+  String get injectedNoticeTitleBackgroundProcess =>
+      isEnglish ? 'Background process' : '后台进程';
+  String get injectedNoticeTitleSkill => isEnglish ? 'Skill' : '技能';
+  String get injectedNoticeTitleCron =>
+      isEnglish ? 'Scheduled task' : '定时任务';
+  String get injectedNoticeTitleMcp =>
+      isEnglish ? 'MCP' : 'MCP';
+  String get injectedNoticeShowOutput =>
+      isEnglish ? 'Show output' : '展开';
+  String get injectedNoticeHideOutput =>
+      isEnglish ? 'Hide output' : '收起';
+  String get injectedNoticeExpand => injectedNoticeShowOutput;
+  String get injectedNoticeCollapse => injectedNoticeHideOutput;
 
   // ---------------------------------------------------------------------------
   // 7. Workspace (Files)
@@ -527,6 +622,9 @@ class AppLocalizations {
   String get modelsSection => isEnglish ? 'Models' : '模型';
   String get tokensLast14Days => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
   String get recent14DaysTokens => isEnglish ? 'Tokens in Last 14 Days' : '近 14 天令牌';
+  String get tokensTodayChartTitle => isEnglish ? 'Today\'s Tokens' : '今日令牌';
+  String tokensDailyChartTitle(int days) => isEnglish ? 'Tokens in Last $days Days' : '近 $days 天令牌';
+  String get tokensAllTimeChartTitle => isEnglish ? 'All Tokens' : '全部令牌';
   String get activity => isEnglish ? 'Activity' : '活动';
   String get activitySection => isEnglish ? 'Activity' : '活动';
   String get mostActiveDay => isEnglish ? 'Most Active Day' : '最活跃的一天';
@@ -569,6 +667,12 @@ class AppLocalizations {
   String get syncedWithRemote => isEnglish ? 'In sync with remote' : '与远程同步';
   String get inSyncWithRemote => isEnglish ? 'In sync with remote' : '与远程同步';
   String get switchBranch => isEnglish ? 'Switch Branch' : '切换分支';
+  String get branchTreeSection => isEnglish ? 'Branch Tree' : '分支树';
+  String get localBranches => isEnglish ? 'Local' : '本地';
+  String get remoteBranches => isEnglish ? 'Remote' : '远程';
+  String get currentBranchBadge => isEnglish ? 'CURRENT' : '当前';
+  String get checkoutBranchAction => isEnglish ? 'Switch' : '切换';
+  String get noBranches => isEnglish ? 'No branches found' : '未找到分支';
   String get changesLabel => isEnglish ? 'Changes' : '变更';
   String get changes => isEnglish ? 'Changes' : '变更';
   String changesSummary(int additions, int deletions, int changed) => isEnglish
@@ -644,6 +748,14 @@ class AppLocalizations {
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
   String get serverNameOptionalPlaceholder =>
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
+  String get advancedSettings => isEnglish ? 'Advanced Settings' : '高级设置';
+  String get advancedSettingsSection => isEnglish ? 'Advanced Settings' : '高级设置';
+  String get serverBasicInfoSection => isEnglish ? 'Basic Information' : '基本信息';
+  String get serverNameLabel => isEnglish ? 'Name' : '名称';
+  String get serverUrlLabel => isEnglish ? 'Address' : '地址';
+  String get serverPasswordLabel => isEnglish ? 'Password' : '密码';
+  String get serverUrlExampleHint =>
+      isEnglish ? 'e.g. https://hermes.example.com:30002' : '例如 https://hermes.example.com:30002';
   String get serverPasswordPlaceholder =>
       isEnglish ? 'Password (optional; leave blank to keep existing)' : '密码（可选；编辑时留空保持原密码）';
   String get serverPasswordOptionalPlaceholder =>
@@ -701,6 +813,78 @@ class AppLocalizations {
   String get promptDeleted => isEnglish ? 'Prompt deleted' : '已删除';
   String get savePromptFailed => isEnglish ? 'Failed to save prompt' : '收藏失败';
   String get deletePromptFailed => isEnglish ? 'Failed to delete prompt' : '删除失败';
+
+  // ---------------------------------------------------------------------------
+  // 14. Settings · Extensions/MCP/Auxiliary
+  // ---------------------------------------------------------------------------
+  String get extensionsSection => isEnglish ? 'Extensions' : '扩展 (Extensions)';
+  String get extensionsTitle => isEnglish ? 'Extensions' : '扩展';
+  String get installedExtensions => isEnglish ? 'Installed Extensions' : '已安装扩展';
+  String get noExtensions => isEnglish ? 'No extensions installed' : '暂无已安装扩展';
+  String get installExtension => isEnglish ? 'Install Extension' : '安装扩展';
+  String get extensionId => isEnglish ? 'Extension ID' : '扩展 ID';
+  String get extensionDownloadUrl => isEnglish ? 'Download URL' : '下载地址';
+  String get extensionSha256 => isEnglish ? 'SHA256 Checksum' : 'SHA256 校验和';
+  String get extensionSidecarConsent => isEnglish ? 'Sidecar Proxy Consent' : 'Sidecar 代理授权';
+  String get extensionSidecarActive => isEnglish ? 'Sidecar Active' : 'Sidecar 运行中';
+  String get extensionSidecarInactive => isEnglish ? 'Sidecar Inactive' : 'Sidecar 未运行';
+  String get uninstall => isEnglish ? 'Uninstall' : '卸载';
+  String get uninstallExtension => isEnglish ? 'Uninstall Extension' : '卸载扩展';
+  String confirmUninstallExtension(String name) =>
+      isEnglish ? 'Are you sure you want to uninstall "$name"?' : '确定卸载「$name」扩展吗？';
+  String get extensionDetails => isEnglish ? 'Extension Details' : '扩展详情';
+  String get extensionRegistry => isEnglish ? 'Extension Registry' : '扩展源';
+  String get selectFromRegistry => isEnglish ? 'Select from Registry' : '从扩展源选择';
+  String get loadingExtensions => isEnglish ? 'Loading extensions…' : '正在加载扩展…';
+  String get extensionsLoadFailed => isEnglish ? 'Failed to load extensions' : '扩展加载失败';
+
+  String get mcpSection => isEnglish ? 'MCP Servers' : 'MCP 服务器';
+  String get mcpServersTitle => isEnglish ? 'MCP Servers' : 'MCP 服务器';
+  String get noMcpServers => isEnglish ? 'No MCP servers configured' : '暂无已配置的 MCP 服务器';
+  String get addMcpServer => isEnglish ? 'Add MCP Server' : '添加 MCP 服务器';
+  String get editMcpServer => isEnglish ? 'Edit MCP Server' : '编辑 MCP 服务器';
+  String get deleteMcpServer => isEnglish ? 'Delete MCP Server' : '删除 MCP 服务器';
+  String confirmDeleteMcpServer(String name) =>
+      isEnglish ? 'Are you sure you want to delete "$name"?' : '确定删除 MCP 服务器「$name」吗？';
+  String get mcpServerName => isEnglish ? 'Server Name' : '服务器名称';
+  String get mcpCommand => isEnglish ? 'Command' : '执行命令';
+  String get mcpArgs => isEnglish ? 'Arguments' : '参数';
+  String get mcpArgsPlaceholder =>
+      isEnglish ? 'Arguments (one per line or space separated)' : '命令参数（每行一个）';
+  String get mcpEnv => isEnglish ? 'Environment Variables (JSON)' : '环境变量（JSON）';
+  String get mcpServerEnabled => isEnglish ? 'Enabled' : '启用';
+  String get mcpTools => isEnglish ? 'MCP Tools' : 'MCP 工具';
+  String mcpToolsCount(int count) => isEnglish ? '$count tools' : '$count 个工具';
+  String get viewMcpTools => isEnglish ? 'View Tools' : '查看工具';
+  String get noMcpTools => isEnglish ? 'No tools available' : '暂无可用的 MCP 工具';
+  String get mcpStatusConnected => isEnglish ? 'Connected' : '已连接';
+  String get mcpStatusDisconnected => isEnglish ? 'Disconnected' : '未连接';
+  String get mcpServerDetails => isEnglish ? 'MCP Server Details' : 'MCP 服务器详情';
+  String get loadingMcpServers => isEnglish ? 'Loading MCP servers…' : '正在加载 MCP 服务器…';
+  String get mcpServersLoadFailed => isEnglish ? 'Failed to load MCP servers' : 'MCP 服务器加载失败';
+  String get mcpServerNameRequired => isEnglish ? 'Server name is required' : '请输入服务器名称';
+  String get mcpCommandRequired => isEnglish ? 'Command is required' : '请输入执行命令';
+  String get mcpEnvInvalidJson => isEnglish ? 'Environment must be valid JSON' : '环境变量必须是合法的 JSON 对象';
+
+  String get auxiliaryModelsSection => isEnglish ? 'Auxiliary Models' : '辅助模型';
+  String get auxiliaryModelsTitle => isEnglish ? 'Auxiliary Models' : '辅助模型';
+  String get resetAuxiliary => isEnglish ? 'Reset All to Auto' : '全部重置为自动';
+  String get confirmResetAuxiliary =>
+      isEnglish ? 'Reset all auxiliary model tasks to automatic?' : '确定将所有辅助模型任务重置为自动吗？';
+  String get auto => isEnglish ? 'Auto' : '自动';
+  String get apiKeyConfigured => isEnglish ? 'API Key Configured' : '已配置 API Key';
+  String get apiKeyNotConfigured => isEnglish ? 'No API Key' : '未配置 API Key';
+  String get auxTaskPickerTitle => isEnglish ? 'Select Auxiliary Model' : '选择辅助模型';
+  String get auxMainModel => isEnglish ? 'Main Model' : '主模型';
+  String get auxTasks => isEnglish ? 'Task Bindings' : '任务绑定';
+  String get loadingAuxiliaryModels => isEnglish ? 'Loading auxiliary models…' : '正在加载辅助模型…';
+  String get auxiliaryModelsLoadFailed => isEnglish ? 'Failed to load auxiliary models' : '辅助模型加载失败';
+
+  // Malformed event friendly prefix (sse_client 525)
+  String get connectionErrorPrefix => isEnglish ? 'Connection error:' : '连接异常：';
+  String connectionErrorWithDetail(String detail) => '$connectionErrorPrefix $detail';
+  String get connectionErrorMalformedDone =>
+      isEnglish ? 'Connection error: malformed completion event' : '连接异常：完成事件格式异常';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??

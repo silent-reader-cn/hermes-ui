@@ -155,7 +155,9 @@ void main() {
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
-          settingsApiFactoryProvider.overrideWithValue((_) => FakeSettingsApi()),
+          settingsApiFactoryProvider.overrideWithValue(
+            (_) => FakeSettingsApi(),
+          ),
           onboardingApiFactoryProvider.overrideWithValue(
             (_, _) => FakeOnboardingLoginApi(),
           ),
@@ -171,17 +173,30 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final minTrayFinder =
-          find.byKey(const ValueKey('settings-desktop-minimize-to-tray'));
-      final shortcutsFinder =
-          find.byKey(const ValueKey('settings-desktop-global-shortcuts'));
-      final rememberFinder =
-          find.byKey(const ValueKey('settings-desktop-remember-window'));
+      // 桌面分组已移入二级页：先滚到「桌面」入口并进入
+      final desktopEntry = find.byKey(const ValueKey('settings-entry-desktop'));
+      await tester.scrollUntilVisible(desktopEntry, 50);
+      await tester.pumpAndSettle();
+      await tester.tap(desktopEntry);
+      await tester.pumpAndSettle();
+
+      final minTrayFinder = find.byKey(
+        const ValueKey('settings-desktop-minimize-to-tray'),
+      );
+      final shortcutsFinder = find.byKey(
+        const ValueKey('settings-desktop-global-shortcuts'),
+      );
+      final rememberFinder = find.byKey(
+        const ValueKey('settings-desktop-remember-window'),
+      );
 
       await tester.scrollUntilVisible(minTrayFinder, 50);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 100));
+      await tester.pumpAndSettle();
 
-      // 验证桌面分组标题与开关
-      expect(find.text('桌面'), findsOneWidget);
+      // 验证桌面分组标题与开关（导航栏标题 + 分组 header 均有「桌面」）
+            expect(find.text('桌面'), findsNWidgets(2));
       expect(find.text('最小化到托盘'), findsOneWidget);
       expect(find.text('全局快捷键'), findsOneWidget);
       expect(find.text('记住窗口位置'), findsOneWidget);
@@ -191,18 +206,9 @@ void main() {
       expect(rememberFinder, findsOneWidget);
 
       // 默认状态为 true
-      expect(
-        tester.widget<CupertinoSwitch>(minTrayFinder).value,
-        isTrue,
-      );
-      expect(
-        tester.widget<CupertinoSwitch>(shortcutsFinder).value,
-        isTrue,
-      );
-      expect(
-        tester.widget<CupertinoSwitch>(rememberFinder).value,
-        isTrue,
-      );
+      expect(tester.widget<CupertinoSwitch>(minTrayFinder).value, isTrue);
+      expect(tester.widget<CupertinoSwitch>(shortcutsFinder).value, isTrue);
+      expect(tester.widget<CupertinoSwitch>(rememberFinder).value, isTrue);
 
       // 点击切换
       await tester.tap(minTrayFinder);

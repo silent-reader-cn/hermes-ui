@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/models/session.dart';
 import '../../l10n/app_localizations.dart';
 import '../projects/project_providers.dart';
@@ -37,30 +40,12 @@ class _ProjectPickerSheet extends ConsumerWidget {
           child: Text(l10n.noProject),
         ),
         for (final project in projects)
-          GestureDetector(
+          _ProjectPickerRow(
             key: ValueKey('project-picker-${project.id}'),
-            behavior: HitTestBehavior.opaque,
-            onLongPress: () => _showProjectActions(context, ref, project),
-            child: CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(context, project.id),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      project.name ?? l10n.unnamedProject,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    CupertinoIcons.ellipsis,
-                    size: 14,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ],
-              ),
-            ),
+            project: project,
+            onSelect: () => Navigator.pop(context, project.id),
+            onManage: (anchorKey) =>
+                unawaited(_showProjectActions(context, ref, project, anchorKey)),
           ),
         CupertinoActionSheetAction(
           key: const ValueKey('project-picker-create'),
@@ -128,72 +113,118 @@ Future<String?> _promptProjectName(
   return name;
 }
 
+class _ProjectPickerRow extends StatefulWidget {
+  const _ProjectPickerRow({
+    super.key,
+    required this.project,
+    required this.onSelect,
+    required this.onManage,
+  });
+
+  final ProjectSummary project;
+  final VoidCallback onSelect;
+  final void Function(GlobalKey anchorKey) onManage;
+
+  @override
+  State<_ProjectPickerRow> createState() => _ProjectPickerRowState();
+}
+
+class _ProjectPickerRowState extends State<_ProjectPickerRow> {
+  final GlobalKey _anchorKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () => widget.onManage(_anchorKey),
+      child: CupertinoActionSheetAction(
+        onPressed: widget.onSelect,
+        child: KeyedSubtree(
+          key: _anchorKey,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  widget.project.name ?? l10n.unnamedProject,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                CupertinoIcons.ellipsis,
+                size: 14,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 长按项目行：弹管理菜单（重命名 / 删除，删除需确认）。
 Future<void> _showProjectActions(
   BuildContext context,
   WidgetRef ref,
   ProjectSummary project,
+  GlobalKey anchorKey,
 ) async {
   final l10n = AppLocalizations.of(context);
-  final action = await showCupertinoModalPopup<String>(
-    context: context,
-    builder: (sheetContext) => CupertinoActionSheet(
-      title: Text(project.name ?? l10n.unnamedProject),
-      message: Text(l10n.projectManagement),
-      actions: [
-        CupertinoActionSheetAction(
-          key: const ValueKey('project-action-rename'),
-          onPressed: () => Navigator.pop(sheetContext, 'rename'),
-          child: Text(l10n.rename),
-        ),
-        CupertinoActionSheetAction(
-          key: const ValueKey('project-action-delete'),
-          isDestructiveAction: true,
-          onPressed: () => Navigator.pop(sheetContext, 'delete'),
-          child: Text(l10n.delete),
-        ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        key: const ValueKey('project-action-cancel'),
-        isDefaultAction: true,
-        onPressed: () => Navigator.pop(sheetContext),
-        child: Text(l10n.cancel),
+  await AdaptiveActionMenu.show(
+    context,
+    anchorKey: anchorKey,
+    title: project.name ?? l10n.unnamedProject,
+    cancelLabel: l10n.cancel,
+    cancelKey: const ValueKey('project-action-cancel'),
+    items: [
+      AdaptiveMenuItem(
+        key: const ValueKey('project-action-rename'),
+        label: l10n.rename,
+        onPressed: () async {
+          final name = await _promptProjectName(
+            context,
+            title: l10n.renameProject,
+            confirmText: l10n.save,
+          );
+          if (name == null || name.trim().isEmpty || !context.mounted) return;
+          await ref
+              .read(projectsProvider.notifier)
+              .renameProject(projectId: project.id, name: name.trim());
+        },
       ),
-    ),
+      AdaptiveMenuItem(
+        key: const ValueKey('project-action-delete'),
+        isDestructive: true,
+        label: l10n.delete,
+        onPressed: () async {
+          final confirmed = await showCupertinoDialog<bool>(
+            context: context,
+            builder: (dialogContext) => CupertinoAlertDialog(
+              title: Text(l10n.deleteProject),
+              content: Text(l10n.deleteProjectWarning),
+              actions: [
+                CupertinoDialogAction(
+                  key: const ValueKey('project-delete-cancel'),
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.cancel),
+                ),
+                CupertinoDialogAction(
+                  key: const ValueKey('project-delete-confirm'),
+                  isDestructiveAction: true,
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(l10n.delete),
+                ),
+              ],
+            ),
+          );
+          if (confirmed == true && context.mounted) {
+            await ref.read(projectsProvider.notifier).deleteProject(project.id);
+          }
+        },
+      ),
+    ],
   );
-  if (action == null || !context.mounted) return;
-  final notifier = ref.read(projectsProvider.notifier);
-  if (action == 'rename') {
-    final name = await _promptProjectName(
-      context,
-      title: l10n.renameProject,
-      confirmText: l10n.save,
-    );
-    if (name == null || name.trim().isEmpty || !context.mounted) return;
-    await notifier.renameProject(projectId: project.id, name: name.trim());
-  } else if (action == 'delete') {
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.deleteProject),
-        content: Text(l10n.deleteProjectWarning),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('project-delete-cancel'),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('project-delete-confirm'),
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      await notifier.deleteProject(project.id);
-    }
-  }
 }

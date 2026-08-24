@@ -6,6 +6,7 @@ import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/api/api_exception.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/models/workspace.dart';
+import 'package:hermex_flutter/features/shared/app_back_button.dart';
 import 'package:hermex_flutter/features/workspace_manager/workspace_manager_page.dart';
 import 'package:hermex_flutter/features/workspace_manager/workspace_manager_providers.dart';
 
@@ -325,6 +326,18 @@ void main() {
         find.byKey(const ValueKey('workspace-manager-dialog-ok')),
       );
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('导航栏返回按钮 fallback 为 /（窄屏 go 直进回会话列表，非设置页）', (
+      tester,
+    ) async {
+      final api = FakeWorkspaceManagerApi(workspaces: [wroot('/a', 'Alpha')]);
+      await pumpManager(tester, api);
+
+      final backButton = tester.widget<AppBackButton>(
+        find.byType(AppBackButton),
+      );
+      expect(backButton.fallback, '/');
     });
   });
 }

@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
@@ -58,8 +59,8 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         key: const ValueKey('skills-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.skillsTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.skillsTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('skills-refresh'),
@@ -126,6 +127,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
       for (final group in groups)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            hasLeading: false,
             header: Text(_skillsGroupTitle(context, group.title)),
             children: [
               for (final skill in group.skills)
@@ -207,7 +209,10 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               isSearchMode
                   ? l10n.tryAnotherKeyword
                   : l10n.serverSkillsWillShowHere,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -220,6 +225,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   // -------------------------------------------------------------------------
 
   void _toggleExpanded(SkillSummary skill) {
+    if (!skillHasDetail(skill)) return;
     final name = skillDisplayName(skill);
     setState(() {
       if (!_expandedNames.remove(name)) {
@@ -252,6 +258,14 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   }
 }
 
+/// 是否存在可展开的本地详情（path 或 relatedSkills 任一非空）。
+bool skillHasDetail(SkillSummary skill) {
+  final path = skill.path?.trim();
+  if (path != null && path.isNotEmpty) return true;
+  final related = skill.relatedSkills ?? const <String>[];
+  return related.any((e) => e.trim().isNotEmpty);
+}
+
 String _skillsGroupTitle(BuildContext context, String rawTitle) {
   final l10n = AppLocalizations.of(context);
   switch (rawTitle) {
@@ -280,7 +294,7 @@ class _SkillRow extends ConsumerWidget {
 
   final SkillSummary skill;
   final bool expanded;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -296,10 +310,11 @@ class _SkillRow extends ConsumerWidget {
             .valueOrNull
             ?.isBusy(skill.name ?? '') ??
         false;
+    final hasDetail = skillHasDetail(skill);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: hasDetail ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -330,16 +345,18 @@ class _SkillRow extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            expanded
-                                ? CupertinoIcons.chevron_down
-                                : CupertinoIcons.chevron_right,
-                            size: 14,
-                            color: CupertinoColors.tertiaryLabel.resolveFrom(
-                              context,
+                          if (hasDetail) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              expanded
+                                  ? CupertinoIcons.chevron_down
+                                  : CupertinoIcons.chevron_right,
+                              size: 14,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       if (description != null) ...[
@@ -348,9 +365,9 @@ class _SkillRow extends ConsumerWidget {
                           description,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: secondaryText,
+                            color: secondaryText.resolveFrom(context),
                           ),
                         ),
                       ],
@@ -388,7 +405,7 @@ class _SkillRow extends ConsumerWidget {
                 ),
               ],
             ),
-            if (expanded)
+            if (expanded && hasDetail)
               _SkillDetail(
                 key: ValueKey('skills-detail-${skillDisplayName(skill)}'),
                 skill: skill,
@@ -419,17 +436,6 @@ class _SkillDetail extends StatelessWidget {
         .map((name) => name.trim())
         .where((name) => name.isNotEmpty)
         .toList();
-    final hasDetail = (path != null && path.isNotEmpty) || related.isNotEmpty;
-
-    if (!hasDetail) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(
-          l10n.noMoreDetailsForSkill,
-          style: const TextStyle(fontSize: 13, color: secondaryText),
-        ),
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -465,7 +471,7 @@ class _DetailLine extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label：',
-            style: const TextStyle(color: secondaryText),
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
           TextSpan(
             text: value,

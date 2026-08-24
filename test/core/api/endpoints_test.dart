@@ -638,7 +638,85 @@ void main() {
       },
     );
   });
+
+  group('设置页三板块新增端点（1.17 / 1.18 / 1.19 — 13 个）', () {
+    test('Extensions 端点（6 个）路径与 URL', () {
+      expect(
+        Endpoint.extensionsStatus.url(base).toString(),
+        '$base/api/extensions/status',
+      );
+      expect(
+        Endpoint.extensionsRegistry.url(base).toString(),
+        '$base/api/extensions/registry',
+      );
+      expect(
+        Endpoint.extensionToggle.url(base).toString(),
+        '$base/api/extensions/toggle',
+      );
+      expect(
+        Endpoint.extensionInstall.url(base).toString(),
+        '$base/api/extensions/install',
+      );
+      expect(
+        Endpoint.extensionUninstall.url(base).toString(),
+        '$base/api/extensions/uninstall',
+      );
+      expect(
+        Endpoint.extensionSidecarProxyConsent.url(base).toString(),
+        '$base/api/extensions/sidecar-proxy-consent',
+      );
+    });
+
+    test('MCP 端点（5 个）路径、URL 与路径段编码', () {
+      expect(
+        Endpoint.mcpServers.url(base).toString(),
+        '$base/api/mcp/servers',
+      );
+      expect(
+        Endpoint.mcpTools.url(base).toString(),
+        '$base/api/mcp/tools',
+      );
+      expect(
+        Endpoint.mcpServerUpdate('my-server').url(base).toString(),
+        '$base/api/mcp/servers/my-server',
+      );
+      expect(
+        Endpoint.mcpServerToggle('my-server').url(base).toString(),
+        '$base/api/mcp/servers/my-server',
+      );
+      expect(
+        Endpoint.mcpServerDelete('my-server').url(base).toString(),
+        '$base/api/mcp/servers/my-server',
+      );
+
+      // 验证特殊字符/空格/斜杠编码
+      expect(
+        Endpoint.mcpServerUpdate('srv/1 2').url(base).toString(),
+        '$base/api/mcp/servers/srv%2F1%202',
+      );
+      expect(
+        Endpoint.mcpServerToggle('srv.name').url(base).toString(),
+        '$base/api/mcp/servers/srv.name',
+      );
+      expect(
+        Endpoint.mcpServerDelete('srv/delete').url(base).toString(),
+        '$base/api/mcp/servers/srv%2Fdelete',
+      );
+    });
+
+    test('辅助模型端点（2 个）路径与 URL', () {
+      expect(
+        Endpoint.auxiliaryModels.url(base).toString(),
+        '$base/api/model/auxiliary',
+      );
+      expect(
+        Endpoint.modelSet.url(base).toString(),
+        '$base/api/model/set',
+      );
+    });
+  });
 }
+
 
 /// 全部静态（无参）端点，供路径完整性校验。
 List<Endpoint> _staticEndpoints() {

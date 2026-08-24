@@ -33,10 +33,15 @@ class ContextWindowFormatter {
     return formatTokens(tokens);
   }
 
+  /// 阈值：对齐 WebUI `Auto-compress at ${_fmtTokens(threshold)} (${pct}%)`
+  /// 有 threshold + contextLength 时展示 `64.0K (50%)`，否则仅 token。
   static String thresholdLabel(ContextWindowSnapshot snapshot) {
     final threshold = snapshot.thresholdTokens;
     if (threshold == null || threshold <= 0) return 'Unavailable';
-    return formatTokens(threshold);
+    final total = snapshot.contextLength;
+    if (total == null || total <= 0) return formatTokens(threshold);
+    final pct = (threshold / total * 100).round().clamp(0, 100);
+    return '${formatTokens(threshold)} ($pct%)';
   }
 
   static String costLabel(ContextWindowSnapshot snapshot) {

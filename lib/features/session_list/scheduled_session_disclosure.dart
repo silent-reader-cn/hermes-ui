@@ -3,15 +3,10 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
-/// 定时会话分区可折叠 disclosure 组件（对齐 Hermex ScheduledSessionsDisclosure）。
+/// **已废弃：由融流替代**
 ///
-/// 默认展开状态依据蓝本实现：
-/// - `.reference/hermex-src/Features/SessionList/SessionRowView.swift` L426:
-///   `static let defaultScheduledSessionsAreExpanded = false`
-/// - `.reference/hermex-src/Features/SessionList/SessionListView.swift` L44-45:
-///   `@AppStorage(SessionSidebarDisclosureSettings.scheduledSessionsAreExpandedKey)`
-///   `private var scheduledSessionsAreExpanded = SessionSidebarDisclosureSettings.defaultScheduledSessionsAreExpanded`
-/// 故默认折叠状态为收起（`false`）。
+/// 定时会话分区可折叠 disclosure 组件（历史遗留，保留以追溯）。
+@Deprecated('已废弃：由融流替代')
 class ScheduledSessionDisclosure extends StatefulWidget {
   const ScheduledSessionDisclosure({
     super.key,
@@ -128,6 +123,7 @@ class _ScheduledSessionDisclosureState
     if (_isExpanded) {
       return CupertinoListSection.insetGrouped(
         key: const ValueKey('scheduled-disclosure-section'),
+        hasLeading: false,
         header: _buildHeader(context),
         children: widget.children,
       );

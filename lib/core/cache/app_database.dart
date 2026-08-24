@@ -47,6 +47,9 @@ class CachedMedia extends Table {
   Set<Column<Object>> get primaryKey => {cacheKey};
 }
 
+/// **单例约束**：生产代码不要直接多次 `AppDatabase.production()`。
+/// 请改为 `ref.watch(appDatabaseProvider)` 取得全进程唯一实例，避免
+/// 同名 `hermex_cache` 的 `QueryExecutor` 争用导致崩溃。
 @DriftDatabase(tables: [CachedSessions, CachedMessages, CachedMedia])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);

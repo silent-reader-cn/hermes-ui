@@ -18,6 +18,10 @@ import 'desktop_settings.dart';
 /// 从 asset 加载托盘图标并写入临时文件，返回临时文件的绝对路径。
 ///
 /// 避免 Windows 下直接引用相对路径导致图标无法加载的问题。
+/// Windows 下 [tray_manager] 的原生侧通过 `LoadImage(IMAGE_ICON, LR_LOADFROMFILE)`
+/// 仅可靠加载 `.ico`，传入 `.png` 会静默失败导致托盘空白；因此 Windows 分支
+/// 应传入 `assets/branding/tray_icon.ico` 并以 `.ico` 后缀落盘。
+/// 当 [fileName] 以 `.ico` 结尾时直接写入资产字节即可（资产本身即为合法 ICO）。
 Future<String> prepareTrayIconFile({
   AssetBundle? assetBundle,
   Directory? tempDir,
@@ -156,6 +160,11 @@ class TrayManagerService with TrayListener {
       if (defaultTargetPlatform == TargetPlatform.macOS) {
         iconPath =
             'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png';
+      } else if (defaultTargetPlatform == TargetPlatform.windows) {
+        iconPath = await prepareTrayIconFile(
+          assetPath: 'assets/branding/tray_icon.ico',
+          fileName: 'hermex_tray_icon.ico',
+        );
       } else {
         iconPath = await prepareTrayIconFile();
       }

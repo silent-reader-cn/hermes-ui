@@ -99,7 +99,7 @@ void main() {
       );
       expect(
         ContextWindowFormatter.thresholdLabel(snapshot),
-        '160.0K',
+        '160.0K (80%)',
       );
       expect(
         ContextWindowFormatter.tokensLabel(

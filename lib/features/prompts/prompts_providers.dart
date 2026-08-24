@@ -1,7 +1,14 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_prompts.dart';
+import '../../core/cache/app_database.dart';
+import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/saved_prompt.dart';
 
@@ -43,10 +50,8 @@ final promptsApiFactoryProvider = Provider<PromptsApiFactory>(
 
 /// 收藏提示词控制器（列表 CRUD）。
 ///
-/// AsyncValue 语义：`AsyncData<List<SavedPrompt>>` 成功携带；`AsyncLoading`
-/// 加载；`AsyncError` 展示错误态（重试走 [refresh]）。
-/// - [create]：成功后尝试局部插入并重拉保证一致性，[ApiException] 透传不吞。
-/// - [remove]：乐观删除，失败回滚并透传异常。
+/// 缓存策略：先读 SharedPreferences/drift 缓存即显列表后静默刷新，无缓存才 loading。
+/// 覆盖式小 indicator 而非替换整板。
 final savedPromptsControllerProvider =
     AsyncNotifierProvider<SavedPromptsController, List<SavedPrompt>>(
       SavedPromptsController.new,
@@ -56,48 +61,143 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
   PromptsApi get _api =>
       ref.read(promptsApiFactoryProvider)(ref.read(apiClientProvider));
 
+  static const String _spKey = 'saved_prompts_cache_v1';
+  static const Duration _spTtl = Duration(days: 7);
+
+  Future<List<SavedPrompt>?> _readCacheInternal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_spKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          final list = decoded['prompts'];
+          final ts = decoded['cachedAt'];
+          if (list is List) {
+            final ageOk = ts is int
+                ? (DateTime.now().millisecondsSinceEpoch - ts) <
+                    _spTtl.inMilliseconds
+                : true;
+            if (ageOk) {
+              final prompts = <SavedPrompt>[];
+              for (final e in list) {
+                if (e is Map) {
+                  try {
+                    prompts.add(
+                      SavedPrompt.fromJson(Map<String, Object?>.from(e)),
+                    );
+                  } catch (_) {}
+                }
+              }
+              if (prompts.isNotEmpty) return prompts;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final row = await (db.select(db.cachedSessions)
+            ..where((t) => t.sessionId.equals('saved_prompts')))
+          .getSingleOrNull();
+      if (row != null) {
+        final payload = jsonDecode(row.payload);
+        if (payload is Map && payload['prompts'] is List) {
+          final list = payload['prompts'] as List;
+          final prompts = <SavedPrompt>[];
+          for (final e in list) {
+            if (e is Map) {
+              try {
+                prompts.add(SavedPrompt.fromJson(Map<String, Object?>.from(e)));
+              } catch (_) {}
+            }
+          }
+          if (prompts.isNotEmpty) return prompts;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<List<SavedPrompt>?> _readCache() async {
+    try {
+      return await _readCacheInternal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeCache(List<SavedPrompt> prompts) async {
+    final payload = jsonEncode({
+      'prompts': prompts.map((e) => e.toJson()).toList(),
+      'cachedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_spKey, payload);
+    } catch (_) {}
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await db.into(db.cachedSessions).insertOnConflictUpdate(
+            CachedSessionsCompanion.insert(
+              sessionId: 'saved_prompts',
+              title: const Value('saved_prompts'),
+              payload: payload,
+              cachedAt: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+    } catch (_) {}
+  }
+
   @override
   Future<List<SavedPrompt>> build() async {
-    // watch：切换服务器或工厂被替换时自动重载。
+    // 缓存预热在后台静默进行，不阻塞首帧 data；首帧仍走 fetch 以保证测试时序与实时性
+    unawaited(_readCache().then((cached) {
+      if (cached != null && cached.isNotEmpty) {
+        // 若首帧已是 AsyncData 则不覆盖，否则用缓存快速展示
+        if (state is AsyncLoading) state = AsyncData(cached);
+      }
+    }));
     final api = ref.watch(promptsApiFactoryProvider)(
       ref.watch(apiClientProvider),
     );
     final response = await api.fetchPrompts();
-    return response.prompts ?? const <SavedPrompt>[];
+    final fresh = response.prompts ?? const <SavedPrompt>[];
+    unawaited(_writeCache(fresh));
+    return fresh;
   }
 
   /// 下拉/错误态重试：重新拉取。
   Future<void> refresh() async {
     try {
       final response = await _api.fetchPrompts();
-      state = AsyncData(response.prompts ?? const <SavedPrompt>[]);
+      final fresh = response.prompts ?? const <SavedPrompt>[];
+      unawaited(_writeCache(fresh));
+      state = AsyncData(fresh);
     } on Exception catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
     }
   }
 
   /// 收藏当前输入。
-  ///
-  /// 成功（`ok == true`）时局部插入返回的 prompt 并尝试重拉保证一致性；
-  /// 失败（业务 `ok==false` 或抛 [ApiException]）透传给调用方，不吞异常。
   Future<SavedPrompt?> create({required String text, String? label}) async {
     final response = await _api.createPrompt(text: text, label: label);
     final prompt = response.prompt;
     if (response.ok == true && prompt != null) {
       final current = state.valueOrNull;
       if (current != null) {
-        // 局部插入（服务端按追加序，重拉后以服务端为准）。
-        state = AsyncData([...current, prompt]);
+        final next = [...current, prompt];
+        state = AsyncData(next);
+        unawaited(_writeCache(next));
       }
-      // 尝试重拉保证最终一致（失败不回滚，调用方已拿到 prompt）。
       try {
         final refreshed = await _api.fetchPrompts();
-        state = AsyncData(refreshed.prompts ?? const <SavedPrompt>[]);
+        final list = refreshed.prompts ?? const <SavedPrompt>[];
+        unawaited(_writeCache(list));
+        state = AsyncData(list);
       } catch (_) {}
       return prompt;
     }
-    // ok==false 的业务失败也返回 prompt（若有），由 UI 决定提示；
-    // 真正的传输层失败由上层 catch ApiException。
     return prompt;
   }
 
@@ -105,7 +205,9 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
   Future<void> remove(String id) async {
     final previous = state.valueOrNull;
     if (previous != null) {
-      state = AsyncData(previous.where((p) => p.id != id).toList());
+      final next = previous.where((p) => p.id != id).toList();
+      state = AsyncData(next);
+      unawaited(_writeCache(next));
     }
     try {
       final response = await _api.deletePrompt(id);
@@ -113,10 +215,11 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
         if (previous != null) state = AsyncData(previous);
         return;
       }
-      // 保证最终一致性：尝试重拉（失败也不回滚，幂等删除已生效）。
       try {
         final refreshed = await _api.fetchPrompts();
-        state = AsyncData(refreshed.prompts ?? const <SavedPrompt>[]);
+        final list = refreshed.prompts ?? const <SavedPrompt>[];
+        unawaited(_writeCache(list));
+        state = AsyncData(list);
       } catch (_) {}
     } on Exception {
       if (previous != null) state = AsyncData(previous);

@@ -127,12 +127,15 @@ void main() {
       expect(adapter.requests.length, 1);
       expect(chatApi.startChatCalls, 0);
 
-      // 断言失败对话框展示，且内容文字为 statusRedText 颜色
+      // 断言失败对话框展示，且内容文字为 statusRedText 的解析色（已 resolve，深浅色均达标）
       expect(find.text('上传失败'), findsOneWidget);
       final errorFinder = find.text('服务器返回 HTTP 500。');
       expect(errorFinder, findsOneWidget);
       final errorWidget = tester.widget<Text>(errorFinder);
-      expect(errorWidget.style?.color, statusRedText);
+      expect(
+        errorWidget.style?.color,
+        statusRedText.resolveFrom(tester.element(find.byType(CupertinoApp))),
+      );
 
       // 关闭弹窗
       await tester.tap(find.text('好'));
@@ -168,12 +171,15 @@ void main() {
       expect(adapter.requests, isEmpty);
       expect(chatApi.startChatCalls, 0);
 
-      // 断言选择失败对话框展示
+      // 断言选择失败对话框展示（解析色已 resolve）
       expect(find.text('选择文件失败'), findsOneWidget);
       final errorFinder = find.textContaining('访问相册权限被拒绝');
       expect(errorFinder, findsOneWidget);
       final errorWidget = tester.widget<Text>(errorFinder);
-      expect(errorWidget.style?.color, statusRedText);
+      expect(
+        errorWidget.style?.color,
+        statusRedText.resolveFrom(tester.element(find.byType(CupertinoApp))),
+      );
 
       // 关闭弹窗
       await tester.tap(find.text('好'));

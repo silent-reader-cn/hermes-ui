@@ -7,7 +7,9 @@
 // - 深色模式用亮色变体（黑底对比 >= 4.5:1）
 // - highContrast* 为系统增强对比度模式下的更强变体。
 //
-// 用法：Text('运行中', style: TextStyle(color: statusGreenText))
+// 用法：Text('运行中', style: TextStyle(color: statusGreenText.resolveFrom(context)))
+// 必须经 resolveFrom(context) 解析为当前主题色，禁止直接作为 const TextStyle 的 color
+//（动态色不解析在暗黑下会退化为浅色变体，对比度不足且与装饰圆点不一致）。
 import 'package:flutter/cupertino.dart';
 
 /// 状态「运行中/成功」文字色：浅 #1E7A34（白底 ~5.9:1）/ 深 #34C759（黑底 ~6.3:1）。
@@ -67,15 +69,15 @@ const CupertinoDynamicColor statusRedText =
   darkHighContrastColor: Color(0xFFFF6961),
 );
 
-/// 辅助/次要信息文字色（对齐 iOS 次级层级，并在深色模式下提亮到 ~72% 白，改善暗色列表行与卡片上的感知对比）。
+/// 辅助/次要信息文字色（对齐 iOS 次级层级，深色模式对齐 CupertinoColors.secondaryLabel 的 60% 白 0x99EBEBF5，即设置页服务器地址显示色）。
 ///
 /// 用于会话列表副标、列表项次要描述、空态提示、详情元数据等用户需读取的辅助文字。
 /// - 浅色模式：Color.fromARGB(0x99, 0x3C, 0x3C, 0x43)（白底 ~4.5:1，浅灰底 ~5.0:1）
-/// - 深色模式：Color.fromARGB(0xB8, 0xEB, 0xEB, 0xF5)（黑底 ~8.9:1，暗灰分组底 ~7.8:1，清晰不发糊）
+/// - 深色模式：Color.fromARGB(0x99, 0xEB, 0xEB, 0xF5)（黑底 ~6.7:1，对齐 secondaryLabel 设置页服务器地址色）
 const CupertinoDynamicColor secondaryText =
     CupertinoDynamicColor.withBrightnessAndContrast(
   color: Color.fromARGB(0x99, 0x3C, 0x3C, 0x43),
-  darkColor: Color.fromARGB(0xB8, 0xEB, 0xEB, 0xF5),
+  darkColor: Color.fromARGB(0x99, 0xEB, 0xEB, 0xF5),
   highContrastColor: Color.fromARGB(0xAA, 0x3C, 0x3C, 0x43),
-  darkHighContrastColor: Color.fromARGB(0xD0, 0xEB, 0xEB, 0xF5),
+  darkHighContrastColor: Color.fromARGB(0xAD, 0xEB, 0xEB, 0xF5),
 );

@@ -8,6 +8,8 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_action_menu.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
@@ -121,10 +123,16 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         key: const ValueKey('workspace-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.files),
-            middle: Text(l10n.files),
-            leading: AppBackButton(fallback: '/chat/${widget.sessionId}'),
+          AdaptiveSliverNavigationBar(
+            title: l10n.files,
+            showMiddleOnNarrow: true,
+            // 返回回会话列表 '/' 兜底。
+            // 窄屏从会话列表 push 进入时栈为 [/, /workspace/:sid]，canPop 为
+            // true 由 canPop/pop 返回 / 无需 fallback；仅当直进深链或桌面刷新
+            // 后栈仅 [/workspace/:sid]，canPop false 时 fallback 应回 '/' 而
+            // 非 '/chat/:sid'（后者在从 /workspaces 管理页 push 进来等场景与
+            // “返回会话列表”预期偏离）。
+            leading: const AppBackButton(fallback: '/'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -208,7 +216,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 entry: entry,
                 busy: state.isBusy(entry.path ?? ''),
                 onTap: () => _onEntryTap(entry),
-                onActions: () => unawaited(_showRowActions(entry)),
+                onActions: (anchorKey) =>
+                    unawaited(_showRowActions(entry, anchorKey)),
               ),
           ],
         ),
@@ -225,10 +234,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -239,7 +248,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -268,10 +280,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.folder_open,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
@@ -279,7 +291,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Text(
               state.displayPath,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -297,62 +312,46 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
     if (entry.isBrowsableDirectory) {
       unawaited(controller.navigateTo(entry.path ?? entry.name ?? '.'));
-    } else {
-      unawaited(_showRowActions(entry));
     }
   }
 
-  Future<void> _showRowActions(WorkspaceEntry entry) async {
+  Future<void> _showRowActions(
+    WorkspaceEntry entry,
+    GlobalKey anchorKey,
+  ) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(entry.name ?? entry.path ?? ''),
-        actions: [
-          if (workspaceFileIsPreviewable(entry) && !entry.isReadOnlyEscape)
-            CupertinoActionSheetAction(
-              key: const ValueKey('workspace-action-preview'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _openPreview(entry);
-              },
-              child: Text(l10n.preview),
-            ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('workspace-action-download'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              unawaited(_onDownload(entry));
-            },
-            child: Text(l10n.download),
+    await AdaptiveActionMenu.show(
+      context,
+      anchorKey: anchorKey,
+      title: entry.name ?? entry.path ?? '',
+      cancelLabel: l10n.cancel,
+      cancelKey: const ValueKey('workspace-action-cancel'),
+      items: [
+        if (workspaceFileIsPreviewable(entry) && !entry.isReadOnlyEscape)
+          AdaptiveMenuItem(
+            key: const ValueKey('workspace-action-preview'),
+            label: l10n.preview,
+            onPressed: () => _openPreview(entry),
           ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('workspace-action-rename'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showRenameDialog(entry);
-            },
-            child: Text(l10n.rename),
-          ),
-          CupertinoActionSheetAction(
-            key: const ValueKey('workspace-action-delete'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showDeleteDialog(entry);
-            },
-            child: Text(l10n.delete),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          key: const ValueKey('workspace-action-cancel'),
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.cancel),
+        AdaptiveMenuItem(
+          key: const ValueKey('workspace-action-download'),
+          label: l10n.download,
+          onPressed: () => unawaited(_onDownload(entry)),
         ),
-      ),
+        AdaptiveMenuItem(
+          key: const ValueKey('workspace-action-rename'),
+          label: l10n.rename,
+          onPressed: () => _showRenameDialog(entry),
+        ),
+        AdaptiveMenuItem(
+          key: const ValueKey('workspace-action-delete'),
+          isDestructive: true,
+          label: l10n.delete,
+          onPressed: () => _showDeleteDialog(entry),
+        ),
+      ],
     );
   }
-
   Future<void> _onDownload(WorkspaceEntry entry) async {
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)
@@ -590,10 +589,10 @@ class _PathHeader extends StatelessWidget {
               children: [
                 Text(
                   l10n.locationLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: secondaryText,
+                    color: secondaryText.resolveFrom(context),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -618,7 +617,9 @@ class _PathHeader extends StatelessWidget {
                     horizontal: 10,
                     vertical: 4,
                   ),
-                  disabledColor: CupertinoColors.quaternaryLabel,
+                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                    context,
+                  ),
                   onPressed: isAtRoot ? null : onRoot,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -636,7 +637,9 @@ class _PathHeader extends StatelessWidget {
                     horizontal: 10,
                     vertical: 4,
                   ),
-                  disabledColor: CupertinoColors.quaternaryLabel,
+                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                    context,
+                  ),
                   onPressed: isAtRoot ? null : onUp,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -672,12 +675,15 @@ class _PathHeader extends StatelessWidget {
                       children: [
                         for (var i = 0; i < crumbs.length; i++) ...[
                           if (i > 0)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               child: Icon(
                                 CupertinoIcons.chevron_right,
                                 size: 10,
-                                color: CupertinoColors.tertiaryLabel,
+                                color: CupertinoColors.tertiaryLabel
+                                    .resolveFrom(context),
                               ),
                             ),
                           CupertinoButton(
@@ -686,6 +692,8 @@ class _PathHeader extends StatelessWidget {
                               horizontal: 4,
                               vertical: 4,
                             ),
+                            disabledColor: CupertinoColors.quaternaryLabel
+                                .resolveFrom(context),
                             onPressed: crumbs[i].path == crumbs.last.path
                                 ? null
                                 : () => onCrumbTap(crumbs[i]),
@@ -712,7 +720,10 @@ class _PathHeader extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     l10n.loadingIndicator,
-                    style: const TextStyle(fontSize: 13, color: secondaryText),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondaryText.resolveFrom(context),
+                    ),
                   ),
                 ],
               ),
@@ -722,10 +733,10 @@ class _PathHeader extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     CupertinoIcons.exclamationmark_triangle,
                     size: 14,
-                    color: CupertinoColors.systemRed,
+                    color: CupertinoColors.systemRed.resolveFrom(context),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -733,9 +744,9 @@ class _PathHeader extends StatelessWidget {
                       errorMessage!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText,
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ),
@@ -759,7 +770,7 @@ class _PathHeader extends StatelessWidget {
 }
 
 /// 单行文件/目录（自绘行，对齐 Hermex FileBrowserRow：图标 + 名称 + 副标题）。
-class _WorkspaceEntryRow extends StatelessWidget {
+class _WorkspaceEntryRow extends StatefulWidget {
   const _WorkspaceEntryRow({
     super.key,
     required this.entry,
@@ -771,28 +782,41 @@ class _WorkspaceEntryRow extends StatelessWidget {
   final WorkspaceEntry entry;
   final bool busy;
   final VoidCallback onTap;
-  final VoidCallback onActions;
+  final void Function(GlobalKey anchorKey) onActions;
+
+  @override
+  State<_WorkspaceEntryRow> createState() => _WorkspaceEntryRowState();
+}
+
+class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
+  final GlobalKey _actionKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final isDirectory = entry.isBrowsableDirectory;
-    final detail = workspaceEntryDetail(entry);
+    final isDirectory = widget.entry.isBrowsableDirectory;
+    final detail = workspaceEntryDetail(widget.entry);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: () {
+        if (isDirectory) {
+          widget.onTap();
+        } else {
+          widget.onActions(_actionKey);
+        }
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            _EntryIcon(entry: entry),
+            _EntryIcon(entry: widget.entry),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.name ?? l10n.unnamedFile,
+                    widget.entry.name ?? l10n.unnamedFile,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -806,9 +830,9 @@ class _WorkspaceEntryRow extends StatelessWidget {
                       detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText,
+                        color: secondaryText.resolveFrom(context),
                       ),
                     ),
                   ],
@@ -816,24 +840,29 @@ class _WorkspaceEntryRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (busy)
+            if (widget.busy)
               const CupertinoActivityIndicator(radius: 10)
             else if (isDirectory)
-              const Icon(
+              Icon(
                 CupertinoIcons.chevron_right,
                 size: 14,
-                color: CupertinoColors.tertiaryLabel,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               )
             else
-              AccessibleButton(
-                key: ValueKey('workspace-actions-${entry.name ?? entry.path}'),
-                label: l10n.fileActions,
-                padding: EdgeInsets.zero,
-                onPressed: onActions,
-                child: const Icon(
-                  CupertinoIcons.ellipsis,
-                  size: 20,
-                  color: CupertinoColors.secondaryLabel,
+              KeyedSubtree(
+                key: _actionKey,
+                child: AccessibleButton(
+                  key: ValueKey(
+                    'workspace-actions-${widget.entry.name ?? widget.entry.path}',
+                  ),
+                  label: l10n.fileActions,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => widget.onActions(_actionKey),
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    size: 20,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
                 ),
               ),
           ],
@@ -856,16 +885,18 @@ class _EntryIcon extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: entry.isBrowsableDirectory
-            ? CupertinoColors.tertiarySystemFill
-            : CupertinoColors.secondarySystemFill,
+        color:
+            (entry.isBrowsableDirectory
+                    ? CupertinoColors.tertiarySystemFill
+                    : CupertinoColors.secondarySystemFill)
+                .resolveFrom(context),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: Icon(icon, size: 16, color: color),
+      child: Icon(icon, size: 16, color: color.resolveFrom(context)),
     );
   }
 
-  static (IconData, Color) _iconFor(WorkspaceEntry entry) {
+  static (IconData, CupertinoDynamicColor) _iconFor(WorkspaceEntry entry) {
     if (entry.isBrowsableDirectory) {
       return (CupertinoIcons.folder, CupertinoColors.label);
     }

@@ -8,7 +8,9 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import 'memory_providers.dart';
 
@@ -42,8 +44,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         key: const ValueKey('memory-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.memoryTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.memoryTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('memory-refresh'),
@@ -253,6 +255,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 child: MarkdownBody(
                   data: content.trim(),
                   styleSheet: _buildMarkdownStyleSheet(context),
+                  builders: createAssistantMarkdownBuilders(context),
                 ),
               ),
             ),
@@ -284,7 +287,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -319,7 +322,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             const SizedBox(height: 6),
             Text(
               l10n.noMemoryContentYet,
-              style: const TextStyle(color: secondaryText),
+              style: TextStyle(color: secondaryText.resolveFrom(context)),
             ),
           ],
         ),
@@ -357,6 +360,11 @@ String _memorySectionEmptyMessage(BuildContext context, MemorySection section) {
   }
 }
 
+const TextStyle _metaStyle = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w400,
+);
+
 /// 记忆分区头：图标 + 标题 + 字数 + 相对修改时间。
 class _MemorySectionHeader extends StatelessWidget {
   const _MemorySectionHeader({
@@ -373,6 +381,8 @@ class _MemorySectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
+    final metaColor = secondaryText.resolveFrom(context);
+    final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -389,13 +399,22 @@ class _MemorySectionHeader extends StatelessWidget {
           ),
           const Spacer(),
           if (charCount > 0)
-            Text(
-              '$charCount ${l10n.memoryCharUnit}',
-              style: const TextStyle(color: secondaryText),
+            Flexible(
+              child: Text(
+                '$charCount ${l10n.memoryCharUnit}',
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
           if (modified != null) ...[
-            const SizedBox(width: 6),
-            Text(modified, style: const TextStyle(color: secondaryText)),
+            if (charCount > 0) const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                modified,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
+            ),
           ],
         ],
       ),
@@ -427,10 +446,10 @@ class _MemorySectionBody extends StatelessWidget {
     if (trimmed.isEmpty) {
       return Text(
         _memorySectionEmptyMessage(context, section),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText,
+          color: secondaryText.resolveFrom(context),
         ),
       );
     }
@@ -456,10 +475,10 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
     if (trimmed.isEmpty) {
       return Text(
         _memorySectionEmptyMessage(context, section),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText,
+          color: secondaryText.resolveFrom(context),
         ),
       );
     }
@@ -467,6 +486,7 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
       child: MarkdownBody(
         data: trimmed,
         styleSheet: _buildMarkdownStyleSheet(context),
+        builders: createAssistantMarkdownBuilders(context),
       ),
     );
   }
@@ -512,6 +532,7 @@ MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
     listBullet: theme.textTheme.textStyle.copyWith(fontSize: 15, color: label),
     code: TextStyle(
       fontSize: 13,
+      height: 1.4,
       fontFamily: 'monospace',
       color: label,
       backgroundColor: grey5,
@@ -539,6 +560,8 @@ class _ProjectContextHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
+    final metaColor = secondaryText.resolveFrom(context);
+    final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -555,15 +578,24 @@ class _ProjectContextHeader extends StatelessWidget {
           ),
           const Spacer(),
           if (charCount > 0)
-            Text(
-              '$charCount ${l10n.memoryCharUnit}',
-              style: const TextStyle(color: secondaryText),
+            Flexible(
+              child: Text(
+                '$charCount ${l10n.memoryCharUnit}',
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
           if (modified != null) ...[
-            const SizedBox(width: 6),
-            Text(modified, style: const TextStyle(color: secondaryText)),
-            const SizedBox(width: 8),
+            if (charCount > 0) const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                modified,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
+            ),
           ],
+          if (charCount > 0 || modified != null) const SizedBox(width: 8),
           const Icon(
             CupertinoIcons.lock_fill,
             size: 13,
@@ -590,12 +622,15 @@ class _ProjectContextFooter extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (detail != null)
-          Text(detail!, style: const TextStyle(color: secondaryText)),
+          Text(
+            detail!,
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
+          ),
         if (shadowed) ...[
           const SizedBox(height: 4),
           Text(
             l10n.projectContextShadowedWarning,
-            style: const TextStyle(color: secondaryText),
+            style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
         ],
       ],

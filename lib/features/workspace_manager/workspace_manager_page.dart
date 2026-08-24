@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'add_workspace_sheet.dart';
@@ -73,10 +75,16 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         key: const ValueKey('workspaces-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.workspacesTitle),
-            middle: Text(l10n.workspacesTitle),
-            leading: const AppBackButton(fallback: '/settings'),
+          AdaptiveSliverNavigationBar(
+            title: l10n.workspacesTitle,
+            showMiddleOnNarrow: true,
+            // 返回回会话列表 '/' 兜底。
+            // 窄屏从会话列表 push 进入时栈为 [/, /workspaces]，canPop true 时
+            // 由 AppBackButton.canPop/pop 返回 /；仅当直进深链或刷新后栈仅
+            // [/workspaces]、canPop false 时 go(fallback) 才生效，此时
+            // fallback 必须为 '/' 才能回到会话列表，写死 '/settings' 导致
+            // 窄屏返回误跳设置页（本文件分区 bug 根因）。
+            leading: const AppBackButton(fallback: '/'),
             trailing: CupertinoButton(
               key: const ValueKey('workspaces-add'),
               padding: EdgeInsets.zero,
@@ -126,7 +134,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: CupertinoListSection.insetGrouped(
           footer: Text(
             l10n.removeWorkspaceFooter,
-            style: const TextStyle(fontSize: 12, color: secondaryText),
+            style: TextStyle(
+              fontSize: 12,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
           children: [
             for (final workspace in state.workspaces)
@@ -136,7 +147,8 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
                 isCurrent: state.isCurrent(workspace),
                 isMutating: state.isMutating,
                 onTap: () => unawaited(_onRowTap(workspace)),
-                onActions: () => _showRowActions(workspace),
+                onActions: (anchorKey) =>
+                    unawaited(_showRowActions(workspace, anchorKey)),
                 onRename: () => _showRenameDialog(workspace),
                 onRemove: () => _showRemoveDialog(workspace),
               ),
@@ -155,10 +167,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -169,7 +181,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -194,10 +209,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.folder_badge_plus,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -208,7 +223,10 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Text(
               l10n.addWorkspaceHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         ),
@@ -246,51 +264,37 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
     }
   }
 
-  Future<void> _showRowActions(WorkspaceRoot workspace) async {
+  Future<void> _showRowActions(
+    WorkspaceRoot workspace,
+    GlobalKey anchorKey,
+  ) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(_displayName(workspace)),
-        actions: [
-          CupertinoActionSheetAction(
-            key: ValueKey('workspace-manager-action-browse-${workspace.path}'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              unawaited(_onRowTap(workspace));
-            },
-            child: Text(l10n.browseWorkspaceFiles),
-          ),
-          CupertinoActionSheetAction(
-            key: ValueKey('workspace-manager-action-rename-${workspace.path}'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showRenameDialog(workspace);
-            },
-            child: Text(l10n.rename),
-          ),
-          CupertinoActionSheetAction(
-            key: ValueKey('workspace-manager-action-remove-${workspace.path}'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showRemoveDialog(workspace);
-            },
-            child: Text(
-              l10n.removeWorkspaceTitle,
-              style: const TextStyle(color: statusRedText),
-            ),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          key: const ValueKey('workspace-manager-action-cancel'),
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.cancel),
+    await AdaptiveActionMenu.show(
+      context,
+      anchorKey: anchorKey,
+      title: _displayName(workspace),
+      cancelLabel: l10n.cancel,
+      cancelKey: const ValueKey('workspace-manager-action-cancel'),
+      items: [
+        AdaptiveMenuItem(
+          key: ValueKey('workspace-manager-action-browse-${workspace.path}'),
+          label: l10n.browseWorkspaceFiles,
+          onPressed: () => unawaited(_onRowTap(workspace)),
         ),
-      ),
+        AdaptiveMenuItem(
+          key: ValueKey('workspace-manager-action-rename-${workspace.path}'),
+          label: l10n.rename,
+          onPressed: () => _showRenameDialog(workspace),
+        ),
+        AdaptiveMenuItem(
+          key: ValueKey('workspace-manager-action-remove-${workspace.path}'),
+          isDestructive: true,
+          label: l10n.removeWorkspaceTitle,
+          onPressed: () => _showRemoveDialog(workspace),
+        ),
+      ],
     );
   }
-
   void _showAddSheet() {
     unawaited(
       showCupertinoModalPopup<void>(
@@ -384,7 +388,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
               },
               child: Text(
                 l10n.removeWorkspaceTitle,
-                style: const TextStyle(color: statusRedText),
+                style: TextStyle(color: statusRedText.resolveFrom(context)),
               ),
             ),
           ],
@@ -432,7 +436,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
 }
 
 /// 单行工作区（自绘行，对齐 WebUI 列表：友好名 + 路径副行 + 当前徽标）。
-class _WorkspaceRow extends StatelessWidget {
+class _WorkspaceRow extends StatefulWidget {
   const _WorkspaceRow({
     super.key,
     required this.workspace,
@@ -448,52 +452,66 @@ class _WorkspaceRow extends StatelessWidget {
   final bool isCurrent;
   final bool isMutating;
   final VoidCallback onTap;
-  final VoidCallback onActions;
+  final void Function(GlobalKey anchorKey) onActions;
   final VoidCallback onRename;
   final VoidCallback onRemove;
 
+  @override
+  State<_WorkspaceRow> createState() => _WorkspaceRowState();
+}
+
+class _WorkspaceRowState extends State<_WorkspaceRow> {
+  final GlobalKey _actionKey = GlobalKey();
+
   String get _displayName =>
-      workspace.name ?? _WorkspaceManagerPageState._basename(workspace.path);
+      widget.workspace.name ??
+      _WorkspaceManagerPageState._basename(widget.workspace.path);
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final path = workspace.path ?? '';
+    final path = widget.workspace.path ?? '';
     return CupertinoContextMenu(
-      key: ValueKey('workspace-manager-ctx-${workspace.path}'),
+      key: ValueKey('workspace-manager-ctx-${widget.workspace.path}'),
       actions: [
         CupertinoContextMenuAction(
-          key: ValueKey('workspace-manager-ctx-browse-${workspace.path}'),
+          key: ValueKey(
+            'workspace-manager-ctx-browse-${widget.workspace.path}',
+          ),
           onPressed: () {
             Navigator.of(context).pop();
-            onTap();
+            widget.onTap();
           },
           child: Text(l10n.browseWorkspaceFiles),
         ),
         CupertinoContextMenuAction(
-          key: ValueKey('workspace-manager-ctx-rename-${workspace.path}'),
+          key: ValueKey(
+            'workspace-manager-ctx-rename-${widget.workspace.path}',
+          ),
           onPressed: () {
             Navigator.of(context).pop();
-            onRename();
+            widget.onRename();
           },
           child: Text(l10n.rename),
         ),
         CupertinoContextMenuAction(
-          key: ValueKey('workspace-manager-ctx-remove-${workspace.path}'),
+          key: ValueKey(
+            'workspace-manager-ctx-remove-${widget.workspace.path}',
+          ),
           isDestructiveAction: true,
           onPressed: () {
             Navigator.of(context).pop();
-            onRemove();
+            widget.onRemove();
           },
           child: Text(
             l10n.removeWorkspaceTitle,
-            style: const TextStyle(color: statusRedText),
+            style: TextStyle(color: statusRedText.resolveFrom(context)),
           ),
         ),
       ],
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
+        onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -519,9 +537,9 @@ class _WorkspaceRow extends StatelessWidget {
                         path,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: secondaryText,
+                          color: secondaryText.resolveFrom(context),
                         ),
                       ),
                     ],
@@ -529,16 +547,23 @@ class _WorkspaceRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (isCurrent) const _CurrentBadge(),
+              if (widget.isCurrent) const _CurrentBadge(),
               const SizedBox(width: 4),
-              CupertinoButton(
-                key: ValueKey('workspace-manager-actions-${workspace.path}'),
-                padding: EdgeInsets.zero,
-                onPressed: isMutating ? null : onActions,
-                child: const Icon(
-                  CupertinoIcons.ellipsis,
-                  size: 20,
-                  color: CupertinoColors.secondaryLabel,
+              KeyedSubtree(
+                key: _actionKey,
+                child: CupertinoButton(
+                  key: ValueKey(
+                    'workspace-manager-actions-${widget.workspace.path}',
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: widget.isMutating
+                      ? null
+                      : () => widget.onActions(_actionKey),
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    size: 20,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
                 ),
               ),
             ],
@@ -557,13 +582,13 @@ class _FolderBadge extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: CupertinoColors.tertiarySystemFill,
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: const Icon(
+      child: Icon(
         CupertinoIcons.folder,
         size: 16,
-        color: CupertinoColors.label,
+        color: CupertinoColors.label.resolveFrom(context),
       ),
     );
   }
@@ -578,12 +603,17 @@ class _CurrentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemBlue.withValues(alpha: 0.15),
+        color: CupertinoColors.systemBlue
+            .resolveFrom(context)
+            .withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         AppLocalizations.of(context).currentWorkspaceBadge,
-        style: const TextStyle(fontSize: 11, color: statusBlueText),
+        style: TextStyle(
+          fontSize: 11,
+          color: statusBlueText.resolveFrom(context),
+        ),
       ),
     );
   }

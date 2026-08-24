@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +10,9 @@ import 'package:hermex_flutter/features/projects/project_providers.dart';
 import 'package:hermex_flutter/features/session_list/scheduled_session_disclosure.dart';
 import 'package:hermex_flutter/features/session_list/session_list_page.dart';
 import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermex_flutter/features/settings/cron_visibility_settings.dart';
 import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
 
@@ -74,8 +76,12 @@ class _ChatStub extends StatelessWidget {
 }
 
 void main() {
-  group('ScheduledSessionDisclosure 独立组件测试', () {
-    testWidgets('默认状态收起（对齐蓝本）：展示标题、数量与折叠 chevron，不展示子项', (
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  group('ScheduledSessionDisclosure 独立组件测试（已废弃组件向下兼容）', () {
+    testWidgets('默认状态收起：展示标题、数量与折叠 chevron，不展示子项', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -98,8 +104,20 @@ void main() {
       expect(find.text('定时'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
       // 折叠图标 chevron_right
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsNothing,
+      );
       // 子项收起不展示
       expect(find.text('会话 1'), findsNothing);
       expect(find.text('会话 2'), findsNothing);
@@ -144,8 +162,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(expansionEvents, [true]);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsNothing,
+      );
       expect(find.text('会话 A'), findsOneWidget);
       expect(find.text('会话 B'), findsOneWidget);
       expect(
@@ -160,8 +190,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(expansionEvents, [true, false]);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsNothing,
+      );
       expect(find.text('会话 A'), findsNothing);
       expect(find.text('会话 B'), findsNothing);
     });
@@ -181,16 +223,23 @@ void main() {
         ),
       );
 
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ScheduledSessionDisclosure),
+          matching: find.byIcon(CupertinoIcons.chevron_down),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('直接可见会话'), findsOneWidget);
     });
   });
 
-  group('SessionListPage 定时分区与折叠集成测试', () {
-    Future<void> pumpSessionListPage(
+  group('SessionListPage 定时融流与开关联动集成测试', () {
+    Future<ProviderContainer> pumpSessionListPage(
       WidgetTester tester,
       FakeSessionListApi api, {
       Locale locale = const Locale('zh'),
+      bool showCron = false,
     }) async {
       final router = GoRouter(
         initialLocation: '/',
@@ -209,17 +258,25 @@ void main() {
         ],
       );
 
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(
+            ApiClient(baseUrl: 'http://test.local:30002'),
+          ),
+          sessionListApiFactoryProvider.overrideWithValue((_) => api),
+          projectApiFactoryProvider.overrideWithValue(
+            (_) => _StubProjectApi(),
+          ),
+        ],
+      );
+
+      if (showCron) {
+        await container.read(cronVisibilityProvider.notifier).setShowCron(true);
+      }
+
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            apiClientProvider.overrideWithValue(
-              ApiClient(baseUrl: 'http://test.local:30002'),
-            ),
-            sessionListApiFactoryProvider.overrideWithValue((_) => api),
-            projectApiFactoryProvider.overrideWithValue(
-              (_) => _StubProjectApi(),
-            ),
-          ],
+        UncontrolledProviderScope(
+          container: container,
           child: CupertinoApp.router(
             routerConfig: router,
             locale: locale,
@@ -237,88 +294,69 @@ void main() {
       // 首帧（AsyncLoading）+ 异步 build 完成（AsyncData）
       await tester.pump();
       await tester.pump();
+      return container;
     }
 
-    testWidgets('含 cron 会话列表：页面出现「定时」标题行，默认收起；其他分区正常渲染', (
+    testWidgets('默认 showCron=false：定时会话不显示，无「定时」分区', (tester) async {
+      final now = DateTime.now();
+      final noon = DateTime(now.year, now.month, now.day, 12);
+      final api = FakeSessionListApi(
+        sessions: [
+          buildSession('cron_1', '每日自动同步', at: noon),
+          buildSession('p1', '置顶重要会话', pinned: true, at: noon),
+          buildSession(
+            't1',
+            '今天普通会话',
+            at: noon.subtract(const Duration(hours: 2)),
+          ),
+        ],
+      );
+
+      await pumpSessionListPage(tester, api, showCron: false);
+
+      expect(find.text('定时'), findsNothing);
+      expect(find.text('置顶'), findsOneWidget);
+      expect(find.text('今天'), findsOneWidget);
+      expect(find.text('置顶重要会话'), findsOneWidget);
+      expect(find.text('今天普通会话'), findsOneWidget);
+      expect(find.text('每日自动同步'), findsNothing);
+      expect(find.byType(ScheduledSessionDisclosure), findsNothing);
+    });
+
+    testWidgets('开启 showCron=true：定时会话融流进时间分区，不再有独立「定时」折叠面板', (
       tester,
     ) async {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
         sessions: [
-          // 定时会话 1（cron_ 前缀）
           buildSession('cron_1', '每日自动同步', at: noon),
-          // 定时会话 2（sourceLabel=cron）
-          buildSession('s_cron_2', '定时备份任务', sourceLabel: 'cron', at: noon),
-          // 普通置顶会话
           buildSession('p1', '置顶重要会话', pinned: true, at: noon),
-          // 今天会话
           buildSession(
             't1',
             '今天普通会话',
             at: noon.subtract(const Duration(hours: 2)),
           ),
-          // 更早会话
-          buildSession(
-            'e1',
-            '更早普通会话',
-            at: noon.subtract(const Duration(days: 5)),
-          ),
         ],
       );
 
-      await pumpSessionListPage(tester, api);
+      await pumpSessionListPage(tester, api, showCron: true);
 
-      // 分区标题断言
-      expect(find.text('定时'), findsOneWidget);
+      // 无「定时」分区，无 ScheduledSessionDisclosure
+      expect(find.text('定时'), findsNothing);
+      expect(find.byType(ScheduledSessionDisclosure), findsNothing);
+
+      // 分区为 置顶 与 今天
       expect(find.text('置顶'), findsOneWidget);
       expect(find.text('今天'), findsOneWidget);
-      expect(find.text('更早'), findsOneWidget);
 
-      // 非定时分区的普通会话行正常显示
+      // 定时会话与普通会话一起在「今天」分区直接渲染展示
       expect(find.text('置顶重要会话'), findsOneWidget);
-      expect(find.text('今天普通会话'), findsOneWidget);
-      expect(find.text('更早普通会话'), findsOneWidget);
-
-      // 定时会话由于默认折叠，行内容不显示
-      expect(find.text('每日自动同步'), findsNothing);
-      expect(find.text('定时备份任务'), findsNothing);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-    });
-
-    testWidgets('点击「定时」标题行 → 展开显示定时会话；再点击 → 收起', (tester) async {
-      final now = DateTime.now();
-      final noon = DateTime(now.year, now.month, now.day, 12);
-      final api = FakeSessionListApi(
-        sessions: [
-          buildSession('cron_1', '每日自动同步', at: noon),
-          buildSession('t1', '今天普通会话', at: noon),
-        ],
-      );
-
-      await pumpSessionListPage(tester, api);
-
-      expect(find.text('定时'), findsOneWidget);
-      expect(find.text('每日自动同步'), findsNothing);
-
-      // 点击展开
-      await tester.tap(find.text('定时'));
-      await tester.pumpAndSettle();
-
-      // 展开后显示定时会话
       expect(find.text('每日自动同步'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
-
-      // 再次点击收起
-      await tester.tap(find.text('定时'));
-      await tester.pumpAndSettle();
-
-      // 收起后隐藏
-      expect(find.text('每日自动同步'), findsNothing);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
+      expect(find.text('今天普通会话'), findsOneWidget);
     });
 
-    testWidgets('展开定时分区后点击会话行 → 跳转 /chat/:sessionId', (tester) async {
+    testWidgets('融流展示后点击定时会话行 → 跳转 /chat/:sessionId', (tester) async {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
@@ -327,13 +365,9 @@ void main() {
         ],
       );
 
-      await pumpSessionListPage(tester, api);
+      await pumpSessionListPage(tester, api, showCron: true);
 
-      // 展开
-      await tester.tap(find.text('定时'));
-      await tester.pumpAndSettle();
-
-      // 点击会话行
+      // 直接点击会话行
       await tester.tap(find.text('每日自动同步'));
       await tester.pumpAndSettle();
 
@@ -341,7 +375,7 @@ void main() {
       expect(find.text('ChatPage: cron_1'), findsOneWidget);
     });
 
-    testWidgets('展开定时分区后行快捷操作 ellipsis 菜单正常工作', (tester) async {
+    testWidgets('融流展示后行快捷操作 ellipsis 菜单正常工作', (tester) async {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
@@ -350,11 +384,7 @@ void main() {
         ],
       );
 
-      await pumpSessionListPage(tester, api);
-
-      // 展开
-      await tester.tap(find.text('定时'));
-      await tester.pumpAndSettle();
+      await pumpSessionListPage(tester, api, showCron: true);
 
       // 点击 ellipsis 按钮
       await tester.tap(
@@ -368,41 +398,6 @@ void main() {
         find.byKey(const ValueKey('session-action-pin')),
         findsOneWidget,
       );
-    });
-
-    testWidgets('英文语言环境下标题映射为「Scheduled」', (tester) async {
-      final now = DateTime.now();
-      final noon = DateTime(now.year, now.month, now.day, 12);
-      final api = FakeSessionListApi(
-        sessions: [
-          buildSession('cron_1', 'Daily Sync Job', at: noon),
-          buildSession('p1', 'Pinned Session', pinned: true, at: noon),
-        ],
-      );
-
-      await pumpSessionListPage(tester, api, locale: const Locale('en'));
-
-      expect(find.text('Scheduled'), findsOneWidget);
-      expect(find.text('Pinned'), findsOneWidget);
-      expect(find.text('定时'), findsNothing);
-      expect(find.text('置顶'), findsNothing);
-    });
-
-    testWidgets('无定时会话时页面不渲染「定时」分区', (tester) async {
-      final now = DateTime.now();
-      final noon = DateTime(now.year, now.month, now.day, 12);
-      final api = FakeSessionListApi(
-        sessions: [
-          buildSession('p1', '置顶会话', pinned: true, at: noon),
-          buildSession('t1', '今天会话', at: noon),
-        ],
-      );
-
-      await pumpSessionListPage(tester, api);
-
-      expect(find.text('定时'), findsNothing);
-      expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
     });
 
     testWidgets('搜索模式下定时会话直接进入「搜索结果」，无独立定时折叠分区', (tester) async {
@@ -431,7 +426,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 搜索模式下展示「搜索结果」单一分区，无「定时」折叠分区
+      // 搜索模式下展示「搜索结果」单一分区
       expect(find.text('搜索结果'), findsOneWidget);
       expect(find.text('定时'), findsNothing);
       expect(find.text('自动备份同步'), findsOneWidget);

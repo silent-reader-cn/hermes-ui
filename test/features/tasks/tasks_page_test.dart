@@ -126,11 +126,13 @@ void main() {
       expect(find.text('已暂停（1）'), findsOneWidget);
       expect(find.byKey(const ValueKey('tasks-create')), findsOneWidget);
 
-      // 验证副标使用 secondaryText 颜色
-      final subtitleWidget = tester.widget<Text>(
-        find.text('0 9 * * * · 上次运行 09:30'),
+      // 验证副标使用 secondaryText 颜色（内联动态色需 resolveFrom，测试环境浅色）
+      final subtitleFinder = find.text('0 9 * * * · 上次运行 09:30');
+      final subtitleWidget = tester.widget<Text>(subtitleFinder);
+      expect(
+        subtitleWidget.style?.color?.toARGB32(),
+        secondaryText.resolveFrom(tester.element(subtitleFinder)).toARGB32(),
       );
-      expect(subtitleWidget.style?.color, secondaryText);
     });
 
     testWidgets('加载态：数据到达前显示 ActivityIndicator，到达后渲染列表', (tester) async {

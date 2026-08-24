@@ -20,11 +20,10 @@ class _UtilityItem {
   final String Function(AppLocalizations l10n) getTitle;
 }
 
-/// 侧栏常驻工具入口行（TASK W2 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
+/// 侧栏常驻工具入口行（TASK W2/W3 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
 ///
-/// 宽屏下展示在会话列表顶部，提供任务、看板、工作区、技能、统计、设置的快捷跳转与激活高亮
-/// （记忆入口已移至设置页）。受 [sessionEntryVisibilityProvider] 控制功能入口显隐；
-/// 5 个功能入口全关时整条工具条仅保留设置图标。
+/// 宽屏下展示在会话列表顶部，提供任务、看板、工作区、技能、统计、记忆、设置的快捷跳转与激活高亮。
+/// 受 [sessionEntryVisibilityProvider] 控制功能入口显隐；所有功能入口全关时整条工具条仅保留设置图标。
 class SidebarUtilityToolbar extends ConsumerWidget {
   const SidebarUtilityToolbar({super.key, required this.currentLocation});
 
@@ -61,6 +60,12 @@ class SidebarUtilityToolbar extends ConsumerWidget {
       path: '/insights',
       icon: CupertinoIcons.chart_bar,
       getTitle: (l10n) => l10n.insightsTitle,
+    ),
+    _UtilityItem(
+      id: 'memory',
+      path: '/memory',
+      icon: CupertinoIcons.bookmark,
+      getTitle: (l10n) => l10n.memoryTitle,
     ),
     _UtilityItem(
       id: 'settings',
@@ -107,6 +112,10 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                       button: true,
                       child: CupertinoButton(
                         key: ValueKey('sidebar-utility-${item.id}'),
+                        // 视觉压到 32pt（icon 20 + 上下 6pt），点击区保持
+                        // 44pt HIG 下限；配合外层 6pt×2 边距总高 44px，
+                        // 与内容区标准导航栏 / 紧凑导航条顶端对齐。
+                        minimumSize: const Size(40, 32),
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         borderRadius: BorderRadius.circular(8.0),
                         color: isSelected

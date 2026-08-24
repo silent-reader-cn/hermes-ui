@@ -9,6 +9,13 @@ import 'package:hermex_flutter/features/chat/chat_controller.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/chat/chat_state.dart';
 import '../../helpers/fake_chat_api.dart';
+import '../../helpers/in_memory_secure_storage.dart';
+import 'package:hermex_flutter/core/cache/app_database.dart';
+import 'package:hermex_flutter/core/cache/cache_providers.dart';
+import 'package:hermex_flutter/core/cache/cache_service.dart';
+import 'package:hermex_flutter/core/models/session.dart';
+import 'package:hermex_flutter/core/connections/connection_providers.dart';
+import 'package:hermex_flutter/core/connections/connection_store.dart';
 
 void main() {
   group('ChatPhase 九态（chat_spec.md §2.1）', () {
@@ -1219,15 +1226,36 @@ class _FakeClock {
   void advance(Duration duration) => now = now.add(duration);
 }
 
+class _NoopCacheService extends CacheService {
+  _NoopCacheService(super.db);
+  @override Future<void> writeMessages({required String sessionId, required List<Map<String, Object?>> messages}) async {}
+  @override Future<List<Map<String, Object?>>> readMessages(String sessionId) async => const [];
+  @override Future<void> writeSessions(List<SessionSummary> sessions) async {}
+  @override Future<List<SessionSummary>> readSessions() async => const [];
+}
+
 typedef _FakeChatApi = FakeChatApi;
 
 ProviderContainer _buildContainer(_FakeChatApi api, _FakeClock clock) {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  final db = AppDatabase.memory();
+  final cache = _NoopCacheService(db);
   final container = ProviderContainer(
     overrides: [
       chatApiProvider.overrideWithValue(api),
       chatClockProvider.overrideWithValue(clock.call),
+      connectionStoreProvider.overrideWithValue(
+        ConnectionStore(storage: InMemorySecureStorage()),
+      ),
+      appDatabaseProvider.overrideWithValue(db),
+      cacheServiceProvider.overrideWithValue(cache),
     ],
   );
-  addTearDown(container.dispose);
+  addTearDown(() async {
+    try {
+      await db.close();
+    } catch (_) {}
+    container.dispose();
+  });
   return container;
 }

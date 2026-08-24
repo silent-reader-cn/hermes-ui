@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../onboarding/onboarding_providers.dart';
+import '../settings/cron_visibility_settings.dart';
 
 /// 会话列表所需的最小服务器 API 面（sessions 域 18 个端点中的 9 个）。
 ///
@@ -101,10 +103,7 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     required bool archived,
   }) async {
-    return _client.archiveSession(
-      sessionId: sessionId,
-      archived: archived,
-    );
+    return _client.archiveSession(sessionId: sessionId, archived: archived);
   }
 
   @override
@@ -122,10 +121,7 @@ class SessionListApiClient implements SessionListApi {
     required String sessionId,
     String? projectId,
   }) async {
-    return _client.moveSession(
-      sessionId: sessionId,
-      projectId: projectId,
-    );
+    return _client.moveSession(sessionId: sessionId, projectId: projectId);
   }
 }
 
@@ -169,6 +165,10 @@ class SessionListState {
     this.archivedCount,
     this.selectedSessionIds = const {},
     this.isSelectionMode = false,
+    this.lastRefreshAt,
+    this.lastAttemptAt,
+    this.refreshing = false,
+    this.consecutiveFailures = 0,
   });
 
   /// 普通模式全部已加载会话（服务端顺序：新的在前）。
@@ -206,6 +206,18 @@ class SessionListState {
 
   /// 是否处于多选模式（长按行进入）。
   final bool isSelectionMode;
+
+  /// 最近一次成功刷新时间（UTC）。
+  final DateTime? lastRefreshAt;
+
+  /// 最近一次刷新尝试时间（含失败）。
+  final DateTime? lastAttemptAt;
+
+  /// 当前是否有刷新在途（供 UI 展示菊花与禁用按钮）。
+  final bool refreshing;
+
+  /// 连续失败次数（指数退避用；成功清零）。
+  final int consecutiveFailures;
 
   /// 客户端分块页大小。
   static const int pageSize = 50;
@@ -274,6 +286,10 @@ class SessionListState {
     int? Function()? archivedCount,
     Set<String>? selectedSessionIds,
     bool? isSelectionMode,
+    DateTime? Function()? lastRefreshAt,
+    DateTime? Function()? lastAttemptAt,
+    bool? refreshing,
+    int? consecutiveFailures,
   }) {
     return SessionListState(
       sessions: sessions ?? this.sessions,
@@ -292,6 +308,14 @@ class SessionListState {
           : this.archivedCount,
       selectedSessionIds: selectedSessionIds ?? this.selectedSessionIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      lastRefreshAt: lastRefreshAt != null
+          ? lastRefreshAt()
+          : this.lastRefreshAt,
+      lastAttemptAt: lastAttemptAt != null
+          ? lastAttemptAt()
+          : this.lastAttemptAt,
+      refreshing: refreshing ?? this.refreshing,
+      consecutiveFailures: consecutiveFailures ?? this.consecutiveFailures,
     );
   }
 
@@ -333,6 +357,14 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 自动重登进行中标记（防并发重复登录）。
   bool _reauthInFlight = false;
 
+  /// 刷新在途标记（并发互斥）。
+  bool _refreshInFlight = false;
+
+  /// Provider 侧的单测用单次调度与获焦 debounce（真正的 30s 周期在
+  /// Observer 的 State 侧 `Timer.periodic`）。
+  Timer? _autoRefreshTimer;
+  Timer? _focusDebounceTimer;
+
   SessionListApi get _api =>
       ref.read(sessionListApiFactoryProvider)(ref.read(apiClientProvider));
 
@@ -342,7 +374,81 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     final api = ref.watch(sessionListApiFactoryProvider)(
       ref.watch(apiClientProvider),
     );
+    ref.onDispose(() {
+      _autoRefreshTimer?.cancel();
+      _autoRefreshTimer = null;
+      _focusDebounceTimer?.cancel();
+      _focusDebounceTimer = null;
+    });
     return _loadFirstPage(api);
+  }
+
+  /// 轮询重试退避间隔（秒）：30 * 2^n capped 120s。
+  static Duration nextAutoRefreshDelay(int consecutiveFailures) {
+    if (consecutiveFailures <= 0) return const Duration(seconds: 30);
+    final exp = 30 * (1 << consecutiveFailures);
+    return Duration(seconds: exp.clamp(30, 120));
+  }
+
+  /// 启动可见性驱动轮询（幂等）；外部可传入自定义周期（测试注入）。
+  /// 真正的 30s 周期由 [SessionAutoRefreshObserver] 的 State Timer 驱动，
+  /// 此方法仅为 Controller 单测提供单次调度入口，避免 Provider 侧持有
+  /// `Timer.periodic` 导致测试 tree dispose 后 `!timersPending` 失败。
+  void scheduleAutoRefresh({Duration? period}) {
+    _autoRefreshTimer?.cancel();
+    final effective = period ?? nextAutoRefreshDelay(
+          state.valueOrNull?.consecutiveFailures ?? 0,
+        );
+    _autoRefreshTimer = Timer(effective, () {
+      _autoRefreshTimer = null;
+      unawaited(refreshIfStale());
+    });
+  }
+
+  /// 停止周期轮询。
+  void cancelAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = null;
+  }
+
+  /// 取消获焦 debounce。
+  void cancelFocusDebounce() {
+    _focusDebounceTimer?.cancel();
+    _focusDebounceTimer = null;
+  }
+
+  /// 指数退避：上次尝试刚记录但尚未建立成功时 caller 可根据此值决定下次调度。
+  Duration get currentBackoffDelay =>
+      nextAutoRefreshDelay(state.valueOrNull?.consecutiveFailures ?? 0);
+
+  /// 条件刷新：命中任一门槛则 no-op。[force] 跳过 10s 去重窗口。
+  Future<void> refreshIfStale({bool force = false}) async {
+    // 冷启动/错误态：state 为 null 或 hasError → 直接强制刷新。
+    if (state.valueOrNull == null || state.hasError) {
+      await refresh();
+      return;
+    }
+    final current = state.valueOrNull!;
+    if (_refreshInFlight || current.refreshing) return;
+    final query = current.searchQuery?.trim();
+    if (query != null && query.isNotEmpty) return;
+    if (current.filterMode == SessionListFilterMode.archived) return;
+    if (!force) {
+      final last = current.lastRefreshAt;
+      if (last != null &&
+          DateTime.now().difference(last) < const Duration(seconds: 10)) {
+        return;
+      }
+    }
+    await refresh();
+  }
+
+  /// 获焦/前台恢复时带 1s debounce 的调度+刷新。
+  void scheduleFocusRefresh() {
+    _focusDebounceTimer?.cancel();
+    _focusDebounceTimer = Timer(const Duration(seconds: 1), () {
+      unawaited(refreshIfStale());
+    });
   }
 
   /// 加载第一页；401 时自动用保存的密码重登一次再重试
@@ -419,11 +525,61 @@ class SessionListController extends AsyncNotifier<SessionListState> {
 
   /// 下拉刷新 / 错误态重试：重新加载第一页并重置分页窗口。
   Future<void> refresh() async {
+    if (_refreshInFlight) return;
+    _refreshInFlight = true;
+    final previous = state.valueOrNull;
+    final hadData = previous != null;
+    if (hadData) {
+      state = AsyncData(
+        previous.copyWith(
+          refreshing: true,
+          lastAttemptAt: () => DateTime.now().toUtc(),
+        ),
+      );
+    }
     try {
       final api = _api;
-      state = AsyncData(await _loadFirstPage(api));
+      final now = DateTime.now().toUtc();
+      final result = await _loadFirstPage(api);
+      // 离线缓存兜底返回的也算作“失败但有缓存”（actionError 以 离线缓存 开头），需走失败分支
+      final isCachedFallback = result.actionError != null &&
+          result.actionError!.startsWith('离线缓存');
+      if (isCachedFallback && hadData) {
+        final prev = previous;
+        final failed = prev.copyWith(
+          refreshing: false,
+          lastAttemptAt: () => now,
+          consecutiveFailures: prev.consecutiveFailures + 1,
+          // 保持缓存覆盖的会话/可见窗口一致
+          sessions: result.sessions,
+          visibleCount: result.visibleCount,
+          actionError: () => result.actionError,
+        );
+        state = AsyncData(failed);
+        return;
+      }
+      final withRefresh = result.copyWith(
+        lastRefreshAt: () => now,
+        lastAttemptAt: () => now,
+        refreshing: false,
+        consecutiveFailures: 0,
+      );
+      state = AsyncData(withRefresh);
     } on Exception catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      if (hadData) {
+        final now = DateTime.now().toUtc();
+        final prev = previous;
+        final failed = prev.copyWith(
+          refreshing: false,
+          lastAttemptAt: () => now,
+          consecutiveFailures: prev.consecutiveFailures + 1,
+        );
+        state = AsyncData(failed);
+      } else {
+        state = AsyncError(error, stackTrace);
+      }
+    } finally {
+      _refreshInFlight = false;
     }
   }
 
@@ -751,10 +907,17 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       }
       final hasTitle =
           response.title != null && response.title!.trim().isNotEmpty;
+      // 服务端未返回标题时本地兜底加 fork 后缀（对齐 hermes-webui
+      // 默认命名 "<original title> (fork)"，避免刷新前后标题跳变）。
+      final baseTitle = session.title == null || session.title!.trim().isEmpty
+          ? null
+          : session.title!.trim();
       await _insertSession(
         SessionSummary(
           sessionId: newId,
-          title: hasTitle ? response.title : session.title,
+          title: hasTitle
+              ? response.title
+              : (baseTitle == null ? null : '$baseTitle (fork)'),
         ),
       );
       return newId;
@@ -779,6 +942,28 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       await _setActionError(error.message);
       return null;
     }
+  }
+
+  /// P4：新会话首条消息后会话列表即时可见。
+  ///
+  /// 设计抉择：乐观占位（`local-xxx` 预插入）可在 0ms 提供视觉反馈，但需
+  /// 临时 id → 真实 id 替换与去重逻辑，且后端 `startChat` 成功即返回
+  /// 真实 `sessionId`（延迟 <300ms 时单次刷新已在 0~500ms 内可见）。
+  /// 为兼顾「首轮完成后才落库」的异步后端，这里采用**纯刷新**策略：
+  /// 立即 `refreshIfStale(force: true)` + 600ms 二次补拉，桌面双栏下
+  /// 配合 ChatPage 的 `context.go('/chat/<newId>')` 导航即可满足
+  /// 「发送第一条消息后列表即出现新项，无需手动下拉」的验收；无需乐观
+  /// 占位复杂度。若后端延迟明显（>1s），再考虑占位增强。
+  Future<void> handleNewChatSession(
+    String newSessionId, {
+    String? titleHint,
+  }) async {
+    if (newSessionId.isEmpty) return;
+    // titleHint 保留作未来占位标题来源，当前纯刷新策略暂不使用。
+    unawaited(refreshIfStale(force: true));
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      unawaited(refreshIfStale(force: true));
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -895,9 +1080,16 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   Future<void> _insertSession(SessionSummary session) async {
     final current = state.valueOrNull;
     if (current == null) return;
+    // 服务端新建/分支响应通常不带时间戳；缺失时兜底为“现在”，
+    // 否则新会话落入「更早」分区最底部（排序 0），列表里看不到，
+    // 要等手动下拉刷新（服务端带真时间戳）才出现在「今天」顶部。
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
+    final withStamp = session.createdAt == null
+        ? session.copyWith(createdAt: now)
+        : session;
     state = AsyncData(
       current.copyWith(
-        sessions: [session, ...current.sessions],
+        sessions: [withStamp, ...current.sessions],
         visibleCount: current.visibleCount + 1,
       ),
     );
@@ -964,7 +1156,11 @@ final sessionListVisibleSessionsProvider = Provider<List<SessionSummary>>((
   return all.sublist(0, end);
 });
 
-/// 会话分区（定时 / 置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
+/// 是否正在刷新（供 Header 按钮转菊花/禁用）。
+final sessionListRefreshingProvider = Provider<bool>((ref) =>
+    ref.watch(sessionListControllerProvider).valueOrNull?.refreshing == true);
+
+/// 会话分区（置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
 final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   final visible = ref.watch(sessionListVisibleSessionsProvider);
   final query = ref
@@ -975,38 +1171,36 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   if (isSearching) {
     return [SessionListSection(title: '搜索结果', sessions: visible)];
   }
-  return buildSessionSections(visible);
+  final showCron = ref.watch(cronVisibilityProvider).showCron;
+  return buildSessionSections(visible, showCron: showCron);
 });
 
-/// 按类型与时间把会话分组为 定时 / 置顶 / 今天 / 昨天 / 更早（对齐 Hermex
-/// `SessionListViewModel.sections`），组内时间倒序；空组剔除。
+/// 按类型与时间把会话分组为 置顶 / 今天 / 昨天 / 更早，组内时间倒序；空组剔除。
 ///
 /// 分组规则：
-/// 1. 定时优先：`session.isCronSession == true` 抽离为独立的「定时」分区；
-///    即使 `pinned == true` 亦归入「定时」（蓝本中 cron 会话与置顶互斥语义，置顶专属于普通交互会话）。
+/// 1. 定时会话：当 [showCron] 为 false 时直接过滤忽略；当 [showCron] 为 true 时，
+///    不再独立成「定时」分区，而是融流按时间戳归入「今天」/「昨天」/「更早」（即使 pinned 也按时间归入）。
 /// 2. 置顶：非 cron 且 `pinned == true` 进入「置顶」分区。
-/// 3. 时间分区：非 cron 且非置顶按时间归入「今天」/「昨天」/「更早」。
+/// 3. 时间分区：非置顶会话（及开启 showCron 时的 cron 会话）按时间归入「今天」/「昨天」/「更早」。
 ///
 /// [now] 仅供测试注入固定参考时间；生产使用 [DateTime.now]。
 List<SessionListSection> buildSessionSections(
   List<SessionSummary> sessions, {
+  bool showCron = false,
   DateTime? now,
 }) {
   final reference = now ?? DateTime.now();
   final sorted = [...sessions]
     ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
-  final scheduled = <SessionSummary>[];
   final pinned = <SessionSummary>[];
   final today = <SessionSummary>[];
   final yesterday = <SessionSummary>[];
   final earlier = <SessionSummary>[];
   for (final session in sorted) {
-    // 定时会话优先独立归区：即使 pinned == true 也归入「定时」（蓝本中 cron 会话与置顶互斥语义）。
-    if (session.isCronSession) {
-      scheduled.add(session);
+    if (session.isCronSession && !showCron) {
       continue;
     }
-    if (session.pinned == true) {
+    if (session.pinned == true && !session.isCronSession) {
       pinned.add(session);
       continue;
     }
@@ -1027,8 +1221,6 @@ List<SessionListSection> buildSessionSections(
     }
   }
   return [
-    if (scheduled.isNotEmpty)
-      SessionListSection(title: '定时', sessions: scheduled),
     if (pinned.isNotEmpty) SessionListSection(title: '置顶', sessions: pinned),
     if (today.isNotEmpty) SessionListSection(title: '今天', sessions: today),
     if (yesterday.isNotEmpty)

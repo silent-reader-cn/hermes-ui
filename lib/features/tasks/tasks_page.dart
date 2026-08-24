@@ -4,9 +4,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
@@ -101,8 +103,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         key: const ValueKey('tasks-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: Text(l10n.tasksTitle),
+          AdaptiveSliverNavigationBar(
+            title: l10n.tasksTitle,
             leading: const AppBackButton(),
             trailing: AccessibleButton(
               key: const ValueKey('tasks-create'),
@@ -156,6 +158,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     Widget rowsSection({required String header, required List<CronJob> jobs}) {
       return SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          hasLeading: false,
           header: Text('$header（${jobs.length}）'),
           children: [
             for (final job in jobs)
@@ -164,7 +167,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 job: job,
                 busy: state.isBusy(job.jobId ?? ''),
                 onTap: () => unawaited(_showOutput(context, job)),
-                onActions: () => _showRowActions(context, job),
+                onActions: (anchorKey) =>
+                    _showRowActions(context, job, anchorKey),
               ),
           ],
         ),
@@ -238,7 +242,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             const SizedBox(height: 6),
             Text(
               l10n.createTaskPrompt,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -265,74 +272,54 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     ).push(CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
   }
 
-  void _showRowActions(BuildContext context, CronJob job) {
+  void _showRowActions(BuildContext context, CronJob job, GlobalKey anchorKey) {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(tasksControllerProvider.notifier);
     final paused = job.state == 'paused' || job.enabled == false;
-    unawaited(
-      showCupertinoModalPopup<void>(
-        context: context,
-        builder: (sheetContext) => CupertinoActionSheet(
-          title: Text(job.displayName),
-          actions: [
-            CupertinoActionSheetAction(
-              key: const ValueKey('tasks-action-run'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(controller.run(job));
-              },
-              child: Text(l10n.runTask),
-            ),
-            if (paused)
-              CupertinoActionSheetAction(
-                key: const ValueKey('tasks-action-resume'),
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  unawaited(controller.resume(job));
-                },
-                child: Text(l10n.resumeTask),
-              )
-            else
-              CupertinoActionSheetAction(
-                key: const ValueKey('tasks-action-pause'),
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  unawaited(controller.pause(job));
-                },
-                child: Text(l10n.pauseTask),
-              ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('tasks-action-edit'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                _openEditor(context, job: job);
-              },
-              child: Text(l10n.edit),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('tasks-action-output'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_showOutput(context, job));
-              },
-              child: Text(l10n.viewOutput),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('tasks-action-delete'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_confirmDelete(context, job));
-              },
-              child: Text(l10n.delete),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(sheetContext),
-            child: Text(l10n.cancel),
-          ),
+    final items = [
+      AdaptiveMenuItem(
+        key: const ValueKey('tasks-action-run'),
+        label: l10n.runTask,
+        onPressed: () => unawaited(controller.run(job)),
+      ),
+      if (paused)
+        AdaptiveMenuItem(
+          key: const ValueKey('tasks-action-resume'),
+          label: l10n.resumeTask,
+          onPressed: () => unawaited(controller.resume(job)),
+        )
+      else
+        AdaptiveMenuItem(
+          key: const ValueKey('tasks-action-pause'),
+          label: l10n.pauseTask,
+          onPressed: () => unawaited(controller.pause(job)),
         ),
+      AdaptiveMenuItem(
+        key: const ValueKey('tasks-action-edit'),
+        label: l10n.edit,
+        onPressed: () => _openEditor(context, job: job),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('tasks-action-output'),
+        label: l10n.viewOutput,
+        onPressed: () => unawaited(_showOutput(context, job)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('tasks-action-delete'),
+        isDestructive: true,
+        label: l10n.delete,
+        onPressed: () => unawaited(_confirmDelete(context, job)),
+      ),
+    ];
+
+    unawaited(
+      AdaptiveActionMenu.show(
+        context,
+        anchorKey: anchorKey,
+        items: items,
+        title: job.displayName,
+        cancelLabel: l10n.cancel,
+        cancelKey: const ValueKey('tasks-action-cancel'),
       ),
     );
   }
@@ -397,7 +384,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 }
 
 /// 单行任务：状态圆点 + 名称 + 状态标签 + 调度/上次运行 + ellipsis 操作按钮。
-class _TaskRow extends StatelessWidget {
+class _TaskRow extends StatefulWidget {
   const _TaskRow({
     super.key,
     required this.job,
@@ -409,23 +396,47 @@ class _TaskRow extends StatelessWidget {
   final CronJob job;
   final bool busy;
   final VoidCallback onTap;
-  final VoidCallback onActions;
+  final void Function(GlobalKey anchorKey) onActions;
+
+  @override
+  State<_TaskRow> createState() => _TaskRowState();
+
+  static String? _subtitle(BuildContext context, CronJob job) {
+    final l10n = AppLocalizations.of(context);
+    final parts = <String>[
+      if (job.scheduleText != null && job.scheduleText!.isNotEmpty)
+        job.scheduleText!,
+      if (job.lastRunAt != null)
+        l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  static String _formatTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+}
+
+class _TaskRowState extends State<_TaskRow> {
+  final GlobalKey _actionKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final subtitle = _subtitle(context, job);
-    final statusColor = taskStatusColor(job).resolveFrom(context);
+    final subtitle = _TaskRow._subtitle(context, widget.job);
+    final statusColor = taskStatusColor(widget.job).resolveFrom(context);
 
     return Semantics(
       button: true,
-      label: '${job.displayName}, ${l10n.viewOutput}',
+      label: '${widget.job.displayName}, ${l10n.viewOutput}',
       hint: l10n.viewOutput,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
           unawaited(selectionHaptic());
-          onTap();
+          widget.onTap();
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -448,7 +459,7 @@ class _TaskRow extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            job.displayName,
+                            widget.job.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -459,7 +470,7 @@ class _TaskRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          taskStatusLabel(job, context),
+                          taskStatusLabel(widget.job, context),
                           style: TextStyle(fontSize: 12, color: statusColor),
                         ),
                       ],
@@ -470,31 +481,34 @@ class _TaskRow extends StatelessWidget {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: secondaryText,
+                          color: secondaryText.resolveFrom(context),
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              if (busy)
+              if (widget.busy)
                 const Padding(
                   padding: EdgeInsets.all(10),
                   child: CupertinoActivityIndicator(radius: 9),
                 )
               else
-                AccessibleButton(
-                  key: ValueKey('tasks-actions-${job.jobId ?? job.id}'),
-                  label: l10n.taskActions,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(36, 36),
-                  onPressed: onActions,
-                  child: Icon(
-                    CupertinoIcons.ellipsis,
-                    size: 20,
-                    color: CupertinoColors.systemGrey.resolveFrom(context),
+                KeyedSubtree(
+                  key: _actionKey,
+                  child: AccessibleButton(
+                    key: ValueKey('tasks-actions-${widget.job.jobId ?? widget.job.id}'),
+                    label: l10n.taskActions,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(36, 36),
+                    onPressed: () => widget.onActions(_actionKey),
+                    child: Icon(
+                      CupertinoIcons.ellipsis,
+                      size: 20,
+                      color: CupertinoColors.systemGrey.resolveFrom(context),
+                    ),
                   ),
                 ),
             ],
@@ -502,23 +516,6 @@ class _TaskRow extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String? _subtitle(BuildContext context, CronJob job) {
-    final l10n = AppLocalizations.of(context);
-    final parts = <String>[
-      if (job.scheduleText != null && job.scheduleText!.isNotEmpty)
-        job.scheduleText!,
-      if (job.lastRunAt != null)
-        l10n.lastRunTime(_formatTime(job.lastRunAt!.date)),
-    ];
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  static String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
   }
 }
 
@@ -817,7 +814,13 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: secondaryText)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: secondaryText.resolveFrom(context),
+          ),
+        ),
         const SizedBox(height: 6),
         CupertinoTextField(
           key: fieldKey,

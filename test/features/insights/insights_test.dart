@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import 'package:hermex_flutter/core/models/insights.dart';
 import 'package:hermex_flutter/features/insights/insights_api.dart';
 import 'package:hermex_flutter/features/insights/insights_page.dart';
 import 'package:hermex_flutter/features/insights/insights_providers.dart';
+import 'package:hermex_flutter/l10n/app_localizations.dart';
 
 import '../../helpers/fake_insights_api.dart';
 
@@ -278,11 +280,11 @@ void main() {
       expect(find.text('消息'), findsOneWidget);
       expect(find.text('1,234'), findsOneWidget);
       expect(find.text('输入令牌'), findsOneWidget);
-      expect(find.text('1,000,000'), findsOneWidget);
+      expect(find.text('1M'), findsOneWidget);
       expect(find.text('输出令牌'), findsOneWidget);
       expect(find.text('250,000'), findsOneWidget);
       expect(find.text('总令牌'), findsOneWidget);
-      expect(find.text('1,250,000'), findsOneWidget);
+      expect(find.text('1.25M'), findsOneWidget);
       expect(find.text('估算费用'), findsOneWidget);
       expect(find.text(r'$1.2345'), findsOneWidget);
       expect(find.text('缓存命中率'), findsOneWidget);
@@ -291,22 +293,36 @@ void main() {
       expect(find.text('5,000'), findsOneWidget);
       expect(find.text('最近 30 天'), findsOneWidget);
 
-      // 模型拆分（需要滚动到可见）
+      // 模型拆分（需要滚动到可见）——已下沉至底部，仍可滚动找到
       await tester.scrollUntilVisible(find.text('模型'), 200);
       expect(find.text('gpt-4o'), findsOneWidget);
       expect(find.text('60%'), findsOneWidget);
       expect(find.text('claude'), findsOneWidget);
 
-      // 近 14 天令牌柱状图
-      await tester.scrollUntilVisible(find.text('近 14 天令牌'), 200);
+      // 柱状图标题随时间范围动态（默认 30 天 → 近 30 天令牌）
+      await tester.scrollUntilVisible(find.text('近 30 天令牌'), 200);
       expect(find.byType(BarChart), findsOneWidget);
+      final barChart = tester.widget<BarChart>(find.byType(BarChart));
+      expect(barChart.data.barTouchData.enabled, isTrue);
 
-      // 活动：最活跃的一天 / 时段
+      // 活动：最活跃的一天 / 时段（在模型之前）
       await tester.scrollUntilVisible(find.text('活动'), 200);
       expect(find.text('最活跃的一天'), findsOneWidget);
       expect(find.textContaining('2026-08-16'), findsOneWidget);
       expect(find.text('最活跃时段'), findsOneWidget);
       expect(find.textContaining('14:00'), findsOneWidget);
+    });
+
+    testWidgets('模型区在活动之后（已下沉至底部）', (tester) async {
+      final api = FakeInsightsApi(response: sampleResponse());
+      await pumpInsightsPage(tester, api);
+      // 通过滚动顺序验证：活动在模型之前
+      await tester.scrollUntilVisible(find.text('活动'), 200);
+      expect(find.text('活动'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('模型'), 200);
+      expect(find.text('模型'), findsOneWidget);
+      // 模型之后紧跟来源脚注
+      expect(find.textContaining('来源：服务器按最近'), findsOneWidget);
     });
 
     testWidgets('分段控件切换时间范围：重新拉取对应天数', (tester) async {
@@ -374,6 +390,95 @@ void main() {
       await tester.pump();
       expect(api.fetchCount, 2);
     });
+
+    testWidgets(
+      '柱状图可交互：handleBuiltInTouches=false（不展示 tooltip，仅保留 touchCallback 与弹窗）',
+      (tester) async {
+        final api = FakeInsightsApi(response: sampleResponse());
+        await pumpInsightsPage(tester, api);
+        await tester.scrollUntilVisible(find.byType(BarChart), 200);
+        expect(find.byType(BarChart), findsOneWidget);
+        final barChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(barChart.data.barTouchData.enabled, isTrue);
+        expect(barChart.data.barTouchData.handleBuiltInTouches, isFalse);
+        expect(barChart.data.barTouchData.touchCallback, isNotNull);
+
+        final touchCallback = barChart.data.barTouchData.touchCallback!;
+
+        // 1. 模拟 hover/触摸高亮变色
+        touchCallback(
+          const FlPointerHoverEvent(PointerHoverEvent()),
+          BarTouchResponse(
+            touchLocation: Offset.zero,
+            touchChartCoordinate: Offset.zero,
+            spot: BarTouchedSpot(
+              barChart.data.barGroups[1],
+              1,
+              barChart.data.barGroups[1].barRods[0],
+              0,
+              null,
+              -1,
+              const FlSpot(1, 150),
+              Offset.zero,
+            ),
+          ),
+        );
+        await tester.pump();
+        final hoveredChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(
+          hoveredChart.data.barGroups[1].barRods[0].color,
+          const Color(0xFF004999),
+        );
+
+        // 移出后恢复默认蓝
+        touchCallback(const FlPointerExitEvent(PointerExitEvent()), null);
+        await tester.pump();
+        final unhoveredChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(
+          unhoveredChart.data.barGroups[1].barRods[0].color,
+          CupertinoColors.systemBlue,
+        );
+
+        // 2. 模拟点击柱子弹出详情 CupertinoAlertDialog（不被容器截断）
+        touchCallback(
+          FlTapUpEvent(TapUpDetails(kind: PointerDeviceKind.touch)),
+          BarTouchResponse(
+            touchLocation: Offset.zero,
+            touchChartCoordinate: Offset.zero,
+            spot: BarTouchedSpot(
+              barChart.data.barGroups[1],
+              1,
+              barChart.data.barGroups[1].barRods[0],
+              0,
+              null,
+              -1,
+              const FlSpot(1, 150),
+              Offset.zero,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+        expect(find.text('2026-08-16'), findsOneWidget);
+        expect(find.text(r'$0.01'), findsOneWidget);
+
+        // 点击 "好" 关闭弹窗
+        await tester.tap(find.text('好'));
+        await tester.pumpAndSettle();
+        expect(find.byType(CupertinoAlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets('标题随时间范围动态：today → 今日令牌', (tester) async {
+      final api = FakeInsightsApi(response: sampleResponse());
+      await pumpInsightsPage(tester, api);
+      await tester.tap(find.text('今天'));
+      await tester.pump();
+      await tester.pump();
+      await tester.scrollUntilVisible(find.text('今日令牌'), 200);
+      expect(find.text('今日令牌'), findsOneWidget);
+    });
   });
 
   group('Insights 格式化工具', () {
@@ -383,6 +488,19 @@ void main() {
       expect(formatInsightsNumber(1234), '1,234');
       expect(formatInsightsNumber(1000000), '1,000,000');
       expect(formatInsightsNumber(-1234), '-1,234');
+    });
+
+    test('formatTokensCompact：M 单位 / 千分位 / null', () {
+      expect(formatTokensCompact(null), '—');
+      expect(formatTokensCompact(0), '0');
+      expect(formatTokensCompact(999), '999');
+      expect(formatTokensCompact(1234), '1,234');
+      expect(formatTokensCompact(999999), '999,999');
+      expect(formatTokensCompact(1000000), '1M');
+      expect(formatTokensCompact(1250000), '1.25M');
+      expect(formatTokensCompact(10000000), '10M');
+      expect(formatTokensCompact(1234567), '1.23M');
+      expect(formatTokensCompact(-1500000), '-1.5M');
     });
 
     test('formatInsightsCost：最多 4 位小数去尾零；null → —', () {
@@ -397,6 +515,17 @@ void main() {
       expect(formatInsightsPercent(null), '—');
       expect(formatInsightsPercent(87.5), '87.5%');
       expect(formatInsightsPercent(0), '0.0%');
+    });
+
+    test('标题动态：today/allTime/periodDays 的优先级', () {
+      const zh = AppLocalizations(Locale('zh'));
+      const en = AppLocalizations(Locale('en'));
+      expect(zh.tokensTodayChartTitle, '今日令牌');
+      expect(zh.tokensAllTimeChartTitle, '全部令牌');
+      expect(zh.tokensDailyChartTitle(7), '近 7 天令牌');
+      expect(en.tokensTodayChartTitle, "Today's Tokens");
+      expect(en.tokensAllTimeChartTitle, 'All Tokens');
+      expect(en.tokensDailyChartTitle(14), 'Tokens in Last 14 Days');
     });
   });
 }

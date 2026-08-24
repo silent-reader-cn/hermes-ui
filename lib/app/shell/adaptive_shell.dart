@@ -67,25 +67,37 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
     final prefs = await SharedPreferences.getInstance();
     final rawWidth = prefs.get(kAdaptiveSidebarWidthStorageKey);
     if (rawWidth is num && mounted) {
-      setState(() {
-        _sidebarWidth = rawWidth.toDouble().clamp(
-              kAdaptiveSidebarMinWidth,
-              kAdaptiveSidebarMaxWidth,
-            );
+      final resolved = rawWidth.toDouble().clamp(
+            kAdaptiveSidebarMinWidth,
+            kAdaptiveSidebarMaxWidth,
+          );
+      if (resolved == _sidebarWidth) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final again = resolved.clamp(
+          kAdaptiveSidebarMinWidth,
+          kAdaptiveSidebarMaxWidth,
+        );
+        if (again == _sidebarWidth) return;
+        setState(() {
+          _sidebarWidth = again;
+        });
       });
     }
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
+    // 高频拖拽：只做布局更新，不做磁盘 I/O，避免每帧 SharedPreferences
+    // 写入阻塞 UI 线程并放大窗口重绘压力（Windows EGL Context Lost）。
     final nextWidth = (_sidebarWidth + details.delta.dx).clamp(
       kAdaptiveSidebarMinWidth,
       kAdaptiveSidebarMaxWidth,
     );
+    if ((nextWidth - _sidebarWidth).abs() < 0.5) return;
     if (nextWidth != _sidebarWidth) {
       setState(() {
         _sidebarWidth = nextWidth;
       });
-      unawaited(_persistWidth(nextWidth));
     }
   }
 

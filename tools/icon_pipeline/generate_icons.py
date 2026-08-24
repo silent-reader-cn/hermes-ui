@@ -75,6 +75,35 @@ TRAY_ICO_SIZES: List[Tuple[int, int]] = [
 ]
 
 
+def trimTransparentPadding(img: Image.Image) -> Image.Image:
+    """Crop fully transparent border based on alpha channel and pad to square.
+
+    Uses alpha.getbbox() to find tight content bounds; if bbox is None (fully
+    transparent or no alpha) returns original. When cropped region is not square,
+    pads to max side centered on transparent canvas. Fixes source with ~10%
+    outer padding (e.g. 101px) that makes taskbar icon look shrinked.
+    """
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    try:
+        alpha = img.split()[3]
+    except Exception:
+        return img
+    bbox = alpha.getbbox()
+    if bbox is None:
+        return img
+    cropped = img.crop(bbox)
+    w, h = cropped.size
+    if w == h:
+        return cropped
+    size = max(w, h)
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset_x = (size - w) // 2
+    offset_y = (size - h) // 2
+    canvas.paste(cropped, (offset_x, offset_y), cropped)
+    return canvas
+
+
 def load_source_image(source_path: Path) -> Image.Image:
     """Load and validate the single source icon."""
     if not source_path.exists():
@@ -88,13 +117,14 @@ def load_source_image(source_path: Path) -> Image.Image:
 
 def generate_android_legacy_icons(source_img: Image.Image) -> List[Path]:
     """Generate Android legacy mipmap launcher icons."""
+    trimmed = trimTransparentPadding(source_img)
     generated: List[Path] = []
     for dir_name, size in ANDROID_LEGACY_SIZES.items():
         out_dir = ANDROID_RES_DIR / dir_name
         out_dir.mkdir(parents=True, exist_ok=True)
         out_file = out_dir / "ic_launcher.png"
 
-        resized = source_img.resize((size, size), Image.Resampling.LANCZOS)
+        resized = trimmed.resize((size, size), Image.Resampling.LANCZOS)
         resized.save(out_file, format="PNG", optimize=True)
         generated.append(out_file)
     return generated
@@ -128,7 +158,8 @@ def generate_android_adaptive_icons(source_img: Image.Image) -> List[Path]:
     scaled_dim = int(round(ADAPTIVE_CANVAS_SIZE * ADAPTIVE_SAFE_RATIO))  # 288px
     offset = (ADAPTIVE_CANVAS_SIZE - scaled_dim) // 2  # 72px
 
-    scaled_source = source_img.resize((scaled_dim, scaled_dim), Image.Resampling.LANCZOS)
+    trimmed = trimTransparentPadding(source_img)
+    scaled_source = trimmed.resize((scaled_dim, scaled_dim), Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", (ADAPTIVE_CANVAS_SIZE, ADAPTIVE_CANVAS_SIZE), (0, 0, 0, 0))
     canvas.paste(scaled_source, (offset, offset), scaled_source)
     canvas.save(fg_file, format="PNG", optimize=True)
@@ -155,11 +186,12 @@ def generate_windows_icon(source_img: Image.Image) -> List[Path]:
     Generate Windows multi-size .ico icon with sizes 16, 24, 32, 48, 64, 128, 256.
     Ensures small sizes (16, 32) are crisp and opaque for tray / taskbar usage.
     """
+    trimmed = trimTransparentPadding(source_img)
     generated: List[Path] = []
     WINDOWS_RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
     ico_file = WINDOWS_RESOURCES_DIR / "app_icon.ico"
 
-    source_img.save(
+    trimmed.save(
         ico_file,
         format="ICO",
         sizes=WINDOWS_ICO_SIZES,
@@ -170,13 +202,14 @@ def generate_windows_icon(source_img: Image.Image) -> List[Path]:
 
 def generate_macos_icons(source_img: Image.Image) -> List[Path]:
     """Generate macOS xcassets icons if the directory exists."""
+    trimmed = trimTransparentPadding(source_img)
     generated: List[Path] = []
     if not MACOS_ICONSET_DIR.exists():
         return generated
 
     for filename, size in MACOS_SIZES.items():
         out_file = MACOS_ICONSET_DIR / filename
-        resized = source_img.resize((size, size), Image.Resampling.LANCZOS)
+        resized = trimmed.resize((size, size), Image.Resampling.LANCZOS)
         resized.save(out_file, format="PNG", optimize=True)
         generated.append(out_file)
 
@@ -185,24 +218,25 @@ def generate_macos_icons(source_img: Image.Image) -> List[Path]:
 
 def generate_tray_icons(source_img: Image.Image) -> List[Path]:
     """Generate dedicated tray icon assets (16x16 PNG, 32x32 PNG, and multi-size ICO)."""
+    trimmed = trimTransparentPadding(source_img)
     generated: List[Path] = []
     BRANDING_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. 32x32 PNG
     tray_32 = BRANDING_DIR / "tray_icon_32.png"
-    resized_32 = source_img.resize((32, 32), Image.Resampling.LANCZOS)
+    resized_32 = trimmed.resize((32, 32), Image.Resampling.LANCZOS)
     resized_32.save(tray_32, format="PNG", optimize=True)
     generated.append(tray_32)
 
     # 2. 16x16 PNG
     tray_16 = BRANDING_DIR / "tray_icon_16.png"
-    resized_16 = source_img.resize((16, 16), Image.Resampling.LANCZOS)
+    resized_16 = trimmed.resize((16, 16), Image.Resampling.LANCZOS)
     resized_16.save(tray_16, format="PNG", optimize=True)
     generated.append(tray_16)
 
     # 3. Multi-size ICO (16x16, 32x32)
     tray_ico = BRANDING_DIR / "tray_icon.ico"
-    source_img.save(
+    trimmed.save(
         tray_ico,
         format="ICO",
         sizes=TRAY_ICO_SIZES,

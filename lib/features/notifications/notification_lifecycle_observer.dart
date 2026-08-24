@@ -49,6 +49,7 @@ class _NotificationLifecycleObserverState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
     ref.read(appLifecycleStateProvider.notifier).setState(state);
     if (state == AppLifecycleState.resumed) {
       // 回到 app：通知使命完成，自动清除。

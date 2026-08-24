@@ -422,13 +422,23 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('渲染：分支摘要 + 状态分区 + 文件行 + 提交表单 + 远程按钮', (tester) async {
+    testWidgets('渲染：分支摘要 + 分支树 + 状态分区 + 文件行 + 提交表单 + 远程按钮', (tester) async {
       final api = FakeGitApi(status: sampleStatus());
       await pumpGitPage(tester, api);
 
       expect(find.text('Git 面板'), findsOneWidget);
-      expect(find.text('main'), findsOneWidget);
-      expect(find.textContaining('领先 1'), findsOneWidget);
+      expect(find.text('分支树'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('git-branch-tree-section')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('git-branch-node-main')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('git-branch-node-dev')), findsOneWidget);
+      expect(find.text('当前'), findsOneWidget);
+      expect(find.textContaining('领先 1'), findsWidgets);
       expect(find.text('+4 −1 · 共 3 个文件'), findsOneWidget);
       expect(find.text('已暂存'), findsOneWidget);
       expect(find.text('未暂存'), findsOneWidget);
@@ -437,12 +447,104 @@ void main() {
       expect(find.text('c.txt'), findsOneWidget);
       expect(find.text('暂存'), findsNWidgets(2));
       expect(find.text('取消暂存'), findsOneWidget);
-      // 提交表单（分区标题 + 按钮）
+
+      // 滚动到底部以验证提交表单与远程操作按钮
+      await tester.drag(
+        find.byKey(const ValueKey('git-scroll')),
+        const Offset(0, -400),
+      );
+      await tester.pump();
+
+      // 提交表单：输入框与提交按钮同一行
       expect(find.byKey(const ValueKey('git-commit-message')), findsOneWidget);
-      expect(find.text('提交'), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('git-commit-button')), findsOneWidget);
       expect(find.byKey(const ValueKey('git-fetch')), findsOneWidget);
       expect(find.byKey(const ValueKey('git-pull')), findsOneWidget);
       expect(find.byKey(const ValueKey('git-push')), findsOneWidget);
+    });
+
+    testWidgets('提交表单：输入框与提交按钮在同一 Row 且按钮垂直居中', (tester) async {
+      final api = FakeGitApi(status: sampleStatus());
+      await pumpGitPage(tester, api);
+
+      await tester.drag(
+        find.byKey(const ValueKey('git-scroll')),
+        const Offset(0, -400),
+      );
+      await tester.pump();
+
+      final inputFinder = find.byKey(const ValueKey('git-commit-message'));
+      final buttonFinder = find.byKey(const ValueKey('git-commit-button'));
+      expect(inputFinder, findsOneWidget);
+      expect(buttonFinder, findsOneWidget);
+
+      // 断言输入框与提交按钮共同处于一个 Row 内
+      final rowFinder = find.ancestor(
+        of: inputFinder,
+        matching: find.byType(Row),
+      );
+      expect(rowFinder, findsOneWidget);
+      expect(
+        find.descendant(of: rowFinder, matching: buttonFinder),
+        findsOneWidget,
+      );
+
+      final rowWidget = tester.widget<Row>(rowFinder);
+      expect(rowWidget.crossAxisAlignment, CrossAxisAlignment.center);
+    });
+
+    testWidgets('分支树：点击分支节点切换分支', (tester) async {
+      final api = FakeGitApi(status: sampleStatus());
+      await pumpGitPage(tester, api);
+
+      // 分支树中应该有 dev 分支的切换按钮
+      final devSwitchFinder = find.byKey(
+        const ValueKey('git-branch-switch-dev'),
+      );
+      expect(devSwitchFinder, findsOneWidget);
+
+      await tester.tap(devSwitchFinder);
+      await tester.pump();
+      await tester.pump();
+      expect(api.checkoutCalls, ['dev:local']);
+    });
+
+    testWidgets('分支树：本地/远程分段切换与渲染', (tester) async {
+      final api = FakeGitApi(status: sampleStatus());
+      api.branchesResponse = const GitBranchesResponse(
+        branches: GitBranches(
+          isGit: true,
+          current: 'main',
+          local: [
+            GitBranchRef(name: 'main'),
+            GitBranchRef(name: 'dev'),
+          ],
+          remote: [
+            GitBranchRef(name: 'origin/main', upstream: 'main'),
+            GitBranchRef(name: 'origin/feature-1'),
+          ],
+        ),
+      );
+      await pumpGitPage(tester, api);
+
+      expect(
+        find.byKey(const ValueKey('git-branch-node-main')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('git-branch-node-dev')), findsOneWidget);
+
+      // 切换到远程分支分段
+      await tester.tap(find.textContaining('远程'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('git-branch-node-origin/main')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('git-branch-node-origin/feature-1')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('暂存 / 取消暂存 / 丢弃按钮调用 API', (tester) async {
@@ -486,9 +588,12 @@ void main() {
       final api = FakeGitApi(status: sampleStatus());
       await pumpGitPage(tester, api);
 
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('git-commit-message')),
+      await tester.drag(
+        find.byKey(const ValueKey('git-scroll')),
+        const Offset(0, -400),
       );
+      await tester.pump();
+
       await tester.enterText(
         find.byKey(const ValueKey('git-commit-message')),
         'feat: 提交测试',
@@ -510,9 +615,12 @@ void main() {
       final api = FakeGitApi(status: sampleStatus());
       await pumpGitPage(tester, api);
 
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('git-commit-button')),
+      await tester.drag(
+        find.byKey(const ValueKey('git-scroll')),
+        const Offset(0, -400),
       );
+      await tester.pump();
+
       await tester.tap(find.byKey(const ValueKey('git-commit-button')));
       await tester.pump();
       expect(api.commitCalls, isEmpty);
@@ -524,7 +632,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('git-branch-picker')));
       await tester.pumpAndSettle();
-      expect(find.text('dev'), findsOneWidget);
+      expect(find.byKey(const ValueKey('git-branch-dev')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('git-branch-dev')));
       await tester.pumpAndSettle();
@@ -535,13 +643,13 @@ void main() {
       final api = FakeGitApi(status: sampleStatus());
       await pumpGitPage(tester, api);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('git-fetch')));
-      // 确保完全滚入可视区（按钮中心可能仍在视口边缘）。
+      // 滚动到底部使远程操作按钮完全可见
       await tester.drag(
         find.byKey(const ValueKey('git-scroll')),
-        const Offset(0, -120),
+        const Offset(0, -400),
       );
       await tester.pump();
+
       await tester.tap(find.byKey(const ValueKey('git-fetch')));
       await tester.pump();
       await tester.pump();
@@ -549,12 +657,6 @@ void main() {
       // 成功横幅固定在导航栏底部（任何滚动位置可见）。
       expect(find.text('完成'), findsOneWidget);
 
-      // 横幅出现后内容下移 52px，重新滚动后再点 pull。
-      await tester.drag(
-        find.byKey(const ValueKey('git-scroll')),
-        const Offset(0, -120),
-      );
-      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('git-pull')));
       await tester.pump();
       await tester.pump();
@@ -571,13 +673,15 @@ void main() {
       api.statusGate = Completer<void>();
       await pumpGitPage(tester, api);
 
-      expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+      expect(find.byType(CupertinoActivityIndicator), findsWidgets);
 
       api.statusGate!.complete();
       await tester.pump();
       await tester.pump();
-      expect(find.text('main'), findsOneWidget);
-      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      expect(
+        find.byKey(const ValueKey('git-branch-node-main')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('错误态：加载失败展示错误信息，重试恢复', (tester) async {
@@ -593,7 +697,10 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('main'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('git-branch-node-main')),
+        findsOneWidget,
+      );
       expect(find.text('加载失败'), findsNothing);
     });
 

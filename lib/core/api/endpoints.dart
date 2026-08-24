@@ -732,6 +732,68 @@ class Endpoint {
   static const transcribe = Endpoint('/api/transcribe');
   static const tts = Endpoint('/api/tts');
 
+  // ---------------------------------------------------------------------------
+  // 1.17 extensions — 6 个
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/extensions/status
+  static const extensionsStatus = Endpoint('/api/extensions/status');
+
+  /// GET /api/extensions/registry
+  static const extensionsRegistry = Endpoint('/api/extensions/registry');
+
+  /// POST /api/extensions/toggle
+  static const extensionToggle = Endpoint('/api/extensions/toggle');
+
+  /// POST /api/extensions/install
+  static const extensionInstall = Endpoint('/api/extensions/install');
+
+  /// POST /api/extensions/uninstall
+  static const extensionUninstall = Endpoint('/api/extensions/uninstall');
+
+  /// POST /api/extensions/sidecar-proxy-consent
+  static const extensionSidecarProxyConsent = Endpoint(
+    '/api/extensions/sidecar-proxy-consent',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 1.18 mcp — 5 个
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/mcp/servers
+  static const mcpServers = Endpoint('/api/mcp/servers');
+
+  /// GET /api/mcp/tools
+  static const mcpTools = Endpoint('/api/mcp/tools');
+
+  /// PUT /api/mcp/servers/{name}
+  static Endpoint mcpServerUpdate(String name) => Endpoint(
+        '/api/mcp/servers/{name}',
+        pathParams: {'name': name},
+      );
+
+  /// PATCH /api/mcp/servers/{name}
+  static Endpoint mcpServerToggle(String name) => Endpoint(
+        '/api/mcp/servers/{name}',
+        pathParams: {'name': name},
+      );
+
+  /// DELETE /api/mcp/servers/{name}
+  static Endpoint mcpServerDelete(String name) => Endpoint(
+        '/api/mcp/servers/{name}',
+        pathParams: {'name': name},
+      );
+
+  // ---------------------------------------------------------------------------
+  // 1.19 auxiliary models — 2 个
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/model/auxiliary
+  static const auxiliaryModels = Endpoint('/api/model/auxiliary');
+
+  /// POST /api/model/set
+  static const modelSet = Endpoint('/api/model/set');
+
   /// 复制一份并追加查询参数（内部辅助）。
   Endpoint withQuery(List<QueryParam> additional) {
     return Endpoint(
@@ -741,3 +803,4 @@ class Endpoint {
     );
   }
 }
+

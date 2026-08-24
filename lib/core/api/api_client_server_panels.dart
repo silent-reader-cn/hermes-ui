@@ -1,10 +1,11 @@
 import 'api_client.dart';
 import 'endpoints.dart';
+import '../models/auxiliary_model.dart';
 import '../models/insights.dart';
 import '../models/server_catalog.dart';
 
 /// models/commands/设置/更新（1.9，9 个端点）+ profiles（1.10，5 个）+
-/// insights（1.11，1 个）。
+/// insights（1.11，1 个）+ auxiliary models（1.19，2 个）。
 extension ApiClientServerPanels on ApiClient {
   // -------------------------------------------------------------------------
   // models（1.9）
@@ -203,7 +204,39 @@ extension ApiClientServerPanels on ApiClient {
     final json = await sendJson(Endpoint.insights(days));
     return InsightsResponse.fromJson(_asMap(json));
   }
+
+  // -------------------------------------------------------------------------
+  // auxiliary models（1.19）
+  // -------------------------------------------------------------------------
+
+  /// GET /api/model/auxiliary（辅助模型全量槽位配置与主模型信息）。
+  Future<AuxiliaryModelsResponse> auxiliaryModels() async {
+    final json = await sendJson(Endpoint.auxiliaryModels);
+    return AuxiliaryModelsResponse.fromJson(_asMap(json));
+  }
+
+  /// POST /api/model/set（设置辅助模型绑定的 provider/model/advanced）。
+  Future<ModelSetResponse> setAuxiliaryModel({
+    required String task,
+    required String provider,
+    required String model,
+    Map<String, dynamic>? advanced,
+  }) async {
+    final json = await sendJson(
+      Endpoint.modelSet,
+      method: 'POST',
+      body: {
+        'scope': 'auxiliary',
+        'task': task,
+        'provider': provider,
+        'model': model,
+        'advanced': ?advanced,
+      },
+    );
+    return ModelSetResponse.fromJson(_asMap(json));
+  }
 }
+
 
 Map<String, Object?> _asMap(Object? json) =>
     json is Map<String, Object?>

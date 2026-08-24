@@ -147,6 +147,272 @@ void main() {
       expect(response.effectiveEffort, 'low');
     });
   });
+
+  group('SettingsApiClient Extensions 生态透传', () {
+    test('GET /api/extensions/status', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'enabled': true,
+        'extensions': [
+          {
+            'id': 'ext-1',
+            'name': 'Ext 1',
+            'enabled': true,
+            'sidecar_active': true,
+            'sidecar_proxy_consent': true,
+          }
+        ],
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.extensionsStatus();
+
+      expect(adapter.requests.single.uri.path, '/api/extensions/status');
+      expect(response.enabled, isTrue);
+      expect(response.extensions, hasLength(1));
+      expect(response.extensions.first.id, 'ext-1');
+      expect(response.extensions.first.sidecarActive, isTrue);
+    });
+
+    test('GET /api/extensions/registry', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'registry': [
+          {
+            'id': 'reg-1',
+            'name': 'Reg 1',
+            'version': '1.0.0',
+            'download_url': 'https://example.com/e.tar',
+            'sha256': 'sha123',
+          }
+        ],
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.extensionsRegistry();
+
+      expect(adapter.requests.single.uri.path, '/api/extensions/registry');
+      expect(response.registry, hasLength(1));
+      expect(response.registry.first.downloadUrl, 'https://example.com/e.tar');
+    });
+
+    test('POST /api/extensions/toggle', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'id': 'ext-1', 'enabled': true}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.toggleExtension('ext-1', true);
+
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.path, '/api/extensions/toggle');
+      expect(_bodyOf(req), {'id': 'ext-1', 'enabled': true});
+      expect(response.ok, isTrue);
+    });
+
+    test('POST /api/extensions/install', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'installed': 'ext-1'}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.installExtension(
+        id: 'ext-1',
+        downloadUrl: 'https://example.com/ext.zip',
+        sha256: 'sha',
+      );
+
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.path, '/api/extensions/install');
+      expect(_bodyOf(req), {
+        'id': 'ext-1',
+        'download_url': 'https://example.com/ext.zip',
+        'sha256': 'sha',
+      });
+      expect(response.ok, isTrue);
+      expect(response.installed, 'ext-1');
+    });
+
+    test('POST /api/extensions/uninstall', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'uninstalled': 'ext-1'}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.uninstallExtension('ext-1');
+
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.path, '/api/extensions/uninstall');
+      expect(_bodyOf(req), {'id': 'ext-1'});
+      expect(response.ok, isTrue);
+    });
+
+    test('POST /api/extensions/sidecar-proxy-consent', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'id': 'ext-1', 'sidecar_proxy_consent': true}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.setExtensionSidecarConsent('ext-1', true);
+
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.path, '/api/extensions/sidecar-proxy-consent');
+      expect(_bodyOf(req), {'id': 'ext-1', 'approved': true});
+      expect(response.ok, isTrue);
+    });
+  });
+
+  group('SettingsApiClient MCP 服务器透传', () {
+    test('GET /api/mcp/servers', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'servers': [
+          {
+            'name': 'fetch',
+            'command': 'uvx',
+            'args': ['fetch'],
+            'enabled': true,
+            'status': 'connected',
+          }
+        ],
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.mcpServers();
+
+      expect(adapter.requests.single.uri.path, '/api/mcp/servers');
+      expect(response.servers, hasLength(1));
+      expect(response.servers.first.name, 'fetch');
+    });
+
+    test('GET /api/mcp/tools', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'tools': [
+          {'name': 'fetch_url', 'server': 'fetch', 'description': 'desc'}
+        ],
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.mcpTools();
+
+      expect(adapter.requests.single.uri.path, '/api/mcp/tools');
+      expect(response.tools, hasLength(1));
+      expect(response.tools.first.name, 'fetch_url');
+    });
+
+    test('PUT /api/mcp/servers/{name}', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'ok': true,
+        'server': {
+          'name': 'fetch',
+          'command': 'uvx',
+          'args': ['fetch'],
+          'enabled': true,
+        },
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.saveMcpServer(
+        'fetch',
+        command: 'uvx',
+        args: ['fetch'],
+        env: {'DEBUG': '1'},
+        enabled: true,
+      );
+
+      final req = adapter.requests.single;
+      expect(req.method, 'PUT');
+      expect(req.uri.path, '/api/mcp/servers/fetch');
+      expect(response.ok, isTrue);
+      expect(response.server?.name, 'fetch');
+    });
+
+    test('PATCH /api/mcp/servers/{name}', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'name': 'fetch', 'enabled': false}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.toggleMcpServer('fetch', false);
+
+      final req = adapter.requests.single;
+      expect(req.method, 'PATCH');
+      expect(req.uri.path, '/api/mcp/servers/fetch');
+      expect(response.ok, isTrue);
+    });
+
+    test('DELETE /api/mcp/servers/{name}', () async {
+      final (client, adapter) = buildClient(
+        jsonEncode({'ok': true, 'deleted': 'fetch'}),
+      );
+      final api = SettingsApiClient(client);
+
+      final response = await api.deleteMcpServer('fetch');
+
+      final req = adapter.requests.single;
+      expect(req.method, 'DELETE');
+      expect(req.uri.path, '/api/mcp/servers/fetch');
+      expect(response.ok, isTrue);
+    });
+  });
+
+  group('SettingsApiClient 辅助模型透传', () {
+    test('GET /api/model/auxiliary', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'tasks': [
+          {
+            'task': 'vision',
+            'provider': 'openai',
+            'model': 'gpt-4o',
+            'api_key_set': true,
+            'label': 'Vision',
+          }
+        ],
+        'main': {
+          'provider': 'anthropic',
+          'model': 'claude-sonnet-4',
+        },
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.auxiliaryModels();
+
+      expect(adapter.requests.single.uri.path, '/api/model/auxiliary');
+      expect(response.tasks, hasLength(1));
+      expect(response.tasks.first.task, 'vision');
+      expect(response.tasks.first.apiKeySet, isTrue);
+      expect(response.main.model, 'claude-sonnet-4');
+    });
+
+    test('POST /api/model/set', () async {
+      final (client, adapter) = buildClient(jsonEncode({
+        'ok': true,
+        'task': 'vision',
+        'provider': 'openai',
+        'model': 'gpt-4o',
+      }));
+      final api = SettingsApiClient(client);
+
+      final response = await api.setAuxiliaryModel(
+        task: 'vision',
+        provider: 'openai',
+        model: 'gpt-4o',
+      );
+
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.uri.path, '/api/model/set');
+      expect(_bodyOf(req), {
+        'scope': 'auxiliary',
+        'task': 'vision',
+        'provider': 'openai',
+        'model': 'gpt-4o',
+      });
+      expect(response.ok, isTrue);
+      expect(response.task, 'vision');
+    });
+  });
 }
 
 Map<String, Object?> _bodyOf(RequestOptions options) {

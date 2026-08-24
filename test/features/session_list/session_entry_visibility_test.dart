@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermex_flutter/features/session_list/session_entry_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,13 +7,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SessionEntryVisibility 模型单测', () {
-    test('默认配置：任务/工作区/技能/统计开，看板关（使用率低默认隐藏）', () {
+    test('默认配置：任务/工作区/技能/统计/记忆开，看板关（使用率低默认隐藏）', () {
       const visibility = SessionEntryVisibility();
       expect(visibility.tasks, isTrue);
       expect(visibility.kanban, isFalse);
       expect(visibility.skills, isTrue);
       expect(visibility.insights, isTrue);
       expect(visibility.workspaces, isTrue);
+      expect(visibility.memory, isTrue);
       expect(visibility.showsAny, isTrue);
       expect(SessionEntryVisibility.defaults, equals(visibility));
     });
@@ -26,6 +27,7 @@ void main() {
           skills: false,
           insights: false,
           workspaces: false,
+          memory: false,
         ).showsAny,
         isFalse,
       );
@@ -36,6 +38,8 @@ void main() {
           kanban: false,
           skills: false,
           insights: false,
+          workspaces: false,
+          memory: false,
         ).showsAny,
         isTrue,
       );
@@ -45,7 +49,9 @@ void main() {
           tasks: false,
           kanban: false,
           skills: false,
-          insights: true,
+          insights: false,
+          workspaces: false,
+          memory: true,
         ).showsAny,
         isTrue,
       );
@@ -58,6 +64,7 @@ void main() {
         skills: true,
         insights: true,
         workspaces: true,
+        memory: true,
       );
 
       expect(visibility.isVisible('tasks'), isTrue);
@@ -65,18 +72,20 @@ void main() {
       expect(visibility.isVisible('skills'), isTrue);
       expect(visibility.isVisible('insights'), isTrue);
       expect(visibility.isVisible('workspaces'), isTrue);
+      expect(visibility.isVisible('memory'), isTrue);
       expect(visibility.isVisible('unknown'), isTrue);
     });
 
     test('copyWith 支持增量覆盖', () {
       const original = SessionEntryVisibility();
-      final modified = original.copyWith(tasks: false);
+      final modified = original.copyWith(tasks: false, memory: false);
 
       expect(modified.tasks, isFalse);
       expect(modified.kanban, isFalse);
       expect(modified.skills, isTrue);
       expect(modified.insights, isTrue);
       expect(modified.workspaces, isTrue);
+      expect(modified.memory, isFalse);
     });
 
     test('== 与 hashCode 及 toString', () {
@@ -106,6 +115,7 @@ void main() {
       expect(state.skills, isTrue);
       expect(state.insights, isTrue);
       expect(state.workspaces, isTrue);
+      expect(state.memory, isTrue);
     });
 
     test('初始状态从 SharedPreferences 读取已有持久化值', () async {
@@ -114,6 +124,7 @@ void main() {
         'session_entry_visibility_kanban': true,
         'session_entry_visibility_skills': false,
         'session_entry_visibility_insights': false,
+        'session_entry_visibility_memory': false,
       });
 
       final container = ProviderContainer();
@@ -129,6 +140,7 @@ void main() {
       expect(state.skills, isFalse);
       expect(state.insights, isFalse);
       expect(state.workspaces, isTrue);
+      expect(state.memory, isFalse);
     });
 
     test('setVisible 更新状态并持久化到 SharedPreferences', () async {
@@ -140,21 +152,22 @@ void main() {
       );
 
       await controller.setVisible('tasks', false);
-      await controller.setVisible('insights', false);
+      await controller.setVisible('memory', false);
 
       final state = container.read(sessionEntryVisibilityProvider);
       expect(state.tasks, isFalse);
       expect(state.kanban, isTrue);
       expect(state.skills, isTrue);
-      expect(state.insights, isFalse);
+      expect(state.insights, isTrue);
       expect(state.workspaces, isTrue);
+      expect(state.memory, isFalse);
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('session_entry_visibility_tasks'), isFalse);
-      expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
+      expect(prefs.getBool('session_entry_visibility_memory'), isFalse);
     });
 
-    test('setVisible 处理所有 5 个合法 key 及未知 key', () async {
+    test('setVisible 处理所有 6 个合法 key 及未知 key', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -167,6 +180,7 @@ void main() {
       await controller.setVisible('skills', false);
       await controller.setVisible('insights', false);
       await controller.setVisible('workspaces', false);
+      await controller.setVisible('memory', false);
       await controller.setVisible('unknown_key', false);
 
       final state = container.read(sessionEntryVisibilityProvider);
@@ -178,6 +192,7 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_skills'), isFalse);
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
       expect(prefs.getBool('session_entry_visibility_workspaces'), isFalse);
+      expect(prefs.getBool('session_entry_visibility_memory'), isFalse);
       expect(
         prefs.containsKey('session_entry_visibility_unknown_key'),
         isFalse,

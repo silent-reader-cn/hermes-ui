@@ -12,10 +12,13 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_action_menu.dart';
+import '../../app/widgets/narrow_navigation_dropdown.dart';
 import '../../l10n/app_localizations.dart';
+import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
-import 'scheduled_session_disclosure.dart';
+import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
@@ -100,7 +103,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
 
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
+    final isDesktop = isDesktopPlatform();
+    final isWide = MediaQuery.sizeOf(context).width >= 900;
+    final showDesktopRefresh = isDesktop && isWide;
+    final refreshing = ref.watch(sessionListRefreshingProvider);
+    return SessionAutoRefreshObserver(
+      child: CupertinoPageScaffold(
       child: Stack(
         children: [
           CustomScrollView(
@@ -115,14 +123,21 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   topPadding: MediaQuery.paddingOf(context).top,
                   brightness:
                       CupertinoTheme.of(context).brightness ?? Brightness.light,
-                  // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不预留顶部
-                  // 空白（电脑端双栏空间紧凑）；手机端单栈 → 宽敞头部（49pt）。
+                  // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
+                  // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
+                  // 手机端单栈 → 宽敞大标题头部（49pt）。
                   compactHeader: !widget.showUtilityRows,
+                  searchField: !widget.showUtilityRows
+                      ? _buildSearchField()
+                      : null,
                   actions: [
+                    if (!isWide && !isSearchMode)
+                      _buildNarrowNavigationAction(),
                     if (!isSearchMode) _buildFilterAction(state),
                     if (widget.showSettingsTrailing)
                       _buildSettingsOrDoneAction(state),
                     if (!widget.showUtilityRows) _buildNewSessionAction(),
+                    if (showDesktopRefresh) _buildDesktopRefreshAction(refreshing),
                   ],
                 ),
               ),
@@ -130,8 +145,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               // （视口会把 overscroll 逐级分给前面的 box sliver，导致
               // 指示器拿不到负 overlap 而无法触发）。
               CupertinoSliverRefreshControl(onRefresh: _onRefresh),
-              SliverToBoxAdapter(child: _buildSearchBar()),
-              if (widget.showUtilityRows && !isSearchMode)
+              if (widget.showUtilityRows)
+                SliverToBoxAdapter(child: _buildSearchBar()),
+              if (widget.showUtilityRows && !isSearchMode && isWide)
                 const SliverToBoxAdapter(child: SessionListUtilityRows()),
               ..._buildContentSlivers(
                 async,
@@ -168,23 +184,56 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   // -------------------------------------------------------------------------
   // 顶部 chrome
   // -------------------------------------------------------------------------
 
-  Widget _buildSearchBar() {
+  Widget _buildDesktopRefreshAction(bool refreshing) {
     final l10n = AppLocalizations.of(context);
+    return AccessibleButton(
+      key: const ValueKey('session-list-desktop-refresh'),
+      // 避免新增 l10n 键，复用刷新相关语义
+      label: l10n.refreshInsights,
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(44, 44),
+      onPressed: refreshing
+          ? null
+          : () => unawaited(
+                ref
+                    .read(sessionListControllerProvider.notifier)
+                    .refreshIfStale(force: true),
+              ),
+      child: refreshing
+          ? const CupertinoActivityIndicator(radius: 10)
+          : const Icon(CupertinoIcons.refresh, size: 22),
+    );
+  }
+
+  Widget _buildSearchField() {
+    final l10n = AppLocalizations.of(context);
+    return CupertinoSearchTextField(
+      key: const ValueKey('session-list-search'),
+      controller: _searchController,
+      placeholder: l10n.searchSessions,
+      onChanged: _onSearchChanged,
+    );
+  }
+
+  Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: CupertinoSearchTextField(
-        key: const ValueKey('session-list-search'),
-        controller: _searchController,
-        placeholder: l10n.searchSessions,
-        onChanged: _onSearchChanged,
-      ),
+      child: _buildSearchField(),
+    );
+  }
+
+  /// 头部窄屏快捷导航下拉按钮（大标题右侧向下箭头，点击展开 5 个功能入口）。
+  Widget _buildNarrowNavigationAction() {
+    return const NarrowNavigationDropdownButton(
+      buttonKey: ValueKey('session-list-narrow-nav'),
     );
   }
 
@@ -376,81 +425,47 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty)
-          if (section.title == '定时')
-            SliverToBoxAdapter(
-              child: ScheduledSessionDisclosure(
-                title: _sectionTitle(context, section.title),
-                count: section.sessions.length,
-                children: [
-                  for (final session in section.sessions)
-                    _SessionRow(
-                      key: ValueKey(
-                        'session-row-${session.sessionId ?? session.id}',
-                      ),
-                      session: session,
-                      subtitleSettings: subtitleSettings,
-                      projectNames: projectNames,
-                      highlightQuery: isSearchMode
-                          ? state.searchQuery?.trim()
-                          : null,
-                      selectionMode: state.isSelectionMode,
-                      selected: state.selectedSessionIds.contains(
-                        session.sessionId ?? session.id,
-                      ),
-                      onTap: () => state.isSelectionMode
-                          ? ref
-                                .read(sessionListControllerProvider.notifier)
-                                .toggleSelection(
-                                  session.sessionId ?? session.id,
-                                )
-                          : _openSession(context, session),
-                      onLongPress: () => ref
-                          .read(sessionListControllerProvider.notifier)
-                          .toggleSelection(session.sessionId ?? session.id),
-                      onActions: state.isSelectionMode
-                          ? null
-                          : () => _showRowActions(context, session),
+          SliverToBoxAdapter(
+            child: CupertinoListSection.insetGrouped(
+              hasLeading: false,
+              header: Text(_sectionTitle(context, section.title)),
+              children: [
+                for (final session in section.sessions)
+                  _SessionRow(
+                    key: ValueKey(
+                      'session-row-${session.sessionId ?? session.id}',
                     ),
-                ],
-              ),
-            )
-          else
-            SliverToBoxAdapter(
-              child: CupertinoListSection.insetGrouped(
-                header: Text(_sectionTitle(context, section.title)),
-                children: [
-                  for (final session in section.sessions)
-                    _SessionRow(
-                      key: ValueKey(
-                        'session-row-${session.sessionId ?? session.id}',
-                      ),
-                      session: session,
-                      subtitleSettings: subtitleSettings,
-                      projectNames: projectNames,
-                      highlightQuery: isSearchMode
-                          ? state.searchQuery?.trim()
-                          : null,
-                      selectionMode: state.isSelectionMode,
-                      selected: state.selectedSessionIds.contains(
-                        session.sessionId ?? session.id,
-                      ),
-                      onTap: () => state.isSelectionMode
-                          ? ref
-                                .read(sessionListControllerProvider.notifier)
-                                .toggleSelection(
-                                  session.sessionId ?? session.id,
-                                )
-                          : _openSession(context, session),
-                      onLongPress: () => ref
-                          .read(sessionListControllerProvider.notifier)
-                          .toggleSelection(session.sessionId ?? session.id),
-                      onActions: state.isSelectionMode
-                          ? null
-                          : () => _showRowActions(context, session),
+                    session: session,
+                    subtitleSettings: subtitleSettings,
+                    projectNames: projectNames,
+                    highlightQuery: isSearchMode
+                        ? state.searchQuery?.trim()
+                        : null,
+                    selectionMode: state.isSelectionMode,
+                    selected: state.selectedSessionIds.contains(
+                      session.sessionId ?? session.id,
                     ),
-                ],
-              ),
+                    onTap: () => state.isSelectionMode
+                        ? ref
+                              .read(sessionListControllerProvider.notifier)
+                              .toggleSelection(
+                                session.sessionId ?? session.id,
+                              )
+                        : _openSession(context, session),
+                    onLongPress: () => ref
+                        .read(sessionListControllerProvider.notifier)
+                        .toggleSelection(session.sessionId ?? session.id),
+                    onActions: state.isSelectionMode
+                        ? null
+                        : (anchorKey) => _showRowActions(
+                              context,
+                              session,
+                              anchorKey,
+                            ),
+                  ),
+              ],
             ),
+          ),
       if (state.hasMore)
         const SliverToBoxAdapter(
           child: Padding(
@@ -466,7 +481,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             child: Center(
               child: Text(
                 l10n.noMore,
-                style: const TextStyle(fontSize: 13, color: secondaryText),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: secondaryText.resolveFrom(context),
+                ),
               ),
             ),
           ),
@@ -497,7 +515,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: statusRedText),
+              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -539,7 +557,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               isSearchMode
                   ? l10n.tryAnotherKeyword
                   : l10n.tapButtonToStartNewChat,
-              style: const TextStyle(fontSize: 13, color: secondaryText),
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             if (!isSearchMode) ...[
               const SizedBox(height: 20),
@@ -597,106 +618,87 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     context.go('/chat/${session.sessionId ?? session.id}');
   }
 
-  void _showRowActions(BuildContext context, SessionSummary session) {
+  void _showRowActions(
+    BuildContext context,
+    SessionSummary session,
+    GlobalKey anchorKey,
+  ) {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
-    unawaited(
-      showCupertinoModalPopup<void>(
-        context: context,
-        builder: (sheetContext) => CupertinoActionSheet(
-          title: Text(_displayTitle(context, session)),
-          actions: [
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-pin'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(
-                  controller.setPinned(session, !(session.pinned ?? false)),
-                );
-              },
-              child: Text(session.pinned == true ? l10n.unpin : l10n.pin),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-archive'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(controller.setArchived(session, true));
-              },
-              child: Text(l10n.archive),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-branch'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_onBranch(context, controller, session));
-              },
-              child: Text(l10n.branch),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-export'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_showExportFormat(context, session));
-              },
-              child: Text(l10n.export),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-move-project'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_moveToProject(context, session));
-              },
-              child: Text(l10n.moveToProject),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-workspace'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                if (context.mounted) {
-                  // 蓝本对应 SF Symbol: folder (CupertinoIcons.folder)
-                  // push 保留 Navigator 栈，返回时保留滚动/搜索状态
-                  unawaited(context.push('/workspace/${session.id}'));
-                }
-              },
-              child: Text(l10n.workspace),
-            ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-git'),
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                if (context.mounted) {
-                  // 蓝本对应 SF Symbol: arrow.triangle.branch (CupertinoIcons.arrow_branch)
-                  // push 保留 Navigator 栈，返回时保留滚动/搜索状态
-                  unawaited(context.push('/git/${session.id}'));
-                }
-              },
-              child: Text(l10n.git),
-            ),
-            if (session.archived == true)
-              CupertinoActionSheetAction(
-                key: const ValueKey('session-action-unarchive'),
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  unawaited(controller.setArchived(session, false));
-                },
-                child: Text(l10n.unarchive),
-              ),
-            CupertinoActionSheetAction(
-              key: const ValueKey('session-action-delete'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                unawaited(_confirmDelete(context, session));
-              },
-              child: Text(l10n.delete),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(sheetContext),
-            child: Text(l10n.cancel),
-          ),
+    final items = [
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-pin'),
+        label: session.pinned == true ? l10n.unpin : l10n.pin,
+        onPressed: () => unawaited(
+          controller.setPinned(session, !(session.pinned ?? false)),
         ),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-archive'),
+        label: l10n.archive,
+        onPressed: () => unawaited(controller.setArchived(session, true)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-branch'),
+        label: l10n.branch,
+        onPressed: () => unawaited(_onBranch(context, controller, session)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-export'),
+        label: l10n.export,
+        onPressed: () => unawaited(_showExportFormat(context, session)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-move-project'),
+        label: l10n.moveToProject,
+        onPressed: () => unawaited(_moveToProject(context, session)),
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-workspace'),
+        label: l10n.workspace,
+        onPressed: () {
+          if (context.mounted) {
+            // 蓝本对应 SF Symbol: folder (CupertinoIcons.folder)
+            // push 保留 Navigator 栈，返回时保留滚动/搜索状态
+            unawaited(context.push('/workspace/${session.id}'));
+          }
+        },
+      ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-git'),
+        label: l10n.git,
+        onPressed: () {
+          if (context.mounted) {
+            // 蓝本对应 SF Symbol: arrow.triangle.branch (CupertinoIcons.arrow_branch)
+            // push 保留 Navigator 栈，返回时保留滚动/搜索状态
+            unawaited(context.push('/git/${session.id}'));
+          }
+        },
+      ),
+      if (session.archived == true)
+        AdaptiveMenuItem(
+          key: const ValueKey('session-action-unarchive'),
+          label: l10n.unarchive,
+          onPressed: () => unawaited(controller.setArchived(session, false)),
+        ),
+      AdaptiveMenuItem(
+        key: const ValueKey('session-action-delete'),
+        isDestructive: true,
+        label: l10n.delete,
+        onPressed: () => unawaited(_confirmDelete(context, session)),
+      ),
+    ];
+
+    unawaited(
+      AdaptiveActionMenu.show(
+        context,
+        anchorKey: anchorKey,
+        items: items,
+        title: null,
+        cancelLabel: l10n.cancel,
+        cancelKey: const ValueKey('session-action-cancel'),
+        preferredWidth: 220,
+        minWidth: 180,
       ),
     );
   }
@@ -957,7 +959,7 @@ String _sectionTitle(BuildContext context, String rawTitle) {
 }
 
 /// 单行会话（自绘行而非 CupertinoListTile，便于独立 ellipsis 按钮命中测试）。
-class _SessionRow extends StatelessWidget {
+class _SessionRow extends StatefulWidget {
   const _SessionRow({
     super.key,
     required this.session,
@@ -982,7 +984,7 @@ class _SessionRow extends StatelessWidget {
   final Map<String, String> projectNames;
 
   /// 行尾操作按钮回调；null = 隐藏（多选模式下）。
-  final VoidCallback? onActions;
+  final void Function(GlobalKey anchorKey)? onActions;
 
   /// 多选模式：显示勾选圈，点击切换勾选。
   final bool selectionMode;
@@ -992,177 +994,7 @@ class _SessionRow extends StatelessWidget {
   final String? highlightQuery;
 
   @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final metadata = _metadataLabel(
-      context,
-      session,
-      settings: subtitleSettings,
-      projectNames: projectNames,
-    );
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            if (selectionMode) ...[
-              Icon(
-                selected
-                    ? CupertinoIcons.checkmark_circle_fill
-                    : CupertinoIcons.circle,
-                size: 22,
-                color: selected
-                    ? CupertinoColors.activeBlue
-                    : CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-              const SizedBox(width: 10),
-            ],
-            if (_isStreaming(session)) ...[
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: CupertinoColors.systemGreen,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: _highlightedSpan(
-                          context,
-                          _displayTitle(context, session),
-                          style: const TextStyle(fontSize: 17),
-                        ),
-                      ),
-                      if (session.pinned == true) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.pin_fill,
-                          size: 12,
-                          color: CupertinoColors.systemBlue,
-                        ),
-                      ],
-                      if (session.parentSessionId != null) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.arrow_2_squarepath,
-                          size: 12,
-                          color: CupertinoColors.secondaryLabel,
-                        ),
-                      ],
-                      if (session.readOnly == true ||
-                          session.isReadOnly == true) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          CupertinoIcons.lock_fill,
-                          size: 12,
-                          color: CupertinoColors.secondaryLabel,
-                        ),
-                      ],
-                      if (session.hasPendingUserMessage == true) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          l10n.pendingInput,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: CupertinoColors.systemOrange,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (metadata != null) ...[
-                    const SizedBox(height: 2),
-                    _highlightedSpan(
-                      context,
-                      metadata,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: secondaryText,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (onActions != null)
-              AccessibleButton(
-                key: ValueKey(
-                  'session-actions-${session.sessionId ?? session.id}',
-                ),
-                label: l10n.sessionActions,
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(36, 36),
-                onPressed: onActions,
-                child: const Icon(
-                  CupertinoIcons.ellipsis,
-                  size: 20,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 构造标题/摘要文本：搜索模式下把 [query] 命中片段染成高亮。
-  Widget _highlightedSpan(
-    BuildContext context,
-    String text, {
-    TextStyle? style,
-  }) {
-    final query = highlightQuery;
-    if (query == null ||
-        query.isEmpty ||
-        !text.toLowerCase().contains(query.toLowerCase())) {
-      return Text(
-        text,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: style,
-      );
-    }
-    final spans = <TextSpan>[];
-    final lower = text.toLowerCase();
-    final q = query.toLowerCase();
-    var index = 0;
-    while (true) {
-      final hit = lower.indexOf(q, index);
-      if (hit < 0) {
-        spans.add(TextSpan(text: text.substring(index)));
-        break;
-      }
-      if (hit > index) {
-        spans.add(TextSpan(text: text.substring(index, hit)));
-      }
-      spans.add(
-        TextSpan(
-          text: text.substring(hit, hit + query.length),
-          style: TextStyle(
-            color: CupertinoColors.activeBlue.resolveFrom(context),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-      index = hit + query.length;
-    }
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
+  State<_SessionRow> createState() => _SessionRowState();
 
   /// 按副标题显示开关组装元数据行（消息数 / 项目名 / 工作区 / 渠道 /
   /// 预估价钱 + 搜索命中预览），渠道与预估价钱默认关闭。
@@ -1203,9 +1035,186 @@ class _SessionRow extends StatelessWidget {
   }
 
   static String _lastPathComponent(String workspace) {
-    final normalized = workspace.replaceAll('\\', '/');
-    final last = normalized.split('/').last;
-    return last.isEmpty ? workspace : last;
+    final parts = workspace.replaceAll(r'\', '/').split('/');
+    return parts.lastWhere((p) => p.isNotEmpty, orElse: () => workspace);
+  }
+}
+
+class _SessionRowState extends State<_SessionRow> {
+  final GlobalKey _actionKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final metadata = _SessionRow._metadataLabel(
+      context,
+      widget.session,
+      settings: widget.subtitleSettings,
+      projectNames: widget.projectNames,
+    );
+    final isStreaming = _SessionRow._isStreaming(widget.session);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            if (widget.selectionMode) ...[
+              Icon(
+                widget.selected
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                size: 22,
+                color: widget.selected
+                    ? CupertinoColors.activeBlue
+                    : CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: _highlightedSpan(
+                          context,
+                          _displayTitle(context, widget.session),
+                          style: const TextStyle(fontSize: 17),
+                        ),
+                      ),
+                      if (widget.session.pinned == true) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          CupertinoIcons.pin_fill,
+                          size: 12,
+                          color: CupertinoColors.systemBlue,
+                        ),
+                      ],
+                      if (widget.session.parentSessionId != null) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          CupertinoIcons.arrow_2_squarepath,
+                          size: 12,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ],
+                      if (widget.session.readOnly == true ||
+                          widget.session.isReadOnly == true) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          CupertinoIcons.lock_fill,
+                          size: 12,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ],
+
+                    ],
+                  ),
+                  if (metadata != null) ...[
+                    const SizedBox(height: 2),
+                    _highlightedSpan(
+                      context,
+                      metadata,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: secondaryText.resolveFrom(context),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.onActions != null)
+              KeyedSubtree(
+                key: _actionKey,
+                child: AccessibleButton(
+                  key: ValueKey(
+                    'session-actions-${widget.session.sessionId ?? widget.session.id}',
+                  ),
+                  label: isStreaming
+                      ? '${l10n.sessionActions} — Active'
+                      : l10n.sessionActions,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 36),
+                  onPressed: () => widget.onActions!(_actionKey),
+                  child: isStreaming
+                      ? Semantics(
+                          label: 'Active',
+                          excludeSemantics: true,
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CupertinoActivityIndicator(
+                              radius: 9,
+                              color: CupertinoColors.activeBlue.resolveFrom(
+                                context,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 20,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构造标题/摘要文本：搜索模式下把 [query] 命中片段染成高亮。
+  Widget _highlightedSpan(
+    BuildContext context,
+    String text, {
+    TextStyle? style,
+  }) {
+    final query = widget.highlightQuery;
+    if (query == null ||
+        query.isEmpty ||
+        !text.toLowerCase().contains(query.toLowerCase())) {
+      return Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+    final spans = <TextSpan>[];
+    final lower = text.toLowerCase();
+    final q = query.toLowerCase();
+    var index = 0;
+    while (true) {
+      final hit = lower.indexOf(q, index);
+      if (hit < 0) {
+        spans.add(TextSpan(text: text.substring(index)));
+        break;
+      }
+      if (hit > index) {
+        spans.add(TextSpan(text: text.substring(index, hit)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(hit, hit + query.length),
+          style: TextStyle(
+            color: CupertinoColors.activeBlue.resolveFrom(context),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+      index = hit + query.length;
+    }
+    return Text.rich(
+      TextSpan(style: style, children: spans),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }
 
@@ -1227,10 +1236,11 @@ Map<String, String> _projectNameMap(WidgetRef ref) {
   };
 }
 
-/// 筛选底部弹层：状态（全部 / 已归档）+ 渠道 chips + 项目 chips。
+/// 筛选底部弹层：会话 / 渠道 / 项目 三段等宽 insetGrouped 列表。
 ///
-/// 由头部「会话」右侧向下箭头（[ValueKey('session-list-filter-trigger')]）
-/// 打开，替代原先常驻界面的筛选栏，释放列表纵向空间。
+/// 三段统一为 [CupertinoListSection.insetGrouped] 列表视觉（等宽、同边距），
+/// 渠道与项目不再用 Wrap/chip 居中，改为纵向 [_SheetOptionRow] 单选列表；
+/// 外层用 [ClipRRect]+[DecoratedBox] 紧凑布局，去掉底部白条与多余 padding。
 class _SessionFilterSheet extends ConsumerWidget {
   const _SessionFilterSheet({required this.state, required this.onSelect});
 
@@ -1244,147 +1254,179 @@ class _SessionFilterSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = state.filterMode;
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final sheetBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
+    final headerStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: secondaryText.resolveFrom(context),
+      letterSpacing: 0.3,
+    );
 
-    return SafeArea(
-      top: false,
-      child: Container(
+    return ClipRRect(
+      borderRadius: sheetRadius,
+      child: DecoratedBox(
         key: const ValueKey('session-filter-sheet'),
-        decoration: BoxDecoration(
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l10n.filterSessions,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  AccessibleButton(
-                    key: const ValueKey('session-filter-sheet-close'),
-                    label: l10n.close,
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(36, 36),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Icon(
-                      CupertinoIcons.xmark_circle_fill,
-                      size: 22,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        decoration: BoxDecoration(color: sheetBg),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+                child: Row(
                   children: [
-                    CupertinoListSection.insetGrouped(
-                      header: Text(l10n.sessions),
-                      children: [
-                        _SheetOptionRow(
-                          key: const ValueKey('sheet-filter-all'),
-                          label: l10n.all,
-                          selected: mode == SessionListFilterMode.all,
-                          onTap: () =>
-                              onSelect(SessionListFilterMode.all, null),
+                    Expanded(
+                      child: Text(
+                        l10n.filterSessions,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
                         ),
-                        _SheetOptionRow(
-                          key: const ValueKey('sheet-filter-archived'),
-                          label:
-                              '${l10n.archived}${_archivedCountLabelFor(state)}',
-                          selected: mode == SessionListFilterMode.archived,
-                          onTap: () =>
-                              onSelect(SessionListFilterMode.archived, null),
-                        ),
-                        if (mode != SessionListFilterMode.all &&
-                            mode != SessionListFilterMode.archived)
-                          _SheetOptionRow(
-                            key: const ValueKey('sheet-filter-clear'),
-                            label: l10n.clearFilter,
-                            selected: false,
-                            onTap: () =>
-                                onSelect(SessionListFilterMode.all, null),
-                          ),
-                      ],
+                      ),
                     ),
-                    if (state.sourceLabels.isNotEmpty)
-                      CupertinoListSection.insetGrouped(
-                        header: Text(l10n.channels),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final label in state.sourceLabels)
-                                  _SheetChip(
-                                    key: ValueKey('filter-chip-$label'),
-                                    label: label,
-                                    selected:
-                                        mode == SessionListFilterMode.source &&
-                                        state.filterValue == label,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.source,
-                                      label,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
+                    AccessibleButton(
+                      key: const ValueKey('session-filter-sheet-close'),
+                      label: l10n.close,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(36, 36),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Icon(
+                        CupertinoIcons.xmark_circle_fill,
+                        size: 22,
+                        color: CupertinoColors.secondaryLabel,
                       ),
-                    if (projects.isNotEmpty)
-                      CupertinoListSection.insetGrouped(
-                        header: Text(l10n.projects),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final project in projects)
-                                  _SheetChip(
-                                    key: ValueKey('project-chip-${project.id}'),
-                                    label: project.name ?? l10n.untitledProject,
-                                    selected:
-                                        mode == SessionListFilterMode.project &&
-                                        state.filterValue == project.id,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.project,
-                                      project.id,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      CupertinoListSection.insetGrouped(
+                        key: const ValueKey('filter-section-sessions'),
+                        hasLeading: false,
+                        header: Text(l10n.sessions, style: headerStyle),
+                        backgroundColor: CupertinoColors
+                            .secondarySystemGroupedBackground
+                            .resolveFrom(context),
+                        separatorColor: CupertinoColors.separator.resolveFrom(
+                          context,
+                        ),
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        children: [
+                          _SheetOptionRow(
+                            key: const ValueKey('sheet-filter-all'),
+                            label: l10n.all,
+                            selected: mode == SessionListFilterMode.all,
+                            onTap: () =>
+                                onSelect(SessionListFilterMode.all, null),
+                          ),
+                          _SheetOptionRow(
+                            key: const ValueKey('sheet-filter-archived'),
+                            label:
+                                '${l10n.archived}${_archivedCountLabelFor(state)}',
+                            selected: mode == SessionListFilterMode.archived,
+                            onTap: () =>
+                                onSelect(SessionListFilterMode.archived, null),
+                          ),
+                          if (mode != SessionListFilterMode.all &&
+                              mode != SessionListFilterMode.archived)
+                            _SheetOptionRow(
+                              key: const ValueKey('sheet-filter-clear'),
+                              label: l10n.clearFilter,
+                              selected: false,
+                              onTap: () =>
+                                  onSelect(SessionListFilterMode.all, null),
+                            ),
+                        ],
+                      ),
+                      if (state.sourceLabels.isNotEmpty)
+                        CupertinoListSection.insetGrouped(
+                          key: const ValueKey('filter-section-channels'),
+                          hasLeading: false,
+                          header: Text(l10n.channels, style: headerStyle),
+                          backgroundColor: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          separatorColor: CupertinoColors.separator.resolveFrom(
+                            context,
+                          ),
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          children: [
+                            for (final label in state.sourceLabels)
+                              _SheetOptionRow(
+                                key: ValueKey('filter-chip-$label'),
+                                label: label,
+                                selected:
+                                    mode == SessionListFilterMode.source &&
+                                    state.filterValue == label,
+                                onTap: () => onSelect(
+                                  SessionListFilterMode.source,
+                                  label,
+                                ),
+                              ),
+                          ],
+                        ),
+                      if (projects.isNotEmpty)
+                        CupertinoListSection.insetGrouped(
+                          key: const ValueKey('filter-section-projects'),
+                          hasLeading: false,
+                          header: Text(l10n.projects, style: headerStyle),
+                          backgroundColor: CupertinoColors
+                              .secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          separatorColor: CupertinoColors.separator.resolveFrom(
+                            context,
+                          ),
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          children: [
+                            for (final project in projects)
+                              _SheetOptionRow(
+                                key: ValueKey('project-chip-${project.id}'),
+                                label:
+                                    project.name ?? l10n.untitledProject,
+                                selected:
+                                    mode == SessionListFilterMode.project &&
+                                    state.filterValue == project.id,
+                                onTap: () => onSelect(
+                                  SessionListFilterMode.project,
+                                  project.id,
+                                ),
+                              ),
+                          ],
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1396,7 +1438,10 @@ class _SessionFilterSheet extends ConsumerWidget {
   }
 }
 
-/// 筛选弹层中的单选行（全部 / 已归档 / 清除筛选）。
+/// 筛选弹层中的单选行（会话 / 渠道 / 项目 共用）。
+///
+/// 选中态：左侧 activeBlue 浅底 pill + 文字 activeBlue 加粗，右侧 checkmark；
+/// 未选中：常规 label 文字 + separator 0.5 分割。
 class _SheetOptionRow extends StatelessWidget {
   const _SheetOptionRow({
     super.key,
@@ -1411,55 +1456,32 @@ class _SheetOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeBlue = CupertinoColors.activeBlue.resolveFrom(context);
     return CupertinoListTile(
-      title: Text(label),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      backgroundColor: selected
+          ? activeBlue.withValues(alpha: 0.10)
+          : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+              context,
+            ),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          color: selected ? activeBlue : CupertinoColors.label.resolveFrom(context),
+        ),
+      ),
       trailing: selected
-          ? const Icon(
+          ? Icon(
               CupertinoIcons.checkmark_alt,
-              size: 20,
-              color: CupertinoColors.activeBlue,
+              size: 18,
+              color: activeBlue,
             )
           : null,
       onTap: onTap,
-    );
-  }
-}
-
-/// 筛选弹层中的渠道 / 项目 chip。
-class _SheetChip extends StatelessWidget {
-  const _SheetChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? CupertinoColors.activeBlue.resolveFrom(context)
-              : CupertinoColors.systemGrey5.resolveFrom(context),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: selected
-                ? CupertinoColors.white
-                : CupertinoColors.label.resolveFrom(context),
-          ),
-        ),
-      ),
     );
   }
 }

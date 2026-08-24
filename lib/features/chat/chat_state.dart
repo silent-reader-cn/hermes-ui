@@ -324,6 +324,7 @@ class ChatState {
     this.completedReasoningGroups = const [],
     this.queuedSlashMessages = const [],
     this.pinnedLocalNotices = const [],
+    this.lastSteerHint,
     this.stream = const ChatStreamState(),
     this.pendingAction = const ChatPendingActionState(),
     this.contextWindowSnapshot,
@@ -420,6 +421,9 @@ class ChatState {
   /// 流进行中产生的本地 notice（流结束后 flush 进 transcript）。
   final List<String> pinnedLocalNotices;
 
+  /// 最近一次 steer 提示文本（ephemeral，不进 transcript；流结束后自动清除）。
+  final String? lastSteerHint;
+
   /// 流状态（activeStreamId 等）。
   final ChatStreamState stream;
 
@@ -449,9 +453,13 @@ class ChatState {
     bool? hasOlderMessages,
     String? displayTitle,
     String? workspace,
+    bool clearWorkspace = false,
     String? model,
+    bool clearModel = false,
     String? modelProvider,
+    bool clearModelProvider = false,
     String? profile,
+    bool clearProfile = false,
     bool? explicitModelPick,
     String? errorMessage,
     bool clearErrorMessage = false,
@@ -475,9 +483,12 @@ class ChatState {
     List<ReasoningGroup>? completedReasoningGroups,
     List<String>? queuedSlashMessages,
     List<String>? pinnedLocalNotices,
+    String? lastSteerHint,
+    bool clearLastSteerHint = false,
     ChatStreamState? stream,
     ChatPendingActionState? pendingAction,
     ContextWindowSnapshot? contextWindowSnapshot,
+    bool clearContextWindowSnapshot = false,
     bool? responseCompletionNeedsTranscriptRefresh,
     int? streamingScrollTrigger,
   }) {
@@ -488,10 +499,11 @@ class ChatState {
       messagesOffset: messagesOffset ?? this.messagesOffset,
       hasOlderMessages: hasOlderMessages ?? this.hasOlderMessages,
       displayTitle: displayTitle ?? this.displayTitle,
-      workspace: workspace ?? this.workspace,
-      model: model ?? this.model,
-      modelProvider: modelProvider ?? this.modelProvider,
-      profile: profile ?? this.profile,
+      workspace: clearWorkspace ? null : (workspace ?? this.workspace),
+      model: clearModel ? null : (model ?? this.model),
+      modelProvider:
+          clearModelProvider ? null : (modelProvider ?? this.modelProvider),
+      profile: clearProfile ? null : (profile ?? this.profile),
       explicitModelPick: explicitModelPick ?? this.explicitModelPick,
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       sendErrorMessage:
@@ -519,10 +531,12 @@ class ChatState {
           completedReasoningGroups ?? this.completedReasoningGroups,
       queuedSlashMessages: queuedSlashMessages ?? this.queuedSlashMessages,
       pinnedLocalNotices: pinnedLocalNotices ?? this.pinnedLocalNotices,
+      lastSteerHint: clearLastSteerHint ? null : (lastSteerHint ?? this.lastSteerHint),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
-      contextWindowSnapshot:
-          contextWindowSnapshot ?? this.contextWindowSnapshot,
+      contextWindowSnapshot: clearContextWindowSnapshot
+          ? null
+          : (contextWindowSnapshot ?? this.contextWindowSnapshot),
       responseCompletionNeedsTranscriptRefresh:
           responseCompletionNeedsTranscriptRefresh ??
               this.responseCompletionNeedsTranscriptRefresh,

@@ -142,7 +142,16 @@ void main() {
       ),
     );
     await tester.pump();
+    // group header 已本地化为"终端 ×1"（双层默认收起，outer 收起时 inner 不在树）
+    expect(find.textContaining('终端'), findsOneWidget);
+    expect(find.text('bash'), findsNothing);
+    // 展开外层组 -> inner header 出现
+    await tester.tap(find.textContaining('终端'));
+    await tester.pump();
     expect(find.text('bash'), findsOneWidget);
+    // 展开 inner 卡片详情
+    await tester.tap(find.text('bash'));
+    await tester.pump();
     expect(find.textContaining('cmd: ls -la'), findsOneWidget);
     expect(find.text('运行中…'), findsOneWidget);
 
@@ -163,10 +172,15 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets('模型选择器：选择后发送带 explicit_model_pick', (tester) async {
+  testWidgets('模型选择器：经上下文圆环弹层选择后发送带 explicit_model_pick', (tester) async {
     final api = _FakeChatApi();
     api.sessionResult = {
-      'session': {'session_id': 's1', 'messages': const []},
+      'session': {
+        'session_id': 's1',
+        'messages': const [],
+        'context_length': 128000,
+        'last_prompt_tokens': 1000,
+      },
     };
     await tester.pumpWidget(
       ProviderScope(
@@ -183,12 +197,16 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byKey(const ValueKey('chat-model-button')));
+    // 新入口：点击上下文圆环 → 弹出含模型列表的详情弹层
+    await tester.tap(find.byKey(const ValueKey('chat-context-indicator-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    // 点击模型选择器触发按钮展开选项列表
+    await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+    await tester.pumpAndSettle();
     expect(find.text('gpt-5'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('chat-model-gpt-5')));
+    await tester.tap(find.text('gpt-5'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 

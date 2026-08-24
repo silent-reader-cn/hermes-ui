@@ -89,11 +89,7 @@ class GitApiClient implements GitApi {
     required String path,
     String kind = 'unstaged',
   }) async {
-    return _client.gitDiff(
-      sessionId: sessionId,
-      path: path,
-      kind: kind,
-    );
+    return _client.gitDiff(sessionId: sessionId, path: path, kind: kind);
   }
 
   @override
@@ -130,10 +126,7 @@ class GitApiClient implements GitApi {
     required String sessionId,
     required String message,
   }) async {
-    return _client.gitCommit(
-      sessionId: sessionId,
-      message: message,
-    );
+    return _client.gitCommit(sessionId: sessionId, message: message);
   }
 
   @override

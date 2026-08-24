@@ -356,7 +356,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.inputServerAddressHint,
-          style: const TextStyle(fontSize: 15, color: secondaryText),
+          style: TextStyle(
+            fontSize: 15,
+            color: secondaryText.resolveFrom(context),
+          ),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
@@ -383,7 +386,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         const SizedBox(height: 8),
         Text(
           l10n.customHeadersDescription,
-          style: const TextStyle(fontSize: 15, color: secondaryText),
+          style: TextStyle(
+            fontSize: 15,
+            color: secondaryText.resolveFrom(context),
+          ),
         ),
         const SizedBox(height: 16),
         for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),
@@ -392,7 +398,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               _headerError,
-              style: const TextStyle(color: statusRedText),
+              style: TextStyle(color: statusRedText.resolveFrom(context)),
             ),
           ),
         const SizedBox(height: 8),
@@ -418,23 +424,26 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.checking,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );
       case _HealthState.ok:
         return Text(
           l10n.connectionSuccessfulWithCheck,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: statusGreenText,
+            color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
         );
       case _HealthState.failed:
         return Text(
           '❌ $_healthMessage',
-          style: const TextStyle(fontSize: 14, color: statusRedText),
+          style: TextStyle(fontSize: 14, color: statusRedText.resolveFrom(context)),
         );
     }
   }
@@ -450,25 +459,28 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.detectingServerAuth,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );
       case _AuthState.notRequired:
         return Row(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.checkmark_circle_fill,
               size: 16,
-              color: statusGreenText,
+              color: statusGreenText.resolveFrom(context),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 l10n.serverNoPasswordRequired,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: statusGreenText,
+                  color: statusGreenText.resolveFrom(context),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -481,7 +493,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           children: [
             Text(
               l10n.serverPasswordRequired,
-              style: const TextStyle(fontSize: 15, color: secondaryText),
+              style: TextStyle(
+                fontSize: 15,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 12),
             CupertinoTextField(
@@ -513,23 +528,26 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             const SizedBox(width: 8),
             Text(
               l10n.verifyingPassword,
-              style: const TextStyle(fontSize: 14, color: secondaryText),
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryText.resolveFrom(context),
+              ),
             ),
           ],
         );
       case _LoginState.ok:
         return Text(
           _loginMessage,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: statusGreenText,
+            color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
         );
       case _LoginState.failed:
         return Text(
           '❌ $_loginMessage',
-          style: const TextStyle(fontSize: 14, color: statusRedText),
+          style: TextStyle(fontSize: 14, color: statusRedText.resolveFrom(context)),
         );
     }
   }
