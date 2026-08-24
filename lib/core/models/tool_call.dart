@@ -471,12 +471,18 @@ class ToolCallGroup {
           );
       if (toolCalls.isEmpty) continue;
 
-      flushCurrentGroup();
-      currentAnchorMessageID = TranscriptTurnClassifier.anchorID(
+      final anchor = TranscriptTurnClassifier.anchorID(
         message,
         at: messageIndex,
         messageOffset: messageOffset,
       );
+      if (currentAnchorMessageID == null) {
+        currentAnchorMessageID = anchor;
+      } else if (anchor != currentAnchorMessageID) {
+        // Different assistant turn: flush previous, start new group
+        flushCurrentGroup();
+        currentAnchorMessageID = anchor;
+      }
       currentToolCalls += toolCalls;
     }
 

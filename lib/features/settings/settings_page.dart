@@ -123,7 +123,7 @@ class _ChatSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
-    return CupertinoListSection.insetGrouped(
+    return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
         CupertinoListTile(

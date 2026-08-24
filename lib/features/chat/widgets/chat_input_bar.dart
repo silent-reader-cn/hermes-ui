@@ -48,9 +48,27 @@ class ChatInputBar extends ConsumerStatefulWidget {
 
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final TextEditingController _textController = TextEditingController();
-  final GlobalKey _bookmarkKey = GlobalKey();
-  final GlobalKey _contextIndicatorKey = GlobalKey();
+  late GlobalKey _bookmarkKey;
+  late GlobalKey _contextIndicatorKey;
   bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bookmarkKey = GlobalKey(debugLabel: 'chat-bookmark-${widget.sessionId}');
+    _contextIndicatorKey =
+        GlobalKey(debugLabel: 'chat-context-${widget.sessionId}');
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatInputBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId) {
+      _bookmarkKey = GlobalKey(debugLabel: 'chat-bookmark-${widget.sessionId}');
+      _contextIndicatorKey =
+          GlobalKey(debugLabel: 'chat-context-${widget.sessionId}');
+    }
+  }
 
   bool _uploading = false;
 
@@ -180,14 +198,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     } catch (_) {
       attachment = null;
     }
-
     if (attachment != null) {
-      await _handlePasteBytes(attachment.bytes, attachment.filename);
+      try {
+        await _handlePasteBytes(attachment.bytes, attachment.filename);
+      } catch (_) {}
       return;
     }
 
     // 纯文本放行：从系统剪贴板读取文本并插入输入框光标处
-    await _pastePlainText();
+    try {
+      await _pastePlainText();
+    } catch (_) {}
   }
 
   Future<void> _pastePlainText() async {
@@ -391,7 +412,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           color: CupertinoColors.systemGrey,
                         ),
                 ),
-                KeyedSubtree(
+                Container(
                   key: _bookmarkKey,
                   child: AccessibleButton(
                     key: const ValueKey('chat-saved-prompts-button'),
@@ -516,7 +537,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       color: CupertinoColors.activeBlue,
                     ),
                   ),
-                KeyedSubtree(
+                Container(
                   key: _contextIndicatorKey,
                   child: ContextWindowIndicator(
                     snapshot: snapshot,

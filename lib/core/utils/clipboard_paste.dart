@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
+
 import 'package:super_clipboard/super_clipboard.dart';
 
 /// 粘贴附件数据（二进制内容 + 文件名）。
