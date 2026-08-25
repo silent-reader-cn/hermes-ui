@@ -9,14 +9,18 @@ import 'package:hermex_flutter/app/theme/status_colors.dart';
 import 'package:hermex_flutter/core/api/api_client.dart';
 import 'package:hermex_flutter/core/connections/connection_providers.dart';
 import 'package:hermex_flutter/core/providers/file_picker_provider.dart';
+import 'package:hermex_flutter/core/utils/accessibility.dart';
 import 'package:hermex_flutter/core/utils/file_picker.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
+
 import '../../helpers/fake_chat_api.dart';
 
 void main() {
   group('Chat 附件上传链路 Widget 测试', () {
-    testWidgets('成功路径：选择文件 → 调用 uploadFile → 本地消息入流 + 成功弹窗', (tester) async {
+    testWidgets('成功路径：选择文件 → uploadFile → 入待发附件条（不直接发送）；点发送随消息提交', (
+      tester,
+    ) async {
       final chatApi = _FakeChatApi();
       final picker = FakeFilePickerService(
         result: FilePickerResult(
@@ -25,8 +29,10 @@ void main() {
         ),
       );
       final adapter = _RecordingAdapter(
-        responder: (_) =>
-            ResponseBody.fromString('{"ok":true,"filename":"report.pdf"}', 200),
+        responder: (_) => ResponseBody.fromString(
+          '{"ok":true,"filename":"report.pdf","path":"/files/report.pdf","is_image":false}',
+          200,
+        ),
       );
       final client = _buildClient(adapter);
 
@@ -50,20 +56,33 @@ void main() {
       expect(bodyStr, contains('name="session_id"\r\n\r\ns1'));
       expect(bodyStr, contains('filename="report.pdf"'));
 
-      // 断言聊天控制器追加了本地附件消息
-      expect(chatApi.startChatCalls, 1);
-      expect(chatApi.lastSentText, '📎 report.pdf');
-      expect(find.text('📎 report.pdf'), findsOneWidget);
-
-      // 断言成功提示对话框出现
-      expect(find.text('上传成功'), findsOneWidget);
-      expect(find.text('附件「report.pdf」已上传。'), findsOneWidget);
-
-      // 关闭弹窗
-      await tester.tap(find.text('好'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      // 不直接发送：无 startChat、无本地消息、无成功弹窗
+      expect(chatApi.startChatCalls, 0);
+      expect(find.text('📎 report.pdf'), findsNothing);
       expect(find.text('上传成功'), findsNothing);
+
+      // 待发附件条出现（文档项）
+      expect(find.text('report.pdf'), findsOneWidget);
+
+      // 发送按钮因附件可用
+      final sendBtn = find.byKey(const ValueKey('chat-send-button'));
+      final sendWidget = tester.widget<AccessibleButton>(sendBtn);
+      expect(sendWidget.onPressed, isNotNull);
+
+      // 点发送 → 带附件提交，之后附件条清空
+      await tester.tap(sendBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(chatApi.startChatCalls, 1);
+      expect(chatApi.lastSentText, '[Attached files: /files/report.pdf]');
+      expect(chatApi.lastSentAttachments, isNotNull);
+      expect(chatApi.lastSentAttachments!.length, 1);
+      expect(chatApi.lastSentAttachments!.first['name'], 'report.pdf');
+      expect(chatApi.lastSentAttachments!.first['path'], '/files/report.pdf');
+
+      await tester.pump();
+      expect(find.text('report.pdf'), findsNothing);
 
       await _unmount(tester);
     });

@@ -19,23 +19,92 @@ import 'package:hermex_flutter/features/chat/widgets/chat_input_bar.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
+final Uint8List kTransparentPngBytes = Uint8List.fromList([
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0A,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
+]);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Chat 输入框粘贴附件链路 Widget 测试', () {
-    testWidgets('Ctrl+V / PasteAttachmentIntent 粘贴图片：调用 uploadFile → 本地消息入流 + 成功弹窗', (
+    testWidgets('Ctrl+V 粘贴图片：uploadFile 进入待发附件条，不直接发送；点发送随消息提交', (
       tester,
     ) async {
       final chatApi = FakeChatApi();
       final pasteService = FakeClipboardPasteService(
-        result: (
-          bytes: Uint8List.fromList([137, 80, 78, 71, 10, 20]),
-          filename: 'screenshot.png',
-        ),
+        result: (bytes: kTransparentPngBytes, filename: 'screenshot.png'),
       );
       final adapter = _RecordingAdapter(
-        responder: (_) =>
-            ResponseBody.fromString('{"ok":true,"filename":"screenshot.png"}', 200),
+        responder: (_) => ResponseBody.fromString(
+          '{"ok":true,"filename":"screenshot.png","path":"/files/screenshot.png","is_image":true}',
+          200,
+        ),
       );
       final client = _buildClient(adapter);
 
@@ -53,7 +122,6 @@ void main() {
       await tester.tap(inputFinder);
       await tester.pump();
 
-      // 发送 PasteAttachmentIntent 动作
       Actions.invoke(
         tester.element(inputFinder),
         const PasteAttachmentIntent(),
@@ -69,25 +137,47 @@ void main() {
       expect(bodyStr, contains('name="session_id"\r\n\r\ns1'));
       expect(bodyStr, contains('filename="screenshot.png"'));
 
-      // 断言聊天流中追加本地消息
-      expect(chatApi.startChatCalls, 1);
-      expect(chatApi.lastSentText, '📎 screenshot.png');
-      expect(find.text('📎 screenshot.png'), findsOneWidget);
-
-      // 断言成功提示对话框出现
-      expect(find.text('上传成功'), findsOneWidget);
-      expect(find.text('附件「screenshot.png」已上传。'), findsOneWidget);
-
-      // 关闭弹窗
-      await tester.tap(find.text('好'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      // 不直接发送：无 startChat、无本地消息、无成功弹窗
+      expect(chatApi.startChatCalls, 0);
+      expect(find.text('📎 screenshot.png'), findsNothing);
       expect(find.text('上传成功'), findsNothing);
+
+      // 待发附件条出现（缩略图 + 文件名）
+      expect(find.text('screenshot.png'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('attachment-clear-all')),
+        findsNothing, // 单附件不显示清空按钮
+      );
+
+      // 发送按钮因附件可用
+      final sendBtn = find.byKey(const ValueKey('chat-send-button'));
+      final sendWidget = tester.widget<AccessibleButton>(sendBtn);
+      expect(sendWidget.onPressed, isNotNull);
+
+      // 点发送 → startChat 一次：文本带附件引用，attachments 参数完整
+      await tester.tap(sendBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(chatApi.startChatCalls, 1);
+      expect(chatApi.lastSentText, '[Attached files: /files/screenshot.png]');
+      expect(chatApi.lastSentAttachments, isNotNull);
+      expect(chatApi.lastSentAttachments!.length, 1);
+      expect(chatApi.lastSentAttachments!.first['name'], 'screenshot.png');
+      expect(
+        chatApi.lastSentAttachments!.first['path'],
+        '/files/screenshot.png',
+      );
+      expect(chatApi.lastSentAttachments!.first['is_image'], true);
+
+      // 发送成功后附件条清空
+      await tester.pump();
+      expect(find.text('screenshot.png'), findsNothing);
 
       await _unmount(tester);
     });
 
-    testWidgets('PasteTextIntent 粘贴文件：调用 uploadFile → 本地消息入流 + 成功弹窗', (
+    testWidgets('PasteTextIntent 粘贴文件：入待发附件条，点发送一并提交（非图片走文档图标）', (
       tester,
     ) async {
       final chatApi = FakeChatApi();
@@ -98,8 +188,10 @@ void main() {
         ),
       );
       final adapter = _RecordingAdapter(
-        responder: (_) =>
-            ResponseBody.fromString('{"ok":true,"filename":"document.pdf"}', 200),
+        responder: (_) => ResponseBody.fromString(
+          '{"ok":true,"filename":"document.pdf","path":"/files/document.pdf","is_image":false}',
+          200,
+        ),
       );
       final client = _buildClient(adapter);
 
@@ -123,18 +215,30 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(adapter.requests.length, 1);
-      expect(chatApi.lastSentText, '📎 document.pdf');
-      expect(find.text('上传成功'), findsOneWidget);
+      expect(chatApi.startChatCalls, 0);
+      expect(find.text('上传成功'), findsNothing);
 
-      await tester.tap(find.text('好'));
+      // 待发附件条中的文档项
+      expect(find.text('document.pdf'), findsOneWidget);
+
+      // 点发送 → 带附件提交
+      final sendBtn = find.byKey(const ValueKey('chat-send-button'));
+      await tester.tap(sendBtn);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(chatApi.startChatCalls, 1);
+      expect(chatApi.lastSentText, '[Attached files: /files/document.pdf]');
+      expect(chatApi.lastSentAttachments!.length, 1);
+      expect(chatApi.lastSentAttachments!.first['is_image'], false);
+
+      await tester.pump();
+      expect(find.text('document.pdf'), findsNothing);
+
       await _unmount(tester);
     });
 
-    testWidgets('纯文本粘贴放行：pasteService 返回 null 时插入文本到输入框，不发起上传', (
-      tester,
-    ) async {
+    testWidgets('纯文本粘贴放行：pasteService 返回 null 时插入文本到输入框，不发起上传', (tester) async {
       final chatApi = FakeChatApi();
       final pasteService = FakeClipboardPasteService(result: null);
       final adapter = _RecordingAdapter(
@@ -193,10 +297,7 @@ void main() {
     ) async {
       final chatApi = FakeChatApi();
       final pasteService = FakeClipboardPasteService(
-        result: (
-          bytes: Uint8List.fromList([1, 2, 3]),
-          filename: 'corrupt.png',
-        ),
+        result: (bytes: Uint8List.fromList([1, 2, 3]), filename: 'corrupt.png'),
       );
       final adapter = _RecordingAdapter(
         responder: (_) => ResponseBody.fromString('{"error":"上传超时"}', 500),
@@ -243,13 +344,14 @@ void main() {
     testWidgets('只读/禁用会话中忽略粘贴', (tester) async {
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
-        'session': {'session_id': 's1', 'messages': const [], 'is_read_only': true},
+        'session': {
+          'session_id': 's1',
+          'messages': const [],
+          'is_read_only': true,
+        },
       };
       final pasteService = FakeClipboardPasteService(
-        result: (
-          bytes: Uint8List.fromList([1, 2, 3]),
-          filename: 'photo.png',
-        ),
+        result: (bytes: Uint8List.fromList([1, 2, 3]), filename: 'photo.png'),
       );
       final adapter = _RecordingAdapter(
         responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
@@ -277,9 +379,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('pasteService 抛出异常时容错放行：静默捕获异常并插入系统纯文本，不弹错误弹窗', (
-      tester,
-    ) async {
+    testWidgets('pasteService 抛出异常时容错放行：静默捕获异常并插入系统纯文本，不弹错误弹窗', (tester) async {
       final chatApi = FakeChatApi();
       // 模拟 super_clipboard 读取异常（例如 Windows 平台通道报错）
       final pasteService = FakeClipboardPasteService(
@@ -340,10 +440,7 @@ void main() {
       final chatApi = FakeChatApi();
       // 模拟异常返回空 bytes 附件
       final pasteService = FakeClipboardPasteService(
-        result: (
-          bytes: Uint8List(0),
-          filename: 'empty.png',
-        ),
+        result: (bytes: Uint8List(0), filename: 'empty.png'),
       );
       final adapter = _RecordingAdapter(
         responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
@@ -387,9 +484,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('纯文本粘贴选区替换与光标位置保持：替换选中部分并移动光标至末尾，更新 hasText', (
-      tester,
-    ) async {
+    testWidgets('纯文本粘贴选区替换与光标位置保持：替换选中部分并移动光标至末尾，更新 hasText', (tester) async {
       final chatApi = FakeChatApi();
       final pasteService = FakeClipboardPasteService(result: null);
       final adapter = _RecordingAdapter(

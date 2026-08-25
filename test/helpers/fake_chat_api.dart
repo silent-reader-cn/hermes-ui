@@ -85,6 +85,9 @@ class FakeChatApi implements ChatServerApi {
   String? lastSentText;
   String? lastModel;
   String? lastModelProvider;
+
+  /// 最近一次 startChat 提交的附件（待发附件链路断言用）。
+  List<Map<String, Object?>>? lastSentAttachments;
   String? lastProfile;
   bool? lastExplicitModelPick;
   String? lastRenameTitle;
@@ -117,6 +120,7 @@ class FakeChatApi implements ChatServerApi {
   }) async {
     startChatCalls++;
     lastSentText = message;
+    lastSentAttachments = attachments;
     lastModel = model;
     lastModelProvider = modelProvider;
     lastProfile = profile;
@@ -175,10 +179,7 @@ class FakeChatApi implements ChatServerApi {
       return SessionResponse.fromJson(sessionResult!);
     }
     return SessionResponse(
-      session: SessionDetail(
-        sessionId: sessionId,
-        messages: const [],
-      ),
+      session: SessionDetail(sessionId: sessionId, messages: const []),
     );
   }
 
@@ -288,9 +289,7 @@ class FakeChatApi implements ChatServerApi {
     if (!mutationOk) {
       throw HttpException(400, null, message: mutationError ?? '截断会话失败。');
     }
-    return SessionResponse(
-      session: SessionDetail(sessionId: sessionId),
-    );
+    return SessionResponse(session: SessionDetail(sessionId: sessionId));
   }
 
   @override

@@ -14,16 +14,24 @@ import 'package:hermex_flutter/features/chat/widgets/context_window_popover.dart
 
 import '../../helpers/fake_chat_api.dart';
 
-ApiClient _buildTestClient(ResponseBody Function(RequestOptions options) responder) {
+ApiClient _buildTestClient(
+  ResponseBody Function(RequestOptions options) responder,
+) {
   final adapter = _RecordingAdapter(responder: responder);
-  final dio = Dio(BaseOptions(validateStatus: (_) => true, followRedirects: false));
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
   dio.httpClientAdapter = adapter;
   return ApiClient(baseUrl: 'http://test.local:30002', dio: dio);
 }
 
-ApiClient buildClient(ResponseBody Function(RequestOptions options) responder) => _buildTestClient(responder);
+ApiClient buildClient(
+  ResponseBody Function(RequestOptions options) responder,
+) => _buildTestClient(responder);
 
-ApiClient _buildMockApiClient({required ResponseBody Function(RequestOptions options) handler}) => _buildTestClient(handler);
+ApiClient _buildMockApiClient({
+  required ResponseBody Function(RequestOptions options) handler,
+}) => _buildTestClient(handler);
 
 class _RecordingAdapter implements HttpClientAdapter {
   _RecordingAdapter({required this.responder});
@@ -48,9 +56,7 @@ class _RecordingAdapter implements HttpClientAdapter {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
-
-group('ContextWindowPopover 工作区下拉与手动输入', () {
+  group('ContextWindowPopover 工作区下拉与手动输入', () {
     testWidgets('初始加载并匹配工作区名称（path — name）', (tester) async {
       final client = buildClient((options) {
         if (options.path.contains('/api/workspaces')) {
@@ -108,10 +114,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(
-        find.text('/home/user/project-a — Project Alpha'),
-        findsOneWidget,
-      );
+      expect(find.text('/home/user/project-a — Project Alpha'), findsOneWidget);
     });
 
     testWidgets('点击展开工作区下拉列表 → 选中新工作区 → updateSessionSettings 被调用并自动收起', (
@@ -137,10 +140,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
 
       final fakeChatApi = FakeChatApi();
       fakeChatApi.sessionResult = {
-        'session': {
-          'session_id': 's1',
-          'workspace': '/home/user/project-a',
-        },
+        'session': {'session_id': 's1', 'workspace': '/home/user/project-a'},
       };
 
       final snap = ContextWindowSnapshot.fromJson({
@@ -214,10 +214,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
         findsNothing,
       );
       // 触发器文案更新
-      expect(
-        find.text('/home/user/project-b — Project Beta'),
-        findsOneWidget,
-      );
+      expect(find.text('/home/user/project-b — Project Beta'), findsOneWidget);
     });
 
     testWidgets('工作区列表为空或加载异常时展示友好提示', (tester) async {
@@ -233,10 +230,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
 
       final fakeChatApi = FakeChatApi();
       fakeChatApi.sessionResult = {
-        'session': {
-          'session_id': 's1',
-          'workspace': null,
-        },
+        'session': {'session_id': 's1', 'workspace': null},
       };
 
       final snap = ContextWindowSnapshot.fromJson({
@@ -278,10 +272,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
         find.byKey(const ValueKey('workspace-item-default')),
         findsOneWidget,
       );
-      expect(
-        find.text('暂无可用工作区（可在设置→工作区管理中添加）'),
-        findsOneWidget,
-      );
+      expect(find.text('暂无可用工作区（可在设置→工作区管理中添加）'), findsOneWidget);
     });
 
     testWidgets('手动输入逃生通道：展开 TextField 并保存任意路径', (tester) async {
@@ -294,10 +285,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
 
       final fakeChatApi = FakeChatApi();
       fakeChatApi.sessionResult = {
-        'session': {
-          'session_id': 's1',
-          'workspace': null,
-        },
+        'session': {'session_id': 's1', 'workspace': null},
       };
 
       final snap = ContextWindowSnapshot.fromJson({
@@ -373,7 +361,6 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
     });
   });
 
-
   final testSnapshot = ContextWindowSnapshot.fromJson({
     'context_length': 128000,
     'last_prompt_tokens': 1200,
@@ -382,16 +369,11 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
     'cost': '\$0.02',
   });
 
-  Widget wrap({
-    required Widget child,
-    List<Override> overrides = const [],
-  }) {
+  Widget wrap({required Widget child, List<Override> overrides = const []}) {
     return ProviderScope(
       overrides: overrides,
       child: CupertinoApp(
-        home: CupertinoPageScaffold(
-          child: Center(child: child),
-        ),
+        home: CupertinoPageScaffold(child: Center(child: child)),
       ),
     );
   }
@@ -457,15 +439,28 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pump(const Duration(milliseconds: 50));
 
       // 点击展开
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('context-popover-model-gpt-4o')), findsOneWidget);
-      expect(find.byKey(const ValueKey('context-popover-model-claude-3-5-sonnet')), findsOneWidget);
-      expect(find.byKey(const ValueKey('context-popover-model-default')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-model-claude-3-5-sonnet')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-model-default')),
+        findsOneWidget,
+      );
 
       // 再次点击收起
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
     });
 
@@ -504,11 +499,15 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pump(const Duration(milliseconds: 50));
 
       // 展开下拉列表
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
 
       // 点击 gpt-4o
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-gpt-4o')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+      );
       await tester.pumpAndSettle();
 
       expect(closed, isTrue);
@@ -550,72 +549,95 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pump(const Duration(milliseconds: 50));
 
       // 先设置为某模型
-      capturedRef.read(chatControllerProvider('s1').notifier).selectModel('claude-3-5-sonnet');
-      expect(capturedRef.read(chatControllerProvider('s1')).model, 'claude-3-5-sonnet');
+      capturedRef
+          .read(chatControllerProvider('s1').notifier)
+          .selectModel('claude-3-5-sonnet');
+      expect(
+        capturedRef.read(chatControllerProvider('s1')).model,
+        'claude-3-5-sonnet',
+      );
 
       // 展开下拉列表
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
 
       // 点击跟随服务器默认
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-default')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-default')),
+      );
       await tester.pumpAndSettle();
 
       expect(closed, isTrue);
       expect(capturedRef.read(chatControllerProvider('s1')).model, isNull);
     });
 
-    testWidgets('chatAvailableModelsProvider 为空时，通过 ApiClient 异步拉取 modelsLive', (tester) async {
-      final fakeChat = FakeChatApi();
-      final mockClient = _buildMockApiClient(
-        handler: (options) {
-          if (options.path.endsWith('/api/models/live')) {
-            final body = jsonEncode({
-              'provider': 'openai',
-              'models': [
-                {'id': 'gpt-4o-mini', 'name': 'GPT-4o Mini'},
-                {'id': 'o1-preview', 'name': 'o1 Preview'},
-              ],
-            });
-            return ResponseBody.fromString(
-              body,
-              200,
-              headers: {
-                Headers.contentTypeHeader: [Headers.jsonContentType],
-              },
-            );
-          }
-          return ResponseBody.fromString('{}', 404);
-        },
-      );
+    testWidgets(
+      'chatAvailableModelsProvider 为空时，通过 ApiClient 异步拉取 modelsLive',
+      (tester) async {
+        final fakeChat = FakeChatApi();
+        final mockClient = _buildMockApiClient(
+          handler: (options) {
+            if (options.path.endsWith('/api/models/live')) {
+              final body = jsonEncode({
+                'provider': 'openai',
+                'models': [
+                  {'id': 'gpt-4o-mini', 'name': 'GPT-4o Mini'},
+                  {'id': 'o1-preview', 'name': 'o1 Preview'},
+                ],
+              });
+              return ResponseBody.fromString(
+                body,
+                200,
+                headers: {
+                  Headers.contentTypeHeader: [Headers.jsonContentType],
+                },
+              );
+            }
+            return ResponseBody.fromString('{}', 404);
+          },
+        );
 
-      await tester.pumpWidget(
-        wrap(
-          overrides: [
-            chatApiProvider.overrideWithValue(fakeChat),
-            apiClientProvider.overrideWithValue(mockClient),
-          ],
-          child: ContextWindowPopover(
-            sessionId: 's1',
-            snapshot: testSnapshot,
-            currentModel: null,
-            onClose: () {},
+        await tester.pumpWidget(
+          wrap(
+            overrides: [
+              chatApiProvider.overrideWithValue(fakeChat),
+              apiClientProvider.overrideWithValue(mockClient),
+            ],
+            child: ContextWindowPopover(
+              sessionId: 's1',
+              snapshot: testSnapshot,
+              currentModel: null,
+              onClose: () {},
+            ),
           ),
-        ),
-      );
-      // 触发 postFrameCallback 中的 _maybeFetchModels
-      await tester.pump();
-      await tester.pumpAndSettle();
+        );
+        // 触发 postFrameCallback 中的 _maybeFetchModels
+        await tester.pump();
+        await tester.pumpAndSettle();
 
-      // 展开选项列表
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
-      await tester.pumpAndSettle();
+        // 展开选项列表
+        await tester.tap(
+          find.byKey(const ValueKey('context-popover-model-trigger')),
+        );
+        await tester.pumpAndSettle();
 
-      // 验证拉取到的模型列表正常展示
-      expect(find.byKey(const ValueKey('context-popover-model-gpt-4o-mini')), findsOneWidget);
-      expect(find.byKey(const ValueKey('context-popover-model-o1-preview')), findsOneWidget);
-      expect(find.byKey(const ValueKey('context-popover-model-default')), findsOneWidget);
-    });
+        // 验证拉取到的模型列表正常展示
+        expect(
+          find.byKey(const ValueKey('context-popover-model-gpt-4o-mini')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('context-popover-model-o1-preview')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('context-popover-model-default')),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('ApiClient 请求异常时静默降级为仅显示跟随默认', (tester) async {
       final fakeChat = FakeChatApi();
@@ -643,11 +665,16 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pumpAndSettle();
 
       // 展开选项列表
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
 
       // 静默降级，仅展示跟随默认
-      expect(find.byKey(const ValueKey('context-popover-model-default')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('context-popover-model-default')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -744,11 +771,18 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       final modelOptionTopLeft = tester.getTopLeft(modelOptionFinder);
       // 验证下拉选项位于宽屏右侧内容区（>= 320），且紧贴模型触发器水平坐标，绝不飘到屏幕左侧（dx < 100）
       expect(modelOptionTopLeft.dx, greaterThanOrEqualTo(320.0));
-      expect((modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(), lessThan(30.0));
+      expect(
+        (modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(),
+        lessThan(30.0),
+      );
       // 验证工作区下拉处于收起状态（互斥）
-      expect(find.byKey(const ValueKey('workspace-item-default')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('workspace-item-default')),
+        findsNothing,
+      );
 
-      // 2. 点击工作区触发器展开工作区下拉，模型下拉自动收起
+      // 2. 打开工作区下拉。模型菜单悬浮会盖住下方内容：先点菜单外区域
+      // （popover 内容顶部）收起模型菜单，再点工作区触发器展开工作区下拉
       final workspaceTriggerFinder = find.byKey(
         const ValueKey('context-popover-workspace-trigger'),
       );
@@ -757,7 +791,8 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pumpAndSettle();
       final workspaceTriggerTopLeft = tester.getTopLeft(workspaceTriggerFinder);
 
-      await tester.tap(workspaceTriggerFinder);
+      // 点悬浮菜单外的屏障区域（弹层内容顶部）→ 收起模型菜单，不关弹层
+      await tester.tapAt(const Offset(900, 300));
       await tester.pumpAndSettle();
 
       // 验证模型下拉已收起
@@ -765,6 +800,10 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
         find.byKey(const ValueKey('context-popover-model-gpt-4o')),
         findsNothing,
       );
+
+      await tester.tap(workspaceTriggerFinder);
+      await tester.pumpAndSettle();
+
       // 验证工作区下拉项展示
       final workspaceOptionFinder = find.byKey(
         const ValueKey('workspace-item-/home/user/other-project'),
@@ -779,12 +818,21 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
         lessThan(30.0),
       );
 
-      // 3. 点击手动输入切换按钮，工作区下拉自动收起，手动输入框展示
+      // 3. 先收起工作区下拉（点菜单外屏障区域），再打开手动输入
       final manualToggleFinder = find.byKey(
         const ValueKey('context-popover-workspace-manual-toggle'),
       );
       await tester.ensureVisible(manualToggleFinder);
       await tester.pumpAndSettle();
+
+      // 工作区菜单悬浮盖住该区域：点菜单外收起
+      await tester.tapAt(const Offset(900, 300));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('workspace-item-/home/user/other-project')),
+        findsNothing,
+      );
+
       await tester.tap(manualToggleFinder);
       await tester.pumpAndSettle();
 
@@ -798,9 +846,7 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       );
     });
 
-    testWidgets('窄屏 400 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器', (
-      tester,
-    ) async {
+    testWidgets('窄屏 400 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器', (tester) async {
       tester.view.physicalSize = const Size(400, 700);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -916,11 +962,16 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      await tester.tap(find.byKey(const ValueKey('context-popover-model-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
       await tester.pumpAndSettle();
 
       // 第一项可见
-      expect(find.byKey(const ValueKey('context-popover-model-model-v0')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('context-popover-model-model-v0')),
+        findsOneWidget,
+      );
       // 最后一项在初始可视区之外，可通过滚动找到
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('context-popover-model-model-v19')),
@@ -928,7 +979,10 @@ group('ContextWindowPopover 工作区下拉与手动输入', () {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('context-popover-model-model-v19')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('context-popover-model-model-v19')),
+        findsOneWidget,
+      );
     });
   });
 }

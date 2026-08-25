@@ -12,6 +12,7 @@ import '../../core/models/context_window_snapshot.dart';
 import '../../core/models/json_value.dart';
 import '../../core/models/session.dart';
 import '../../core/models/tool_call.dart';
+import '../../core/models/upload_response.dart';
 import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
 import '../session_list/session_list_providers.dart';
@@ -147,9 +148,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   // -------------------------------------------------------------------------
 
   /// 发送新消息；流式期间按 [behavior] 处理（默认 steer）。
+  ///
+  /// [attachments] 为随消息一并提交的待发附件（已上传到服务端，
+  /// 以 `{name, path, mime, size, is_image}` 传给 `/api/chat/start`）。
   Future<bool> send(
     String text, {
     StreamingSendBehavior behavior = StreamingSendBehavior.steer,
+    List<PendingAttachment> attachments = const [],
   }) async {
     final current = state;
     if (current.isViewingCachedData) {
@@ -157,11 +162,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       return false;
     }
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return false;
+    if (trimmed.isEmpty && attachments.isEmpty) return false;
     if (current.stream.activeStreamId != null) {
       return _submitStreamingMessage(trimmed, behavior);
     }
-    return _sendMessage(trimmed);
+    return _sendMessage(trimmed, attachments: attachments);
   }
 
   /// 停止当前响应（保留已流出文本，不删除）。
@@ -468,9 +473,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _setSendError('YOLO 状态更新失败。');
         return false;
       }
-      state = state.copyWith(
-        yoloEnabled: response.yoloEnabled ?? enabled,
-      );
+      state = state.copyWith(yoloEnabled: response.yoloEnabled ?? enabled);
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -566,15 +569,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             .where((m) => m.messageId == null)
             .map((m) => '${m.role}:${m.timestamp}:${m.content}')
             .toSet();
-        final fresh = loaded
-            .where((m) {
-              if (m.messageId != null) {
-                return !existingIds.contains(m.messageId);
-              }
-              return !existingFingerprints
-                  .contains('${m.role}:${m.timestamp}:${m.content}');
-            })
-            .toList();
+        final fresh = loaded.where((m) {
+          if (m.messageId != null) {
+            return !existingIds.contains(m.messageId);
+          }
+          return !existingFingerprints.contains(
+            '${m.role}:${m.timestamp}:${m.content}',
+          );
+        }).toList();
         final allMessages = [...fresh, ...state.messages];
         final fallbackOffset = state.messagesOffset - loaded.length;
         final newOffset =
@@ -612,8 +614,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       } else {
         // 全量重载：diff-merge 调和本地与服务端消息
         // 若当前展示的是离线缓存回放数据，fresh 在线消息直接替换旧缓存
-        final local =
-            state.isViewingCachedData ? const <ChatMessage>[] : state.messages;
+        final local = state.isViewingCachedData
+            ? const <ChatMessage>[]
+            : state.messages;
         final mergedMessages = diffMergeMessages(
           localMessages: local,
           serverMessages: loaded,
@@ -625,8 +628,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (messageBefore == null && ApiException.shouldUseCache(error)) {
         List<Map<String, Object?>> cachedMaps = const [];
         try {
-          cachedMaps =
-              await ref.read(cacheServiceProvider).readMessages(sessionId);
+          cachedMaps = await ref
+              .read(cacheServiceProvider)
+              .readMessages(sessionId);
         } catch (_) {
           // 缓存读取异常静默，继续维持无缓存错误态
         }
@@ -673,9 +677,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         }
       }
       // 无缓存或非网络类错误（401/业务错误）：保持现状错误态
-      state = state.copyWith(
-        errorMessage: error.message,
-      );
+      state = state.copyWith(errorMessage: error.message);
     }
   }
 
@@ -683,8 +685,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     required SessionDetail detail,
     required List<ChatMessage> mergedMessages,
   }) {
-    final persistedToolCalls =
-        detail.toolCalls ?? const <PersistedToolCall>[];
+    final persistedToolCalls = detail.toolCalls ?? const <PersistedToolCall>[];
     _lastPersistedToolCalls = persistedToolCalls;
     final newOffset = detail.messagesOffset ?? state.messagesOffset;
     final serverDerivedGroups = ToolCallGroup.groups(
@@ -707,7 +708,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       nextLiveToolCalls = const [];
     } else {
       if (state.liveToolCalls.isNotEmpty) {
-        final anchor = state.stream.toolCallAnchorMessageId ??
+        final anchor =
+            state.stream.toolCallAnchorMessageId ??
             state.stream.streamingAssistantMessageId ??
             _lastAssistantMessageId(mergedMessages);
         final liveGroup = ToolCallGroup.live(
@@ -726,23 +728,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     final liveReasoningList = <ReasoningGroup>[];
     if (state.liveReasoningText.isNotEmpty) {
-      final anchor = state.stream.reasoningAnchorMessageId ??
+      final anchor =
+          state.stream.reasoningAnchorMessageId ??
           state.stream.streamingAssistantMessageId ??
           _lastAssistantMessageId(mergedMessages);
       liveReasoningList.add(
-        ReasoningGroup(
-          anchorMessageId: anchor,
-          text: state.liveReasoningText,
-        ),
+        ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
       );
       nextLiveReasoning = '';
     }
     var nextCompletedReasoning = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
-      fallbackGroups: [
-        ...state.completedReasoningGroups,
-        ...liveReasoningList,
-      ],
+      fallbackGroups: [...state.completedReasoningGroups, ...liveReasoningList],
     );
     // 历史思考归档：从已加载消息的 reasoning 字段提取，补入 completedReasoningGroups
     final persistedReasoning = _reasoningGroupsFromMessages(
@@ -764,7 +761,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(
       messages: mergedMessages,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
-      hasOlderMessages: detail.messageCount != null &&
+      hasOlderMessages:
+          detail.messageCount != null &&
           detail.messageCount! > mergedMessages.length,
       displayTitle: _resolveTitle(detail),
       workspace: detail.workspace ?? state.workspace,
@@ -774,7 +772,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       isReadOnly: detail.readOnly == true || detail.isReadOnly == true,
       hasPendingUserMessage:
           detail.pendingUserMessage?.trim().isNotEmpty == true ||
-              detail.pendingAttachments?.isNotEmpty == true,
+          detail.pendingAttachments?.isNotEmpty == true,
       parentSessionId: detail.parentSessionId,
       contextWindowSnapshot: ContextWindowSnapshot(
         contextLength: detail.contextLength,
@@ -783,7 +781,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         inputTokens: detail.inputTokens,
         outputTokens: detail.outputTokens,
         estimatedCost: detail.estimatedCost,
-        tokensPerSecond: state.stream.liveTokensPerSecond ??
+        tokensPerSecond:
+            state.stream.liveTokensPerSecond ??
             state.contextWindowSnapshot?.tokensPerSecond,
       ),
       completedToolCallGroups: nextCompletedGroups,
@@ -866,7 +865,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   // 发送内部实现
   // -------------------------------------------------------------------------
 
-  Future<bool> _sendMessage(String text) async {
+  Future<bool> _sendMessage(
+    String text, {
+    List<PendingAttachment> attachments = const [],
+  }) async {
     final api = _api;
     if (api == null) return false;
     _archiveLiveReasoningIfNeeded();
@@ -894,6 +896,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         modelProvider: state.modelProvider,
         profile: state.profile,
         explicitModelPick: state.explicitModelPick,
+        attachments: attachments.isEmpty
+            ? null
+            : [
+                for (final a in attachments)
+                  a.toJsonValue().toJson() as Map<String, Object?>,
+              ],
       );
       if (_disposed || gen != _generation) return false;
       final streamId = response.streamId;
@@ -965,7 +973,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<bool> _steer(String text) async {
     final gen = _generation;
     try {
-      final response = await _api!.steerChat(sessionId: state.sessionId, text: text);
+      final response = await _api!.steerChat(
+        sessionId: state.sessionId,
+        text: text,
+      );
       if (_disposed || gen != _generation) return false;
       if (response.accepted == true) {
         _markProgress();
@@ -1438,7 +1449,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         id: existing.id,
         name: evt.name ?? existing.name,
         preview: evt.preview ?? existing.preview,
-        args: evt.jsonArgs ?? (evt.args != null ? _argsToJsonValue(evt.args) : existing.args),
+        args:
+            evt.jsonArgs ??
+            (evt.args != null ? _argsToJsonValue(evt.args) : existing.args),
         duration: evt.duration,
         isError: evt.isError,
         isCompleted: true,
@@ -1601,32 +1614,39 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _applyCompletedStreamSession(rawSession, currentStreamingId);
     }
     final rawUsage = event.usage;
-    ContextWindowSnapshot? snapshot = event.usageSnapshot ??
+    ContextWindowSnapshot? snapshot =
+        event.usageSnapshot ??
         (rawUsage != null ? ContextWindowSnapshot.fromJson(rawUsage) : null);
     // 若 usage 缺失关键字段，尝试从 session detail 或历史 snapshot 回退补齐
     if (snapshot != null) {
       final prev = state.contextWindowSnapshot;
       final detailFallback = hasCompletedTranscript
-          ? SessionDetail.fromJson(rawSession!) // ignore: unnecessary_non_null_assertion
+          ? SessionDetail.fromJson(rawSession)
           : null;
       // 回退 contextLength / threshold / tokens
       final merged = ContextWindowSnapshot(
-        contextLength: snapshot.contextLength ??
+        contextLength:
+            snapshot.contextLength ??
             detailFallback?.contextLength ??
             prev?.contextLength,
-        thresholdTokens: snapshot.thresholdTokens ??
+        thresholdTokens:
+            snapshot.thresholdTokens ??
             detailFallback?.thresholdTokens ??
             prev?.thresholdTokens,
-        lastPromptTokens: snapshot.lastPromptTokens ??
+        lastPromptTokens:
+            snapshot.lastPromptTokens ??
             detailFallback?.lastPromptTokens ??
             prev?.lastPromptTokens,
-        inputTokens: snapshot.inputTokens ??
+        inputTokens:
+            snapshot.inputTokens ??
             detailFallback?.inputTokens ??
             prev?.inputTokens,
-        outputTokens: snapshot.outputTokens ??
+        outputTokens:
+            snapshot.outputTokens ??
             detailFallback?.outputTokens ??
             prev?.outputTokens,
-        estimatedCost: snapshot.estimatedCost ??
+        estimatedCost:
+            snapshot.estimatedCost ??
             detailFallback?.estimatedCost ??
             prev?.estimatedCost,
         tokensPerSecond: snapshot.tokensPerSecond ?? prev?.tokensPerSecond,
@@ -1647,7 +1667,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         tokensPerSecond: state.contextWindowSnapshot?.tokensPerSecond,
       );
       // 若回退的 tps 存在，同步到 snapshot
-      final prevTps = state.stream.liveTokensPerSecond ??
+      final prevTps =
+          state.stream.liveTokensPerSecond ??
           state.contextWindowSnapshot?.tokensPerSecond;
       if (prevTps != null && snapshot.tokensPerSecond == null) {
         snapshot = snapshot.replacingTokensPerSecond(prevTps);
@@ -1716,10 +1737,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       inputTokens: detail.inputTokens,
       outputTokens: detail.outputTokens,
       estimatedCost: detail.estimatedCost,
-      tokensPerSecond: state.stream.liveTokensPerSecond ??
+      tokensPerSecond:
+          state.stream.liveTokensPerSecond ??
           state.contextWindowSnapshot?.tokensPerSecond,
     );
-    final hasSnapshotValues = snapshotFromDetail.contextLength != null ||
+    final hasSnapshotValues =
+        snapshotFromDetail.contextLength != null ||
         snapshotFromDetail.thresholdTokens != null ||
         snapshotFromDetail.lastPromptTokens != null ||
         snapshotFromDetail.inputTokens != null;
@@ -2376,7 +2399,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final anchor =
         state.stream.reasoningAnchorMessageId ??
         state.stream.streamingAssistantMessageId;
-    final group = ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText);
+    final group = ReasoningGroup(
+      anchorMessageId: anchor,
+      text: state.liveReasoningText,
+    );
     return ReasoningGroup.merging(
       primaryGroups: state.completedReasoningGroups,
       fallbackGroups: [group],
@@ -2623,13 +2649,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }).toList();
       if (authoritative.isEmpty) return;
       final takeCount = authoritative.length > 50 ? 50 : authoritative.length;
-      final recentMessages =
-          authoritative.sublist(authoritative.length - takeCount);
-      final maps = recentMessages.map(_messageToCacheJson).toList();
-      await cacheService.writeMessages(
-        sessionId: sessionId,
-        messages: maps,
+      final recentMessages = authoritative.sublist(
+        authoritative.length - takeCount,
       );
+      final maps = recentMessages.map(_messageToCacheJson).toList();
+      await cacheService.writeMessages(sessionId: sessionId, messages: maps);
     } catch (_) {
       // 写缓存失败不得影响聊天主流程（缓存旁路设计，不吞异常原则下此处属旁路容错）。
     }

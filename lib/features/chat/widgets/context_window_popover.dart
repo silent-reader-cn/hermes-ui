@@ -41,11 +41,19 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   bool _compressing = false;
   bool _savingWorkspace = false;
   bool _loadingModels = false;
-  bool _isExpanded = false;
+  bool _manualInputExpanded = false;
   bool _loadingWorkspaces = false;
   bool _workspacesFetched = false;
-  bool _workspaceDropdownExpanded = false;
-  bool _manualInputExpanded = false;
+
+  /// 模型/工作区下拉悬浮菜单：手动 `OverlayEntry` + `CompositedTransformFollower`
+  /// （经典悬浮层模式）。不参与 Column 高度流，展开时覆盖在弹层内容之上，
+  /// 弹层高度恒定不挤占。不用 OverlayPortal（其 DeferredLayout 在嵌套
+  /// OverlayEntry（popover 内）场景下 hit test 不经过覆盖层子项）。
+  OverlayEntry? _modelMenuEntry;
+  OverlayEntry? _workspaceMenuEntry;
+  final LayerLink _modelMenuLink = LayerLink();
+  final LayerLink _workspaceMenuLink = LayerLink();
+
   List<WorkspaceRoot> _workspaces = const [];
   late final TextEditingController _workspaceController;
   List<String> _fetchedModels = const [];
@@ -70,17 +78,211 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       _workspaceController.text =
           ref.read(chatControllerProvider(widget.sessionId)).workspace ?? '';
       _workspacesFetched = false;
-      _isExpanded = false;
-      _workspaceDropdownExpanded = false;
       _manualInputExpanded = false;
+      _removeAllMenus();
       unawaited(_fetchWorkspaces());
     }
   }
 
   @override
   void dispose() {
+    _modelMenuEntry?.remove();
+    _workspaceMenuEntry?.remove();
     _workspaceController.dispose();
     super.dispose();
+  }
+
+  void _removeEntry(OverlayEntry? entry) {
+    if (entry != null && entry.mounted) entry.remove();
+  }
+
+  void _removeAllMenus() {
+    _removeEntry(_modelMenuEntry);
+    _removeEntry(_workspaceMenuEntry);
+    _modelMenuEntry = null;
+    _workspaceMenuEntry = null;
+  }
+
+  /// 展开/收起模型下拉（互斥：展开本菜单时收起工作区菜单与手动输入）。
+  void _toggleModelMenu() {
+    if (_modelMenuEntry != null) {
+      _removeEntry(_modelMenuEntry);
+      _modelMenuEntry = null;
+      setState(() {});
+      return;
+    }
+    _removeAllMenus();
+    setState(() => _manualInputExpanded = false);
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (entryContext) => _FloatingMenu(
+        link: _modelMenuLink,
+        offset: const Offset(0, 38),
+        onDismiss: () {
+          _removeEntry(_modelMenuEntry);
+          _modelMenuEntry = null;
+          if (mounted) setState(() {});
+        },
+        child: _buildModelMenu(entryContext),
+      ),
+    );
+    _modelMenuEntry = entry;
+    overlay.insert(entry);
+  }
+
+  /// 展开/收起工作区下拉（互斥：展开本菜单时收起模型菜单与手动输入）。
+  void _toggleWorkspaceMenu() {
+    if (_workspaceMenuEntry != null) {
+      _removeEntry(_workspaceMenuEntry);
+      _workspaceMenuEntry = null;
+      setState(() {});
+      return;
+    }
+    _removeAllMenus();
+    setState(() => _manualInputExpanded = false);
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (entryContext) => _FloatingMenu(
+        link: _workspaceMenuLink,
+        offset: const Offset(0, 38),
+        onDismiss: () {
+          _removeEntry(_workspaceMenuEntry);
+          _workspaceMenuEntry = null;
+          if (mounted) setState(() {});
+        },
+        child: _buildWorkspaceMenu(entryContext),
+      ),
+    );
+    _workspaceMenuEntry = entry;
+    overlay.insert(entry);
+  }
+
+  /// 模型下拉菜单内容（悬浮卡片，展开时构建）。
+  Widget _buildModelMenu(BuildContext menuContext) {
+    final l10n = AppLocalizations.of(menuContext);
+    final providerModels = ref.read(chatAvailableModelsProvider);
+    final resolved = providerModels.isNotEmpty
+        ? providerModels
+        : _fetchedModels;
+    final currentModel = ref
+        .read(chatControllerProvider(widget.sessionId))
+        .model;
+    return PopoverDropdownCard(
+      child: _loadingModels
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: CupertinoActivityIndicator(radius: 8),
+              ),
+            )
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final m in resolved)
+                      _ModelRow(
+                        key: ValueKey('context-popover-model-$m'),
+                        label: m,
+                        selected: m == currentModel,
+                        onTap: () {
+                          _removeEntry(_modelMenuEntry);
+                          _modelMenuEntry = null;
+                          ref
+                              .read(
+                                chatControllerProvider(widget.sessionId)
+                                    .notifier,
+                              )
+                              .selectModel(m);
+                          widget.onClose();
+                        },
+                      ),
+                    _ModelRow(
+                      key: const ValueKey('context-popover-model-default'),
+                      label: l10n.contextWindowFollowServerDefault,
+                      selected: currentModel == null || currentModel.isEmpty,
+                      onTap: () {
+                        _removeEntry(_modelMenuEntry);
+                        _modelMenuEntry = null;
+                        ref
+                            .read(
+                              chatControllerProvider(widget.sessionId).notifier,
+                            )
+                            .selectModel(null);
+                        widget.onClose();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  /// 工作区下拉菜单内容（悬浮卡片，展开时构建）。
+  Widget _buildWorkspaceMenu(BuildContext menuContext) {
+    final l10n = AppLocalizations.of(menuContext);
+    final currentWorkspace = ref
+        .read(chatControllerProvider(widget.sessionId))
+        .workspace;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(menuContext);
+    return PopoverDropdownCard(
+      child: _loadingWorkspaces
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: CupertinoActivityIndicator(radius: 8),
+              ),
+            )
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_workspaces.isNotEmpty) ...[
+                      for (final w in _workspaces)
+                        _WorkspaceRow(
+                          key: ValueKey('workspace-item-${w.path}'),
+                          label: (w.name != null && w.name!.trim().isNotEmpty)
+                              ? '${w.path} — ${w.name}'
+                              : (w.path ?? ''),
+                          selected: currentWorkspace == w.path,
+                          onTap: () => _selectWorkspace(w.path),
+                        ),
+                      _WorkspaceRow(
+                        key: const ValueKey('workspace-item-default'),
+                        label: l10n.followSessionDefaultWorkspace,
+                        selected:
+                            currentWorkspace == null ||
+                            currentWorkspace.trim().isEmpty,
+                        onTap: () => _selectWorkspace(null),
+                      ),
+                    ] else ...[
+                      _WorkspaceRow(
+                        key: const ValueKey('workspace-item-default'),
+                        label: l10n.followSessionDefaultWorkspace,
+                        selected:
+                            currentWorkspace == null ||
+                            currentWorkspace.trim().isEmpty,
+                        onTap: () => _selectWorkspace(null),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Text(
+                          l10n.noWorkspacesAvailableHint,
+                          style: TextStyle(fontSize: 11, color: secondary),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+    );
   }
 
   Future<void> _maybeFetchModels() async {
@@ -145,9 +347,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   Future<void> _selectWorkspace(String? path) async {
     final text = path?.trim() ?? '';
     _workspaceController.text = text;
+    _removeEntry(_workspaceMenuEntry);
+    _workspaceMenuEntry = null;
     setState(() {
       _savingWorkspace = true;
-      _workspaceDropdownExpanded = false;
     });
     try {
       await ref
@@ -194,9 +397,6 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final separator = CupertinoColors.separator.resolveFrom(context);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    // 模型列表：优先使用 provider，空时尝试 fetched（未来扩展），至少保证跟随默认
-    final providerModels = ref.watch(chatAvailableModelsProvider);
-    final models = providerModels.isNotEmpty ? providerModels : _fetchedModels;
     final currentModel = widget.currentModel;
     final workspace = ref.watch(
       chatControllerProvider(widget.sessionId).select((s) => s.workspace),
@@ -264,9 +464,8 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           try {
                             final ok = await ref
                                 .read(
-                                  chatControllerProvider(
-                                    widget.sessionId,
-                                  ).notifier,
+                                  chatControllerProvider(widget.sessionId)
+                                      .notifier,
                                 )
                                 .compressSession();
                             if (!mounted) return;
@@ -315,125 +514,57 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                 Semantics(
                   button: true,
                   label: l10n.selectModel,
-                  child: CupertinoButton(
-                    key: const ValueKey('context-popover-model-trigger'),
-                    padding: EdgeInsets.zero,
-                    onPressed: () {
-                      setState(() {
-                        if (_isExpanded) {
-                          _isExpanded = false;
-                        } else {
-                          _isExpanded = true;
-                          _workspaceDropdownExpanded = false;
-                          _manualInputExpanded = false;
-                        }
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemBackground.resolveFrom(
-                          context,
+                  child: CompositedTransformTarget(
+                    link: _modelMenuLink,
+                    child: CupertinoButton(
+                      key: const ValueKey('context-popover-model-trigger'),
+                      padding: EdgeInsets.zero,
+                      onPressed: _toggleModelMenu,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemBackground.resolveFrom(
+                            context,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: separator),
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: separator),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              (currentModel == null || currentModel.isEmpty)
-                                  ? l10n.contextWindowFollowServerDefault
-                                  : currentModel,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: CupertinoColors.label.resolveFrom(
-                                  context,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                (currentModel == null || currentModel.isEmpty)
+                                    ? l10n.contextWindowFollowServerDefault
+                                    : currentModel,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: CupertinoColors.label.resolveFrom(
+                                    context,
+                                  ),
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          AnimatedRotation(
-                            turns: _isExpanded ? 0.5 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              CupertinoIcons.chevron_down,
-                              size: 14,
-                              color: secondary,
+                            const SizedBox(width: 8),
+                            AnimatedRotation(
+                              turns: _modelMenuEntry != null ? 0.5 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                CupertinoIcons.chevron_down,
+                                size: 14,
+                                color: secondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-                if (_isExpanded) ...[
-                  const SizedBox(height: 6),
-                  PopoverDropdownCard(
-                    width: double.infinity,
-                    child: _loadingModels
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: CupertinoActivityIndicator(radius: 8),
-                            ),
-                          )
-                        : ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 160),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (final m in models)
-                                    _ModelRow(
-                                      key: ValueKey('context-popover-model-$m'),
-                                      label: m,
-                                      selected: m == currentModel,
-                                      onTap: () {
-                                        setState(() => _isExpanded = false);
-                                        ref
-                                            .read(
-                                              chatControllerProvider(
-                                                widget.sessionId,
-                                              ).notifier,
-                                            )
-                                            .selectModel(m);
-                                        widget.onClose();
-                                      },
-                                    ),
-                                  _ModelRow(
-                                    key: const ValueKey(
-                                      'context-popover-model-default',
-                                    ),
-                                    label:
-                                        l10n.contextWindowFollowServerDefault,
-                                    selected: currentModel == null ||
-                                        currentModel.isEmpty,
-                                    onTap: () {
-                                      setState(() => _isExpanded = false);
-                                      ref
-                                          .read(
-                                            chatControllerProvider(
-                                              widget.sessionId,
-                                            ).notifier,
-                                          )
-                                          .selectModel(null);
-                                      widget.onClose();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -461,12 +592,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(36, 24),
                         onPressed: () {
+                          _removeAllMenus();
                           setState(() {
                             _manualInputExpanded = !_manualInputExpanded;
-                            if (_manualInputExpanded) {
-                              _workspaceDropdownExpanded = false;
-                              _isExpanded = false;
-                            }
                           });
                         },
                         child: Text(
@@ -482,131 +610,55 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                 Semantics(
                   button: true,
                   label: l10n.selectWorkspace,
-                  child: CupertinoButton(
-                    key: const ValueKey('context-popover-workspace-trigger'),
-                    padding: EdgeInsets.zero,
-                    onPressed: () {
-                      setState(() {
-                        if (_workspaceDropdownExpanded) {
-                          _workspaceDropdownExpanded = false;
-                        } else {
-                          _workspaceDropdownExpanded = true;
-                          _isExpanded = false;
-                          _manualInputExpanded = false;
-                        }
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemBackground.resolveFrom(
-                          context,
+                  child: CompositedTransformTarget(
+                    link: _workspaceMenuLink,
+                    child: CupertinoButton(
+                      key: const ValueKey('context-popover-workspace-trigger'),
+                      padding: EdgeInsets.zero,
+                      onPressed: _toggleWorkspaceMenu,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemBackground.resolveFrom(
+                            context,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: separator),
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: separator),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              currentWorkspaceLabel,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: CupertinoColors.label.resolveFrom(
-                                  context,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                currentWorkspaceLabel,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: CupertinoColors.label.resolveFrom(
+                                    context,
+                                  ),
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          AnimatedRotation(
-                            turns: _workspaceDropdownExpanded ? 0.5 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              CupertinoIcons.chevron_down,
-                              size: 14,
-                              color: secondary,
+                            const SizedBox(width: 8),
+                            AnimatedRotation(
+                              turns: _workspaceMenuEntry != null ? 0.5 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                CupertinoIcons.chevron_down,
+                                size: 14,
+                                color: secondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-                if (_workspaceDropdownExpanded) ...[
-                  const SizedBox(height: 6),
-                  PopoverDropdownCard(
-                    width: double.infinity,
-                    child: _loadingWorkspaces
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: CupertinoActivityIndicator(radius: 8),
-                            ),
-                          )
-                        : ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 160),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_workspaces.isNotEmpty) ...[
-                                    for (final w in _workspaces)
-                                      _WorkspaceRow(
-                                        key: ValueKey(
-                                          'workspace-item-${w.path}',
-                                        ),
-                                        label: (w.name != null &&
-                                                w.name!.trim().isNotEmpty)
-                                            ? '${w.path} — ${w.name}'
-                                            : (w.path ?? ''),
-                                        selected: currentWorkspace == w.path,
-                                        onTap: () => _selectWorkspace(w.path),
-                                      ),
-                                    _WorkspaceRow(
-                                      key: const ValueKey(
-                                        'workspace-item-default',
-                                      ),
-                                      label:
-                                          l10n.followSessionDefaultWorkspace,
-                                      selected: currentWorkspace == null ||
-                                          currentWorkspace.trim().isEmpty,
-                                      onTap: () => _selectWorkspace(null),
-                                    ),
-                                  ] else ...[
-                                    _WorkspaceRow(
-                                      key: const ValueKey(
-                                        'workspace-item-default',
-                                      ),
-                                      label:
-                                          l10n.followSessionDefaultWorkspace,
-                                      selected: currentWorkspace == null ||
-                                          currentWorkspace.trim().isEmpty,
-                                      onTap: () => _selectWorkspace(null),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Text(
-                                        l10n.noWorkspacesAvailableHint,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: secondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
                 if (_manualInputExpanded) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -645,8 +697,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           vertical: 8,
                         ),
                         minimumSize: const Size(44, 28),
-                        onPressed:
-                            _savingWorkspace ? null : _saveManualWorkspace,
+                        onPressed: _savingWorkspace
+                            ? null
+                            : _saveManualWorkspace,
                         child: Text(
                           l10n.save,
                           style: const TextStyle(fontSize: 13),
@@ -698,6 +751,48 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+/// 模型/工作区悬浮下拉菜单的 overlay 壳：全屏透明 barrier（点菜单外先收
+/// 起本菜单，悬浮层盖住下层内容时也能点外部收起）+ 跟随触发器位置的卡片。
+class _FloatingMenu extends StatelessWidget {
+  const _FloatingMenu({
+    required this.link,
+    required this.offset,
+    required this.onDismiss,
+    required this.child,
+  });
+
+  final LayerLink link;
+  final Offset offset;
+  final VoidCallback onDismiss;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.expand(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDismiss,
+            ),
+          ),
+          CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            offset: offset,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDismiss,
+              child: child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CompressIconButton extends StatelessWidget {
   const _CompressIconButton({
     super.key,
@@ -729,11 +824,7 @@ class _CompressIconButton extends StatelessWidget {
 
     final child = compressing
         ? const CupertinoActivityIndicator(radius: 10)
-        : Icon(
-            CupertinoIcons.archivebox,
-            size: 18,
-            color: iconColor,
-          );
+        : Icon(CupertinoIcons.archivebox, size: 18, color: iconColor);
 
     return Semantics(
       button: true,
@@ -749,25 +840,25 @@ class _CompressIconButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: enabled
                 ? (isHigh
-                    ? CupertinoColors.systemRed
-                        .resolveFrom(context)
-                        .withValues(alpha: 0.12)
-                    : isMid
-                        ? CupertinoColors.systemOrange
+                      ? CupertinoColors.systemRed
                             .resolveFrom(context)
                             .withValues(alpha: 0.12)
-                        : CupertinoColors.systemGrey5.resolveFrom(context))
+                      : isMid
+                      ? CupertinoColors.systemOrange
+                            .resolveFrom(context)
+                            .withValues(alpha: 0.12)
+                      : CupertinoColors.systemGrey5.resolveFrom(context))
                 : CupertinoColors.systemGrey5
-                    .resolveFrom(context)
-                    .withValues(alpha: 0.6),
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: enabled
                   ? (isHigh
-                      ? CupertinoColors.systemRed.resolveFrom(context)
-                      : isMid
-                          ? CupertinoColors.systemOrange.resolveFrom(context)
-                          : CupertinoColors.separator.resolveFrom(context))
+                        ? CupertinoColors.systemRed.resolveFrom(context)
+                        : isMid
+                        ? CupertinoColors.systemOrange.resolveFrom(context)
+                        : CupertinoColors.separator.resolveFrom(context))
                   : CupertinoColors.separator.resolveFrom(context),
               width: 0.5,
             ),
@@ -853,8 +944,8 @@ class _WorkspaceRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: selected
-                    ? CupertinoColors.activeBlue.resolveFrom(context)
-                    : CupertinoColors.label.resolveFrom(context),
+                      ? CupertinoColors.activeBlue.resolveFrom(context)
+                      : CupertinoColors.label.resolveFrom(context),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -872,4 +963,3 @@ class _WorkspaceRow extends StatelessWidget {
     );
   }
 }
-

@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../chat/pending_attachments_provider.dart';
 import '../../chat/selection_provider.dart';
+import '../../chat/widgets/attachment_pending_bar.dart';
 import '../../chat/widgets/context_window_indicator.dart';
 import '../../chat/widgets/context_window_popover.dart';
 import '../../chat/widgets/selection_chips.dart';
@@ -16,6 +18,7 @@ import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
+import '../../../core/models/upload_response.dart';
 import '../../../core/providers/clipboard_paste_provider.dart';
 import '../../../core/providers/file_picker_provider.dart';
 import '../../../core/utils/accessibility.dart';
@@ -56,8 +59,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   void initState() {
     super.initState();
     _bookmarkKey = GlobalKey(debugLabel: 'chat-bookmark-${widget.sessionId}');
-    _contextIndicatorKey =
-        GlobalKey(debugLabel: 'chat-context-${widget.sessionId}');
+    _contextIndicatorKey = GlobalKey(
+      debugLabel: 'chat-context-${widget.sessionId}',
+    );
   }
 
   @override
@@ -65,8 +69,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sessionId != widget.sessionId) {
       _bookmarkKey = GlobalKey(debugLabel: 'chat-bookmark-${widget.sessionId}');
-      _contextIndicatorKey =
-          GlobalKey(debugLabel: 'chat-context-${widget.sessionId}');
+      _contextIndicatorKey = GlobalKey(
+        debugLabel: 'chat-context-${widget.sessionId}',
+      );
     }
   }
 
@@ -103,15 +108,26 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   Future<void> _submit() async {
     final raw = _textController.text;
     final repo = ref.read(pendingSelectionsProvider(widget.sessionId).notifier);
+    final pendingAttachments = ref.read(
+      pendingAttachmentsProvider(widget.sessionId),
+    );
     final extra = repo.buildMessageForApi(raw);
-    if (extra.trim().isEmpty) return;
+    // 附件引用后缀（对齐 Swift PendingAttachment.chatMessageText）
+    final message = PendingAttachment.chatMessageText(
+      extra.trim(),
+      pendingAttachments,
+    );
+    if (message.trim().isEmpty) return;
     _textController.clear();
     setState(() => _hasText = false);
     final sent = await ref
         .read(chatControllerProvider(widget.sessionId).notifier)
-        .send(extra);
-    if (sent && extra != raw) {
-      ref.read(pendingSelectionsProvider(widget.sessionId).notifier).clear();
+        .send(message, attachments: pendingAttachments);
+    if (sent) {
+      if (extra != raw) {
+        ref.read(pendingSelectionsProvider(widget.sessionId).notifier).clear();
+      }
+      ref.read(pendingAttachmentsProvider(widget.sessionId).notifier).clear();
     } else if (!sent) {
       _textController.text = raw;
       _textController.selection = TextSelection.fromPosition(
@@ -137,20 +153,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     setState(() => _uploading = true);
     try {
       final client = ref.read(apiClientProvider);
-      await client.uploadFile(
+      final resp = await client.uploadFile(
         sessionId: widget.sessionId,
         data: picked.bytes,
         filename: picked.name,
       );
       if (!mounted) return;
-      // 上传成功后把附件作为本地消息追加进聊天流
-      await ref
-          .read(chatControllerProvider(widget.sessionId).notifier)
-          .send('📎 ${picked.name}');
-      await _showNotice(
-        l10n.uploadSuccess,
-        l10n.attachmentUploaded(picked.name),
-      );
+      // 只入待发附件列表，不直接发送；点发送时随消息一并提交。
+      ref
+          .read(pendingAttachmentsProvider(widget.sessionId).notifier)
+          .add(
+            PendingAttachment(
+              name: picked.name,
+              path: resp.path ?? picked.name,
+              mime: resp.mime ?? '',
+              size: resp.size ?? picked.bytes.length,
+              isImage: resp.isImage ?? false,
+              thumbnailData: picked.bytes,
+            ),
+          );
     } catch (error) {
       if (!mounted) return;
       await _showError(l10n.uploadFailed, _errorMessage(error));
@@ -159,25 +180,31 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     }
   }
 
+  /// 粘贴得到的图片/文件：上传完成后进入待发附件列表（发送由用户点按钮触发）。
   Future<void> _handlePasteBytes(Uint8List bytes, String filename) async {
     if (_uploading) return;
     final l10n = AppLocalizations.of(context);
     setState(() => _uploading = true);
     try {
       final client = ref.read(apiClientProvider);
-      await client.uploadFile(
+      final resp = await client.uploadFile(
         sessionId: widget.sessionId,
         data: bytes,
         filename: filename,
       );
       if (!mounted) return;
-      await ref
-          .read(chatControllerProvider(widget.sessionId).notifier)
-          .send('📎 $filename');
-      await _showNotice(
-        l10n.uploadSuccess,
-        l10n.attachmentUploaded(filename),
-      );
+      ref
+          .read(pendingAttachmentsProvider(widget.sessionId).notifier)
+          .add(
+            PendingAttachment(
+              name: filename,
+              path: resp.path ?? filename,
+              mime: resp.mime ?? '',
+              size: resp.size ?? bytes.length,
+              isImage: resp.isImage ?? false,
+              thumbnailData: bytes,
+            ),
+          );
     } catch (error) {
       if (!mounted) return;
       await _showError(l10n.uploadFailed, _errorMessage(error));
@@ -197,7 +224,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     // 修复：附件探测与纯文本路径彻底解耦——任意一边异常都不影响另一边。
     PastedAttachment? attachment;
     try {
-      attachment = await ref.read(clipboardPasteServiceProvider).readPastedAttachment();
+      attachment = await ref
+          .read(clipboardPasteServiceProvider)
+          .readPastedAttachment();
     } catch (_) {
       attachment = null;
     }
@@ -228,7 +257,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final int clampedMin = min.clamp(0, currentText.length);
     final int clampedMax = max.clamp(0, currentText.length);
 
-    final newText = currentText.replaceRange(clampedMin, clampedMax, textToInsert);
+    final newText = currentText.replaceRange(
+      clampedMin,
+      clampedMax,
+      textToInsert,
+    );
     final newOffset = clampedMin + textToInsert.length;
     _textController.value = TextEditingValue(
       text: newText,
@@ -236,28 +269,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
 
     final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
-    final canSendWithPending = pending.isNotEmpty;
+    final pendingAttachments = ref.read(
+      pendingAttachmentsProvider(widget.sessionId),
+    );
+    final canSendWithPending =
+        pending.isNotEmpty || pendingAttachments.isNotEmpty;
     final hasText = newText.trim().isNotEmpty || canSendWithPending;
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
-  }
-
-  Future<void> _showNotice(String title, String message) {
-    final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _showError(String title, String message) {
@@ -266,7 +286,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: Text(title),
-        content: Text(message, style: TextStyle(color: statusRedText.resolveFrom(context))),
+        content: Text(
+          message,
+          style: TextStyle(color: statusRedText.resolveFrom(context)),
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
@@ -347,11 +370,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _showContextPopover() async {
-    final snapshot =
-        ref.read(chatControllerProvider(widget.sessionId)).contextWindowSnapshot;
+    final snapshot = ref
+        .read(chatControllerProvider(widget.sessionId))
+        .contextWindowSnapshot;
     if (snapshot == null) return;
-    final currentModel =
-        ref.read(chatControllerProvider(widget.sessionId)).model;
+    final currentModel = ref
+        .read(chatControllerProvider(widget.sessionId))
+        .model;
     await showCupertinoPopover(
       context: context,
       anchorKey: _contextIndicatorKey,
@@ -380,15 +405,21 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final isSending = phase == ChatPhase.sending;
     final interactive = widget.enabled;
     final pending = ref.watch(pendingSelectionsProvider(widget.sessionId));
-    final canSendWithPending = pending.isNotEmpty;
-    final snapshot =
-        ref.watch(chatControllerProvider(widget.sessionId)).contextWindowSnapshot;
+    final pendingAttachments = ref.watch(
+      pendingAttachmentsProvider(widget.sessionId),
+    );
+    final canSendWithPending =
+        pending.isNotEmpty || pendingAttachments.isNotEmpty;
+    final snapshot = ref
+        .watch(chatControllerProvider(widget.sessionId))
+        .contextWindowSnapshot;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SelectionChipPanel(sessionId: widget.sessionId),
+        AttachmentPendingBar(sessionId: widget.sessionId),
         Container(
           decoration: BoxDecoration(
             border: Border(
@@ -533,8 +564,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   AccessibleButton(
                     key: const ValueKey('chat-send-button'),
                     label: l10n.sendMessage,
-                    onPressed:
-                        (interactive && (_hasText || canSendWithPending))
+                    onPressed: (interactive && (_hasText || canSendWithPending))
                         ? _submit
                         : null,
                     padding: EdgeInsets.zero,
