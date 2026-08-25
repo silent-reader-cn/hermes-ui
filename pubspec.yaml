@@ -59,6 +59,7 @@ dependencies:
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
   super_clipboard: ^0.1.7+6
+  pasteboard: ^0.5.0
 
 dev_dependencies:
   flutter_test:

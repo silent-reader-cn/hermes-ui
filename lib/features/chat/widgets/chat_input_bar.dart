@@ -191,19 +191,23 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final isSending = phase == ChatPhase.sending;
     if (!widget.enabled || isSending || _uploading) return;
 
-    final pasteService = ref.read(clipboardPasteServiceProvider);
+    // 对话框复制文本后右键粘贴闪退的主因：纯文本也先走 FFI 的
+    // ClipboardReader.readClipboard()（super_clipboard），在 Windows 上
+    // Dart 3.13 + irondash 0.1.1 会直接 abort。
+    // 修复：附件探测与纯文本路径彻底解耦——任意一边异常都不影响另一边。
     PastedAttachment? attachment;
     try {
-      attachment = await pasteService.readPastedAttachment();
+      attachment = await ref.read(clipboardPasteServiceProvider).readPastedAttachment();
     } catch (_) {
       attachment = null;
     }
+
     if (attachment != null && attachment.bytes.isNotEmpty) {
       await _handlePasteBytes(attachment.bytes, attachment.filename);
       return;
     }
 
-    // 纯文本放行：从系统剪贴板读取文本并插入输入框光标处
+    // 无附件或探测超时/失败：回落到纯文本粘贴（引擎通道，Windows 安全）
     try {
       await _pastePlainText();
     } catch (_) {}
