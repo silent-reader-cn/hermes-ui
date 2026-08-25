@@ -1,7 +1,8 @@
-# AGENTS.md — hermex-flutter 项目行为守则
+# AGENTS.md — hermex-flutter 执行契约（agy 子代理必读）
 
-> 本文档是**所有参与本仓库工作的 AI 代理（含子代理）的强制规范**，开工前必读。
-> 与本仓库代码风格冲突的写法一律以本文档为准；本文档与 `docs/CODING_STYLE.md` 同源，冲突时以本文档为准。
+> 本文档是**执行契约**：所有编码子代理（agy / 任何 AI 代理）进本仓库前必读。
+> 与代码风格冲突时以本文档为准；协作与方向见 `HERMES.md`（主人 ↔ 柚子），与本文档冲突时本文档的硬规则优先。
+> 精简镜像：`docs/CODING_STYLE.md`（同源，AGENTS.md 为权威）。
 > 历史说明：曾因 Hermes 对 `AGENTS.md` 文件名的审批机制在 QQ 渠道不可用而以 `AGENT_.md` 落盘，现已正名。
 
 ## 1. 项目简介
@@ -228,13 +229,14 @@ avoid_dynamic_calls: false  # 容错解码刻意放宽
 ### 8.2 本地流水线
 
 ```bash
-flutter analyze          # 零告警（含 info）
-flutter test             # 全绿
-flutter build apk --debug
+C:/tmp/f.bat analyze          # 零告警（含 info）
+C:/tmp/f.bat test             # 全绿
+C:/tmp/f.bat test --update-goldens   # 布局/样式变更后刷新金照
+C:/tmp/f.bat build apk --debug
 python tools/fake_gateway/smoke_test.py
 ```
 
-> Windows 宿主在 MSYS bash 下跑 flutter/dart 需走封装 bat（如 `C:/tmp/f.bat`），避免 HOME/PATH 污染（见 `windows-terminal` skill）。
+> Windows 宿主在 MSYS bash 下跑 flutter/dart 需走封装 bat `C:/tmp/f.bat`，避免 HOME/PATH 污染。详见 `windows-terminal` skill 的 `references/flutter-toolchain-msys-setup.md`。
 
 ### 8.3 CI 流水线（`.github/workflows/ci.yml`）
 
@@ -252,7 +254,7 @@ python tools/fake_gateway/smoke_test.py
 
 ## 9. Git 规范
 
-- 分支：`feat/<模块>`；提交信息：`<type>(<scope>): <subject>`（type: feat/fix/refactor/test/docs/chore）
+- 分支：`feat/<模块>` 或 `agy/<任务>`；提交信息：`<type>(<scope>): <subject>`（type: feat/fix/refactor/test/docs/chore）
 - 提交前 `git status` 确认只 add 相关文件；禁止 `git add -A` 混入无关文件
 - 合并到 main 前必须：analyze 通过 + 测试通过 + 无 TODO 遗留（有意遗留的 TODO 要标注负责人）
 - 任务前先 commit 当前进度；子代理禁止自行 commit（由 Leader 统一提交，见 §12）
@@ -266,59 +268,48 @@ python tools/fake_gateway/smoke_test.py
 
 ## 11. 完成定义（DoD）
 
-- [ ] `flutter analyze` 零告警
-- [ ] `flutter test` 全绿（新增代码有测试）
+- [ ] `C:/tmp/f.bat analyze` 零告警
+- [ ] `C:/tmp/f.bat test` 全绿（新增代码有测试）
 - [ ] 无 Material 组件混入业务 UI
 - [ ] 与 Hermex 对应功能行为一致（对照 `.reference/hermex-src`）
 - [ ] 提交信息规范、分支正确
 - [ ] CI 三 job 全绿（analyze-test / android-debug / fake-gateway）
 
-## 12. 并行治理与 Leader 工作流（强制）
+## 12. 子代理执行规范（agy 并行任务书）
 
-> 本节定义本仓库的**协作治理规范**。柚子担任 Leader，负责通过 AGY 调度并行子代理完成任务，承担下令、盯场、验收、合并全责。所有参与本仓库的 AI 代理（含子代理）必须遵守。
+> 本节是**子代理执行规范**。协作与方向见 `HERMES.md`，任务书自包含，子代理无对话上下文，只按任务书执行。
 
-### 12.1 角色与职责
+### 12.1 任务书自包含
 
-- **Leader（柚子）**：接收主人指示，拆解任务，编写任务书，派发 AGY 子代理，实时盯场与 steer 纠偏，独立复验成果，统一提交入库，并向主人汇报阶段快照。
-- **子代理**：无对话上下文，按任务书自包含指令执行；只写分配给自己的文件分区；禁止自行 commit/push；各自自测后报告。
-- **主人**：下达目标与验收标准，不需关心并发细节；阻塞或重大偏离时由 Leader 报损失、给方案、等指示。
+每个 AGY 子代理任务书（`TASK.md`）必须包含：
 
-### 12.2 五步闭环（固定节奏）
-
-```
-1. 规格先行 — 预研子代理读透 .reference/hermex-src 与现有代码，产出规格文档（字段映射/端点表/状态机/容错规则/易错点，关键结论带源码行号），Leader 逐条抽查验收后入库 docs/specs/
-2. 编码并行 — 子代理按规格与文件级分区并行编码，互不重叠，交叉依赖接口在规格中定死
-3. 盯场纠偏 — Leader 实时查看 transcript 与产出文件数，静默 3 分钟即 steer，给具体绕坑方案而非空催
-4. 独立复验 — 不轻信子代理自报，Leader 独立重跑 flutter analyze（零告警）+ flutter test（全绿），清理临时文件，核查规格偏离
-5. 统一提交 — 子代理禁止 commit，由 Leader 统一 git add 指定文件、规范提交、推送；进入下一阶段
-```
-
-### 12.3 任务书自包含规范
-
-每个 AGY 子代理任务书必须包含：
-
-- 项目根路径 `D:\projects\hermex-flutter` 与 Windows/MSYS 环境坑说明（flutter/dart 必须走封装 bat，如 `C:/tmp/f.bat`，见 `windows-terminal` skill 的 `references/flutter-toolchain-msys-setup.md`）
-- 必读文档清单（绝对路径：本 AGENTS.md、DESIGN.md、IMPLEMENTATION_PLAN.md、对应 .reference 源码）
-- 关键已有代码路径（先读再写，避免重复造轮子）
+- 项目根路径 `D:\projects\hermex-flutter` 与 worktree 路径 `D:\worktrees\hermex-aug24-xxx`，以及 Windows/MSYS 环境坑说明（flutter/dart 必须走 `C:/tmp/f.bat`，见 `windows-terminal` skill `references/flutter-toolchain-msys-setup.md`）
+- 必读文档清单（绝对路径：本 AGENTS.md、`HERMES.md`、`DESIGN.md`、`IMPLEMENTATION_PLAN.md`、对应 `.reference` 源码、关键已有代码路径）
 - 文件级分区（例：`lib/features/chat/*` 归 A，`lib/core/models/*` 归 B，禁止交叉写）
-- 验收标准（具体命令与阈值：`flutter analyze` 零告警、`flutter test` 全绿、无 Material 混入）
+- 验收标准（具体命令与阈值：`C:/tmp/f.bat analyze` 零告警、`C:/tmp/f.bat test` 全绿 + `--update-goldens`、无 Material 混入）
 - Git 纪律：**不要 commit**，Leader 统一提交
-- 模型固定：`gemini-3.7-flash-high`（用户指定，禁换）
+- 模型固定：`gemini-3.7-flash-high`（禁换）
 - 产出要求：手写 fromJson/toJson 容错、Cupertino 全量、Riverpod 后缀规范等（同本文第 4-8 节）
 
-### 12.4 盯场与 steer
+### 12.2 agy 调用
 
-- 进度检查：`find <产出目录> -name "*.dart" | wc -l` 计数 + `tail` live transcript 看最近动作
-- 静默 3 分钟无日志视为可能卡住，立即 steer，示例话术："立即落盘第一个文件，不要在脑中一次性生成全部；按 <文件顺序> 逐个写"
-- steer 必须给**具体方案**：如 secure_storage 测试卡 platform 注入 → 建议抽象 `SecureStorage` 接口并注入内存 fake；网络超时 → 提示用 mocktail 隔离
-- 子代理回复"信息足够，开始写"后仍无产出，二次 steer 指定文件顺序与首个文件路径
+```bash
+# 探活
+command -v agy && agy --version
+agy models   # 确认 gemini-3.7-flash-high 在列
 
-### 12.5 独立复验（验收清单）
+# 一把梭（workdir 必须指到对应 worktree，否则 TASK.md 找不到会空 prompt）
+agy --model "gemini-3.7-flash-high" -p "$(cat TASK.md)" --print-timeout 40m --dangerously-skip-permissions
+```
+
+参数：`--model` 必须在 `-p` 前；`-p/--print` 非交互纯文本；`--print-timeout 40m` 起步（默认 5m 太紧）；`--dangerously-skip-permissions` 无人值守；`workdir` 指 worktree。
+
+### 12.3 验收清单（每批子代理交活后 Leader 复验）
 
 每批子代理交活后 Leader 必须逐项复验：
 
-- [ ] 独立跑 `flutter analyze` 全项目零告警（含 info 级）
-- [ ] 独立跑 `flutter test` 全绿（含原有用例无回归）
+- [ ] 独立跑 `C:/tmp/f.bat analyze` 全项目零告警（含 info）
+- [ ] 独立跑 `C:/tmp/f.bat test` 全绿（含原有用例无回归）；样式变更后 `C:/tmp/f.bat test --update-goldens` 并提交 `test/golden/goldens/*.png`
 - [ ] 无临时调试文件残留（如 `debug_tmp_test.dart`、未清理 mock、TODO(merge)）
 - [ ] 无 Material 组件混入业务 UI
 - [ ] 子代理偏离规格处有书面说明，无说明偏离需追问
@@ -326,21 +317,17 @@ python tools/fake_gateway/smoke_test.py
 
 > 并发 flaky 识别：两子代理同时跑 `flutter test` 会抢 build 锁导致时序敏感用例偶发失败。判定：单独重跑该文件全绿且工作区干净即判为并发干扰，不视为回归；验收应在子代理全部结束后统一重跑。
 
-### 12.6 环境与提交纪律
-
-- Windows 宿主：子代理与 Leader 共用同一机器，flutter/dart 的 MSYS PATH/HOME 污染问题一致，任务书必须写明封装 bat 路径
-- Git：`checkout -b feat/<模块>` 新分支；任务前 commit；commit 前 `git status` 仅 add 相关文件，禁止 `git add -A`；合并到 main 前满足 §11 DoD
-- 文档沉淀：规格文档、SSE/WS 事件映射、端点对照表等一律进 `docs/` 并 git 入库；项目决策（优先级/命名/工具链位置/推进方式）记入 `IMPLEMENTATION_PLAN.md`
-
-### 12.7 汇报节奏
-
-- 每阶段完成向主人汇报「已完成 / 进行中 / 下一步」快照
-- 阻塞、数据丢失、核心事实错误等重错：立即停手 → 报损失 → 给方案 → 等指示；轻错（拼写/路径）秒修不提
-- 进度更新用中文短平快，技术结论先行、分析附后
-
-### 12.8 引用 Skill
+### 12.4 引用 Skill
 
 - `parallel-subagent-project-governance` — 并行治理主规范
 - `windows-terminal` — Windows 上 flutter 工具链封装与 MSYS 坑位
 - `hermex-flutter-codebase` — 本仓库代码导航与移植约束
 - `hermes-agent` — Hermes 本体能力查询（与 docs 冲突时以 docs 为准）
+
+## 13. 索引（去哪看）
+
+- 协作与方向：`HERMES.md`（主人 ↔ 柚子）
+- 外壳：`DESIGN.md`
+- 实施计划：`IMPLEMENTATION_PLAN.md`
+- 规格：`docs/specs/` + `docs/PROTOCOL_NOTES.md`
+- 流水线：`.github/workflows/ci.yml`

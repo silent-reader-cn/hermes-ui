@@ -42,3 +42,6 @@ web/favicon.png
 Thumbs.db
 # Flutter / Dart tooling
 devtools_options.yaml
+
+# 协作手册（本地，主仆私有，不进仓库）
+HERMES.md
