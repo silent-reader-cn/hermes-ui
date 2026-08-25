@@ -17,6 +17,9 @@ import 'markdown_styles.dart';
 import 'selected_context_card.dart';
 import 'tool_call_card.dart';
 
+/// 消息内区块统一间距（思考卡 / 工具卡 / 正文 / 选中上下文卡之间固定间隔）。
+const double kMessageSectionGap = 8.0;
+
 /// 单条消息气泡（chat_spec.md §6.3 渲染分支）。
 ///
 /// - user：右对齐蓝色气泡，content 去 `[Attached files: …]` 标记，附件条渲染；
@@ -263,49 +266,87 @@ class _AssistantContent extends StatelessWidget {
     final cleanText = selected.cleanText;
     final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
 
+    // 渲染层去重兜底：completed 与 live 双份（重连/重放场景）时只显示一份，
+    // 避免 double 思考卡 / double 工具卡。
+    final distinctReasoning = _distinctReasoning(reasoningGroups);
+    final distinctTools = _distinctToolGroups(toolGroups);
+
+    // 统一间距模型：各区块（选中上下文卡片 / 思考卡 / 正文 / 工具卡 / 速率）
+    // 之间固定 [kMessageSectionGap]，不再依赖卡片自身 margin 造成上下不均。
+    final sections = <Widget>[];
+    if (blocks.isNotEmpty) {
+      sections.add(SelectedContextCardGroup(blocks: blocks));
+    }
+    // 思考卡在工具卡上方（同聚合场景下思考优先展示）
+    for (final group in distinctReasoning) {
+      sections.add(_ReasoningBlock(group: group));
+    }
+    if (parsedContent.isNotEmpty) {
+      sections.add(
+        MarkdownBody(
+          data: parsedContent,
+          selectable: true,
+          styleSheet: buildAssistantMarkdownStyleSheet(context),
+          builders: createAssistantMarkdownBuilders(context),
+          // ignore: deprecated_member_use
+          imageBuilder: (uri, title, alt) {
+            return ChatInlineMediaWidget(
+              rawUri: uri.toString(),
+              title: title,
+              alt: alt,
+              baseUrl: baseUrl,
+              sessionId: sessionId,
+              customHeaders: customHeaders,
+            );
+          },
+        ),
+      );
+    }
+    for (final group in distinctTools) {
+      sections.add(ToolCallGroupCard(group: group));
+    }
+    if (message.turnTps != null) {
+      sections.add(
+        Text(
+          '${message.turnTps!.toStringAsFixed(1)} tok/s',
+          style: TextStyle(
+            fontSize: 11,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+      );
+    }
+
+    final children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) children.add(const SizedBox(height: kMessageSectionGap));
+      children.add(sections[i]);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (blocks.isNotEmpty) ...[
-          SelectedContextCardGroup(blocks: blocks),
-          if (parsedContent.isNotEmpty ||
-              toolGroups.isNotEmpty ||
-              reasoningGroups.isNotEmpty)
-            const SizedBox(height: 6),
-        ],
-        for (final group in reasoningGroups) _ReasoningBlock(group: group),
-        if (parsedContent.isNotEmpty)
-          MarkdownBody(
-            data: parsedContent,
-            selectable: true,
-            styleSheet: buildAssistantMarkdownStyleSheet(context),
-            builders: createAssistantMarkdownBuilders(context),
-            // ignore: deprecated_member_use
-            imageBuilder: (uri, title, alt) {
-              return ChatInlineMediaWidget(
-                rawUri: uri.toString(),
-                title: title,
-                alt: alt,
-                baseUrl: baseUrl,
-                sessionId: sessionId,
-                customHeaders: customHeaders,
-              );
-            },
-          ),
-        for (final group in toolGroups) ToolCallGroupCard(group: group),
-        if (message.turnTps != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '${message.turnTps!.toStringAsFixed(1)} tok/s',
-              style: TextStyle(
-                fontSize: 11,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-      ],
+      children: children,
     );
+  }
+
+  static List<ReasoningGroup> _distinctReasoning(List<ReasoningGroup> groups) {
+    final seen = <String>{};
+    final out = <ReasoningGroup>[];
+    for (final g in groups) {
+      final key = '${g.anchorMessageId ?? ''}:${g.text.trim()}';
+      if (seen.add(key)) out.add(g);
+    }
+    return out;
+  }
+
+  static List<ToolCallGroup> _distinctToolGroups(List<ToolCallGroup> groups) {
+    final seen = <String>{};
+    final out = <ToolCallGroup>[];
+    for (final g in groups) {
+      final key =
+          '${g.anchorMessageID ?? ''}:${g.toolCalls.map((t) => t.id).join(',')}';
+      if (seen.add(key)) out.add(g);
+    }
+    return out;
   }
 }
 
@@ -421,7 +462,6 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         // 与工具调用卡片同款视觉（思考按 tool 样式折叠卡渲染）。

@@ -214,20 +214,34 @@ final reasoningGroupsProvider = Provider.family<List<ReasoningGroup>, String>((
         ];
   final raw = [...state.completedReasoningGroups, ...live];
   if (raw.length <= 1) return raw;
+  // 去重兜底：同一锚点+同文本的推理段只保留一份（重连/重放时 completed 与
+  // live 可能携带同一思考内容，合并前先去重，避免 double 思考卡）。
+  final distinct = _distinctReasoning(raw);
+  if (distinct.length <= 1) return distinct;
   if (!coalesce) {
     // 关闭 ≠ 完全不聚合：仅相邻（无 text/tool 打断）的思考段合并。
     return ReasoningGroup.coalescingAdjacent(
-      raw,
+      distinct,
       messages: state.messages,
       messageOffset: state.messagesOffset,
     );
   }
   return ReasoningGroup.coalescingByTurn(
-    raw,
+    distinct,
     messages: state.messages,
     messageOffset: state.messagesOffset,
   );
 });
+
+List<ReasoningGroup> _distinctReasoning(List<ReasoningGroup> groups) {
+  final seen = <String>{};
+  final out = <ReasoningGroup>[];
+  for (final g in groups) {
+    final key = '${g.anchorMessageId ?? ''}:${g.text.trim()}';
+    if (seen.add(key)) out.add(g);
+  }
+  return out;
+}
 
 /// 排队待发送消息数。
 final queuedCountProvider = Provider.family<int, String>((ref, sessionId) {

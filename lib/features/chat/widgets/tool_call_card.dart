@@ -30,13 +30,17 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final accentColor = failed
         ? CupertinoColors.systemRed.resolveFrom(context)
         : running
-            ? CupertinoColors.activeBlue.resolveFrom(context)
-            : CupertinoColors.systemGreen.resolveFrom(context);
+        ? CupertinoColors.activeBlue.resolveFrom(context)
+        : CupertinoColors.systemGreen.resolveFrom(context);
     final bgColor = failed
         ? CupertinoColors.systemRed.resolveFrom(context).withValues(alpha: 0.08)
         : running
-            ? CupertinoColors.activeBlue.resolveFrom(context).withValues(alpha: 0.08)
-            : CupertinoColors.systemTeal.resolveFrom(context).withValues(alpha: 0.08);
+        ? CupertinoColors.activeBlue
+              .resolveFrom(context)
+              .withValues(alpha: 0.08)
+        : CupertinoColors.systemTeal
+              .resolveFrom(context)
+              .withValues(alpha: 0.08);
 
     final rawSummary = call.summary;
     final String? summary;
@@ -74,7 +78,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   )
                 else
                   Icon(
-                    failed ? CupertinoIcons.exclamationmark_triangle : CupertinoIcons.wrench,
+                    failed
+                        ? CupertinoIcons.exclamationmark_triangle
+                        : CupertinoIcons.wrench,
                     size: 14,
                     color: accentColor,
                   ),
@@ -97,7 +103,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w400,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
                           ),
                       ],
@@ -111,12 +119,16 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     '${call.duration!.toStringAsFixed(1)}s',
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 const SizedBox(width: 6),
                 Icon(
-                  _expanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                  _expanded
+                      ? CupertinoIcons.chevron_up
+                      : CupertinoIcons.chevron_down,
                   size: 12,
                   color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
@@ -157,7 +169,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     AppLocalizations.of(context).runningIndicator,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -200,9 +214,7 @@ class _DividerLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: CupertinoColors.systemGrey4.resolveFrom(context),
-    );
+    return ColoredBox(color: CupertinoColors.systemGrey4.resolveFrom(context));
   }
 }
 
@@ -262,7 +274,6 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色亮块。
@@ -309,7 +320,8 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                         maxWidth: constraints.maxWidth,
                         style: titleStyle,
                         textScaler: MediaQuery.textScalerOf(context),
-                        textDirection: Directionality.maybeOf(context) ??
+                        textDirection:
+                            Directionality.maybeOf(context) ??
                             TextDirection.ltr,
                       );
                       return Text(
@@ -334,12 +346,16 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                     l10n.toolRunningStatus,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 const SizedBox(width: 6),
                 Icon(
-                  _expanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                  _expanded
+                      ? CupertinoIcons.chevron_up
+                      : CupertinoIcons.chevron_down,
                   size: 12,
                   color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
@@ -425,4 +441,3 @@ String _adaptiveActivityTitle({
   // 兜底：若首个 entry 就超宽，则只显示首个 entry 的 name（不含 ×count）+ " …"
   return '${entries.first.key} \u2026';
 }
-

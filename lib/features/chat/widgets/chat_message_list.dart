@@ -65,9 +65,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     super.initState();
     _controller.addListener(_onScroll);
     _scrollTriggerSub = ref.listenManual<int>(
-      chatControllerProvider(
-        widget.sessionId,
-      ).select((s) => s.streamingScrollTrigger),
+      chatControllerProvider(widget.sessionId)
+          .select((s) => s.streamingScrollTrigger),
       (_, _) {
         if (!mounted) return;
         if (_nearBottom) _scrollToBottom();
@@ -107,9 +106,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _nearBottom = true;
       _layoutGeneration++;
       _scrollTriggerSub = ref.listenManual<int>(
-        chatControllerProvider(
-          widget.sessionId,
-        ).select((s) => s.streamingScrollTrigger),
+        chatControllerProvider(widget.sessionId)
+            .select((s) => s.streamingScrollTrigger),
         (_, _) {
           if (!mounted) return;
           if (_nearBottom) _scrollToBottom();
@@ -484,7 +482,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         if (!coalesce && mountedGroupIds.contains(g.id)) {
           continue;
         }
-        final isMatch = (msgId != null && msgId.isNotEmpty && g.anchorMessageID == msgId) ||
+        final isMatch =
+            (msgId != null && msgId.isNotEmpty && g.anchorMessageID == msgId) ||
             (g.anchorMessageID != null && g.anchorMessageID == anchorId);
         if (isMatch) {
           matched.add(g);
@@ -528,7 +527,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         phase == ChatPhase.steered && steerHintText.isNotEmpty;
     final showQueuedBanner = queuedMessages.isNotEmpty;
     // 落地兜底：仅在 coalesce==true 或 transcript 为空且无可挂载 anchor 时才渲染聚合视图
-    final needFallback = coalesce &&
+    final needFallback =
+        coalesce &&
         transcript.isEmpty &&
         streaming == null &&
         phase != ChatPhase.sending &&
@@ -549,12 +549,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
         if (index < transcript.length) {
           final entry = transcript[index];
-          final groups = entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+          final groups =
+              entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
           final reasoning = reasoningGroups
-              .where((g) =>
-                  g.anchorMessageId == entry.message.messageId ||
-                  (g.anchorMessageId != null &&
-                      g.anchorMessageId == entry.anchorId))
+              .where(
+                (g) =>
+                    g.anchorMessageId == entry.message.messageId ||
+                    (g.anchorMessageId != null &&
+                        g.anchorMessageId == entry.anchorId),
+              )
               .toList();
           final noticeId = entry.message.id;
           final expanded = _expandedNoticeIds.contains(noticeId);
@@ -733,15 +736,22 @@ class _FallbackToolReasoningCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 复用与 assistant 气泡相同的 horizontal 12 外边距，内层卡片自带间距
+    // 复用与 assistant 气泡相同的 horizontal 12 外边距；区块间统一固定间距
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final group in reasoningGroups)
+          for (final group in reasoningGroups) ...[
             _FallbackReasoningBlock(group: group),
-          for (final group in toolGroups) ToolCallGroupCard(group: group),
+            if (group != reasoningGroups.last) const SizedBox(height: 8),
+          ],
+          if (reasoningGroups.isNotEmpty && toolGroups.isNotEmpty)
+            const SizedBox(height: 8),
+          for (final group in toolGroups) ...[
+            ToolCallGroupCard(group: group),
+            if (group != toolGroups.last) const SizedBox(height: 8),
+          ],
         ],
       ),
     );
@@ -754,7 +764,8 @@ class _FallbackReasoningBlock extends StatefulWidget {
   final ReasoningGroup group;
 
   @override
-  State<_FallbackReasoningBlock> createState() => _FallbackReasoningBlockState();
+  State<_FallbackReasoningBlock> createState() =>
+      _FallbackReasoningBlockState();
 }
 
 class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
@@ -766,7 +777,9 @@ class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
     final text = widget.group.text.trim();
     if (text.isEmpty) return const SizedBox.shrink();
     final summary = text.replaceAll(RegExp(r'\s+'), ' ');
-    final preview = summary.length > 80 ? '${summary.substring(0, 80)}…' : summary;
+    final preview = summary.length > 80
+        ? '${summary.substring(0, 80)}…'
+        : summary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: GestureDetector(
@@ -784,7 +797,9 @@ class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
               Row(
                 children: [
                   Icon(
-                    _expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_right,
+                    _expanded
+                        ? CupertinoIcons.chevron_down
+                        : CupertinoIcons.chevron_right,
                     size: 12,
                     color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
@@ -794,7 +809,9 @@ class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -805,7 +822,9 @@ class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   ),
