@@ -109,7 +109,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (_yoloLoadedFor == widget.sessionId) return;
     _yoloLoadedFor = widget.sessionId;
     unawaited(
-      ref.read(chatControllerProvider(widget.sessionId).notifier).loadYoloState(),
+      ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .loadYoloState(),
     );
   }
 
@@ -117,33 +119,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     // 监听生命周期状态（Riverpod provider 驱动）
-    ref.listen<AppLifecycleState>(
-      appLifecycleStateProvider,
-      (previous, next) {
-        if (next == AppLifecycleState.resumed) {
-          _triggerSyncDebounced();
-        }
-      },
-    );
+    ref.listen<AppLifecycleState>(appLifecycleStateProvider, (previous, next) {
+      if (next == AppLifecycleState.resumed) {
+        _triggerSyncDebounced();
+      }
+    });
     // P4：新会话首条消息后 URL 从 /chat("") → /chat/<newId> 替换，避免刷新丢会话。
     // 监听与 widget.sessionId 绑定的 controller 的 sessionId 变化；widget 本身
     // 的 sessionId 为空串时代表新会话页，待真实 id 回来后立即 go 替换，左侧
     // SessionList 在 ChatController._onNewSessionCreated 中已触发强制刷新，
     // 桌面双栏下右侧切到新路由后左侧列表保持不丢选中态并高亮新项。
-    ref.listen<ChatState>(
-      chatControllerProvider(widget.sessionId),
-      (previous, next) {
-        final prevId = previous?.sessionId ?? widget.sessionId;
-        final nextId = next.sessionId;
-        if (widget.sessionId.isEmpty && prevId.isEmpty && nextId.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            if (!context.mounted) return;
-            context.go('/chat/$nextId');
-          });
-        }
-      },
-    );
+    ref.listen<ChatState>(chatControllerProvider(widget.sessionId), (
+      previous,
+      next,
+    ) {
+      final prevId = previous?.sessionId ?? widget.sessionId;
+      final nextId = next.sessionId;
+      if (widget.sessionId.isEmpty && prevId.isEmpty && nextId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (!context.mounted) return;
+          context.go('/chat/$nextId');
+        });
+      }
+    });
     final state = ref.watch(chatControllerProvider(widget.sessionId));
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
     return CupertinoPageScaffold(
@@ -152,10 +151,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         middle: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              state.displayTitle,
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text(state.displayTitle, overflow: TextOverflow.ellipsis),
             if (state.parentSessionId != null)
               CupertinoButton(
                 key: const ValueKey('chat-branch-badge'),
@@ -219,27 +215,39 @@ class _ChatPageState extends ConsumerState<ChatPage>
             Expanded(
               child: ChatMessageList(
                 sessionId: widget.sessionId,
-                highlightQuery: widget.matchType == 'content' ? widget.searchQuery : null,
+                highlightQuery: widget.matchType == 'content'
+                    ? widget.searchQuery
+                    : null,
               ),
             ),
             if (state.sendErrorMessage != null)
               _ErrorBanner(
                 message: state.sendErrorMessage!,
-                onDismiss: () =>
-                    ref.read(chatControllerProvider(widget.sessionId).notifier).dismissError(),
+                onDismiss: () => ref
+                    .read(chatControllerProvider(widget.sessionId).notifier)
+                    .dismissError(),
               ),
-            if (queued > 0)
-              _QueuedBanner(count: queued),
-            if (state.hasPendingUserMessage)
-              const _PendingUserMessageBanner(),
+            if (queued > 0) _QueuedBanner(count: queued),
+            if (state.hasPendingUserMessage) const _PendingUserMessageBanner(),
             if (state.noticeMessage != null)
               _TransientNoticeToast(
                 key: ValueKey('chat-notice-toast-${state.noticeMessage}'),
                 message: state.noticeMessage!,
-                onDismiss: () =>
-                    ref.read(chatControllerProvider(widget.sessionId).notifier).dismissNotice(),
+                onDismiss: () => ref
+                    .read(chatControllerProvider(widget.sessionId).notifier)
+                    .dismissNotice(),
               ),
-            ChatInputBar(sessionId: widget.sessionId, enabled: !state.isReadOnly),
+            if (state.lastSteerHint?.trim().isNotEmpty == true)
+              _SteerNoticeToast(
+                message: state.lastSteerHint!,
+                onClose: () => ref
+                    .read(chatControllerProvider(widget.sessionId).notifier)
+                    .clearSteerHint(),
+              ),
+            ChatInputBar(
+              sessionId: widget.sessionId,
+              enabled: !state.isReadOnly,
+            ),
           ],
         ),
       ),
@@ -294,9 +302,8 @@ Future<void> _showSessionActions(
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-rename'),
         label: l10n.rename,
-        onPressed: () => unawaited(
-          _renameSession(context, controller, state.displayTitle),
-        ),
+        onPressed: () =>
+            unawaited(_renameSession(context, controller, state.displayTitle)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-pin'),
@@ -333,7 +340,8 @@ Future<void> _showSessionActions(
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-settings'),
         label: l10n.sessionSettings,
-        onPressed: () => unawaited(_sessionSettings(context, controller, state)),
+        onPressed: () =>
+            unawaited(_sessionSettings(context, controller, state)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-yolo'),
@@ -384,14 +392,21 @@ Future<void> _showSessionActions(
   );
 }
 
-Future<void> _renameSession(BuildContext context, ChatController controller, String current) async {
+Future<void> _renameSession(
+  BuildContext context,
+  ChatController controller,
+  String current,
+) async {
   final l10n = AppLocalizations.of(context);
   final input = TextEditingController(text: current);
   final title = await showCupertinoDialog<String>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
       title: Text(l10n.renameSession),
-      content: Padding(padding: const EdgeInsets.only(top: 12), child: CupertinoTextField(controller: input, autofocus: true)),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CupertinoTextField(controller: input, autofocus: true),
+      ),
       actions: [
         CupertinoDialogAction(
           key: const ValueKey('chat-rename-cancel'),
@@ -541,10 +556,10 @@ Future<void> _sessionSettings(
         ),
         CupertinoDialogAction(
           key: const ValueKey('chat-settings-save'),
-          onPressed: () => Navigator.pop(
-            dialogContext,
-            (workspace: workspaceInput.text, model: modelInput.text),
-          ),
+          onPressed: () => Navigator.pop(dialogContext, (
+            workspace: workspaceInput.text,
+            model: modelInput.text,
+          )),
           child: Text(l10n.save),
         ),
       ],
@@ -560,10 +575,16 @@ Future<void> _sessionSettings(
   }
 }
 
-Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionId) async {
+Future<void> _exportSession(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+) async {
   final l10n = AppLocalizations.of(context);
   try {
-    final response = await ref.read(apiClientProvider).exportSession(sessionId: sessionId, format: 'md');
+    final response = await ref
+        .read(apiClientProvider)
+        .exportSession(sessionId: sessionId, format: 'md');
     final content = utf8.decode(response.data, allowMalformed: true);
     await Clipboard.setData(ClipboardData(text: content));
     if (context.mounted) {
@@ -572,7 +593,12 @@ Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionI
         builder: (dialogContext) => CupertinoAlertDialog(
           title: Text(l10n.exportSuccessDialogTitle),
           content: Text(l10n.markdownCopiedToClipboard),
-          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: Text(l10n.ok))],
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.ok),
+            ),
+          ],
         ),
       );
     }
@@ -583,7 +609,12 @@ Future<void> _exportSession(BuildContext context, WidgetRef ref, String sessionI
         builder: (dialogContext) => CupertinoAlertDialog(
           title: Text(l10n.exportFailed),
           content: Text(error.message),
-          actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(dialogContext), child: Text(l10n.ok))],
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.ok),
+            ),
+          ],
         ),
       );
     }
@@ -670,7 +701,10 @@ class _PendingPromptCard extends ConsumerWidget {
     return null;
   }
 
-  static List<String> _stringListOf(Map<String, Object?> map, List<String> keys) {
+  static List<String> _stringListOf(
+    Map<String, Object?> map,
+    List<String> keys,
+  ) {
     for (final key in keys) {
       final value = map[key];
       if (value is List) {
@@ -684,10 +718,7 @@ class _PendingPromptCard extends ConsumerWidget {
 
 /// 离线缓存提示横幅（isShowingOfflineCache 模式，中性/蓝色系，可点重试与关闭）。
 class _OfflineCacheBanner extends StatelessWidget {
-  const _OfflineCacheBanner({
-    required this.onReload,
-    required this.onDismiss,
-  });
+  const _OfflineCacheBanner({required this.onReload, required this.onDismiss});
 
   final VoidCallback onReload;
   final VoidCallback onDismiss;
@@ -818,7 +849,10 @@ class _QueuedBanner extends StatelessWidget {
       ),
       child: Text(
         l10n.queuedBannerMessage(count),
-        style: const TextStyle(fontSize: 12, color: CupertinoColors.systemBrown),
+        style: const TextStyle(
+          fontSize: 12,
+          color: CupertinoColors.systemBrown,
+        ),
       ),
     );
   }
@@ -901,7 +935,10 @@ class _NoticeBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontSize: 13, color: statusGreenText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusGreenText.resolveFrom(context),
+              ),
             ),
           ),
           AccessibleButton(
@@ -995,9 +1032,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
     // 要求：白/绿8%轻底（浅色 white + systemGreen 8%）、深色 #2C2C2E
     // 文字用 label 主色 500、18px 绿勾、圆角10+细阴影
     // 浅色：Color(0xFFF0FAF2) ≈ 白 92% + 绿 8% 轻底效果
-    final bgColor = isDark
-        ? const Color(0xFF2C2C2E)
-        : const Color(0xFFF0FAF2);
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0FAF2);
     final textColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.92)
         : CupertinoColors.label.resolveFrom(context);
@@ -1015,14 +1050,16 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
           border: Border.all(
             color: isDark
                 ? CupertinoColors.systemGrey
-                    .resolveFrom(context)
-                    .withValues(alpha: 0.18)
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.18)
                 : CupertinoColors.systemGreen.withValues(alpha: 0.18),
             width: 0.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: CupertinoColors.black.withValues(alpha: isDark ? 0.18 : 0.06),
+              color: CupertinoColors.black.withValues(
+                alpha: isDark ? 0.18 : 0.06,
+              ),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -1058,6 +1095,85 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 常驻 steer 提示（与「已复制到剪贴板」同款视觉）。
+///
+/// 差异：不自动消失；新 steer 直接覆盖文本；无新 steer 则一直显示，
+/// 直到 live 会话结束（finishStream 清 lastSteerHint）或用户手动关闭。
+class _SteerNoticeToast extends StatelessWidget {
+  const _SteerNoticeToast({required this.message, required this.onClose});
+
+  final String message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0FAF2);
+    final textColor = isDark
+        ? CupertinoColors.white.withValues(alpha: 0.92)
+        : CupertinoColors.label.resolveFrom(context);
+    return Container(
+      key: const ValueKey('chat-steer-notice'),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? CupertinoColors.systemGrey
+                    .resolveFrom(context)
+                    .withValues(alpha: 0.18)
+              : CupertinoColors.systemGreen.withValues(alpha: 0.18),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.black.withValues(
+              alpha: isDark ? 0.18 : 0.06,
+            ),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.checkmark_circle_fill,
+            size: 18,
+            color: CupertinoColors.systemGreen,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ),
+          AccessibleButton(
+            key: const ValueKey('chat-steer-notice-close'),
+            label: l10n.dismissNotice,
+            onPressed: onClose,
+            child: const Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 16,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
       ),
     );
   }

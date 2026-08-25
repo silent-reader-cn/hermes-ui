@@ -327,6 +327,23 @@ class ToolCallGroup {
           messageOffset: messageOffset,
         );
 
+    // 聚合组统一锚到「回合内最早出现的 assistant 消息」（而非各自类别的首条），
+    // 使同回合的思考组与工具组挂到同一条消息 → 气泡内思考卡渲染在工具卡上方。
+    final earliestAssistantAnchorByTurnKey = <String, String>{};
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        message,
+        at: i,
+        messageOffset: messageOffset,
+      );
+      final turnKey = turnKeysByAssistantMessageID[anchor];
+      if (turnKey != null) {
+        earliestAssistantAnchorByTurnKey.putIfAbsent(turnKey, () => anchor);
+      }
+    }
+
     final mergedGroups = <_TurnGroupBuilder>[];
     final builderIndexesByTurnKey = <String, int>{};
 
@@ -364,9 +381,10 @@ class ToolCallGroup {
     });
 
     return mergedGroups.map((builder) {
+      final turnAnchor = earliestAssistantAnchorByTurnKey[builder.turnKey];
       return ToolCallGroup(
         id: builder.id,
-        anchorMessageID: builder.anchorMessageID,
+        anchorMessageID: turnAnchor ?? builder.anchorMessageID,
         toolCalls: _uniqueToolCalls(builder.toolCalls),
       );
     }).toList();

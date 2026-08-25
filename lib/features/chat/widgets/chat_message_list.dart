@@ -465,9 +465,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
-    final steerHint = ref.watch(
-      chatControllerProvider(sessionId).select((s) => s.lastSteerHint),
-    );
     final queuedMessages = ref.watch(
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
     );
@@ -522,9 +519,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               .where((g) => g.anchorMessageId == streaming.messageId)
               .toList();
 
-    final steerHintText = (steerHint ?? '').trim();
-    final showSteerBanner =
-        phase == ChatPhase.steered && steerHintText.isNotEmpty;
     final showQueuedBanner = queuedMessages.isNotEmpty;
     // 落地兜底：仅在 coalesce==true 或 transcript 为空且无可挂载 anchor 时才渲染聚合视图
     final needFallback =
@@ -537,7 +531,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     var itemCount = transcript.length;
     if (streaming != null) itemCount++;
     if (phase == ChatPhase.sending) itemCount++;
-    if (showSteerBanner) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
 
@@ -601,12 +594,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               count: queuedMessages.length,
               preview: queuedMessages.first,
             );
-          }
-          tail--;
-        }
-        if (showSteerBanner) {
-          if (tail == 0) {
-            return SteerBanner(text: steerHintText);
           }
           tail--;
         }

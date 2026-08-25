@@ -108,6 +108,22 @@ class ReasoningGroup {
         messageOffset: messageOffset,
       );
     }
+    // 聚合组统一锚到「回合内最早出现的 assistant 消息」，与工具聚合语义一致，
+    // 使同回合思考组与工具组挂到同一条消息（思考卡渲染在工具卡上方）。
+    final earliestAssistantAnchorByTurnKey = <String, String>{};
+    final assistantTurnKeysByAnchor = <String, String>{};
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg.role != 'assistant') continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        msg,
+        at: i,
+        messageOffset: messageOffset,
+      );
+      final turnKey = _turnKeyAt(messages, i, messageOffset: messageOffset);
+      assistantTurnKeysByAnchor[anchor] = turnKey;
+      earliestAssistantAnchorByTurnKey.putIfAbsent(turnKey, () => anchor);
+    }
     final mergedByTurn = <String, List<ReasoningGroup>>{};
     final order = <String>[];
     for (final g in groups) {
@@ -120,17 +136,23 @@ class ReasoningGroup {
       });
       list.add(g);
     }
-    return order.map((turnKey) {
-      final list = mergedByTurn[turnKey]!;
-      final first = list.first;
-      return ReasoningGroup(
-        anchorMessageId: first.anchorMessageId,
-        text: list
-            .map((g) => g.text.trim())
-            .where((t) => t.isNotEmpty)
-            .join('\n\n'),
-      );
-    }).toList();
+    return order
+        .map((turnKey) {
+          final list = mergedByTurn[turnKey]!;
+          final text = list
+              .map((g) => g.text.trim())
+              .where((t) => t.isNotEmpty)
+              .join('\n\n');
+          final turnAnchor = earliestAssistantAnchorByTurnKey[turnKey];
+          // 空文本组直接丢弃（无内容不渲染）
+          if (text.isEmpty) return const ReasoningGroup(text: '');
+          return ReasoningGroup(
+            anchorMessageId: turnAnchor ?? list.first.anchorMessageId,
+            text: text,
+          );
+        })
+        .where((g) => g.text.trim().isNotEmpty)
+        .toList();
   }
 
   /// 相邻聚合（聚合开关关闭语义）：间隔内无可见文本且无工具调用的相邻推理段

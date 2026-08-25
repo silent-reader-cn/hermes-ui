@@ -166,25 +166,30 @@ final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
 ) {
   final state = ref.watch(chatControllerProvider(sessionId));
   final coalesce = ref.watch(toolGroupCoalesceProvider);
+  final liveAnchor =
+      state.stream.toolCallAnchorMessageId ??
+      state.stream.streamingAssistantMessageId;
+  // live 工具组遵循聚合设置：开启时累积为一张卡（整轮聚合）；
+  // 关闭时按次拆分（每个工具调用一张卡），不再「总是按回合聚合」。
   final live = state.liveToolCalls.isEmpty
       ? const <ToolCallGroup>[]
-      : [
+      : coalesce
+      ? [
           ToolCallGroup.live(
-            anchorMessageID:
-                state.stream.toolCallAnchorMessageId ??
-                state.stream.streamingAssistantMessageId,
+            anchorMessageID: liveAnchor,
             toolCalls: state.liveToolCalls,
           ),
+        ]
+      : [
+          for (final call in state.liveToolCalls)
+            ToolCallGroup.live(anchorMessageID: liveAnchor, toolCalls: [call]),
         ];
   final raw = [...state.completedToolCallGroups, ...live];
   if (raw.length <= 1) return raw;
   if (!coalesce) {
     // 关闭 ≠ 完全不聚合：仅相邻（无 text/think 打断）组合并，支持穿插呈现。
-    return ToolCallGroup.coalescingAdjacent(
-      raw,
-      messages: state.messages,
-      messageOffset: state.messagesOffset,
-    );
+    // completed 已由 controller 按相邻语义生成；live 已逐卡拆分，直接返回。
+    return raw;
   }
   return ToolCallGroup.coalescingByAssistantTurn(
     raw,

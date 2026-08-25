@@ -2474,6 +2474,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(clearNoticeMessage: true);
   }
 
+  /// 手动关闭 steer 提示（常驻 toast 的 x 按钮）。
+  void clearSteerHint() {
+    state = state.copyWith(clearLastSteerHint: true);
+  }
+
   /// 清除重试回填预填值（输入栏已消费后调用）。
   void clearComposerPrefill() {
     state = state.copyWith(clearComposerPrefill: true);
