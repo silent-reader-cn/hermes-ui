@@ -39,11 +39,7 @@ class AuxiliaryModelsPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.auxiliaryModelsSection),
       ),
-      child: ListView(
-        children: const [
-          AuxiliaryModelsSection(),
-        ],
-      ),
+      child: ListView(children: const [AuxiliaryModelsSection()]),
     );
   }
 }
@@ -63,11 +59,7 @@ class McpPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.mcpSection),
       ),
-      child: ListView(
-        children: const [
-          McpSection(),
-        ],
-      ),
+      child: ListView(children: const [McpSection()]),
     );
   }
 }
@@ -87,11 +79,7 @@ class ExtensionsPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.extensionsSection),
       ),
-      child: ListView(
-        children: const [
-          ExtensionsSection(),
-        ],
-      ),
+      child: ListView(children: const [ExtensionsSection()]),
     );
   }
 }
@@ -111,11 +99,7 @@ class SessionListEntriesPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.sessionListEntriesSection),
       ),
-      child: ListView(
-        children: const [
-          SessionListEntriesSection(),
-        ],
-      ),
+      child: ListView(children: const [SessionListEntriesSection()]),
     );
   }
 }
@@ -213,11 +197,7 @@ class SessionRowSubtitlePage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.sessionRowSubtitleSection),
       ),
-      child: ListView(
-        children: const [
-          SessionRowSubtitleSection(),
-        ],
-      ),
+      child: ListView(children: const [SessionRowSubtitleSection()]),
     );
   }
 }
@@ -306,11 +286,7 @@ class DesktopSettingsPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.desktopSection),
       ),
-      child: ListView(
-        children: const [
-          DesktopSection(),
-        ],
-      ),
+      child: ListView(children: const [DesktopSection()]),
     );
   }
 }
@@ -367,6 +343,36 @@ class DesktopSection extends ConsumerWidget {
                 ref
                     .read(desktopSettingsProvider.notifier)
                     .setRememberWindowPosition(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.startOnLogin),
+          subtitle: Text(l10n.startOnLoginSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-desktop-start-on-login'),
+            value: settings.startOnLogin,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(desktopSettingsProvider.notifier)
+                    .setStartOnLogin(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.silentStart),
+          subtitle: Text(l10n.silentStartSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-desktop-silent-start'),
+            value: settings.silentStart,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(desktopSettingsProvider.notifier)
+                    .setSilentStart(value),
               );
             },
           ),

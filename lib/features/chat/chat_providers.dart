@@ -248,6 +248,293 @@ List<ReasoningGroup> _distinctReasoning(List<ReasoningGroup> groups) {
   return out;
 }
 
+/// live 时间线（流式回合内 think/text/tools 按事件先后穿插的展示条目）。
+///
+/// 返回语义：
+/// - `null`：非时间线模式（重连归档等无法还原段落边界的场景）→ 渲染层回退
+///   旧的「分组式」流式气泡（思考卡 → 正文 → 工具卡），保证不丢内容；
+/// - 空列表：流式存在但尚无任何可见内容 → 思考中指示器；
+/// - 非空：按事件顺序排列的段落条目，渲染层逐条渲染。
+///
+/// 聚合开关语义与历史一致：coalesce=true 时同类型段落合并为一卡（挂在
+/// 首现位置）；coalesce=false 时每段独立一卡（相邻工具段自然即「相邻合并」）。
+final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
+  ref,
+  sessionId,
+) {
+  final state = ref.watch(chatControllerProvider(sessionId));
+  final id = state.stream.streamingAssistantMessageId;
+  if (id == null) return null;
+  ChatMessage? streamingMessage;
+  for (final message in state.messages) {
+    if (message.messageId == id) {
+      streamingMessage = message;
+      break;
+    }
+  }
+  if (streamingMessage == null) return null;
+
+  final content = streamingMessage.content ?? '';
+  final reasoningText = state.liveReasoningText;
+  final points = state.liveTimelinePoints;
+  final hideReasoning = ref.watch(hideReasoningProvider);
+  final thinkCoalesce = ref.watch(thinkGroupCoalesceProvider);
+  final toolCoalesce = ref.watch(toolGroupCoalesceProvider);
+
+  // 断点为空但有锚定本流式消息的归档内容（重连/恢复路径）→ 无法还原段落
+  // 边界，回退旧分组式气泡（内容与卡片由 legacy streamingTools 过滤承载）。
+  if (points.isEmpty) {
+    final hasAnchoredArchive =
+        state.completedToolCallGroups.any((g) => g.anchorMessageID == id) ||
+        state.completedReasoningGroups.any((g) => g.anchorMessageId == id);
+    if (hasAnchoredArchive) return null;
+    if (content.trim().isEmpty &&
+        reasoningText.trim().isEmpty &&
+        state.liveToolCalls.isEmpty) {
+      return const <LiveTimelineEntry>[]; // 思考中指示器
+    }
+    // 防御兜底：内容非空但断点缺失 → 按「思考 → 正文 → 工具」单段呈现。
+    return _fallbackSingleSegments(
+      streamingId: id,
+      content: content,
+      reasoningText: reasoningText,
+      liveToolCalls: state.liveToolCalls,
+      hideReasoning: hideReasoning,
+      toolCoalesce: toolCoalesce,
+    );
+  }
+
+  // 按 kind 分组切片边界。
+  final textStarts = <int>[];
+  final thinkStarts = <int>[];
+  final toolStarts = <int>[];
+  for (final point in points) {
+    switch (point.kind) {
+      case LiveSegmentKind.text:
+        textStarts.add(point.start);
+      case LiveSegmentKind.thinking:
+        thinkStarts.add(point.start);
+      case LiveSegmentKind.tools:
+        toolStarts.add(point.start);
+    }
+  }
+
+  final textSegments = <({int start, int end})>[];
+  for (var i = 0; i < textStarts.length; i++) {
+    // 断点含 pending 缓冲长度，中间态可能超过已 flush 的 content 长度，
+    // 两侧 clamp 保证切片安全（内容随后续 reveal 增长补齐）。
+    final rawEnd = i + 1 < textStarts.length
+        ? textStarts[i + 1]
+        : content.length;
+    final start = textStarts[i].clamp(0, content.length);
+    final end = rawEnd.clamp(start, content.length);
+    if (end > start) textSegments.add((start: start, end: end));
+  }
+  final thinkSegments = <String>[];
+  for (var i = 0; i < thinkStarts.length; i++) {
+    final rawEnd = i + 1 < thinkStarts.length
+        ? thinkStarts[i + 1]
+        : reasoningText.length;
+    final start = thinkStarts[i].clamp(0, reasoningText.length);
+    final end = rawEnd.clamp(start, reasoningText.length);
+    if (end <= start) continue;
+    final segment = reasoningText.substring(start, end).trim();
+    if (segment.isNotEmpty) thinkSegments.add(segment);
+  }
+  final toolSegments = <List<ToolCall>>[];
+  for (var i = 0; i < toolStarts.length; i++) {
+    final start = toolStarts[i];
+    final end = i + 1 < toolStarts.length
+        ? toolStarts[i + 1]
+        : state.liveToolCalls.length;
+    if (end > start) {
+      toolSegments.add(state.liveToolCalls.sublist(start, end));
+    }
+  }
+
+  final entries = <LiveTimelineEntry>[];
+  // 重连/重锚定场景：首个断点前的内容无断点覆盖（如恢复时锚定到一条
+  // 已有内容的 assistant 消息），作为「孤儿段」前置，保证旧内容不丢失。
+  final orphanText = textStarts.isNotEmpty && textStarts.first > 0
+      ? content.substring(0, textStarts.first.clamp(0, content.length))
+      : null;
+  final orphanThink = thinkStarts.isNotEmpty && thinkStarts.first > 0
+      ? reasoningText
+            .substring(0, thinkStarts.first.clamp(0, reasoningText.length))
+            .trim()
+      : null;
+  final orphanToolCount = toolStarts.isNotEmpty && toolStarts.first > 0
+      ? toolStarts.first
+      : 0;
+  if (orphanText != null && orphanText.trim().isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.text,
+        renderKey: 'live:text:orphan',
+        textSlice: orphanText,
+      ),
+    );
+  }
+  var orphanThinkMerged = false;
+  if (orphanThink != null && orphanThink.isNotEmpty && !hideReasoning) {
+    if (thinkCoalesce) {
+      // 与后续 thinking 段同卡（合并文本在首个 thinking 段输出时拼接）。
+      orphanThinkMerged = true;
+    } else {
+      entries.add(
+        LiveTimelineEntry(
+          kind: LiveSegmentKind.thinking,
+          renderKey: 'live:think:orphan',
+          reasoningText: orphanThink,
+        ),
+      );
+    }
+  }
+  if (orphanToolCount > 0) {
+    final orphanTools = state.liveToolCalls.sublist(0, orphanToolCount);
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.tools,
+        renderKey: 'live:tools:orphan',
+        toolGroup: ToolCallGroup(
+          id: 'live-timeline-tools-orphan',
+          anchorMessageID: id,
+          toolCalls: toolCoalesce
+              ? orphanTools
+              : [for (final call in orphanTools) call],
+        ),
+      ),
+    );
+  }
+
+  var textIndex = 0;
+  var thinkIndex = 0;
+  var toolIndex = 0;
+  for (final point in points) {
+    switch (point.kind) {
+      case LiveSegmentKind.text:
+        if (textIndex < textSegments.length) {
+          final segment = textSegments[textIndex];
+          entries.add(
+            LiveTimelineEntry(
+              kind: LiveSegmentKind.text,
+              renderKey: 'live:text:${point.sequence}',
+              textSlice: content.substring(segment.start, segment.end),
+            ),
+          );
+        }
+        textIndex++;
+      case LiveSegmentKind.thinking:
+        if (!hideReasoning) {
+          if (thinkCoalesce) {
+            // 整回合合并：全部思考段并入一张卡，挂在首个 thinking 断点位置
+            // （含孤儿思考段文本）。
+            if (thinkIndex == 0) {
+              final mergedText =
+                  (orphanThinkMerged ? '$orphanThink\n\n' : '') +
+                  reasoningText.trim();
+              if (mergedText.isNotEmpty) {
+                entries.add(
+                  LiveTimelineEntry(
+                    kind: LiveSegmentKind.thinking,
+                    renderKey: 'live:think:merged',
+                    reasoningText: mergedText,
+                  ),
+                );
+              }
+            }
+          } else if (thinkIndex < thinkSegments.length) {
+            entries.add(
+              LiveTimelineEntry(
+                kind: LiveSegmentKind.thinking,
+                renderKey: 'live:think:${point.sequence}',
+                reasoningText: thinkSegments[thinkIndex],
+              ),
+            );
+          }
+        }
+        thinkIndex++;
+      case LiveSegmentKind.tools:
+        if (toolCoalesce) {
+          // 整回合合并：全部工具并入一张卡，挂在首个 tools 断点位置。
+          if (toolIndex == 0 && state.liveToolCalls.isNotEmpty) {
+            entries.add(
+              LiveTimelineEntry(
+                kind: LiveSegmentKind.tools,
+                renderKey: 'live:tools:merged',
+                toolGroup: ToolCallGroup(
+                  id: 'live-timeline-tools-merged',
+                  anchorMessageID: id,
+                  toolCalls: List<ToolCall>.of(state.liveToolCalls),
+                ),
+              ),
+            );
+          }
+        } else if (toolIndex < toolSegments.length) {
+          entries.add(
+            LiveTimelineEntry(
+              kind: LiveSegmentKind.tools,
+              renderKey: 'live:tools:${point.sequence}',
+              toolGroup: ToolCallGroup(
+                id: 'live-timeline-tools-${point.sequence}',
+                anchorMessageID: id,
+                toolCalls: toolSegments[toolIndex],
+              ),
+            ),
+          );
+        }
+        toolIndex++;
+    }
+  }
+  return entries;
+});
+
+/// 断点缺失时的单段兜底（防御路径，理论不可达）。
+List<LiveTimelineEntry> _fallbackSingleSegments({
+  required String streamingId,
+  required String content,
+  required String reasoningText,
+  required List<ToolCall> liveToolCalls,
+  required bool hideReasoning,
+  required bool toolCoalesce,
+}) {
+  final entries = <LiveTimelineEntry>[];
+  if (!hideReasoning && reasoningText.trim().isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.thinking,
+        renderKey: 'live:think:fallback',
+        reasoningText: reasoningText.trim(),
+      ),
+    );
+  }
+  if (content.trim().isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.text,
+        renderKey: 'live:text:fallback',
+        textSlice: content,
+      ),
+    );
+  }
+  if (liveToolCalls.isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.tools,
+        renderKey: 'live:tools:fallback',
+        toolGroup: ToolCallGroup(
+          id: 'live-timeline-tools-fallback',
+          anchorMessageID: streamingId,
+          toolCalls: toolCoalesce
+              ? List<ToolCall>.of(liveToolCalls)
+              : [for (final call in liveToolCalls) call],
+        ),
+      ),
+    );
+  }
+  return entries;
+}
+
 /// 排队待发送消息数。
 final queuedCountProvider = Provider.family<int, String>((ref, sessionId) {
   return ref

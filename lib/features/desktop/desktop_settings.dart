@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'startup_registrar.dart';
+
 /// 桌面平台配置状态模型。
 ///
-/// 包含三个平台能力开关（默认均为开启）：
+/// 包含五个平台能力开关：
 /// 1. [minimizeToTray]：最小化到托盘（关闭窗口时隐藏到托盘而非退出）；
 /// 2. [globalShortcutsEnabled]：全局快捷键（Ctrl+Shift+H / Ctrl+Shift+N）；
-/// 3. [rememberWindowPosition]：记住窗口位置与大小。
+/// 3. [rememberWindowPosition]：记住窗口位置与大小；
+/// 4. [startOnLogin]：开机启动（登录 Windows 时自动启动，写 HKCU Run 注册值）；
+/// 5. [silentStart]：静默启动（启动时不显示主窗口，直接驻留系统托盘）。
 class DesktopSettings {
   /// 是否开启最小化到托盘。
   final bool minimizeToTray;
@@ -20,11 +25,19 @@ class DesktopSettings {
   /// 是否开启记住窗口位置。
   final bool rememberWindowPosition;
 
+  /// 是否开启开机启动（登录 Windows 时自动启动）。
+  final bool startOnLogin;
+
+  /// 是否开启静默启动（启动时不显示主窗口，直接驻留托盘）。
+  final bool silentStart;
+
   /// 构造桌面配置模型。
   const DesktopSettings({
     this.minimizeToTray = true,
     this.globalShortcutsEnabled = true,
     this.rememberWindowPosition = true,
+    this.startOnLogin = false,
+    this.silentStart = false,
   });
 
   /// 复制并更新部分字段。
@@ -32,6 +45,8 @@ class DesktopSettings {
     bool? minimizeToTray,
     bool? globalShortcutsEnabled,
     bool? rememberWindowPosition,
+    bool? startOnLogin,
+    bool? silentStart,
   }) {
     return DesktopSettings(
       minimizeToTray: minimizeToTray ?? this.minimizeToTray,
@@ -39,6 +54,8 @@ class DesktopSettings {
           globalShortcutsEnabled ?? this.globalShortcutsEnabled,
       rememberWindowPosition:
           rememberWindowPosition ?? this.rememberWindowPosition,
+      startOnLogin: startOnLogin ?? this.startOnLogin,
+      silentStart: silentStart ?? this.silentStart,
     );
   }
 
@@ -49,27 +66,32 @@ class DesktopSettings {
           runtimeType == other.runtimeType &&
           minimizeToTray == other.minimizeToTray &&
           globalShortcutsEnabled == other.globalShortcutsEnabled &&
-          rememberWindowPosition == other.rememberWindowPosition;
+          rememberWindowPosition == other.rememberWindowPosition &&
+          startOnLogin == other.startOnLogin &&
+          silentStart == other.silentStart;
 
   @override
   int get hashCode => Object.hash(
-        minimizeToTray,
-        globalShortcutsEnabled,
-        rememberWindowPosition,
-      );
+    minimizeToTray,
+    globalShortcutsEnabled,
+    rememberWindowPosition,
+    startOnLogin,
+    silentStart,
+  );
 
   @override
   String toString() =>
       'DesktopSettings(minimizeToTray: $minimizeToTray, '
       'globalShortcutsEnabled: $globalShortcutsEnabled, '
-      'rememberWindowPosition: $rememberWindowPosition)';
+      'rememberWindowPosition: $rememberWindowPosition, '
+      'startOnLogin: $startOnLogin, silentStart: $silentStart)';
 }
 
 /// 桌面设置 Provider（持久化到 shared_preferences）。
 final desktopSettingsProvider =
     NotifierProvider<DesktopSettingsController, DesktopSettings>(
-  DesktopSettingsController.new,
-);
+      DesktopSettingsController.new,
+    );
 
 /// 桌面设置 Controller。
 class DesktopSettingsController extends Notifier<DesktopSettings> {
@@ -84,6 +106,12 @@ class DesktopSettingsController extends Notifier<DesktopSettings> {
   static const String keyRememberWindowPosition =
       'desktop_remember_window_position';
 
+  /// 开机启动持久化 Key。
+  static const String keyStartOnLogin = 'desktop_start_on_login';
+
+  /// 静默启动持久化 Key。
+  static const String keySilentStart = 'desktop_silent_start';
+
   @override
   DesktopSettings build() {
     unawaited(_load());
@@ -96,10 +124,14 @@ class DesktopSettingsController extends Notifier<DesktopSettings> {
     final minimize = prefs.getBool(keyMinimizeToTray) ?? true;
     final shortcuts = prefs.getBool(keyGlobalShortcutsEnabled) ?? true;
     final rememberWindow = prefs.getBool(keyRememberWindowPosition) ?? true;
+    final startOnLogin = prefs.getBool(keyStartOnLogin) ?? false;
+    final silentStart = prefs.getBool(keySilentStart) ?? false;
     state = DesktopSettings(
       minimizeToTray: minimize,
       globalShortcutsEnabled: shortcuts,
       rememberWindowPosition: rememberWindow,
+      startOnLogin: startOnLogin,
+      silentStart: silentStart,
     );
   }
 
@@ -122,6 +154,44 @@ class DesktopSettingsController extends Notifier<DesktopSettings> {
     state = state.copyWith(rememberWindowPosition: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(keyRememberWindowPosition, value);
+  }
+
+  /// 更新「开机启动」开关。
+  ///
+  /// 开启时按当前状态写入注册表值（命令含/不含 `--silent` 视 [DesktopSettings.silentStart]
+  /// 而定），关闭时删除注册值；重复写入/删除幂等。
+  Future<void> setStartOnLogin(bool value) async {
+    state = state.copyWith(startOnLogin: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(keyStartOnLogin, value);
+    await _syncStartupRegistration();
+  }
+
+  /// 更新「静默启动」开关。
+  ///
+  /// 静默启动本身不触碰注册表；仅当「开机启动」已开启时联动重写注册表值
+  /// （即时更新命令中的 `--silent`），保证勾选顺序任意、结果一致。
+  Future<void> setSilentStart(bool value) async {
+    state = state.copyWith(silentStart: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(keySilentStart, value);
+    if (state.startOnLogin) {
+      await _syncStartupRegistration();
+    }
+  }
+
+  /// 按当前状态同步开机启动注册值（仅 Windows 注册表实现生效，其余平台 no-op）。
+  Future<void> _syncStartupRegistration() async {
+    final registrar = ref.read(startupRegistrarProvider);
+    if (state.startOnLogin) {
+      final command = buildStartupCommand(
+        executablePath: Platform.resolvedExecutable,
+        silent: state.silentStart,
+      );
+      await registrar.setRegistered(true, command: command);
+    } else {
+      await registrar.setRegistered(false);
+    }
   }
 }
 

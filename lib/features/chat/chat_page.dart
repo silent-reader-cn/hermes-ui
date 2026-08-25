@@ -1100,7 +1100,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
   }
 }
 
-/// 常驻 steer 提示（与「已复制到剪贴板」同款视觉）。
+/// 常驻 steer 提示（左侧图标用 steer 转向语义，区别于「已复制到剪贴板」的成功勾）。
 ///
 /// 差异：不自动消失；新 steer 直接覆盖文本；无新 steer 则一直显示，
 /// 直到 live 会话结束（finishStream 清 lastSteerHint）或用户手动关闭。
@@ -1146,7 +1146,7 @@ class _SteerNoticeToast extends StatelessWidget {
       child: Row(
         children: [
           const Icon(
-            CupertinoIcons.checkmark_circle_fill,
+            CupertinoIcons.arrow_turn_up_right,
             size: 18,
             color: CupertinoColors.systemGreen,
           ),

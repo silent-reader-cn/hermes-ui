@@ -26,10 +26,16 @@ import '../../../core/utils/clipboard_paste.dart';
 import '../../../core/utils/file_picker.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
+import '../../settings/chat_send_shortcut_settings.dart';
 
 /// 触发附件/图片粘贴意图（快捷键或右键菜单触发）。
 class PasteAttachmentIntent extends Intent {
   const PasteAttachmentIntent();
+}
+
+/// 触发发送消息意图（Ctrl+Enter / Cmd+Enter 快捷键；enter 模式下仅作兜底）。
+class SendMessageIntent extends Intent {
+  const SendMessageIntent();
 }
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
@@ -135,6 +141,27 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       );
       setState(() => _hasText = raw.trim().isNotEmpty);
     }
+  }
+
+  /// Ctrl+Enter/Cmd+Enter 快捷键发送的前置条件。
+  ///
+  /// 对齐发送按钮条件 `interactive && (_hasText || canSendWithPending)`，
+  /// 且流式/到来中（sending）阶段不发送（任务书 §4.5 边界）；按钮行为不变。
+  bool _canSendByShortcut() {
+    final phase = ref.read(chatPhaseProvider(widget.sessionId));
+    final isStreaming =
+        phase == ChatPhase.streaming ||
+        phase == ChatPhase.steered ||
+        phase == ChatPhase.approvalPending ||
+        phase == ChatPhase.clarifyPending ||
+        phase == ChatPhase.recovering;
+    final isSending = phase == ChatPhase.sending;
+    if (!widget.enabled || isSending || isStreaming) return false;
+    final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
+    final pendingAttachments = ref.read(
+      pendingAttachmentsProvider(widget.sessionId),
+    );
+    return _hasText || pending.isNotEmpty || pendingAttachments.isNotEmpty;
   }
 
   Future<void> _handleAttachment() async {
@@ -413,6 +440,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final snapshot = ref
         .watch(chatControllerProvider(widget.sessionId))
         .contextWindowSnapshot;
+    final sendMode = ref.watch(chatSendShortcutSettingsProvider).mode;
+    final multiline = sendMode == ChatSendShortcutMode.ctrlEnter;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -473,6 +502,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           PasteAttachmentIntent(),
                       SingleActivator(LogicalKeyboardKey.keyV, meta: true):
                           PasteAttachmentIntent(),
+                      // Ctrl+Enter / Cmd+Enter 发送（ctrlEnter 模式主路径；
+                      // enter 模式下 Ctrl+Enter 也可发送，无副作用）
+                      SingleActivator(LogicalKeyboardKey.enter, control: true):
+                          SendMessageIntent(),
+                      SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                          SendMessageIntent(),
                     },
                     child: Actions(
                       actions: <Type, Action<Intent>>{
@@ -486,6 +521,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         PasteTextIntent: CallbackAction<PasteTextIntent>(
                           onInvoke: (intent) {
                             unawaited(_handlePaste());
+                            return null;
+                          },
+                        ),
+                        SendMessageIntent: CallbackAction<SendMessageIntent>(
+                          onInvoke: (intent) {
+                            if (_canSendByShortcut()) {
+                              unawaited(_submit());
+                            }
                             return null;
                           },
                         ),
@@ -503,6 +546,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           horizontal: 12,
                           vertical: 8,
                         ),
+                        // ctrlEnter 模式放开行数（Enter 换行）；enter 模式保持单行。
+                        minLines: multiline ? 1 : null,
+                        maxLines: multiline ? null : 1,
                         contextMenuBuilder: (context, editableTextState) {
                           final buttonItems = editableTextState
                               .contextMenuButtonItems
@@ -532,7 +578,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                             setState(() => _hasText = hasText);
                           }
                         },
-                        onSubmitted: (_) => _submit(),
+                        onSubmitted: (_) {
+                          // ctrlEnter 模式防双发：Ctrl+Enter/Cmd+Enter 在部分
+                          // 平台可能同时触发 onSubmitted 与 Shortcuts——若修饰键
+                          // 按下则跳过，交给 Shortcuts 的 SendMessageIntent 处理。
+                          if (multiline &&
+                              (HardwareKeyboard.instance.isControlPressed ||
+                                  HardwareKeyboard.instance.isMetaPressed)) {
+                            return;
+                          }
+                          unawaited(_submit());
+                        },
                       ),
                     ),
                   ),

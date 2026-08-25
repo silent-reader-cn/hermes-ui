@@ -401,7 +401,10 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -505,34 +508,39 @@ class _MemorySectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
-          Icon(
-            _memorySectionIcon(section),
-            size: 15,
-            color: CupertinoColors.label,
+          // 左簇：图标 + 标题，占满剩余空间（Expanded），保证右簇贴右缘。
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  _memorySectionIcon(section),
+                  size: 15,
+                  color: CupertinoColors.label,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _memorySectionTitle(context, section),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            _memorySectionTitle(context, section),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
+          // 右簇：字数统计 + 相对修改时间 + 编辑按钮，自然宽度贴右（float right）。
           if (charCount > 0)
-            Flexible(
-              child: Text(
-                '$charCount ${l10n.memoryCharUnit}',
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
+            Text(
+              '$charCount ${l10n.memoryCharUnit}',
+              overflow: TextOverflow.ellipsis,
+              style: metaStyle,
             ),
           if (modified != null) ...[
             if (charCount > 0) const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                modified,
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
-            ),
+            Text(modified, overflow: TextOverflow.ellipsis, style: metaStyle),
           ],
           if (onEdit != null && !isEditing) ...[
             const SizedBox(width: 8),
@@ -775,34 +783,39 @@ class _ProjectContextHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
-          const Icon(
-            CupertinoIcons.folder,
-            size: 15,
-            color: CupertinoColors.label,
+          // 左簇：图标 + 标题，占满剩余空间（Expanded），保证右簇贴右缘。
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.folder,
+                  size: 15,
+                  color: CupertinoColors.label,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    l10n.projectContextTitle,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            l10n.projectContextTitle,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
+          // 右簇：字数统计 + 相对修改时间 + 只读锁，自然宽度贴右（float right）。
           if (charCount > 0)
-            Flexible(
-              child: Text(
-                '$charCount ${l10n.memoryCharUnit}',
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
+            Text(
+              '$charCount ${l10n.memoryCharUnit}',
+              overflow: TextOverflow.ellipsis,
+              style: metaStyle,
             ),
           if (modified != null) ...[
             if (charCount > 0) const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                modified,
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
-            ),
+            Text(modified, overflow: TextOverflow.ellipsis, style: metaStyle),
           ],
           if (charCount > 0 || modified != null) const SizedBox(width: 8),
           const Icon(
@@ -833,13 +846,21 @@ class _ProjectContextFooter extends StatelessWidget {
         if (detail != null)
           Text(
             detail!,
-            style: TextStyle(color: secondaryText.resolveFrom(context)),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
         if (shadowed) ...[
           const SizedBox(height: 4),
           Text(
             l10n.projectContextShadowedWarning,
-            style: TextStyle(color: secondaryText.resolveFrom(context)),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: secondaryText.resolveFrom(context),
+            ),
           ),
         ],
       ],

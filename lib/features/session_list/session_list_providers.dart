@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_sessions.dart';
@@ -169,6 +170,7 @@ class SessionListState {
     this.lastAttemptAt,
     this.refreshing = false,
     this.consecutiveFailures = 0,
+    this.showSubagent = false,
   });
 
   /// 普通模式全部已加载会话（服务端顺序：新的在前）。
@@ -219,14 +221,19 @@ class SessionListState {
   /// 连续失败次数（指数退避用；成功清零）。
   final int consecutiveFailures;
 
+  /// 是否在列表中显示 subagent 会话（全局视图过滤；默认 false = 隐藏）。
+  final bool showSubagent;
+
   /// 客户端分块页大小。
   static const int pageSize = 50;
 
-  /// 来源标签的 distinct 列表（从普通模式列表收集，空标签剔除）。
+  /// 来源标签的 distinct 列表（从普通模式列表收集，空标签剔除；
+  /// 隐藏 subagent 会话时其 `Subagent` 来源标签一并剔除，保持与视图一致）。
   List<String> get sourceLabels {
     final seen = <String>{};
     final labels = <String>[];
     for (final session in sessions) {
+      if (!showSubagent && session.isDelegatedSubagentSession) continue;
       final label = session.sourceLabel?.trim();
       if (label == null || label.isEmpty || seen.contains(label)) continue;
       seen.add(label);
@@ -238,36 +245,43 @@ class SessionListState {
   /// 当前展示的会话（搜索模式 = 搜索命中；否则按筛选模式取对应子集）。
   ///
   /// 自动过滤空占位会话（`shouldAppearInSessionList`：无消息且无 sidebar 状态的
-  /// Untitled 会话不展示，对齐 Hermex 蓝本与后端 `#1171` 规范）。
+  /// Untitled 会话不展示，对齐 Hermex 蓝本与后端 `#1171` 规范）。另外
+  /// [showSubagent] 为 false（默认）时隐藏所有 subagent 会话
+  /// （`isDelegatedSubagentSession`）：它是全局视图过滤，独立于 [filterMode]
+  /// 三段单选，对搜索命中同样生效。
   List<SessionSummary> get displaySessions {
     final query = searchQuery?.trim();
-    if (query != null && query.isNotEmpty) {
-      return (searchResults ?? const [])
-          .where((s) => s.shouldAppearInSessionList)
-          .toList();
-    }
     final List<SessionSummary> base;
-    switch (filterMode) {
-      case SessionListFilterMode.archived:
-        base = archivedSessions;
-      case SessionListFilterMode.source:
-        final label = filterValue;
-        if (label == null || label.isEmpty) {
+    if (query != null && query.isNotEmpty) {
+      base = searchResults ?? const [];
+    } else {
+      switch (filterMode) {
+        case SessionListFilterMode.archived:
+          base = archivedSessions;
+        case SessionListFilterMode.source:
+          final label = filterValue;
+          if (label == null || label.isEmpty) {
+            base = sessions;
+          } else {
+            base = sessions
+                .where((s) => s.sourceLabel?.trim() == label)
+                .toList();
+          }
+        case SessionListFilterMode.project:
+          final projectId = filterValue;
+          if (projectId == null || projectId.isEmpty) {
+            base = sessions;
+          } else {
+            base = sessions.where((s) => s.projectId == projectId).toList();
+          }
+        case SessionListFilterMode.all:
           base = sessions;
-        } else {
-          base = sessions.where((s) => s.sourceLabel?.trim() == label).toList();
-        }
-      case SessionListFilterMode.project:
-        final projectId = filterValue;
-        if (projectId == null || projectId.isEmpty) {
-          base = sessions;
-        } else {
-          base = sessions.where((s) => s.projectId == projectId).toList();
-        }
-      case SessionListFilterMode.all:
-        base = sessions;
+      }
     }
-    return base.where((s) => s.shouldAppearInSessionList).toList();
+    return base
+        .where((s) => s.shouldAppearInSessionList)
+        .where((s) => showSubagent || !s.isDelegatedSubagentSession)
+        .toList();
   }
 
   /// 是否还有更多可分页内容。
@@ -290,6 +304,7 @@ class SessionListState {
     DateTime? Function()? lastAttemptAt,
     bool? refreshing,
     int? consecutiveFailures,
+    bool? showSubagent,
   }) {
     return SessionListState(
       sessions: sessions ?? this.sessions,
@@ -316,6 +331,7 @@ class SessionListState {
           : this.lastAttemptAt,
       refreshing: refreshing ?? this.refreshing,
       consecutiveFailures: consecutiveFailures ?? this.consecutiveFailures,
+      showSubagent: showSubagent ?? this.showSubagent,
     );
   }
 
@@ -354,11 +370,30 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 页大小（客户端分块）。
   static const int pageSize = SessionListState.pageSize;
 
+  /// subagent 会话显隐持久化 key（默认关闭：false = 隐藏）。
+  static const String keyShowSubagent = 'session_list_show_subagent';
+
+  /// 读取 subagent 会话显隐偏好（默认 false）；[customPrefs] 供测试注入。
+  static Future<bool> loadShowSubagentPref({
+    SharedPreferences? customPrefs,
+  }) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyShowSubagent) ?? false;
+    } catch (_) {
+      // 测试环境无 shared_preferences 插件时静默回落为 false。
+      return false;
+    }
+  }
+
   /// 自动重登进行中标记（防并发重复登录）。
   bool _reauthInFlight = false;
 
   /// 刷新在途标记（并发互斥）。
   bool _refreshInFlight = false;
+
+  /// 用户是否已手动切换过 subagent 开关（防后台偏好加载覆盖即时操作）。
+  bool _showSubagentCustomized = false;
 
   /// Provider 侧的单测用单次调度与获焦 debounce（真正的 30s 周期在
   /// Observer 的 State 侧 `Timer.periodic`）。
@@ -380,7 +415,23 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       _focusDebounceTimer?.cancel();
       _focusDebounceTimer = null;
     });
-    return _loadFirstPage(api);
+    final loaded = await _loadFirstPage(api);
+    // 首屏状态就绪后再后台读取本地「显示 subagent 会话」偏好并回填
+    // （不阻塞 build 完成；对齐 CronVisibilityController 的异步加载模式，
+    // widget 测试无 prefs mock 时 SharedPreferences.getInstance() 会挂起，
+    // 不能直接 await 在 build 里）。
+    unawaited(_applyStoredShowSubagent());
+    return loaded;
+  }
+
+  /// 读取本地偏好并回填 [SessionListState.showSubagent]；仅当用户尚未手动
+  /// 切换过（[_showSubagentCustomized]）时生效，避免覆盖即时操作。
+  Future<void> _applyStoredShowSubagent() async {
+    final value = await loadShowSubagentPref();
+    if (_showSubagentCustomized) return;
+    final current = state.valueOrNull;
+    if (current == null || current.showSubagent == value) return;
+    state = AsyncData(current.copyWith(showSubagent: value));
   }
 
   /// 轮询重试退避间隔（秒）：30 * 2^n capped 120s。
@@ -396,9 +447,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// `Timer.periodic` 导致测试 tree dispose 后 `!timersPending` 失败。
   void scheduleAutoRefresh({Duration? period}) {
     _autoRefreshTimer?.cancel();
-    final effective = period ?? nextAutoRefreshDelay(
-          state.valueOrNull?.consecutiveFailures ?? 0,
-        );
+    final effective =
+        period ??
+        nextAutoRefreshDelay(state.valueOrNull?.consecutiveFailures ?? 0);
     _autoRefreshTimer = Timer(effective, () {
       _autoRefreshTimer = null;
       unawaited(refreshIfStale());
@@ -456,6 +507,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   Future<SessionListState> _loadFirstPage(
     SessionListApi api, {
     bool allowAutoReauth = true,
+    bool showSubagent = false,
   }) async {
     try {
       final response = await api.fetchSessions();
@@ -470,12 +522,17 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         visibleCount: min(pageSize, sessions.length),
         // 普通模式响应不返回 archived_count 时为 null（UI 不显示计数）。
         archivedCount: response.archivedCount,
+        showSubagent: showSubagent,
       );
     } on UnauthorizedException {
       // 会话过期/未登录：有保存密码时自动重登一次，成功后重试。
       // 重登失败或重试仍 401 → 直接抛错（不递归），UI 展示错误 + 重试。
       if (allowAutoReauth && await _tryAutoReauth()) {
-        return _loadFirstPage(api, allowAutoReauth: false);
+        return _loadFirstPage(
+          api,
+          allowAutoReauth: false,
+          showSubagent: showSubagent,
+        );
       }
       rethrow;
     } on ApiException catch (error, stackTrace) {
@@ -491,6 +548,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
             sessions: cached,
             visibleCount: min(pageSize, cached.length),
             actionError: '离线缓存：当前显示最近缓存的会话',
+            showSubagent: showSubagent,
           );
         }
       }
@@ -540,10 +598,14 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     try {
       final api = _api;
       final now = DateTime.now().toUtc();
-      final result = await _loadFirstPage(api);
+      // 保留用户当前的 subagent 显隐开关，避免刷新把已开启的开关重置为默认。
+      final result = await _loadFirstPage(
+        api,
+        showSubagent: previous?.showSubagent ?? false,
+      );
       // 离线缓存兜底返回的也算作“失败但有缓存”（actionError 以 离线缓存 开头），需走失败分支
-      final isCachedFallback = result.actionError != null &&
-          result.actionError!.startsWith('离线缓存');
+      final isCachedFallback =
+          result.actionError != null && result.actionError!.startsWith('离线缓存');
       if (isCachedFallback && hadData) {
         final prev = previous;
         final failed = prev.copyWith(
@@ -664,6 +726,21 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     );
     if (mode == SessionListFilterMode.archived) {
       await fetchArchived();
+    }
+  }
+
+  /// 切换 subagent 会话显示并持久化（默认关闭；全局视图过滤，
+  /// 独立于 [setFilter] 的三段单选，切换即时生效无需重拉列表）。
+  Future<void> setShowSubagent(bool value) async {
+    _showSubagentCustomized = true;
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(showSubagent: value));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyShowSubagent, value);
+    } catch (_) {
+      // 测试环境无 shared_preferences 插件时静默（对齐 CronVisibilityController）。
     }
   }
 
@@ -1157,8 +1234,10 @@ final sessionListVisibleSessionsProvider = Provider<List<SessionSummary>>((
 });
 
 /// 是否正在刷新（供 Header 按钮转菊花/禁用）。
-final sessionListRefreshingProvider = Provider<bool>((ref) =>
-    ref.watch(sessionListControllerProvider).valueOrNull?.refreshing == true);
+final sessionListRefreshingProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(sessionListControllerProvider).valueOrNull?.refreshing == true,
+);
 
 /// 会话分区（置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
 final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {

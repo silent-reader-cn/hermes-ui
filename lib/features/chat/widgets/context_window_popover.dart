@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,14 +46,21 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   bool _loadingWorkspaces = false;
   bool _workspacesFetched = false;
 
-  /// 模型/工作区下拉悬浮菜单：手动 `OverlayEntry` + `CompositedTransformFollower`
-  /// （经典悬浮层模式）。不参与 Column 高度流，展开时覆盖在弹层内容之上，
+  /// 模型/工作区下拉悬浮菜单：手动 `OverlayEntry`，位置在打开瞬间按触发器
+  /// RenderBox 全局坐标换算（不用 CompositedTransformFollower 固定 offset——
+  /// 要做「优先向上 + 顶部越界回落」的动态方向决策，需要触发器的真实几何）。
+  /// 不参与 Column 高度流，展开时覆盖在弹层内容之上，
   /// 弹层高度恒定不挤占。不用 OverlayPortal（其 DeferredLayout 在嵌套
   /// OverlayEntry（popover 内）场景下 hit test 不经过覆盖层子项）。
   OverlayEntry? _modelMenuEntry;
   OverlayEntry? _workspaceMenuEntry;
   final LayerLink _modelMenuLink = LayerLink();
   final LayerLink _workspaceMenuLink = LayerLink();
+
+  /// 触发器锚点 GlobalKey：打开下拉时取 RenderBox 全局矩形（换算方式见
+  /// [_resolveAnchorRect]），计算向上/向下展开方向与边界 clamp。
+  final GlobalKey _modelTriggerKey = GlobalKey();
+  final GlobalKey _workspaceTriggerKey = GlobalKey();
 
   List<WorkspaceRoot> _workspaces = const [];
   late final TextEditingController _workspaceController;
@@ -114,10 +122,16 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     _removeAllMenus();
     setState(() => _manualInputExpanded = false);
     final overlay = Overlay.of(context);
+    final anchor = _resolveAnchorRect(_modelTriggerKey, overlay);
+    if (anchor == null) return;
+    final providerModels = ref.read(chatAvailableModelsProvider);
+    final resolved = providerModels.isNotEmpty
+        ? providerModels
+        : _fetchedModels;
     final entry = OverlayEntry(
       builder: (entryContext) => _FloatingMenu(
-        link: _modelMenuLink,
-        offset: const Offset(0, 38),
+        anchorRect: anchor,
+        estimatedHeight: _estimateMenuHeight(resolved.length + 1),
         onDismiss: () {
           _removeEntry(_modelMenuEntry);
           _modelMenuEntry = null;
@@ -141,10 +155,14 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     _removeAllMenus();
     setState(() => _manualInputExpanded = false);
     final overlay = Overlay.of(context);
+    final anchor = _resolveAnchorRect(_workspaceTriggerKey, overlay);
+    if (anchor == null) return;
+    // 空列表时额外估算一行高度，容纳「暂无工作区」提示块
+    final rowCount = _workspaces.length + (_workspaces.isEmpty ? 2 : 1);
     final entry = OverlayEntry(
       builder: (entryContext) => _FloatingMenu(
-        link: _workspaceMenuLink,
-        offset: const Offset(0, 38),
+        anchorRect: anchor,
+        estimatedHeight: _estimateMenuHeight(rowCount),
         onDismiss: () {
           _removeEntry(_workspaceMenuEntry);
           _workspaceMenuEntry = null;
@@ -155,6 +173,32 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     );
     _workspaceMenuEntry = entry;
     overlay.insert(entry);
+  }
+
+  /// 计算触发器在 overlay 坐标系中的全局矩形（对齐自适应 popover 的锚点
+  /// 换算方式：`localToGlobal(ancestor: overlayBox)`）。取不到 RenderBox
+  /// 时返回 null，调用方直接放弃展开（触发器未布局时属防御性保护）。
+  Rect? _resolveAnchorRect(GlobalKey key, OverlayState overlay) {
+    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (overlayBox == null || box == null || !box.attached) return null;
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
+    return Rect.fromLTWH(
+      topLeft.dx,
+      topLeft.dy,
+      box.size.width,
+      box.size.height,
+    );
+  }
+
+  /// 按内容行数估算下拉卡片高度：行高 44（CupertinoButton 默认 minimumSize，
+  /// 实测逐行间距 44，非 padding+字号 34）、卡片上下边框约 2。上限 200 与
+  /// 内容 `ConstrainedBox(maxHeight: 200)` 一致，超出由滚动兜底。
+  static double _estimateMenuHeight(int rowCount) {
+    const rowHeight = 44.0;
+    const cardBorder = 2.0;
+    const maxMenuHeight = 200.0;
+    return math.min<double>(maxMenuHeight, rowCount * rowHeight + cardBorder);
   }
 
   /// 模型下拉菜单内容（悬浮卡片，展开时构建）。
@@ -515,6 +559,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   button: true,
                   label: l10n.selectModel,
                   child: CompositedTransformTarget(
+                    key: _modelTriggerKey,
                     link: _modelMenuLink,
                     child: CupertinoButton(
                       key: const ValueKey('context-popover-model-trigger'),
@@ -611,6 +656,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   button: true,
                   label: l10n.selectWorkspace,
                   child: CompositedTransformTarget(
+                    key: _workspaceTriggerKey,
                     link: _workspaceMenuLink,
                     child: CupertinoButton(
                       key: const ValueKey('context-popover-workspace-trigger'),
@@ -752,22 +798,97 @@ class _InfoRow extends StatelessWidget {
 }
 
 /// 模型/工作区悬浮下拉菜单的 overlay 壳：全屏透明 barrier（点菜单外先收
-/// 起本菜单，悬浮层盖住下层内容时也能点外部收起）+ 跟随触发器位置的卡片。
+/// 起本菜单，悬浮层盖住下层内容时也能点外部收起）+ 按触发器全局坐标定位的卡片。
+///
+/// 展开策略（需求：优先向上展开 + 顶部越界保护）：
+/// 1. 优先向上：菜单底边紧贴触发器顶部、间隔 8px；空间不足时内部滚动兜底
+///    （内容自带 `ConstrainedBox(maxHeight: 200)` + `SingleChildScrollView`）。
+/// 2. 顶部越界保护：当「触发器顶部 y − 菜单估算高 − 8 < 安全区顶部
+///    （MediaQuery 顶部 padding + 8）」时，回落为向下展开（老 offset(0,38) 行为）。
+/// 3. 向下空间也不足时收紧菜单高度 = 底部可用空间 − 8（保底 ≥ 一行最小高度），
+///    由滚动兜底。
+/// 4. 水平：菜单左缘对齐触发器左缘，右缘越界时 clamp 到屏幕右缘 − 菜单宽。
 class _FloatingMenu extends StatelessWidget {
   const _FloatingMenu({
-    required this.link,
-    required this.offset,
+    required this.anchorRect,
+    required this.estimatedHeight,
     required this.onDismiss,
     required this.child,
   });
 
-  final LayerLink link;
-  final Offset offset;
+  /// 触发器在 overlay 坐标系中的全局矩形（详见 [_ContextWindowPopoverState
+  /// ._resolveAnchorRect]）。
+  final Rect anchorRect;
+
+  /// 菜单内容估算高度（行数 × 44 + 边框 2，上限 200，见
+  /// [_ContextWindowPopoverState._estimateMenuHeight]），用于展开方向决策。
+  final double estimatedHeight;
+
   final VoidCallback onDismiss;
   final Widget child;
 
+  /// 菜单宽度（对齐 `PopoverDropdownCard(width: 228)`）。
+  static const double _menuWidth = 228;
+
+  /// 向上展开时菜单底边距触发器顶部间隔。
+  static const double _gapAbove = 8;
+
+  /// 向下展开时的纵向 offset（保持老 offset(0,38) 行为）。
+  static const double _gapBelow = 38;
+
+  /// 屏幕安全边距（水平 clamp 与顶部底线）。
+  static const double _safeMargin = 8;
+
+  /// 菜单高度保底（一行 44 + 边框 2），空间不足时也不低于它（滚动兜底）。
+  static const double _minMenuHeight = 46;
+
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final screenWidth = media.size.width;
+    final screenHeight = media.size.height;
+    final safeTop = media.padding.top + _safeMargin;
+
+    final maxLeft = math.max(
+      _safeMargin,
+      screenWidth - _safeMargin - _menuWidth,
+    );
+    final left = anchorRect.left.clamp(_safeMargin, maxLeft).toDouble();
+
+    // 优先向上：菜单底边 = 触发器顶部 − 8。顶部越界则回落向下。
+    final upTop = anchorRect.top - estimatedHeight - _gapAbove;
+    final fitsAbove = upTop >= safeTop;
+
+    Widget positioned;
+    if (fitsAbove) {
+      // 向上展开：用 bottom 锚定保证底边恒定贴在触发器上方 8px，
+      // 同时限制高度避免突破安全区顶部。
+      final maxHeight = math.max(
+        _minMenuHeight,
+        anchorRect.top - safeTop - _gapAbove,
+      );
+      positioned = Positioned(
+        left: left,
+        bottom: screenHeight - anchorRect.top + _gapAbove,
+        width: _menuWidth,
+        child: _menuShell(maxHeight: maxHeight),
+      );
+    } else {
+      // 回落向下：保持 offset(0,38) 老行为；底部空间不足时收紧高度（保底一行）。
+      final downTop = anchorRect.top + _gapBelow;
+      final downAvail = math.max(0.0, screenHeight - downTop - _safeMargin);
+      final menuHeight = math.max(
+        math.min(estimatedHeight, downAvail),
+        _minMenuHeight,
+      );
+      positioned = Positioned(
+        left: left,
+        top: downTop,
+        width: _menuWidth,
+        child: _menuShell(maxHeight: menuHeight),
+      );
+    }
+
     return SizedBox.expand(
       child: Stack(
         children: [
@@ -777,17 +898,20 @@ class _FloatingMenu extends StatelessWidget {
               onTap: onDismiss,
             ),
           ),
-          CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            offset: offset,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onDismiss,
-              child: child,
-            ),
-          ),
+          positioned,
         ],
+      ),
+    );
+  }
+
+  /// 菜单卡片外壳：菜单本体 + 点卡片本身也收起（行按钮的点击优先命中）。
+  Widget _menuShell({required double maxHeight}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onDismiss,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: child,
       ),
     );
   }

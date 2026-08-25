@@ -19,6 +19,7 @@ import '../../l10n/app_localizations.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
+import 'chat_send_shortcut_settings.dart';
 import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
@@ -159,9 +160,38 @@ class _ChatSection extends ConsumerWidget {
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final thinkCoalesce = ref.watch(thinkGroupCoalesceProvider);
     final hideReasoning = ref.watch(hideReasoningProvider);
+    final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-send-message-shortcut'),
+          title: Text(l10n.sendMessageShortcutLabel),
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: CupertinoSlidingSegmentedControl<ChatSendShortcutMode>(
+                groupValue: sendShortcut,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref
+                          .read(chatSendShortcutSettingsProvider.notifier)
+                          .setMode(value),
+                    );
+                  }
+                },
+                children: {
+                  ChatSendShortcutMode.enter: Text(l10n.sendShortcutEnter),
+                  ChatSendShortcutMode.ctrlEnter: Text(
+                    l10n.sendShortcutCtrlEnter,
+                  ),
+                },
+              ),
+            ),
+          ),
+        ),
         CupertinoListTile(
           key: const ValueKey('settings-group-tools-by-turn'),
           title: Text(l10n.groupToolsByTurn),

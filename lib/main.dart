@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import 'core/cache/cache_providers.dart';
 import 'core/connections/connection_store.dart';
 import 'features/chat/chat_providers.dart';
 import 'features/desktop/desktop_settings.dart';
+import 'features/desktop/startup_registrar.dart';
 import 'features/notifications/notification_providers.dart';
 
 /// 进程级唯一持久库单例
@@ -22,9 +25,13 @@ import 'features/notifications/notification_providers.dart';
 /// （见渲染层崩溃族：GeneratedDatabase 被实例化两次）。
 final AppDatabase _productionDatabase = AppDatabase.production();
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  final silentStart = isSilentStart(
+    args: args,
+    executableArguments: Platform.executableArguments,
+  );
   if (isDesktopPlatform()) {
     try {
       await windowManager.ensureInitialized();
@@ -32,6 +39,24 @@ Future<void> main() async {
       // 兜底最小窗口：避免拖到 0 宽/过窄时 Windows EGL 上下文丢失
       // （gpu_surface_gl_impeller.cc Context Lost 循环刷屏）。
       await windowManager.setMinimumSize(const Size(720, 480));
+      if (silentStart) {
+        // 静默启动：不显示主窗口，仅驻留系统托盘；
+        // 托盘「显示主窗口」可随时唤出。无参启动路径行为不变。
+        unawaited(
+          windowManager.waitUntilReadyToShow(null, () async {
+            try {
+              await windowManager.hide();
+            } catch (e, st) {
+              developer.log(
+                'Failed to hide window on silent start',
+                name: 'main',
+                error: e,
+                stackTrace: st,
+              );
+            }
+          }),
+        );
+      }
     } catch (e, st) {
       developer.log(
         'windowManager.ensureInitialized failed',

@@ -528,6 +528,46 @@ void main() {
       },
     );
 
+    testWidgets('项目上下文覆盖提示：13pt secondary 说明层级，与分区头右簇贴右缘', (tester) async {
+      final api = FakeMemoryApi(
+        response: MemoryResponse(
+          projectContext: '项目上下文内容',
+          projectContextShadowed: true,
+          projectContextName: 'HERMES.md',
+          projectContextWorkspace: 'D:/projects/hermex-flutter',
+          projectContextMtime: DateTime.now()
+              .subtract(const Duration(hours: 1))
+              .millisecondsSinceEpoch /
+              1000,
+        ),
+      );
+      await pumpMemoryPage(tester, api);
+
+      // 覆盖提示与明细行：显式 13pt、secondary 说明层级（非继承 17pt 大标题级）
+      final warnFinder = find.text('工作区本地文件正在覆盖全局项目上下文。');
+      final detailFinder = find.textContaining('HERMES.md');
+      expect(warnFinder, findsOneWidget);
+      expect(detailFinder, findsWidgets);
+
+      final warnText = tester.widget<Text>(warnFinder);
+      expect(warnText.style?.fontSize, 13);
+      expect(warnText.style?.fontWeight, FontWeight.w400);
+
+      // 分区头右簇（字数统计 + 修改时间 + 只读锁）沿行右缘 float right：
+      // 行末元素（锁图标）右缘贴齐分区卡片右缘，而非摊在行中间标题后。
+      final sectionRect = tester.getRect(
+        find.byType(CupertinoListSection).first,
+      );
+      final titleRect = tester.getRect(find.text('项目上下文').last);
+      final lockRect = tester.getRect(find.byIcon(CupertinoIcons.lock_fill));
+      final charRect = tester.getRect(find.text('7 字'));
+      // 右簇整体在标题右侧，且贴齐分区卡内容右缘（16pt 内容内边距 + 容差）。
+      expect(lockRect.right, greaterThan(titleRect.right));
+      expect(sectionRect.right - lockRect.right, lessThan(60));
+      expect(charRect.right, greaterThan(titleRect.right));
+      expect(charRect.right, lessThan(lockRect.right));
+    });
+
     testWidgets('进入编辑态：点击编辑按钮 → 隐藏 Markdown / Text，显示 CupertinoTextField', (
       tester,
     ) async {

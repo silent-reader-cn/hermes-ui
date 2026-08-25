@@ -4,6 +4,70 @@ import '../../core/models/chat_message.dart';
 import '../../core/models/json_value.dart';
 import '../../core/models/tool_call.dart';
 
+/// live 时间线段落种类。
+///
+/// 按 SSE 事件到达顺序穿插：thinking（reasoning 段）/ text（token 段）/
+/// tools（工具调用段）。controller 在事件到达时记录断点，渲染层按断点切片。
+enum LiveSegmentKind { thinking, text, tools }
+
+/// live 时间线断点：一次「段切换」发生时对应缓冲区的起始游标。
+///
+/// - [kind] == text     → [start] 为流式 assistant 消息 content 的字符偏移；
+/// - [kind] == thinking → [start] 为 liveReasoningText 的字符偏移；
+/// - [kind] == tools    → [start] 为 liveToolCalls 的下标。
+/// [sequence] 单调递增，用于渲染 key（List 复用稳定）。
+class LiveTimelinePoint {
+  const LiveTimelinePoint({
+    required this.kind,
+    required this.start,
+    required this.sequence,
+  });
+
+  final LiveSegmentKind kind;
+  final int start;
+  final int sequence;
+
+  @override
+  bool operator ==(Object other) {
+    return other is LiveTimelinePoint &&
+        other.kind == kind &&
+        other.start == start &&
+        other.sequence == sequence;
+  }
+
+  @override
+  int get hashCode => Object.hash(kind, start, sequence);
+
+  @override
+  String toString() =>
+      'LiveTimelinePoint(kind: $kind, start: $start, seq: $sequence)';
+}
+
+/// live 时间线条目（[liveTimelineProvider] 输出，渲染层按 [kind] 分发 widget）。
+class LiveTimelineEntry {
+  const LiveTimelineEntry({
+    required this.kind,
+    required this.renderKey,
+    this.textSlice = '',
+    this.reasoningText = '',
+    this.toolGroup,
+  });
+
+  final LiveSegmentKind kind;
+
+  /// ListView 稳定 key（如 `live:text:3` / `live:think:merged`）。
+  final String renderKey;
+
+  /// kind==text：流式 assistant 消息 content 的切片（随流式增长）。
+  final String textSlice;
+
+  /// kind==thinking：展示用推理文本。
+  final String reasoningText;
+
+  /// kind==tools：本段的工具组（coalesce=true 时为整回合合并组）。
+  final ToolCallGroup? toolGroup;
+}
+
 /// 展示层转录消息（chat_spec.md §6.2；只读派生，不存状态）。
 class TranscriptMessage {
   const TranscriptMessage({

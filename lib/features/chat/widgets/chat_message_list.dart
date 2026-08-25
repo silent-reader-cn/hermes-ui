@@ -1,20 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
+import '../../../core/utils/selected_context.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import 'chat_media_parser.dart';
+import 'chat_media_view.dart';
+import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
+import 'message_highlight.dart';
 import '../../settings/injected_notice_settings.dart';
 import '../../settings/tool_group_settings.dart';
-import 'message_highlight.dart';
+import 'selected_context_card.dart';
 import 'steer_banner.dart';
 import 'tool_call_card.dart';
 
@@ -241,8 +248,12 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     });
   }
 
+  /// 初始定位是否在途（调度中或收敛循环执行中）。
+  bool get _positioningActive =>
+      _initialPositionScheduled || _initialPositioning;
+
   /// 初始定位滚到底部：lazy `ListView.builder` 首帧的 `maxScrollExtent` 是
-  /// 估算值（未构建条目按估算高度折算），单次 jumpTo 会停在估算位置——
+  /// 估算值（未构建条目按平均高度折算），单次 jumpTo 会停在估算位置——
   /// 长会话下表现为「随机停在中间」。改为逐帧复核、收敛到真实底部。
   void _positionInitialView({required bool hasContent}) {
     if (!mounted ||
@@ -266,15 +277,32 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   }
 
   /// 收敛循环：跳到底部 → 下一帧复核 `maxScrollExtent` 是否仍在增长
-  /// （新增条目改变了真实 extent）→ 增长则再跳；稳定或超限则完成。
-  void _settleToBottom({required int generation, required int attempts}) {
+  /// （新增条目改变了真实 extent）→ 增长则再跳；连续两帧稳定则一次精准
+  /// jumpTo(最终 max) 收官（收官值 == max，不会越界 clamp）。
+  ///
+  /// 相对旧实现的改进：① 以「extent 连续稳定」为收敛条件（而非与跳转前
+  /// 目标值比较），杜绝 overshoot 后像素被 ClampingScrollPhysics 拉回的
+  /// 「撞击反弹」；② 超限时也做最后一次精准跳转收场（不再停在半途）。
+  void _settleToBottom({
+    required int generation,
+    required int attempts,
+    double? lastExtent,
+  }) {
     if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
       _initialPositioning = false;
       return;
     }
-    if (attempts >= 12 || !_controller.hasClients) {
+    if (attempts >= 24 || !_controller.hasClients) {
+      // 尽力而为收场：以当前（最新估算/真实）extent 精准跳一次，避免停在半途。
+      if (mounted &&
+          _controller.hasClients &&
+          !_userHasScrolled &&
+          generation == _layoutGeneration) {
+        final target = _controller.position.maxScrollExtent;
+        if (target > 0) _controller.jumpTo(target);
+      }
       _initialPositioning = false;
-      _initialPositioned = true; // 尽力而为：以当前 extent 收场。
+      _initialPositioned = true;
       _nearBottom =
           _controller.hasClients &&
           _controller.position.maxScrollExtent - _controller.position.pixels <
@@ -285,8 +313,17 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (target <= 0 && _controller.position.viewportDimension <= 0) {
       // 视口尚未布局：下一帧再试，避免空转。
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _settleToBottom(generation: generation, attempts: attempts + 1);
+        _settleToBottom(
+          generation: generation,
+          attempts: attempts + 1,
+          lastExtent: lastExtent,
+        );
       });
+      return;
+    }
+    // extent 已连续两帧不变 → 真实底部已确定，最终精准跳一次收场。
+    if (lastExtent != null && (target - lastExtent).abs() <= 0.5) {
+      _finishSettleWithTarget(generation);
       return;
     }
     _initialPositioning = true;
@@ -294,7 +331,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositioning = false;
       return;
     }
-    _controller.jumpTo(target);
+    if (target > 0) _controller.jumpTo(target);
     // 下一帧复核真实 extent 是否与跳转目标仍有出入。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
@@ -305,19 +342,35 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         _initialPositioning = false;
         return;
       }
-      final now = _controller.position.maxScrollExtent;
-      if ((now - target).abs() > 1.0) {
-        _settleToBottom(generation: generation, attempts: attempts + 1);
-      } else {
-        _initialPositioning = false;
-        _initialPositioned = true;
-        _nearBottom = true;
-      }
+      _settleToBottom(
+        generation: generation,
+        attempts: attempts + 1,
+        lastExtent: _controller.position.maxScrollExtent,
+      );
     });
+  }
+
+  /// 收敛收官：以当前真实 maxScrollExtent 精准跳一次并标记定位完成。
+  /// （收官值恒等于 extent 本身，无越界 clamp，无回弹。）
+  void _finishSettleWithTarget(int generation) {
+    if (mounted && _controller.hasClients && generation == _layoutGeneration) {
+      final target = _controller.position.maxScrollExtent;
+      if (target > 0) _controller.jumpTo(target);
+    }
+    _initialPositioning = false;
+    _initialPositioned = true;
+    _nearBottom = true;
   }
 
   void _scrollToBottom({bool animated = true}) {
     if (!mounted || !_controller.hasClients) return;
+    // 初始定位在途期间的滚动由 _settleToBottom 收敛循环负责（jumpTo 链）；
+    // 若此时允许 animateTo，会与 jumpTo 竞争，并在估算 extent 上越界
+    // 后被 ClampingScrollPhysics 拉回 → 视觉「撞击反弹」。
+    // 初始定位在途期间的滚动由 _settleToBottom 收敛循环负责（jumpTo 链）；
+    // 若此时允许 animateTo，会与 jumpTo 竞争，并在估算 extent 上越界
+    // 后被 ClampingScrollPhysics 拉回 → 视觉「撞击反弹」。
+    if (_positioningActive) return;
     final target = _controller.position.maxScrollExtent;
     if (target <= 0) return;
     if (animated) {
@@ -462,6 +515,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final transcript = ref.watch(transcriptMessagesProvider(sessionId));
     final streaming = ref.watch(streamingMessageProvider(sessionId));
+    final liveTimeline = ref.watch(liveTimelineProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
@@ -508,12 +562,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       });
     }
 
-    final streamingTools = streaming == null
+    // live 时间线模式：streaming 且 provider 非 null（null = 重连归档等
+    // 无法还原段落边界的场景，回退旧分组式流式气泡）。
+    final timelineActive = streaming != null && liveTimeline != null;
+    final streamingTools = streaming == null || liveTimeline != null
         ? const <ToolCallGroup>[]
         : toolGroups
               .where((g) => g.anchorMessageID == streaming.messageId)
               .toList();
-    final streamingReasoning = streaming == null
+    final streamingReasoning = streaming == null || liveTimeline != null
         ? const <ReasoningGroup>[]
         : reasoningGroups
               .where((g) => g.anchorMessageId == streaming.messageId)
@@ -528,8 +585,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         phase != ChatPhase.sending &&
         (toolGroups.isNotEmpty || reasoningGroups.isNotEmpty);
 
-    var itemCount = transcript.length;
-    if (streaming != null) itemCount++;
+    // live 段落条目数：时间线模式 = 段数（空段列表 = 思考中指示器 1 条）；
+    // legacy 模式 = 单个流式气泡。
+    final liveItemCount = streaming == null
+        ? 0
+        : liveTimeline == null
+        ? 1
+        : (liveTimeline.isEmpty ? 1 : liveTimeline.length);
+
+    var itemCount = transcript.length + liveItemCount;
     if (phase == ChatPhase.sending) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
@@ -597,7 +661,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
           tail--;
         }
-        if (streaming != null) {
+        if (streaming != null && !timelineActive) {
+          // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
           if (tail == 0) {
             return _StreamingBubble(
               message: streaming,
@@ -606,6 +671,20 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             );
           }
           tail--;
+        }
+        if (streaming != null && timelineActive) {
+          if (liveTimeline.isEmpty) {
+            if (tail == 0) return const _StreamingThinkingIndicator();
+            tail--;
+          } else {
+            if (tail < liveTimeline.length) {
+              return _LiveTimelineItem(
+                entry: liveTimeline[tail],
+                streamingMessage: streaming,
+              );
+            }
+            tail -= liveTimeline.length;
+          }
         }
         if (phase == ChatPhase.sending) {
           if (tail == 0) return const _SendingIndicator();
@@ -640,7 +719,6 @@ class _StreamingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final hasContent = (message.content ?? '').isNotEmpty;
     final isEmpty =
         !hasContent && toolGroups.isEmpty && reasoningGroups.isEmpty;
@@ -652,6 +730,17 @@ class _StreamingBubble extends StatelessWidget {
       );
     }
     // 空流式气泡 → 思考中指示器。
+    return const _StreamingThinkingIndicator();
+  }
+}
+
+/// 思考中指示器（空流式气泡 / live 时间线空态共用）。
+class _StreamingThinkingIndicator extends StatelessWidget {
+  const _StreamingThinkingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
@@ -675,6 +764,105 @@ class _StreamingBubble extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// live 时间线条目渲染（think/text/tools 按事件先后穿插的独立列表项）。
+class _LiveTimelineItem extends StatelessWidget {
+  const _LiveTimelineItem({
+    required this.entry,
+    required this.streamingMessage,
+  });
+
+  final LiveTimelineEntry entry;
+  final ChatMessage streamingMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: ValueKey(entry.renderKey),
+      child: switch (entry.kind) {
+        LiveSegmentKind.thinking => _FallbackReasoningBlock(
+          group: ReasoningGroup(
+            anchorMessageId: streamingMessage.messageId,
+            text: entry.reasoningText,
+          ),
+        ),
+        LiveSegmentKind.text => _LiveTextBlock(
+          slice: entry.textSlice,
+          streamingMessage: streamingMessage,
+        ),
+        LiveSegmentKind.tools => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: ToolCallGroupCard(group: entry.toolGroup!),
+        ),
+      },
+    );
+  }
+}
+
+/// 流式文本段（Markdown 渲染，镜像历史 assistant 气泡的 content 处理管线）。
+class _LiveTextBlock extends StatelessWidget {
+  const _LiveTextBlock({required this.slice, required this.streamingMessage});
+
+  final String slice;
+  final ChatMessage streamingMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = SelectedContextParser.parse(slice);
+    final blocks = selected.blocks;
+    final cleanText = selected.cleanText;
+    final hasMediaMarker =
+        cleanText.contains('MEDIA:') || cleanText.contains('file://');
+    final parsedContent = hasMediaMarker
+        ? ChatMediaParser.parseMediaMarkers(cleanText)
+        : cleanText;
+    final sections = <Widget>[];
+    if (blocks.isNotEmpty) {
+      sections.add(SelectedContextCardGroup(blocks: blocks));
+    }
+    if (parsedContent.isNotEmpty) {
+      sections.add(
+        MarkdownBody(
+          data: parsedContent,
+          selectable: true,
+          styleSheet: buildAssistantMarkdownStyleSheet(context),
+          builders: createAssistantMarkdownBuilders(context),
+          // ignore: deprecated_member_use
+          imageBuilder: (uri, title, alt) {
+            return ChatInlineMediaWidget(
+              rawUri: uri.toString(),
+              title: title,
+              alt: alt,
+              baseUrl: _resolveBaseUrl(context),
+            );
+          },
+        ),
+      );
+    }
+    if (sections.isEmpty) return const SizedBox.shrink();
+    final children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) children.add(const SizedBox(height: kMessageSectionGap));
+      children.add(sections[i]);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  String? _resolveBaseUrl(BuildContext context) {
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      return container.read(activeConnectionProvider)?.baseUrl;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

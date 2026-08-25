@@ -148,7 +148,9 @@ class ChatStreamState {
     int? replayToolMatchIndex,
   }) {
     return ChatStreamState(
-      activeStreamId: clearActiveStreamId ? null : (activeStreamId ?? this.activeStreamId),
+      activeStreamId: clearActiveStreamId
+          ? null
+          : (activeStreamId ?? this.activeStreamId),
       isSuspended: isSuspended ?? this.isSuspended,
       recovery: recovery ?? this.recovery,
       lastEventId: clearLastEventId ? null : (lastEventId ?? this.lastEventId),
@@ -214,7 +216,8 @@ class ChatStreamState {
   }
 
   @override
-  String toString() => 'ChatStreamState(activeStreamId: $activeStreamId, '
+  String toString() =>
+      'ChatStreamState(activeStreamId: $activeStreamId, '
       'recovery: $recovery, hasCompletedResponse: $hasCompletedResponse)';
 }
 
@@ -239,8 +242,9 @@ class ChatPendingActionState {
     bool clearClarification = false,
   }) {
     return ChatPendingActionState(
-      approvalPrompt:
-          clearApproval ? null : (approvalPrompt ?? this.approvalPrompt),
+      approvalPrompt: clearApproval
+          ? null
+          : (approvalPrompt ?? this.approvalPrompt),
       clarificationPrompt: clearClarification
           ? null
           : (clarificationPrompt ?? this.clarificationPrompt),
@@ -255,10 +259,8 @@ class ChatPendingActionState {
   }
 
   @override
-  int get hashCode => Object.hash(
-        _mapHash(approvalPrompt),
-        _mapHash(clarificationPrompt),
-      );
+  int get hashCode =>
+      Object.hash(_mapHash(approvalPrompt), _mapHash(clarificationPrompt));
 
   static bool _mapEquals(Map<String, Object?>? a, Map<String, Object?>? b) {
     if (a == null || b == null) return a == b;
@@ -288,7 +290,9 @@ class ChatPendingActionState {
 
   static int _mapHash(Map<String, Object?>? map) {
     if (map == null) return 0;
-    return Object.hashAllUnordered(map.entries.map((e) => Object.hash(e.key, e.value)));
+    return Object.hashAllUnordered(
+      map.entries.map((e) => Object.hash(e.key, e.value)),
+    );
   }
 }
 
@@ -320,6 +324,7 @@ class ChatState {
     this.pendingReasoningChunks = const [],
     this.liveReasoningText = '',
     this.liveToolCalls = const [],
+    this.liveTimelinePoints = const [],
     this.completedToolCallGroups = const [],
     this.completedReasoningGroups = const [],
     this.queuedSlashMessages = const [],
@@ -409,6 +414,9 @@ class ChatState {
   /// 实时工具调用（流期间，未归档）。
   final List<ToolCall> liveToolCalls;
 
+  /// live 时间线断点（按事件到达顺序，见 [LiveTimelinePoint]；流式结束即清空）。
+  final List<LiveTimelinePoint> liveTimelinePoints;
+
   /// 已归档工具调用组（done / transcript 重载后）。
   final List<ToolCallGroup> completedToolCallGroups;
 
@@ -479,6 +487,7 @@ class ChatState {
     List<String>? pendingReasoningChunks,
     String? liveReasoningText,
     List<ToolCall>? liveToolCalls,
+    List<LiveTimelinePoint>? liveTimelinePoints,
     List<ToolCallGroup>? completedToolCallGroups,
     List<ReasoningGroup>? completedReasoningGroups,
     List<String>? queuedSlashMessages,
@@ -501,19 +510,26 @@ class ChatState {
       displayTitle: displayTitle ?? this.displayTitle,
       workspace: clearWorkspace ? null : (workspace ?? this.workspace),
       model: clearModel ? null : (model ?? this.model),
-      modelProvider:
-          clearModelProvider ? null : (modelProvider ?? this.modelProvider),
+      modelProvider: clearModelProvider
+          ? null
+          : (modelProvider ?? this.modelProvider),
       profile: clearProfile ? null : (profile ?? this.profile),
       explicitModelPick: explicitModelPick ?? this.explicitModelPick,
-      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
-      sendErrorMessage:
-          clearSendErrorMessage ? null : (sendErrorMessage ?? this.sendErrorMessage),
-      noticeMessage: clearNoticeMessage ? null : (noticeMessage ?? this.noticeMessage),
+      errorMessage: clearErrorMessage
+          ? null
+          : (errorMessage ?? this.errorMessage),
+      sendErrorMessage: clearSendErrorMessage
+          ? null
+          : (sendErrorMessage ?? this.sendErrorMessage),
+      noticeMessage: clearNoticeMessage
+          ? null
+          : (noticeMessage ?? this.noticeMessage),
       isViewingCachedData: isViewingCachedData ?? this.isViewingCachedData,
       isShowingOfflineCache:
           isShowingOfflineCache ?? this.isShowingOfflineCache,
       isReadOnly: isReadOnly ?? this.isReadOnly,
-      hasPendingUserMessage: hasPendingUserMessage ?? this.hasPendingUserMessage,
+      hasPendingUserMessage:
+          hasPendingUserMessage ?? this.hasPendingUserMessage,
       parentSessionId: parentSessionId ?? this.parentSessionId,
       yoloEnabled: yoloEnabled ?? this.yoloEnabled,
       composerPrefill: clearComposerPrefill
@@ -525,13 +541,16 @@ class ChatState {
           pendingReasoningChunks ?? this.pendingReasoningChunks,
       liveReasoningText: liveReasoningText ?? this.liveReasoningText,
       liveToolCalls: liveToolCalls ?? this.liveToolCalls,
+      liveTimelinePoints: liveTimelinePoints ?? this.liveTimelinePoints,
       completedToolCallGroups:
           completedToolCallGroups ?? this.completedToolCallGroups,
       completedReasoningGroups:
           completedReasoningGroups ?? this.completedReasoningGroups,
       queuedSlashMessages: queuedSlashMessages ?? this.queuedSlashMessages,
       pinnedLocalNotices: pinnedLocalNotices ?? this.pinnedLocalNotices,
-      lastSteerHint: clearLastSteerHint ? null : (lastSteerHint ?? this.lastSteerHint),
+      lastSteerHint: clearLastSteerHint
+          ? null
+          : (lastSteerHint ?? this.lastSteerHint),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
       contextWindowSnapshot: clearContextWindowSnapshot
@@ -539,8 +558,9 @@ class ChatState {
           : (contextWindowSnapshot ?? this.contextWindowSnapshot),
       responseCompletionNeedsTranscriptRefresh:
           responseCompletionNeedsTranscriptRefresh ??
-              this.responseCompletionNeedsTranscriptRefresh,
-      streamingScrollTrigger: streamingScrollTrigger ?? this.streamingScrollTrigger,
+          this.responseCompletionNeedsTranscriptRefresh,
+      streamingScrollTrigger:
+          streamingScrollTrigger ?? this.streamingScrollTrigger,
     );
   }
 

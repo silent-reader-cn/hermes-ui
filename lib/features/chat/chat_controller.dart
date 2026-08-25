@@ -55,6 +55,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 词级 reveal 队列（合并缓冲产出、逐 tick 消费）。
   final List<String> _revealQueue = [];
 
+  /// live 时间线断点序列号（单调递增，用于渲染 key；新回合归零）。
+  int _timelineSequence = 0;
+
   /// reveal 队列开始积压的时刻（最大滞后判定）。
   DateTime? _revealQueueStart;
 
@@ -701,10 +704,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     List<ToolCallGroup> nextCompletedGroups;
     List<ToolCall> nextLiveToolCalls = state.liveToolCalls;
-    String nextLiveReasoning = state.liveReasoningText;
+    final String nextLiveReasoning = state.liveReasoningText;
     final hasServerTools =
         persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
     if (hasServerTools) {
+      // 服务端 transcript 已含工具 → 以服务端为准，live 清空。
       nextCompletedGroups = serverDerivedGroups;
       nextLiveToolCalls = const [];
     } else {
@@ -721,7 +725,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           primaryGroups: state.completedToolCallGroups,
           fallbackGroups: [liveGroup],
         );
-        nextLiveToolCalls = const [];
+        // live 时间线需要保留 liveToolCalls 继续切片展示（重连/恢复场景）；
+        // 归档组仅作流式结束后的 transcript fallback，不双显（transcript 会跳过
+        // 流式消息自身）。
       } else {
         nextCompletedGroups = state.completedToolCallGroups;
       }
@@ -736,7 +742,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       liveReasoningList.add(
         ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
       );
-      nextLiveReasoning = '';
+      // 同工具：保留 liveReasoningText 供 live 时间线切片，档案组仅收尾 fallback。
     }
     var nextCompletedReasoning = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
@@ -1044,10 +1050,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   void _beginStream(String streamId) {
+    _timelineSequence = 0;
     state = state.copyWith(
       phase: ChatPhase.streaming,
       clearSendErrorMessage: true,
       clearErrorMessage: true,
+      liveTimelinePoints: const [],
       stream: state.stream.copyWith(
         activeStreamId: streamId,
         isSuspended: false,
@@ -1197,6 +1205,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       if (remainder.isEmpty) return false;
     }
+    // 时间线断点：在「事件到达」时记录（而非 flush 时），保证与真实事件顺序一致；
+    // start 取缓冲全量（content + 待合并 + 待揭示），使切片与最终 content 对齐。
+    _ensureTimelinePoint(
+      LiveSegmentKind.text,
+      _currentStreamingContent().length,
+    );
     state = state.copyWith(
       pendingAssistantTokenChunks: [
         ...state.pendingAssistantTokenChunks,
@@ -1305,6 +1319,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       if (remainder.isEmpty) return false;
     }
+    // 与工具事件一致：reasoning 先到时也立即锚定空流式气泡（思考中指示器兜底）。
+    _ensureStreamingAssistantMessage();
+    // 时间线断点：事件到达时记录（对齐真实顺序）；start 含待 flush 块长度。
+    final start =
+        state.liveReasoningText.length +
+        state.pendingReasoningChunks.join().length;
+    _ensureTimelinePoint(LiveSegmentKind.thinking, start);
     state = state.copyWith(
       pendingReasoningChunks: [...state.pendingReasoningChunks, remainder],
     );
@@ -1333,6 +1354,25 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  /// 时间线断点：段切换时追加（同 kind 连续追加并入同段，不重复建点）。
+  ///
+  /// 断点按 SSE 事件到达顺序记录；[start] 为该段缓冲起始游标，渲染层据此
+  /// 对 content / liveReasoningText / liveToolCalls 切片穿插展示。
+  void _ensureTimelinePoint(LiveSegmentKind kind, int start) {
+    final points = state.liveTimelinePoints;
+    if (points.isNotEmpty && points.last.kind == kind) return;
+    state = state.copyWith(
+      liveTimelinePoints: [
+        ...points,
+        LiveTimelinePoint(
+          kind: kind,
+          start: start,
+          sequence: ++_timelineSequence,
+        ),
+      ],
+    );
+  }
+
   /// 以 messageId == streamingAssistantMessageId 定位，原地替换（content 追加）。
   void _appendToStreamingMessage(String text) {
     if (text.isEmpty) return;
@@ -1341,6 +1381,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final index = state.messages.indexWhere((m) => m.messageId == id);
     if (index == -1) return;
     final current = state.messages[index];
+    // 兜底断点：所有直达追加路径（interim_assistant / flush）都保证段落归属
+    // （常规 token 路径已在事件到达时建点，此处因 last.kind==text 会跳过）。
+    _ensureTimelinePoint(LiveSegmentKind.text, current.content?.length ?? 0);
     final next = List<ChatMessage>.of(state.messages);
     next[index] = current.copyWith(content: '${current.content ?? ''}$text');
     state = state.copyWith(
@@ -1423,6 +1466,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
     }
     _ensureStreamingAssistantMessage();
+    // 时间线断点：工具段切换（真实追加前记录，liveToolCalls 下标即段起点；
+    // replay 去重命中已在上文 return，不会误建点）。
+    _ensureTimelinePoint(LiveSegmentKind.tools, state.liveToolCalls.length);
     final tool = ToolCall(
       id: evt.stableId,
       name: evt.name,
@@ -2027,6 +2073,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messages: messages,
       pinnedLocalNotices: const [],
       clearLastSteerHint: true,
+      liveTimelinePoints: const [],
       pendingAction: const ChatPendingActionState(),
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
@@ -2405,6 +2452,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final groups = _archiveLiveReasoningToGroups();
     state = state.copyWith(
       liveReasoningText: '',
+      liveTimelinePoints: const [],
       completedReasoningGroups: groups,
     );
   }
@@ -2429,6 +2477,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final groups = _archiveLiveToolCallsToGroups();
     state = state.copyWith(
       liveToolCalls: const [],
+      liveTimelinePoints: const [],
       completedToolCallGroups: groups,
     );
   }

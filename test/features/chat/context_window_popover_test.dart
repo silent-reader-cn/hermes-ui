@@ -457,11 +457,17 @@ void main() {
         findsOneWidget,
       );
 
-      // 再次点击收起
+      // 再次点击收起：菜单经改造后优先向上展开，触发器被全屏 barrier 覆盖，
+      // 该点击命中 barrier 走 onDismiss 收起（与 toggle 收起等效，行为不变）。
       await tester.tap(
         find.byKey(const ValueKey('context-popover-model-trigger')),
+        warnIfMissed: false,
       );
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+        findsNothing,
+      );
     });
 
     testWidgets('点击模型选项调用 selectModel 并触发 onClose', (tester) async {

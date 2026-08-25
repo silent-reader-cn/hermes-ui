@@ -27,6 +27,9 @@ class AppLocalizations {
   String get filterSessions => isEnglish ? 'Filter sessions' : '筛选会话';
   String get channels => isEnglish ? 'Channels' : '渠道';
   String get projects => isEnglish ? 'Projects' : '项目';
+  String get displaySectionHeader => isEnglish ? 'Display' : '显示';
+  String get showSubagentSessions =>
+      isEnglish ? 'Show subagent sessions' : '显示 subagent 会话';
   String get retry => isEnglish ? 'Retry' : '重试';
   String get loading => isEnglish ? 'Loading…' : '加载中…';
   String get loadingEllipsis => isEnglish ? 'Loading…' : '加载中…';
@@ -900,6 +903,10 @@ class AppLocalizations {
   String get hideThinkingDesc => isEnglish
       ? 'Hide thinking cards entirely, leaving text and tool cards only'
       : '完全隐藏思考卡片，仅保留文本与工具卡片';
+  String get sendMessageShortcutLabel => isEnglish ? 'Send Message' : '发送消息';
+  String get sendShortcutEnter => isEnglish ? 'Enter to send' : 'Enter 发送';
+  String get sendShortcutCtrlEnter =>
+      isEnglish ? 'Ctrl+Enter to send' : 'Ctrl+Enter 发送';
   String get desktopSection => isEnglish ? 'Desktop' : '桌面';
   String get desktop => isEnglish ? 'Desktop' : '桌面';
   String get minimizeToTray => isEnglish ? 'Minimize to Tray' : '最小化到托盘';
@@ -915,6 +922,14 @@ class AppLocalizations {
   String get rememberWindowPositionSubtitle => isEnglish
       ? 'Restore window size and position on startup'
       : '启动时恢复上次窗口位置与尺寸';
+  String get startOnLogin => isEnglish ? 'Start on Login' : '开机启动';
+  String get startOnLoginSubtitle => isEnglish
+      ? 'Launch Hermex automatically when you sign in to Windows'
+      : '登录 Windows 时自动启动 Hermex';
+  String get silentStart => isEnglish ? 'Silent Start' : '静默启动';
+  String get silentStartSubtitle => isEnglish
+      ? 'Start in the system tray without showing the main window'
+      : '启动时不显示主窗口，直接驻留系统托盘';
   String get serverSection => isEnglish ? 'Servers' : '服务器';
   String get serverSectionDisconnected =>
       isEnglish ? 'Servers (Not Connected)' : '服务器（未连接）';
