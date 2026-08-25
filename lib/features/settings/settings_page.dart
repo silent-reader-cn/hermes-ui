@@ -128,10 +128,14 @@ class _AppearanceSection extends ConsumerWidget {
           title: Text(l10n.collapseInjectedNoticesLabel),
           subtitle: Text(l10n.collapseInjectedNoticesDescription),
           trailing: CupertinoSwitch(
-            value: ref.watch(injectedNoticeSettingsProvider).collapseInjectedNotices,
+            value: ref
+                .watch(injectedNoticeSettingsProvider)
+                .collapseInjectedNotices,
             onChanged: (value) {
               unawaited(
-                ref.read(injectedNoticeSettingsProvider.notifier).setCollapse(value),
+                ref
+                    .read(injectedNoticeSettingsProvider.notifier)
+                    .setCollapse(value),
               );
             },
           ),
@@ -153,6 +157,8 @@ class _ChatSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
+    final thinkCoalesce = ref.watch(thinkGroupCoalesceProvider);
+    final hideReasoning = ref.watch(hideReasoningProvider);
     return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
@@ -166,6 +172,36 @@ class _ChatSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(
                 ref.read(toolGroupCoalesceProvider.notifier).setCoalesce(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-group-think-by-turn'),
+          title: Text(l10n.groupThinkByTurn),
+          subtitle: Text(l10n.groupThinkByTurnDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-group-think-by-turn'),
+            value: thinkCoalesce,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(thinkGroupCoalesceProvider.notifier)
+                    .setCoalesce(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-hide-thinking'),
+          title: Text(l10n.hideThinking),
+          subtitle: Text(l10n.hideThinkingDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-hide-thinking'),
+            value: hideReasoning,
+            onChanged: (value) {
+              unawaited(
+                ref.read(hideReasoningProvider.notifier).setHide(value),
               );
             },
           ),
@@ -211,11 +247,8 @@ class _AdvancedSettingsSection extends StatelessWidget {
             size: 18,
             color: CupertinoColors.systemGrey,
           ),
-          onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
-              builder: (_) => const McpPage(),
-            ),
-          ),
+          onTap: () => Navigator.of(context)
+              .push(CupertinoPageRoute<void>(builder: (_) => const McpPage())),
         ),
         CupertinoListTile(
           key: const ValueKey('settings-entry-extensions'),
@@ -226,9 +259,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
-              builder: (_) => const ExtensionsPage(),
-            ),
+            CupertinoPageRoute<void>(builder: (_) => const ExtensionsPage()),
           ),
         ),
         CupertinoListTile(
@@ -783,7 +814,9 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(
                             _error,
-                            style: TextStyle(color: statusRedText.resolveFrom(context)),
+                            style: TextStyle(
+                              color: statusRedText.resolveFrom(context),
+                            ),
                           ),
                         ),
                     ],
@@ -825,10 +858,8 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
 }
 
 extension on ProfileSwitchResponse {
-  ProfilesResponse toProfilesResponse(String fallback) => ProfilesResponse(
-        profiles: profiles,
-        active: active ?? fallback,
-      );
+  ProfilesResponse toProfilesResponse(String fallback) =>
+      ProfilesResponse(profiles: profiles, active: active ?? fallback);
 }
 
 // ---------------------------------------------------------------------------

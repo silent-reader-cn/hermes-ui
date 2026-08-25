@@ -268,7 +268,9 @@ class _AssistantContent extends StatelessWidget {
       children: [
         if (blocks.isNotEmpty) ...[
           SelectedContextCardGroup(blocks: blocks),
-          if (parsedContent.isNotEmpty || toolGroups.isNotEmpty || reasoningGroups.isNotEmpty)
+          if (parsedContent.isNotEmpty ||
+              toolGroups.isNotEmpty ||
+              reasoningGroups.isNotEmpty)
             const SizedBox(height: 6),
         ],
         for (final group in reasoningGroups) _ReasoningBlock(group: group),
@@ -416,67 +418,69 @@ class _ReasoningBlockState extends State<_ReasoningBlock> {
     final preview = summary.length > 80
         ? '${summary.substring(0, 80)}…'
         : summary;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
-        onTap: () => setState(() => _expanded = !_expanded),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5.resolveFrom(context),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _expanded
-                        ? CupertinoIcons.chevron_down
-                        : CupertinoIcons.chevron_right,
-                    size: 12,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    l10n.thinkingLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_expanded)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        // 与工具调用卡片同款视觉（思考按 tool 样式折叠卡渲染）。
+        color: CupertinoColors.systemGrey6.resolveFrom(context),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.systemGrey4.resolveFrom(context),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.sparkles,
+                  size: 14,
+                  color: CupertinoColors.systemPurple.resolveFrom(context),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  l10n.thinkingLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
-            ],
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: secondary),
+                  ),
+                ),
+                Icon(
+                  _expanded
+                      ? CupertinoIcons.chevron_up
+                      : CupertinoIcons.chevron_down,
+                  size: 12,
+                  color: secondary,
+                ),
+              ],
+            ),
           ),
-        ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+        ],
       ),
     );
   }

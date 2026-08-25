@@ -222,7 +222,11 @@ class ToolCallGroup {
     );
   }
 
-  /// 聚合入口：优先持久化工具调用，缺失时用消息元数据兜底，再按 assistant 回合合并。
+  /// 聚合入口：优先持久化工具调用，缺失时用消息元数据兜底，再按聚合策略合并。
+  ///
+  /// [coalesce]=true 按 assistant 回合整轮合并（同用户回合内全部工具一张卡）；
+  /// [coalesce]=false 仅相邻合并（同回合内无 text/think 打断的连续组合并，
+  /// 中间出现可见文本或推理则分离，呈现 text/think/tools 穿插）。
   static List<ToolCallGroup> groups({
     required List<PersistedToolCall> persistedToolCalls,
     required List<ChatMessage> messages,
@@ -241,13 +245,11 @@ class ToolCallGroup {
             fallbackGroups: derivedGroups,
           );
     if (!coalesce) {
-      return rawGroups.map((group) {
-        return ToolCallGroup(
-          id: group.id,
-          anchorMessageID: group.anchorMessageID,
-          toolCalls: _uniqueToolCalls(group.toolCalls),
-        );
-      }).toList();
+      return coalescingAdjacent(
+        rawGroups,
+        messages: messages,
+        messageOffset: messageOffset,
+      );
     }
     return coalescingByAssistantTurn(
       rawGroups,
@@ -370,6 +372,104 @@ class ToolCallGroup {
     }).toList();
   }
 
+  /// 相邻聚合（聚合开关关闭时的语义：不等于完全不聚合）。
+  ///
+  /// 同一回合内，仅当相邻两组之间**没有**带可见文本或推理的 assistant 消息
+  /// （text/think 打断）时才合并为一张卡；被打断则保持分离，
+  /// 最终呈现 text / think / tools 穿插布局。
+  static List<ToolCallGroup> coalescingAdjacent(
+    List<ToolCallGroup> groups, {
+    required List<ChatMessage> messages,
+    int? messageOffset,
+  }) {
+    if (groups.length <= 1) {
+      return groups.map((group) {
+        return ToolCallGroup(
+          id: group.id,
+          anchorMessageID: group.anchorMessageID,
+          toolCalls: _uniqueToolCalls(group.toolCalls),
+        );
+      }).toList();
+    }
+
+    final messageIndexesByID = <String, int>{};
+    for (var i = 0; i < messages.length; i++) {
+      messageIndexesByID[TranscriptTurnClassifier.anchorID(
+            messages[i],
+            at: i,
+            messageOffset: messageOffset,
+          )] =
+          i;
+    }
+
+    // 不打断（可视作“相邻”）的辅助判定：区间 (prev, cur) 内是否存在
+    // 带可见文本或推理的 assistant 消息。
+    bool hasTextOrThinkBetween(int prevIndex, int curIndex) {
+      for (var k = prevIndex + 1; k < curIndex; k++) {
+        if (k < 0 || k >= messages.length) continue;
+        final message = messages[k];
+        if (message.role != 'assistant') continue;
+        if (message.content?.trim().isNotEmpty == true) return true;
+        if (message.reasoning?.trim().isNotEmpty == true) return true;
+      }
+      return false;
+    }
+
+    final merged = <ToolCallGroup>[];
+    final anchorIndexes = <String, int>{};
+    final groupOrderIndexes = <String, int>{};
+    for (var i = 0; i < groups.length; i++) {
+      final group = groups[i];
+      groupOrderIndexes[group.id] = i;
+      if (group.anchorMessageID != null) {
+        anchorIndexes[group.id] =
+            messageIndexesByID[group.anchorMessageID] ?? -1;
+      }
+    }
+
+    final orderedIds = groups.map((g) => g.id).toList()
+      ..sort((a, b) {
+        final ia = anchorIndexes[a] ?? (1 << 62) - groupOrderIndexes[a]!;
+        final ib = anchorIndexes[b] ?? (1 << 62) - groupOrderIndexes[b]!;
+        final cmp = ia.compareTo(ib);
+        if (cmp != 0) return cmp;
+        return (groupOrderIndexes[a] ?? 0).compareTo(groupOrderIndexes[b] ?? 0);
+      });
+
+    ToolCallGroup? current;
+    int? currentAnchorIndex;
+    for (final id in orderedIds) {
+      final group = groups.firstWhere((g) => g.id == id);
+      final anchorIndex = anchorIndexes[id] ?? -1;
+      if (current == null) {
+        current = group;
+        currentAnchorIndex = anchorIndex;
+        continue;
+      }
+      final canMerge =
+          currentAnchorIndex != null &&
+          currentAnchorIndex >= 0 &&
+          anchorIndex >= 0 &&
+          !hasTextOrThinkBetween(currentAnchorIndex, anchorIndex);
+      if (canMerge) {
+        current = _mergingToolCallGroup(current, group);
+        continue;
+      }
+      merged.add(current);
+      current = group;
+      currentAnchorIndex = anchorIndex;
+    }
+    if (current != null) merged.add(current);
+
+    return merged.map((group) {
+      return ToolCallGroup(
+        id: group.id,
+        anchorMessageID: group.anchorMessageID,
+        toolCalls: _uniqueToolCalls(group.toolCalls),
+      );
+    }).toList();
+  }
+
   // MARK: - 内部聚合
 
   static List<ToolCallGroup> _groupsFromPersistedToolCalls(
@@ -484,7 +584,12 @@ class ToolCallGroup {
         // 查找当前段最后一条消息是否有可见文本（近似：若 currentAnchor 对应的消息有文本，则已是一段带文本的段落）
         var currentHasText = false;
         for (var k = messageIndex - 1; k >= 0; k--) {
-          if (TranscriptTurnClassifier.anchorID(messages[k], at: k, messageOffset: messageOffset) == currentAnchorMessageID) {
+          if (TranscriptTurnClassifier.anchorID(
+                messages[k],
+                at: k,
+                messageOffset: messageOffset,
+              ) ==
+              currentAnchorMessageID) {
             if (messages[k].content?.trim().isNotEmpty == true) {
               currentHasText = true;
             }
@@ -698,6 +803,21 @@ class ToolCallGroup {
       }
     }
     return uniqueToolCalls;
+  }
+
+  /// 相邻合并辅助：把 [other] 的工具调用并入 [base]，保留 base 的 id/anchor。
+  static ToolCallGroup _mergingToolCallGroup(
+    ToolCallGroup base,
+    ToolCallGroup other,
+  ) {
+    return ToolCallGroup(
+      id: base.id,
+      anchorMessageID: base.anchorMessageID,
+      toolCalls: _mergingToolCalls(
+        primaryToolCalls: base.toolCalls,
+        fallbackToolCalls: other.toolCalls,
+      ),
+    );
   }
 
   static List<ToolCall> _mergingToolCalls({
@@ -929,10 +1049,11 @@ String? toolCallSummary(ToolCall call) {
   final args = call.args;
   if (args != null && args.isNotEmpty) {
     final rawName = call.name?.trim();
-    final toolName = ((rawName != null && rawName.isNotEmpty)
-            ? rawName
-            : (call.displayName != 'Tool' ? call.displayName : ''))
-        .toLowerCase();
+    final toolName =
+        ((rawName != null && rawName.isNotEmpty)
+                ? rawName
+                : (call.displayName != 'Tool' ? call.displayName : ''))
+            .toLowerCase();
 
     // 1. 读文件类：read / read_file / cat / view
     if (_isReadFileTool(toolName)) {
@@ -1013,37 +1134,37 @@ extension ToolCallSummaryExtension on ToolCall {
 
 bool _isReadFileTool(String toolName) {
   return const {
-    'read',
-    'read_file',
-    'readfile',
-    'cat',
-    'view',
-    'view_file',
-    'viewfile',
-  }.contains(toolName) ||
+        'read',
+        'read_file',
+        'readfile',
+        'cat',
+        'view',
+        'view_file',
+        'viewfile',
+      }.contains(toolName) ||
       toolName.startsWith('read_') ||
       toolName.startsWith('view_');
 }
 
 bool _isWriteFileTool(String toolName) {
   return const {
-    'write',
-    'write_file',
-    'writefile',
-    'edit',
-    'edit_file',
-    'editfile',
-    'str_replace',
-    'strreplace',
-    'create',
-    'create_file',
-    'createfile',
-    'patch',
-    'apply_patch',
-    'applypatch',
-    'write_to_file',
-    'replace_file_content',
-  }.contains(toolName) ||
+        'write',
+        'write_file',
+        'writefile',
+        'edit',
+        'edit_file',
+        'editfile',
+        'str_replace',
+        'strreplace',
+        'create',
+        'create_file',
+        'createfile',
+        'patch',
+        'apply_patch',
+        'applypatch',
+        'write_to_file',
+        'replace_file_content',
+      }.contains(toolName) ||
       toolName.startsWith('write_') ||
       toolName.startsWith('edit_');
 }
@@ -1079,13 +1200,7 @@ bool _isSearchTool(String toolName) {
 }
 
 bool _isListTool(String toolName) {
-  return const {
-    'glob',
-    'list',
-    'ls',
-    'list_dir',
-    'listdir',
-  }.contains(toolName);
+  return const {'glob', 'list', 'ls', 'list_dir', 'listdir'}.contains(toolName);
 }
 
 String? _extractFileSummary(Map<String, JsonValue> args) {
@@ -1145,7 +1260,10 @@ String? _extractSearchSummary(Map<String, JsonValue> args) {
   ]);
   final cleanPattern = pattern != null ? _cleanSingleLine(pattern) : null;
   final cleanPath = path != null ? _extractFileName(path) : null;
-  if (cleanPattern != null && cleanPattern.isNotEmpty && cleanPath != null && cleanPath.isNotEmpty) {
+  if (cleanPattern != null &&
+      cleanPattern.isNotEmpty &&
+      cleanPath != null &&
+      cleanPath.isNotEmpty) {
     return _truncate40('$cleanPattern $cleanPath');
   } else if (cleanPattern != null && cleanPattern.isNotEmpty) {
     return _truncate40(cleanPattern);
@@ -1176,7 +1294,10 @@ String? _extractListSummary(Map<String, JsonValue> args) {
   ]);
   final cleanPattern = pattern != null ? _cleanSingleLine(pattern) : null;
   final cleanPath = path != null ? _extractFileName(path) : null;
-  if (cleanPattern != null && cleanPattern.isNotEmpty && cleanPath != null && cleanPath.isNotEmpty) {
+  if (cleanPattern != null &&
+      cleanPattern.isNotEmpty &&
+      cleanPath != null &&
+      cleanPath.isNotEmpty) {
     return _truncate40('$cleanPattern $cleanPath');
   } else if (cleanPattern != null && cleanPattern.isNotEmpty) {
     return _truncate40(cleanPattern);
@@ -1206,7 +1327,10 @@ String? _extractTodoSummary(Map<String, JsonValue> args) {
 }
 
 String _extractFileName(String path) {
-  final normalized = path.trim().replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+  final normalized = path
+      .trim()
+      .replaceAll('\\', '/')
+      .replaceAll(RegExp(r'/+$'), '');
   if (normalized.isEmpty) return path.trim();
   final lastSlash = normalized.lastIndexOf('/');
   if (lastSlash >= 0 && lastSlash < normalized.length - 1) {
@@ -1260,7 +1384,10 @@ String _extractLineOrOffsetSuffix(Map<String, JsonValue> args) {
   return '';
 }
 
-String? _findArgString(Map<String, JsonValue> args, List<String> candidateKeys) {
+String? _findArgString(
+  Map<String, JsonValue> args,
+  List<String> candidateKeys,
+) {
   for (final targetKey in candidateKeys) {
     final lowerTarget = targetKey.toLowerCase();
     for (final entry in args.entries) {
@@ -1279,9 +1406,10 @@ String? _jsonValueToDisplayString(JsonValue? val) {
   if (val == null) return null;
   return switch (val) {
     JsonString(:final value) => value,
-    JsonNumber(:final value) => value == value.roundToDouble()
-        ? value.toInt().toString()
-        : value.toString(),
+    JsonNumber(:final value) =>
+      value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toString(),
     JsonBool(:final value) => value ? 'true' : 'false',
     JsonNull() => null,
     JsonObject() => val.compactJsonString,
@@ -1296,4 +1424,3 @@ String _cleanSingleLine(String text) {
 String _truncate40(String text) {
   return text.length > 40 ? text.substring(0, 40) : text;
 }
-

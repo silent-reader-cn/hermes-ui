@@ -36,9 +36,7 @@ void main() {
     });
 
     test('初始状态从 SharedPreferences 读取', () async {
-      SharedPreferences.setMockInitialValues({
-        kToolGroupCoalesceKey: false,
-      });
+      SharedPreferences.setMockInitialValues({kToolGroupCoalesceKey: false});
 
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -72,8 +70,21 @@ void main() {
     test('coalesce: true 聚合模式：合并同一回合内不同 assistant 消息的工具调用', () {
       final messages = [
         const ChatMessage(role: 'user', content: 'hello', messageId: 'u1'),
-        const ChatMessage(role: 'assistant', content: 'let me check', messageId: 'm1'),
-        const ChatMessage(role: 'assistant', content: 'now editing', messageId: 'm2'),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'let me check',
+          messageId: 'm1',
+        ),
+        const ChatMessage(
+          role: 'assistant',
+          content: '中间说明文字打断相邻',
+          messageId: 'm_break',
+        ),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'now editing',
+          messageId: 'm2',
+        ),
       ];
       final persistedCalls = [
         const PersistedToolCall(
@@ -84,7 +95,7 @@ void main() {
         const PersistedToolCall(
           name: 'write_file',
           tid: 'call_2',
-          assistantMsgIdx: 2,
+          assistantMsgIdx: 3,
         ),
       ];
 
@@ -103,8 +114,21 @@ void main() {
     test('coalesce: false 穿插模式：保留独立 anchorMessageID 分别挂载在对应 assistant 消息旁', () {
       final messages = [
         const ChatMessage(role: 'user', content: 'hello', messageId: 'u1'),
-        const ChatMessage(role: 'assistant', content: 'let me check', messageId: 'm1'),
-        const ChatMessage(role: 'assistant', content: 'now editing', messageId: 'm2'),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'let me check',
+          messageId: 'm1',
+        ),
+        const ChatMessage(
+          role: 'assistant',
+          content: '中间说明文字打断相邻',
+          messageId: 'm_break',
+        ),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'now editing',
+          messageId: 'm2',
+        ),
       ];
       final persistedCalls = [
         const PersistedToolCall(
@@ -115,7 +139,7 @@ void main() {
         const PersistedToolCall(
           name: 'write_file',
           tid: 'call_2',
-          assistantMsgIdx: 2,
+          assistantMsgIdx: 3,
         ),
       ];
 
@@ -186,7 +210,7 @@ void main() {
     });
   });
 
-  test('coalesce=false 时被文本打断的连续工具应拆分为 2 组', () {
+  test('coalesce=false 时被文本打断的连续工具应拆分为 2 组（metadata 路径）', () {
     final messages = [
       const ChatMessage(role: 'user', content: 'query', messageId: 'u1'),
       const ChatMessage(
@@ -202,6 +226,11 @@ void main() {
             }),
           }),
         ],
+      ),
+      const ChatMessage(
+        role: 'assistant',
+        messageId: 'm_break',
+        content: '可见文本打断聚合',
       ),
       const ChatMessage(
         role: 'assistant',
@@ -257,12 +286,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final tileFinder = find.byKey(const ValueKey('settings-group-tools-by-turn'));
-      final switchFinder = find.byKey(const ValueKey('settings-switch-group-tools-by-turn'));
+      final tileFinder = find.byKey(
+        const ValueKey('settings-group-tools-by-turn'),
+      );
+      final switchFinder = find.byKey(
+        const ValueKey('settings-switch-group-tools-by-turn'),
+      );
 
       expect(find.text('对话'), findsOneWidget);
       expect(find.text('工具按回合聚合'), findsOneWidget);
-      expect(find.text('关闭后工具折叠面板将穿插在对应回复旁'), findsOneWidget);
+      expect(
+        find.text('开启：整轮工具合成一张折叠卡；关闭：仅相邻工具合并，被文本/思考打断则分离'),
+        findsOneWidget,
+      );
 
       expect(tileFinder, findsOneWidget);
       expect(switchFinder, findsOneWidget);
@@ -297,6 +333,11 @@ void main() {
           'messages': [
             {'role': 'user', 'content': '请执行操作', 'message_id': 'u1'},
             {'role': 'assistant', 'content': '读取完毕', 'message_id': 'm1'},
+            {
+              'role': 'assistant',
+              'content': '我先确认一下格式',
+              'message_id': 'm_break',
+            },
             {'role': 'assistant', 'content': '写入完毕', 'message_id': 'm2'},
           ],
           'tool_calls': [
@@ -310,7 +351,7 @@ void main() {
               'name': 'write_file',
               'snippet': 'Wrote content',
               'tid': 'call_2',
-              'assistant_msg_idx': 2,
+              'assistant_msg_idx': 3,
             },
           ],
         },
@@ -318,9 +359,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            chatApiProvider.overrideWithValue(fakeApi),
-          ],
+          overrides: [chatApiProvider.overrideWithValue(fakeApi)],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
               child: ChatMessageList(sessionId: 'sess-tools-test'),
@@ -337,8 +376,10 @@ void main() {
       expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
 
-      // 2. 切换为 coalesce: false 模式：两个工具卡片分别挂载在各自 assistant 消息旁，共 2 张独立卡片，绝无 double 副本
-      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false);
+      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立卡片穿插呈现，绝无 double 副本
+      await container
+          .read(toolGroupCoalesceProvider.notifier)
+          .setCoalesce(false);
       await tester.pumpAndSettle();
 
       expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
@@ -348,7 +389,9 @@ void main() {
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
 
       // 3. 再次切换回 coalesce: true 模式：即时恢复为 1 张聚合卡片
-      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(true);
+      await container
+          .read(toolGroupCoalesceProvider.notifier)
+          .setCoalesce(true);
       await tester.pumpAndSettle();
 
       expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
@@ -358,10 +401,10 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('coalesce: false 时空 transcript 不渲染 fallback 聚合卡片', (tester) async {
-      SharedPreferences.setMockInitialValues({
-        kToolGroupCoalesceKey: false,
-      });
+    testWidgets('coalesce: false 时空 transcript 不渲染 fallback 聚合卡片', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({kToolGroupCoalesceKey: false});
 
       final fakeApi = FakeChatApi();
       fakeApi.sessionResult = {
@@ -374,9 +417,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            chatApiProvider.overrideWithValue(fakeApi),
-          ],
+          overrides: [chatApiProvider.overrideWithValue(fakeApi)],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
               child: ChatMessageList(sessionId: 'sess-empty-transcript'),
@@ -388,7 +429,9 @@ void main() {
 
       final element = tester.element(find.byType(ChatMessageList));
       final container = ProviderScope.containerOf(element);
-      await container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false);
+      await container
+          .read(toolGroupCoalesceProvider.notifier)
+          .setCoalesce(false);
       await tester.pumpAndSettle();
 
       expect(find.byType(ToolCallGroupCard), findsNothing);

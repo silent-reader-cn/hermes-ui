@@ -16,14 +16,22 @@ void main() {
   group('ReasoningGroup.groups & merging 纯函数测试', () {
     test('groups: 从历史消息正确提取每个 assistant 消息的推理段', () {
       final messages = [
-        const ChatMessage(role: 'user', content: 'What is 2+2?', messageId: 'u1'),
+        const ChatMessage(
+          role: 'user',
+          content: 'What is 2+2?',
+          messageId: 'u1',
+        ),
         const ChatMessage(
           role: 'assistant',
           content: '4',
           messageId: 'a1',
           reasoning: 'Calculate 2 + 2 = 4 directly.',
         ),
-        const ChatMessage(role: 'user', content: 'Explain more', messageId: 'u2'),
+        const ChatMessage(
+          role: 'user',
+          content: 'Explain more',
+          messageId: 'u2',
+        ),
         const ChatMessage(
           role: 'assistant',
           content: 'Addition is basic arithmetic.',
@@ -53,7 +61,10 @@ void main() {
           reasoning: 'Step by step reasoning',
         ),
       ];
-      final groups = ReasoningGroup.groups(messages: messages, messageOffset: 10);
+      final groups = ReasoningGroup.groups(
+        messages: messages,
+        messageOffset: 10,
+      );
       expect(groups, hasLength(1));
       expect(groups.single.anchorMessageId, 'raw:10');
       expect(groups.single.text, 'Step by step reasoning');
@@ -113,13 +124,13 @@ void main() {
       };
 
       final container = ProviderContainer(
-        overrides: [
-          chatApiProvider.overrideWithValue(api),
-        ],
+        overrides: [chatApiProvider.overrideWithValue(api)],
       );
       addTearDown(container.dispose);
 
-      final controller = container.read(chatControllerProvider('sess-history-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-history-1').notifier,
+      );
       await controller.loadMessages();
 
       final state = container.read(chatControllerProvider('sess-history-1'));
@@ -132,9 +143,14 @@ void main() {
 
       expect(state.completedToolCallGroups, hasLength(1));
       expect(state.completedToolCallGroups.single.anchorMessageID, 'a1');
-      expect(state.completedToolCallGroups.single.toolCalls.single.name, 'read_file');
+      expect(
+        state.completedToolCallGroups.single.toolCalls.single.name,
+        'read_file',
+      );
 
-      final reasoningGroups = container.read(reasoningGroupsProvider('sess-history-1'));
+      final reasoningGroups = container.read(
+        reasoningGroupsProvider('sess-history-1'),
+      );
       expect(reasoningGroups, hasLength(1));
       expect(reasoningGroups.single.text, '首先读取 readme.md 文件，然后整理核心要点。');
 
@@ -188,11 +204,17 @@ void main() {
       // 1) 验证初始状态：正文可见，思考块和工具卡片均处于默认收起态（向右箭头）
       expect(find.text('这是最终回答内容。'), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsWidgets); // tool card chevron_down
+      expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
+      expect(
+        find.byIcon(CupertinoIcons.chevron_down),
+        findsWidgets,
+      ); // tool card chevron_down
       // 收起时 preview 与完整文本相同（80 字符内不截断），或预览显示截断版本
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      expect(find.byType(ToolCallCard), findsNothing); // 工具详情收起中（外层 GroupCard 折叠时内层 Card 不在树）
+      expect(
+        find.byType(ToolCallCard),
+        findsNothing,
+      ); // 工具详情收起中（外层 GroupCard 折叠时内层 Card 不在树）
 
       // 2) 点击思考块展开（箭头朝下，完整文本渲染）
       await tester.tap(find.text('思考'));
@@ -209,10 +231,15 @@ void main() {
       await tester.tap(find.byType(ToolCallGroupCard));
       await tester.pumpAndSettle();
       expect(find.byType(ToolCallCard), findsOneWidget);
-      expect(find.textContaining('读取'), findsWidgets); // 工具卡片已展开（组标题+子卡片 header）
+      expect(
+        find.textContaining('读取'),
+        findsWidgets,
+      ); // 工具卡片已展开（组标题+子卡片 header）
     });
 
-    testWidgets('ChatPage 全链路：加载含 reasoning 与 toolCalls 的历史会话，气泡内可展开查看', (tester) async {
+    testWidgets('ChatPage 全链路：加载含 reasoning 与 toolCalls 的历史会话，气泡内可展开查看', (
+      tester,
+    ) async {
       const fullThinking =
           '深度思考全链路测试：第一步分析项目结构，第二步定位数据模型，第三步检查 UI 折叠状态机，最后确认各层数据传递与渲染一致性。额外补充：第四步验证边界条件与异常分支，第五步收敛为可复用工具与测试覆盖，确保历史回放与实时流式行为完全一致。';
       final api = FakeChatApi();
@@ -243,12 +270,8 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            chatApiProvider.overrideWithValue(api),
-          ],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 'sess-hist-ui'),
-          ),
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(home: ChatPage(sessionId: 'sess-hist-ui')),
         ),
       );
       await tester.pumpAndSettle();

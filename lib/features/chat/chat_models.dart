@@ -85,6 +85,158 @@ class ReasoningGroup {
     return merged;
   }
 
+  /// 按回合整轮聚合：同一用户回合内全部推理段合并为一组（对齐工具聚合开启语义）。
+  static List<ReasoningGroup> coalescingByTurn(
+    List<ReasoningGroup> groups, {
+    required List<ChatMessage> messages,
+    int? messageOffset,
+  }) {
+    if (groups.length <= 1) return groups;
+    final turnKeysByAnchor = <String, String>{};
+    for (final g in groups) {
+      final anchor = g.anchorMessageId;
+      if (anchor == null) continue;
+      final index = _messageIndexForAnchor(
+        messages,
+        anchor,
+        messageOffset: messageOffset,
+      );
+      if (index == null) continue;
+      turnKeysByAnchor[anchor] = _turnKeyAt(
+        messages,
+        index,
+        messageOffset: messageOffset,
+      );
+    }
+    final mergedByTurn = <String, List<ReasoningGroup>>{};
+    final order = <String>[];
+    for (final g in groups) {
+      final turnKey = g.anchorMessageId == null
+          ? 'group:${g.hashCode}'
+          : (turnKeysByAnchor[g.anchorMessageId] ?? 'group:${g.hashCode}');
+      final list = mergedByTurn.putIfAbsent(turnKey, () {
+        order.add(turnKey);
+        return <ReasoningGroup>[];
+      });
+      list.add(g);
+    }
+    return order.map((turnKey) {
+      final list = mergedByTurn[turnKey]!;
+      final first = list.first;
+      return ReasoningGroup(
+        anchorMessageId: first.anchorMessageId,
+        text: list
+            .map((g) => g.text.trim())
+            .where((t) => t.isNotEmpty)
+            .join('\n\n'),
+      );
+    }).toList();
+  }
+
+  /// 相邻聚合（聚合开关关闭语义）：间隔内无可见文本且无工具调用的相邻推理段
+  /// 合并为一组，被 text/tool 打断则分离（think/text/tools 穿插呈现）。
+  static List<ReasoningGroup> coalescingAdjacent(
+    List<ReasoningGroup> groups, {
+    required List<ChatMessage> messages,
+    int? messageOffset,
+  }) {
+    if (groups.length <= 1) return groups;
+    final indexByAnchor = <String, int>{};
+    for (final g in groups) {
+      if (g.anchorMessageId == null) continue;
+      final index = _messageIndexForAnchor(
+        messages,
+        g.anchorMessageId!,
+        messageOffset: messageOffset,
+      );
+      if (index != null) indexByAnchor[g.anchorMessageId!] = index;
+    }
+    final ordered = List<ReasoningGroup>.from(groups)
+      ..sort((a, b) {
+        final ia = a.anchorMessageId == null
+            ? (1 << 62)
+            : (indexByAnchor[a.anchorMessageId!] ?? (1 << 62));
+        final ib = b.anchorMessageId == null
+            ? (1 << 62)
+            : (indexByAnchor[b.anchorMessageId!] ?? (1 << 62));
+        return ia.compareTo(ib);
+      });
+
+    bool breaksBetween(int prevIndex, int curIndex) {
+      for (var k = prevIndex + 1; k < curIndex; k++) {
+        if (k < 0 || k >= messages.length) continue;
+        final message = messages[k];
+        if (message.role != 'assistant') continue;
+        if (message.content?.trim().isNotEmpty == true) return true;
+        if (message.toolCalls?.isNotEmpty == true) return true;
+      }
+      return false;
+    }
+
+    final merged = <ReasoningGroup>[];
+    ReasoningGroup? current;
+    int? currentIndex;
+    for (final g in ordered) {
+      final index = g.anchorMessageId == null
+          ? null
+          : indexByAnchor[g.anchorMessageId!];
+      if (current == null) {
+        current = g;
+        currentIndex = index;
+        continue;
+      }
+      final canMerge =
+          currentIndex != null &&
+          currentIndex >= 0 &&
+          index != null &&
+          !breaksBetween(currentIndex, index);
+      if (canMerge) {
+        current = ReasoningGroup(
+          anchorMessageId: current.anchorMessageId,
+          text: '${current.text.trim()}\n\n${g.text.trim()}',
+        );
+        continue;
+      }
+      merged.add(current);
+      current = g;
+      currentIndex = index;
+    }
+    if (current != null) merged.add(current);
+    return merged;
+  }
+
+  static int? _messageIndexForAnchor(
+    List<ChatMessage> messages,
+    String anchor, {
+    int? messageOffset,
+  }) {
+    for (var i = 0; i < messages.length; i++) {
+      if (TranscriptTurnClassifier.anchorID(
+            messages[i],
+            at: i,
+            messageOffset: messageOffset,
+          ) ==
+          anchor) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  static String _turnKeyAt(
+    List<ChatMessage> messages,
+    int index, {
+    int? messageOffset,
+  }) {
+    var turnKey = 'turn:start';
+    for (var i = 0; i <= index && i < messages.length; i++) {
+      if (TranscriptTurnClassifier.isUserTurnBoundary(messages[i])) {
+        turnKey = 'turn:user:${(messageOffset ?? 0) + i}';
+      }
+    }
+    return turnKey;
+  }
+
   @override
   bool operator ==(Object other) {
     return other is ReasoningGroup &&
@@ -124,9 +276,8 @@ class ToolCallDisplayFormatter {
       JsonBool(:final value) => '$value',
       JsonNumber(:final value) => _formatNumber(value),
       JsonString(:final value) => _normalizeNewlines(value),
-      JsonArray(:final value) => value
-          .map((e) => '- ${toolDisplayText(e)}')
-          .join('\n'),
+      JsonArray(:final value) =>
+        value.map((e) => '- ${toolDisplayText(e)}').join('\n'),
       JsonObject(:final value) => _objectTree(value),
     };
   }

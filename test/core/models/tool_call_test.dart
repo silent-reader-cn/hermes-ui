@@ -11,7 +11,10 @@ void main() {
       final call = ToolCall(name: 'write_file');
       expect(call.id, startsWith('live-tool-'));
       expect(call.isCompleted, false);
-      expect(call.startedAt, closeTo(DateTime.now().millisecondsSinceEpoch / 1000, 5));
+      expect(
+        call.startedAt,
+        closeTo(DateTime.now().millisecondsSinceEpoch / 1000, 5),
+      );
       expect(call.displayName, 'write_file');
       expect(ToolCall(name: '  ').displayName, 'Tool');
       expect(ToolCall().displayName, 'Tool');
@@ -109,7 +112,10 @@ void main() {
       // Top 3 distinct by frequency: 读取文件 ×3, 终端 ×1, 写入文件 ×1 (or 执行代码), then +1
       expect(group.localizedActivityTitle(l10nZh), contains('读取文件 \u00D73'));
       expect(group.localizedActivityTitle(l10nZh), contains('+1'));
-      expect(group.localizedActivityTitle(l10nEn), contains('Read File \u00D73'));
+      expect(
+        group.localizedActivityTitle(l10nEn),
+        contains('Read File \u00D73'),
+      );
       expect(group.localizedActivityTitle(l10nEn), contains('+1'));
     });
   });
@@ -145,18 +151,75 @@ void main() {
       expect(coalesced.single.toolCalls[0].id, 'call_1');
       expect(coalesced.single.toolCalls[1].id, 'call_2');
 
+      // coalesce=false ≠ 完全不聚合：m1/m2 相邻（间隔内无 text/think）→ 合并为 1 组
       final separated = ToolCallGroup.groups(
         persistedToolCalls: persisted,
         messages: messages,
         coalesce: false,
       );
-      expect(separated, hasLength(2));
-      expect(separated[0].anchorMessageID, 'm1');
-      expect(separated[0].toolCalls, hasLength(1));
-      expect(separated[0].toolCalls[0].id, 'call_1');
-      expect(separated[1].anchorMessageID, 'm2');
-      expect(separated[1].toolCalls, hasLength(1));
-      expect(separated[1].toolCalls[0].id, 'call_2');
+      expect(separated, hasLength(1));
+      expect(separated.single.anchorMessageID, 'm1');
+      expect(separated.single.toolCalls, hasLength(2));
+      expect(separated.single.toolCalls[0].id, 'call_1');
+      expect(separated.single.toolCalls[1].id, 'call_2');
+    });
+
+    test('coalesce=false 时被 text 打断的相邻工具拆分为两组（穿插呈现）', () {
+      const persisted = [
+        PersistedToolCall(
+          name: 'write_file',
+          tid: 'call_1',
+          assistantMsgIdx: 1,
+        ),
+        PersistedToolCall(name: 'read_file', tid: 'call_2', assistantMsgIdx: 3),
+      ];
+      final brokenMessages = [
+        const ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
+        const ChatMessage(role: 'assistant', content: 'a', messageId: 'm1'),
+        const ChatMessage(
+          role: 'assistant',
+          content: '中间有可见文本，打断相邻聚合',
+          messageId: 'm_break',
+        ),
+        const ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
+      ];
+      final broken = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: brokenMessages,
+        coalesce: false,
+      );
+      expect(broken, hasLength(2));
+      expect(broken[0].anchorMessageID, 'm1');
+      expect(broken[0].toolCalls.single.id, 'call_1');
+      expect(broken[1].anchorMessageID, 'm2');
+      expect(broken[1].toolCalls.single.id, 'call_2');
+    });
+
+    test('coalesce=false 时被 thinking 打断的相邻工具同样拆分为两组', () {
+      const persisted = [
+        PersistedToolCall(
+          name: 'write_file',
+          tid: 'call_1',
+          assistantMsgIdx: 1,
+        ),
+        PersistedToolCall(name: 'read_file', tid: 'call_2', assistantMsgIdx: 3),
+      ];
+      final brokenMessages = [
+        const ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
+        const ChatMessage(role: 'assistant', content: 'a', messageId: 'm1'),
+        const ChatMessage(
+          role: 'assistant',
+          messageId: 'm_think',
+          reasoning: '我先思考一下再继续',
+        ),
+        const ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
+      ];
+      final broken = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: brokenMessages,
+        coalesce: false,
+      );
+      expect(broken, hasLength(2));
     });
 
     test('无持久化调用时从消息元数据派生（OpenAI tool_calls）', () {
@@ -252,10 +315,12 @@ void main() {
   });
 
   test('ToolCallGroupAnchorLookup', () {
-    final lookup = ToolCallGroupAnchorLookup(groups: [
-      ToolCallGroup(anchorMessageID: 'a', toolCalls: [ToolCall()]),
-      ToolCallGroup(toolCalls: [ToolCall()]),
-    ]);
+    final lookup = ToolCallGroupAnchorLookup(
+      groups: [
+        ToolCallGroup(anchorMessageID: 'a', toolCalls: [ToolCall()]),
+        ToolCallGroup(toolCalls: [ToolCall()]),
+      ],
+    );
     expect(lookup.groups(anchorMessageID: 'a'), hasLength(1));
     expect(lookup.groups(anchorMessageID: null), hasLength(1));
     expect(lookup.groups(anchorMessageID: 'zz'), isEmpty);
@@ -319,9 +384,7 @@ void main() {
 
       final call3 = ToolCall(
         name: 'str_replace',
-        args: {
-          'path': const JsonString('README.md'),
-        },
+        args: {'path': const JsonString('README.md')},
       );
       expect(call3.summary, 'README.md');
     });
@@ -333,11 +396,9 @@ void main() {
       );
       expect(call1.summary, 'flutter test --coverage');
 
-      final longCmd = 'git commit -m "feat: very long commit message that exceeds 40 characters easily"';
-      final call2 = ToolCall(
-        name: 'exec',
-        args: {'cmd': JsonString(longCmd)},
-      );
+      final longCmd =
+          'git commit -m "feat: very long commit message that exceeds 40 characters easily"';
+      final call2 = ToolCall(name: 'exec', args: {'cmd': JsonString(longCmd)});
       expect(call2.summary, longCmd.substring(0, 40));
     });
 

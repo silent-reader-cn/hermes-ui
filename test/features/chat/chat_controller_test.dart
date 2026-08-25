@@ -368,6 +368,106 @@ void main() {
     });
   });
 
+  group('同回合连续工具调用合并-Hermes 真实形状（role=tool 结果+空文本 assistant 交替）', () {
+    test('Hermes 会话：带文本助理+工具结果+空文本助理+工具结果 → 合并为一组 ×2', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('跑测试'));
+        async.flushMicrotasks();
+
+        // 形状对齐 state.db e4954fe3579e 真实记录：
+        // user → assistant(文本+tool_calls) → tool(结果) → assistant(空+tool_calls) → tool(结果)
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': 'analyze 零告警 + 57 全绿。最后全量验证后提交：',
+                    'message_id': 'u1',
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': 'analyze 零告警 + 57 全绿。最后全量验证后提交：',
+                    'message_id': 'a1',
+                    'tool_calls': [
+                      {
+                        'id': 'call_5c10811e',
+                        'call_id': 'call_5c10811e',
+                        'response_item_id': 'fc_5c10811e',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter test"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'tool',
+                    'tool_call_id': 'call_5c10811e',
+                    'content': '{"output": "01:04 +1669 ..."}',
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': '',
+                    'message_id': 'a2',
+                    'tool_calls': [
+                      {
+                        'id': 'call_14dce38b',
+                        'call_id': 'call_14dce38b',
+                        'response_item_id': 'fc_14dce38b',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"git commit ..."}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'tool',
+                    'tool_call_id': 'call_14dce38b',
+                    'content': '{"output": "warning: ..."}',
+                  },
+                ],
+                'tool_calls': [
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out1',
+                    'tid': 'call_5c10811e',
+                    'assistant_msg_idx': 1,
+                  },
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out2',
+                    'tid': 'call_14dce38b',
+                    'assistant_msg_idx': 3,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        final state = container.read(chatControllerProvider(''));
+        expect(state.phase, ChatPhase.idle);
+        // Hermes 真实形状：同回合连续两个终端（含空文本 assistant 间隔）应合并
+        expect(state.completedToolCallGroups, hasLength(1));
+        expect(state.completedToolCallGroups.first.toolCalls, hasLength(2));
+        expect(
+          state.completedToolCallGroups.first.toolCalls.map(
+            (t) => t.displayName,
+          ),
+          everyElement('terminal'),
+        );
+      });
+    });
+  });
+
   group('同回合连续工具调用合并（§工具聚合）', () {
     test('done 会话跨两条 assistant 消息的连续工具调用 → 合并为一组（终端 ×2）', () {
       fakeAsync((async) {
@@ -459,7 +559,7 @@ void main() {
       });
     });
 
-    test('coalesce=false 时保持一锚点一组（不合并）', () {
+    test('coalesce=false 时无打断的相邻工具仍合并为一组（相邻聚合语义）', () {
       fakeAsync((async) {
         final api = _FakeChatApi();
         final container = _buildContainer(api, _FakeClock());
@@ -539,6 +639,88 @@ void main() {
           ),
         );
         final state = container.read(chatControllerProvider(''));
+        // a1(有文本)+tool → result → a2(空)+tool：间隔内无 text/think → 相邻合并 1 组
+        expect(state.completedToolCallGroups, hasLength(1));
+        expect(state.completedToolCallGroups.first.toolCalls, hasLength(2));
+      });
+    });
+
+    test('coalesce=false 时被文本打断则拆分（Hermes 形状含中间文本消息）', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        // 开关关闭
+        unawaited(
+          container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false),
+        );
+        async.flushMicrotasks();
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('跑测试'));
+        async.flushMicrotasks();
+
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': '跑测试', 'message_id': 'u1'},
+                  {
+                    'role': 'assistant',
+                    'content': '先跑全量测试',
+                    'message_id': 'a1',
+                    'tool_calls': [
+                      {
+                        'id': 'call_1',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter test"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': '测试通过，继续验证分析',
+                    'message_id': 'a_break',
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': '',
+                    'message_id': 'a2',
+                    'tool_calls': [
+                      {
+                        'id': 'call_2',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter analyze"}',
+                        },
+                      },
+                    ],
+                  },
+                ],
+                'tool_calls': [
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out1',
+                    'tid': 'call_1',
+                    'assistant_msg_idx': 1,
+                  },
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out2',
+                    'tid': 'call_2',
+                    'assistant_msg_idx': 3,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        final state = container.read(chatControllerProvider(''));
+        // 中间 assistant 有可见文本 → 打断相邻聚合 → 2 组
         expect(state.completedToolCallGroups, hasLength(2));
       });
     });

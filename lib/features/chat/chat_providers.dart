@@ -177,7 +177,15 @@ final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
           ),
         ];
   final raw = [...state.completedToolCallGroups, ...live];
-  if (!coalesce || raw.length <= 1) return raw;
+  if (raw.length <= 1) return raw;
+  if (!coalesce) {
+    // 关闭 ≠ 完全不聚合：仅相邻（无 text/think 打断）组合并，支持穿插呈现。
+    return ToolCallGroup.coalescingAdjacent(
+      raw,
+      messages: state.messages,
+      messageOffset: state.messagesOffset,
+    );
+  }
   return ToolCallGroup.coalescingByAssistantTurn(
     raw,
     messages: state.messages,
@@ -185,12 +193,15 @@ final toolGroupsProvider = Provider.family<List<ToolCallGroup>, String>((
   );
 });
 
-/// 推理组（已归档 + 实时组合）。
+/// 推理组（已归档 + 实时组合；受「思考聚合 / 隐藏思考」设置控制）。
 final reasoningGroupsProvider = Provider.family<List<ReasoningGroup>, String>((
   ref,
   sessionId,
 ) {
   final state = ref.watch(chatControllerProvider(sessionId));
+  final hide = ref.watch(hideReasoningProvider);
+  if (hide) return const [];
+  final coalesce = ref.watch(thinkGroupCoalesceProvider);
   final live = state.liveReasoningText.isEmpty
       ? const <ReasoningGroup>[]
       : [
@@ -201,7 +212,21 @@ final reasoningGroupsProvider = Provider.family<List<ReasoningGroup>, String>((
             text: state.liveReasoningText,
           ),
         ];
-  return [...state.completedReasoningGroups, ...live];
+  final raw = [...state.completedReasoningGroups, ...live];
+  if (raw.length <= 1) return raw;
+  if (!coalesce) {
+    // 关闭 ≠ 完全不聚合：仅相邻（无 text/tool 打断）的思考段合并。
+    return ReasoningGroup.coalescingAdjacent(
+      raw,
+      messages: state.messages,
+      messageOffset: state.messagesOffset,
+    );
+  }
+  return ReasoningGroup.coalescingByTurn(
+    raw,
+    messages: state.messages,
+    messageOffset: state.messagesOffset,
+  );
 });
 
 /// 排队待发送消息数。
