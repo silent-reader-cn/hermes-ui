@@ -16,6 +16,7 @@ import 'package:hermex_flutter/core/utils/file_picker.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/chat/widgets/chat_input_bar.dart';
+import 'package:hermex_flutter/features/chat/widgets/chat_media_view.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -143,6 +144,10 @@ void main() {
       expect(find.text('上传成功'), findsNothing);
 
       // 待发附件条出现（缩略图 + 文件名）
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsOneWidget,
+      );
       expect(find.text('screenshot.png'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('attachment-clear-all')),
@@ -170,9 +175,13 @@ void main() {
       );
       expect(chatApi.lastSentAttachments!.first['is_image'], true);
 
-      // 发送成功后附件条清空
+      // 发送成功后附件条清空，附件转为消息气泡内卡片（对齐 WebUI 回显）
       await tester.pump();
-      expect(find.text('screenshot.png'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsNothing,
+      );
+      expect(find.byType(ChatAttachmentChipView), findsOneWidget);
 
       await _unmount(tester);
     });
@@ -219,6 +228,10 @@ void main() {
       expect(find.text('上传成功'), findsNothing);
 
       // 待发附件条中的文档项
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsOneWidget,
+      );
       expect(find.text('document.pdf'), findsOneWidget);
 
       // 点发送 → 带附件提交
@@ -233,7 +246,11 @@ void main() {
       expect(chatApi.lastSentAttachments!.first['is_image'], false);
 
       await tester.pump();
-      expect(find.text('document.pdf'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsNothing,
+      );
+      expect(find.byType(ChatAttachmentChipView), findsOneWidget);
 
       await _unmount(tester);
     });

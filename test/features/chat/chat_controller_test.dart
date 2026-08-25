@@ -8,8 +8,11 @@ import 'package:hermex_flutter/core/api/sse_client.dart';
 import 'package:hermex_flutter/features/chat/chat_controller.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/chat/chat_state.dart';
+import 'package:hermex_flutter/features/settings/tool_group_settings.dart';
+
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
+
 import 'package:hermex_flutter/core/cache/app_database.dart';
 import 'package:hermex_flutter/core/cache/cache_providers.dart';
 import 'package:hermex_flutter/core/cache/cache_service.dart';
@@ -361,6 +364,182 @@ void main() {
           state.completedToolCallGroups.first.toolCalls.first.isCompleted,
           isTrue,
         );
+      });
+    });
+  });
+
+  group('同回合连续工具调用合并（§工具聚合）', () {
+    test('done 会话跨两条 assistant 消息的连续工具调用 → 合并为一组（终端 ×2）', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('跑测试'));
+        async.flushMicrotasks();
+
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': '跑测试', 'message_id': 'u1'},
+                  {
+                    'role': 'assistant',
+                    'content': '先跑全量测试',
+                    'message_id': 'a1',
+                    'tool_calls': [
+                      {
+                        'id': 'call_1',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter test"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'user',
+                    'content': '{"exit_code":0}',
+                    'email': null,
+                    'name': null,
+                    'tool_call_id': 'call_1',
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': '',
+                    'message_id': 'a2',
+                    'tool_calls': [
+                      {
+                        'id': 'call_2',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter analyze"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'user',
+                    'content': '{"exit_code":0}',
+                    'tool_call_id': 'call_2',
+                  },
+                ],
+                'tool_calls': [
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out',
+                    'tid': 'call_1',
+                    'assistant_msg_idx': 1,
+                  },
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out',
+                    'tid': 'call_2',
+                    'assistant_msg_idx': 3,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        final state = container.read(chatControllerProvider(''));
+        expect(state.phase, ChatPhase.idle);
+        // 同回合两次连续终端调用应合并为一组、两张调用记录
+        expect(state.completedToolCallGroups, hasLength(1));
+        expect(state.completedToolCallGroups.first.toolCalls, hasLength(2));
+        expect(
+          state.completedToolCallGroups.first.toolCalls.map(
+            (t) => t.displayName,
+          ),
+          everyElement('terminal'),
+        );
+      });
+    });
+
+    test('coalesce=false 时保持一锚点一组（不合并）', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        // 开关关闭：设置为 false 触发监听重建
+        unawaited(
+          container.read(toolGroupCoalesceProvider.notifier).setCoalesce(false),
+        );
+        async.flushMicrotasks();
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('跑测试'));
+        async.flushMicrotasks();
+
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': '跑测试', 'message_id': 'u1'},
+                  {
+                    'role': 'assistant',
+                    'content': '先跑全量测试',
+                    'message_id': 'a1',
+                    'tool_calls': [
+                      {
+                        'id': 'call_1',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter test"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'user',
+                    'content': '{"exit_code":0}',
+                    'tool_call_id': 'call_1',
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': '',
+                    'message_id': 'a2',
+                    'tool_calls': [
+                      {
+                        'id': 'call_2',
+                        'type': 'function',
+                        'function': {
+                          'name': 'terminal',
+                          'arguments': '{"command":"flutter analyze"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'user',
+                    'content': '{"exit_code":0}',
+                    'tool_call_id': 'call_2',
+                  },
+                ],
+                'tool_calls': [
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out',
+                    'tid': 'call_1',
+                    'assistant_msg_idx': 1,
+                  },
+                  {
+                    'name': 'terminal',
+                    'snippet': 'out',
+                    'tid': 'call_2',
+                    'assistant_msg_idx': 3,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        final state = container.read(chatControllerProvider(''));
+        expect(state.completedToolCallGroups, hasLength(2));
       });
     });
   });
@@ -1228,10 +1407,18 @@ class _FakeClock {
 
 class _NoopCacheService extends CacheService {
   _NoopCacheService(super.db);
-  @override Future<void> writeMessages({required String sessionId, required List<Map<String, Object?>> messages}) async {}
-  @override Future<List<Map<String, Object?>>> readMessages(String sessionId) async => const [];
-  @override Future<void> writeSessions(List<SessionSummary> sessions) async {}
-  @override Future<List<SessionSummary>> readSessions() async => const [];
+  @override
+  Future<void> writeMessages({
+    required String sessionId,
+    required List<Map<String, Object?>> messages,
+  }) async {}
+  @override
+  Future<List<Map<String, Object?>>> readMessages(String sessionId) async =>
+      const [];
+  @override
+  Future<void> writeSessions(List<SessionSummary> sessions) async {}
+  @override
+  Future<List<SessionSummary>> readSessions() async => const [];
 }
 
 typedef _FakeChatApi = FakeChatApi;

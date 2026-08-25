@@ -23,7 +23,7 @@ class AttachmentPendingBar extends ConsumerWidget {
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -47,6 +47,7 @@ class AttachmentPendingBar extends ConsumerWidget {
           SizedBox(
             height: 62,
             child: ListView.separated(
+              key: const ValueKey('attachment-pending-list'),
               scrollDirection: Axis.horizontal,
               itemCount: attachments.length,
               separatorBuilder: (_, _) => const SizedBox(width: 8),

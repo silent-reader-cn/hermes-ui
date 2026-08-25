@@ -13,6 +13,7 @@ import 'package:hermex_flutter/core/utils/accessibility.dart';
 import 'package:hermex_flutter/core/utils/file_picker.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermex_flutter/features/chat/widgets/chat_media_view.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -62,6 +63,10 @@ void main() {
       expect(find.text('上传成功'), findsNothing);
 
       // 待发附件条出现（文档项）
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsOneWidget,
+      );
       expect(find.text('report.pdf'), findsOneWidget);
 
       // 发送按钮因附件可用
@@ -82,7 +87,11 @@ void main() {
       expect(chatApi.lastSentAttachments!.first['path'], '/files/report.pdf');
 
       await tester.pump();
-      expect(find.text('report.pdf'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('attachment-pending-list')),
+        findsNothing,
+      );
+      expect(find.byType(ChatAttachmentChipView), findsOneWidget);
 
       await _unmount(tester);
     });

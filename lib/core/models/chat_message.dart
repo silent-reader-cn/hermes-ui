@@ -33,17 +33,14 @@ class ChatMessage {
     final toolCallId = lossyString(json, 'tool_call_id');
     final toolUseId = lossyString(json, 'tool_use_id');
     final toolCalls = optJsonValueList(json, 'tool_calls');
-    var reasoning = firstKey(
-          json,
-          [
-            'reasoning',
-            'reasoning_content',
-            'reasoning_text',
-            'thought',
-            'thinking',
-          ],
-          lossyString,
-        ) ??
+    var reasoning =
+        firstKey(json, [
+          'reasoning',
+          'reasoning_content',
+          'reasoning_text',
+          'thought',
+          'thinking',
+        ], lossyString) ??
         _reasoningFromParts(decodedContent.parts);
     if (reasoning == null && role == 'assistant' && content != null) {
       final extracted = _extractThinkingTag(content);
@@ -86,8 +83,7 @@ class ChatMessage {
   final double? turnTps;
 
   /// Identifiable：`messageId ?? '$role-$timestamp-$content'`。
-  String get id =>
-      messageId ?? '$role-${timestamp ?? 0}-${content ?? ''}';
+  String get id => messageId ?? '$role-${timestamp ?? 0}-${content ?? ''}';
 
   /// 浅拷贝（流式追加 / 回合收尾时「原地替换」消息用，其余字段透传）。
   ChatMessage copyWith({
@@ -129,10 +125,13 @@ class ChatMessage {
       if (name != null) 'name': name,
       if (toolCallId != null) 'tool_call_id': toolCallId,
       if (toolUseId != null) 'tool_use_id': toolUseId,
-      if (toolCalls != null) 'tool_calls': toolCalls!.map((e) => e.toJson()).toList(),
-      if (contentParts != null) 'content': contentParts!.map((e) => e.toJson()).toList(),
+      if (toolCalls != null)
+        'tool_calls': toolCalls!.map((e) => e.toJson()).toList(),
+      if (contentParts != null)
+        'content': contentParts!.map((e) => e.toJson()).toList(),
       if (reasoning != null) 'reasoning': reasoning,
-      if (attachments != null) 'attachments': attachments!.map((e) => e.toJson()).toList(),
+      if (attachments != null)
+        'attachments': attachments!.map((e) => e.toJson()).toList(),
       if (turnTps != null) '_turnTps': turnTps,
     };
   }
@@ -178,7 +177,9 @@ class ChatMessage {
         .map((part) {
           if (part is JsonObject) {
             final type = part.value['type']?.stringValue?.toLowerCase();
-            if (type == 'thinking' || type == 'thought' || type == 'reasoning') {
+            if (type == 'thinking' ||
+                type == 'thought' ||
+                type == 'reasoning') {
               return part.value['thinking']?.stringValue ??
                   part.value['thought']?.stringValue ??
                   part.value['text']?.stringValue ??
@@ -193,7 +194,9 @@ class ChatMessage {
     return text.isEmpty ? null : text;
   }
 
-  static ({String? content, String? reasoning}) _extractThinkingTag(String text) {
+  static ({String? content, String? reasoning}) _extractThinkingTag(
+    String text,
+  ) {
     final match = RegExp(
       r'<(?:thinking|thought)>([\s\S]*?)</(?:thinking|thought)>',
       caseSensitive: false,
@@ -289,13 +292,15 @@ class ChatMessage {
 
       final inferredMatch = available.removeAt(matchedIndex);
       availableOffsets.removeAt(matchedIndex);
-      result.add(MessageAttachment(
-        name: _nonEmptyString(attachment.name) ?? inferredMatch.name,
-        path: _nonEmptyString(inferredMatch.path),
-        mime: attachment.mime ?? inferredMatch.mime,
-        size: attachment.size ?? inferredMatch.size,
-        isImage: attachment.isImage ?? inferredMatch.isImage,
-      ));
+      result.add(
+        MessageAttachment(
+          name: _nonEmptyString(attachment.name) ?? inferredMatch.name,
+          path: _nonEmptyString(inferredMatch.path),
+          mime: attachment.mime ?? inferredMatch.mime,
+          size: attachment.size ?? inferredMatch.size,
+          isImage: attachment.isImage ?? inferredMatch.isImage,
+        ),
+      );
     }
     return result;
   }
@@ -364,8 +369,14 @@ class TranscriptTurnClassifier {
   }
 
   /// user 且有可见内容或附件 → 用户回合边界。
+  /// 工具结果消息（携带 `tool_call_id` / `tool_use_id`）不是回合边界：
+  /// 否则同回合的连续工具调用会被切成多个 turnKey，聚合时无法合并。
   static bool isUserTurnBoundary(ChatMessage message) {
     if (message.role != 'user') return false;
+    if (_nonEmpty(message.toolCallId) != null ||
+        _nonEmpty(message.toolUseId) != null) {
+      return false;
+    }
     return _hasVisibleUserContent(message);
   }
 
@@ -386,7 +397,11 @@ class TranscriptTurnClassifier {
         currentTurnKey = 'turn:user:${(messageOffset ?? 0) + messageIndex}';
       }
       if (message.role == 'assistant') {
-        keysByMessageID[anchorID(message, at: messageIndex, messageOffset: messageOffset)] =
+        keysByMessageID[anchorID(
+              message,
+              at: messageIndex,
+              messageOffset: messageOffset,
+            )] =
             currentTurnKey;
       }
     }
@@ -408,7 +423,11 @@ class TranscriptTurnClassifier {
     if (rawIndex < 0 || rawIndex >= messages.length) return null;
 
     if (messages[rawIndex].role == 'assistant') {
-      return anchorID(messages[rawIndex], at: rawIndex, messageOffset: messageOffset);
+      return anchorID(
+        messages[rawIndex],
+        at: rawIndex,
+        messageOffset: messageOffset,
+      );
     }
 
     final previous = _previousUserBoundaryIndex(rawIndex, messages);
@@ -416,7 +435,11 @@ class TranscriptTurnClassifier {
     if (rawIndex > lowerBound) {
       for (var index = rawIndex - 1; index >= lowerBound; index--) {
         if (messages[index].role == 'assistant') {
-          return anchorID(messages[index], at: index, messageOffset: messageOffset);
+          return anchorID(
+            messages[index],
+            at: index,
+            messageOffset: messageOffset,
+          );
         }
       }
     }
@@ -426,7 +449,11 @@ class TranscriptTurnClassifier {
     if (rawIndex + 1 < upperBound) {
       for (var index = rawIndex + 1; index < upperBound; index++) {
         if (messages[index].role == 'assistant') {
-          return anchorID(messages[index], at: index, messageOffset: messageOffset);
+          return anchorID(
+            messages[index],
+            at: index,
+            messageOffset: messageOffset,
+          );
         }
       }
     }
@@ -464,7 +491,10 @@ class TranscriptTurnClassifier {
     return currentTurnAssistantAnchorIDs(messages);
   }
 
-  static int? _previousUserBoundaryIndex(int rawIndex, List<ChatMessage> messages) {
+  static int? _previousUserBoundaryIndex(
+    int rawIndex,
+    List<ChatMessage> messages,
+  ) {
     if (rawIndex <= 0) return null;
     for (var index = rawIndex - 1; index >= 0; index--) {
       if (isUserTurnBoundary(messages[index])) return index;

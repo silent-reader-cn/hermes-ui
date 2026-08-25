@@ -10,6 +10,7 @@ import '../../core/cache/cache_providers.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/context_window_snapshot.dart';
 import '../../core/models/json_value.dart';
+import '../../core/models/message_attachment.dart';
 import '../../core/models/session.dart';
 import '../../core/models/tool_call.dart';
 import '../../core/models/upload_response.dart';
@@ -879,6 +880,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       content: text,
       messageId: messageId,
       timestamp: _nowSeconds(),
+      // 乐观消息直接带附件元数据：发送后立即可见附件卡片（对齐 WebUI 回显行为，
+      // 服务端重放后由 attachments/文本标记再次兜底）。
+      attachments: attachments.isEmpty
+          ? null
+          : [
+              for (final a in attachments)
+                MessageAttachment(
+                  name: a.name,
+                  path: a.path,
+                  mime: a.mime,
+                  size: a.size,
+                  isImage: a.isImage,
+                ),
+            ],
     );
     state = state.copyWith(
       phase: ChatPhase.sending,
