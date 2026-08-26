@@ -18,6 +18,7 @@ class ToolCall {
     this.duration,
     this.isError,
     this.isCompleted = false,
+    this.thinking,
     double? startedAt,
   }) : id = id ?? 'live-tool-${uuidV4()}',
        startedAt = startedAt ?? DateTime.now().millisecondsSinceEpoch / 1000;
@@ -29,7 +30,21 @@ class ToolCall {
   double? duration;
   bool? isError;
   bool isCompleted;
+
+  /// 思考子卡内容（非空 = 本条是「思考」伪工具行，非真实工具调用）。
+  ///
+  /// 思考降级为工具卡的子卡：think/tool 穿插的调用序列合并进同一张
+  /// 工具卡，行序即事件时间线；[isThinking] 行在展开区以思考样式渲染。
+  String? thinking;
   final double startedAt;
+
+  /// 是否为思考子卡行（非真实工具调用）。
+  bool get isThinking => thinking != null && thinking!.trim().isNotEmpty;
+
+  /// 构建思考子卡行（时间线与工具行混排，name 固定为思考语义）。
+  factory ToolCall.thinking(String text) {
+    return ToolCall(name: 'thinking', thinking: text, isCompleted: true);
+  }
 
   /// trim 后非空 name 否则 'Tool'。
   String get displayName {
@@ -51,6 +66,7 @@ class ToolCall {
         other.duration == duration &&
         other.isError == isError &&
         other.isCompleted == isCompleted &&
+        other.thinking == thinking &&
         other.startedAt == startedAt;
   }
 
@@ -64,6 +80,7 @@ class ToolCall {
       duration,
       isError,
       isCompleted,
+      thinking,
       startedAt,
     );
   }
@@ -185,10 +202,14 @@ class ToolCallGroup {
     final counts = <String, int>{};
     final initialIndex = <String, int>{};
     for (var i = 0; i < toolCalls.length; i++) {
+      // 思考子卡行不计入工具标题统计（标题保持工具语义）。
+      if (toolCalls[i].isThinking) continue;
       final name = l10n.localizeToolName(toolCalls[i].displayName);
       initialIndex.putIfAbsent(name, () => initialIndex.length);
       counts[name] = (counts[name] ?? 0) + 1;
     }
+    // 纯思考卡（无真实工具行）：标题显示「思考」。
+    if (counts.isEmpty) return l10n.thinkingLabel;
     final entries = counts.entries.toList()
       ..sort((a, b) {
         final cmp = b.value.compareTo(a.value);
@@ -232,6 +253,7 @@ class ToolCallGroup {
     required List<ChatMessage> messages,
     int? messageOffset,
     bool coalesce = true,
+    bool hideThinking = false,
   }) {
     final derivedGroups = _groupsFromMessageMetadata(messages, messageOffset);
     final rawGroups = persistedToolCalls.isEmpty
@@ -244,18 +266,87 @@ class ToolCallGroup {
             ),
             fallbackGroups: derivedGroups,
           );
+    // 思考融合（合并前）：reasoning 转 think 行插组首；纯思考消息补组。
+    final withThinking = withThinkingRows(
+      groups: rawGroups,
+      messages: messages,
+      messageOffset: messageOffset,
+      hideThinking: hideThinking,
+    );
     if (!coalesce) {
       return coalescingAdjacent(
-        rawGroups,
+        withThinking,
         messages: messages,
         messageOffset: messageOffset,
       );
     }
     return coalescingByAssistantTurn(
-      rawGroups,
+      withThinking,
       messages: messages,
       messageOffset: messageOffset,
     );
+  }
+
+  /// 思考融合：把消息里的 reasoning 转成「思考子卡行」并入工具组。
+  ///
+  /// 思考降级为工具卡的子卡后，think/tool 穿插调用合并为同一张卡：
+  /// - 组 anchor 消息带 reasoning → think 行插在组首（同消息内思考先于工具）；
+  /// - 只有思考没有工具的消息 → 补一个纯思考组（[ToolCall.thinking] 单行）。
+  /// 聚合（adjacent/byTurn）合并组时 think 行随 [toolCalls] 顺序保留，
+  /// 组内行序即事件时间线。
+  static List<ToolCallGroup> withThinkingRows({
+    required List<ToolCallGroup> groups,
+    required List<ChatMessage> messages,
+    int? messageOffset,
+    bool hideThinking = false,
+  }) {
+    if (hideThinking) return groups;
+    final reasoningByAnchor = <String, String>{};
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      final reasoning = message.reasoning?.trim();
+      if (reasoning == null || reasoning.isEmpty) continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        message,
+        at: i,
+        messageOffset: messageOffset,
+      );
+      reasoningByAnchor[anchor] = reasoning;
+    }
+    if (reasoningByAnchor.isEmpty) return groups;
+
+    final result = <ToolCallGroup>[];
+    final anchorsWithToolGroups = <String>{};
+    for (final group in groups) {
+      final anchor = group.anchorMessageID;
+      if (anchor != null) anchorsWithToolGroups.add(anchor);
+      final reason = anchor == null ? null : reasoningByAnchor[anchor];
+      if (reason != null && reason.isNotEmpty) {
+        result.add(
+          ToolCallGroup(
+            id: group.id,
+            anchorMessageID: group.anchorMessageID,
+            toolCalls: [ToolCall.thinking(reason), ...group.toolCalls],
+          ),
+        );
+      } else {
+        result.add(group);
+      }
+    }
+    // 纯思考消息（无工具调用）→ 补纯思考组（think 行单行）。
+    for (final entry in reasoningByAnchor.entries) {
+      if (!anchorsWithToolGroups.contains(entry.key)) {
+        result.add(
+          ToolCallGroup(
+            id: 'persisted-think-${entry.key}',
+            anchorMessageID: entry.key,
+            toolCalls: [ToolCall.thinking(entry.value)],
+          ),
+        );
+      }
+    }
+    return result;
   }
 
   /// 主组 + 兜底组按 anchor 合并（Swift `merging`）。

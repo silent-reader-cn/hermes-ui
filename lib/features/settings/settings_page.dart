@@ -158,7 +158,6 @@ class _ChatSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
-    final thinkCoalesce = ref.watch(thinkGroupCoalesceProvider);
     final hideReasoning = ref.watch(hideReasoningProvider);
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     return CupertinoListSection(
@@ -202,22 +201,6 @@ class _ChatSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(
                 ref.read(toolGroupCoalesceProvider.notifier).setCoalesce(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-group-think-by-turn'),
-          title: Text(l10n.groupThinkByTurn),
-          subtitle: Text(l10n.groupThinkByTurnDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-group-think-by-turn'),
-            value: thinkCoalesce,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(thinkGroupCoalesceProvider.notifier)
-                    .setCoalesce(value),
               );
             },
           ),

@@ -221,9 +221,14 @@ void main() {
         messages: brokenMessages,
         coalesce: false,
       );
+      // 结果：1 组（思考行 + 工具行混排，行序=时间线）。
       expect(broken, hasLength(1));
       expect(broken.single.anchorMessageID, 'm1');
-      expect(broken.single.toolCalls, hasLength(2));
+      expect(broken.single.toolCalls, hasLength(3));
+      expect(broken.single.toolCalls[0].id, 'call_1');
+      expect(broken.single.toolCalls[1].isThinking, isTrue);
+      expect(broken.single.toolCalls[1].thinking, '我先思考一下再继续');
+      expect(broken.single.toolCalls[2].id, 'call_2');
     });
 
     test('无持久化调用时从消息元数据派生（OpenAI tool_calls）', () {

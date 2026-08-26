@@ -242,9 +242,16 @@ class _MonospaceText extends StatelessWidget {
 ///
 /// 外层折叠 + 内层每个 ToolCallCard 二次折叠，默认全部收起（包括 live）。
 class ToolCallGroupCard extends StatefulWidget {
-  const ToolCallGroupCard({super.key, required this.group});
+  const ToolCallGroupCard({
+    super.key,
+    required this.group,
+    this.hideThinking = false,
+  });
 
   final ToolCallGroup group;
+
+  /// 隐藏思考子卡行（设置「隐藏思考」开启时：think 行不渲染，仅工具行）。
+  final bool hideThinking;
 
   @override
   State<ToolCallGroupCard> createState() => _ToolCallGroupCardState();
@@ -365,7 +372,13 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
           if (_expanded) ...[
             const SizedBox(height: 8),
             for (final call in group.toolCalls) ...[
-              ToolCallCard(call: call),
+              // 思考子卡行（伪工具）以思考样式渲染，与工具行同属时间线。
+              if (call.isThinking)
+                (widget.hideThinking
+                    ? const SizedBox.shrink()
+                    : _ThinkingRow(call: call))
+              else
+                ToolCallCard(call: call),
               if (call != group.toolCalls.last) const SizedBox(height: 6),
             ],
           ],
@@ -389,10 +402,14 @@ String _adaptiveActivityTitle({
   final counts = <String, int>{};
   final initialIndex = <String, int>{};
   for (var i = 0; i < group.toolCalls.length; i++) {
+    // 思考子卡行不计入工具标题统计（标题保持工具语义）。
+    if (group.toolCalls[i].isThinking) continue;
     final name = l10n.localizeToolName(group.toolCalls[i].displayName);
     initialIndex.putIfAbsent(name, () => initialIndex.length);
     counts[name] = (counts[name] ?? 0) + 1;
   }
+  // 纯思考卡（无真实工具行）：标题显示「思考」。
+  if (counts.isEmpty) return l10n.thinkingLabel;
   final entries = counts.entries.toList()
     ..sort((a, b) {
       final cmp = b.value.compareTo(a.value);
@@ -440,4 +457,85 @@ String _adaptiveActivityTitle({
 
   // 兜底：若首个 entry 就超宽，则只显示首个 entry 的 name（不含 ×count）+ " …"
   return '${entries.first.key} \u2026';
+}
+
+/// 思考子卡行（工具卡展开区内的思考条目）。
+///
+/// 思考降级为工具卡的子卡后，think/tool 穿插序列合并进同一张工具卡；
+/// 本行保持 ReasoningBlock 的视觉语言（sparkles 紫 + 预览 + 点击展开全文），
+/// 行序即事件时间线。
+class _ThinkingRow extends StatefulWidget {
+  const _ThinkingRow({required this.call});
+
+  final ToolCall call;
+
+  @override
+  State<_ThinkingRow> createState() => _ThinkingRowState();
+}
+
+class _ThinkingRowState extends State<_ThinkingRow> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final text = widget.call.thinking?.trim() ?? '';
+    if (text.isEmpty) return const SizedBox.shrink();
+    final summary = text.replaceAll(RegExp(r'\s+'), ' ');
+    final preview = summary.length > 80
+        ? '${summary.substring(0, 80)}…'
+        : summary;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            children: [
+              const Icon(
+                CupertinoIcons.sparkles,
+                size: 14,
+                color: CupertinoColors.systemPurple,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                l10n.thinkingLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: secondary),
+                ),
+              ),
+              Icon(
+                _expanded
+                    ? CupertinoIcons.chevron_up
+                    : CupertinoIcons.chevron_down,
+                size: 12,
+                color: secondary,
+              ),
+            ],
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12, height: 1.4),
+            ),
+          ),
+      ],
+    );
+  }
 }

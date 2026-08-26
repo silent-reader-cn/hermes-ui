@@ -143,20 +143,28 @@ void main() {
 
       expect(state.completedToolCallGroups, hasLength(1));
       expect(state.completedToolCallGroups.single.anchorMessageID, 'a1');
+      // 新语义：思考融合为工具卡子卡（think 行前置 + 工具行）。
+      expect(state.completedToolCallGroups.single.toolCalls, hasLength(2));
       expect(
-        state.completedToolCallGroups.single.toolCalls.single.name,
+        state.completedToolCallGroups.single.toolCalls.first.isThinking,
+        isTrue,
+      );
+      expect(
+        state.completedToolCallGroups.single.toolCalls.last.name,
         'read_file',
       );
 
-      final reasoningGroups = container.read(
-        reasoningGroupsProvider('sess-history-1'),
-      );
-      expect(reasoningGroups, hasLength(1));
-      expect(reasoningGroups.single.text, '首先读取 readme.md 文件，然后整理核心要点。');
-
+      // 新语义：思考融合为工具卡子卡（think 行前置）。
       final toolGroups = container.read(toolGroupsProvider('sess-history-1'));
       expect(toolGroups, hasLength(1));
-      expect(toolGroups.single.toolCalls.single.name, 'read_file');
+      expect(toolGroups.single.anchorMessageID, 'a1');
+      expect(toolGroups.single.toolCalls, hasLength(2));
+      expect(toolGroups.single.toolCalls.first.isThinking, isTrue);
+      expect(
+        toolGroups.single.toolCalls.first.thinking,
+        '首先读取 readme.md 文件，然后整理核心要点。',
+      );
+      expect(toolGroups.single.toolCalls.last.name, 'read_file');
     });
   });
 
@@ -164,10 +172,6 @@ void main() {
     testWidgets('ChatMessageBubble 渲染历史思考块与工具卡片，支持点击折叠与展开', (tester) async {
       const fullReasoningText =
           '这是历史思考过程的详细步骤：首先分析用户问题，其次查阅相关代码模块，最后组织回复结构并检查语法正确性。补充细节：涉及多轮工具调用与状态机合并，需保证锚点与转录消息索引一致，且在不同 collapsed/expanded 态下渲染稳定。';
-      const reasoningGroup = ReasoningGroup(
-        anchorMessageId: 'a1',
-        text: fullReasoningText,
-      );
       final toolCall = ToolCall(
         id: 't1',
         name: 'read_file',
@@ -175,9 +179,10 @@ void main() {
         args: {'path': const JsonString('lib/main.dart')},
         isCompleted: true,
       );
+      // 新语义：思考降级为工具卡子卡行（think 行 + 工具行同一卡内，行序即时间线）。
       final toolGroup = ToolCallGroup(
         anchorMessageID: 'a1',
-        toolCalls: [toolCall],
+        toolCalls: [ToolCall.thinking(fullReasoningText), toolCall],
       );
 
       const message = ChatMessage(
@@ -192,7 +197,6 @@ void main() {
             child: SingleChildScrollView(
               child: ChatMessageBubble(
                 message: message,
-                reasoningGroups: const [reasoningGroup],
                 toolGroups: [toolGroup],
               ),
             ),
@@ -201,40 +205,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 1) 验证初始状态：正文可见，思考块和工具卡片均处于默认收起态（向右箭头）
+      // 1) 初始：正文可见，工具卡默认收起（思考行/工具行为展开态内容，不在树）。
       expect(find.text('这是最终回答内容。'), findsOneWidget);
-      expect(find.text('思考'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
-      expect(
-        find.byIcon(CupertinoIcons.chevron_down),
-        findsWidgets,
-      ); // tool card chevron_down
-      // 收起时 preview 与完整文本相同（80 字符内不截断），或预览显示截断版本
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      expect(
-        find.byType(ToolCallCard),
-        findsNothing,
-      ); // 工具详情收起中（外层 GroupCard 折叠时内层 Card 不在树）
+      expect(find.text('思考'), findsNothing);
+      expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 点击思考块展开（箭头朝下，完整文本渲染）
+      // 2) 展开工具卡 → think 行与工具行都在（行序 = 时间线）。
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
+      expect(find.text('思考'), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsOneWidget);
+
+      // 3) 点击 think 行展开完整思考文本。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsOneWidget); // 展开成功
-      expect(find.byIcon(CupertinoIcons.chevron_down), findsWidgets);
 
-      // 3) 再次点击思考块折叠
+      // 4) 再次点击 think 行折叠。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsNothing); // 折叠成功
-
-      // 4) 点击工具卡片展开
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsOneWidget);
-      expect(
-        find.textContaining('读取'),
-        findsWidgets,
-      ); // 工具卡片已展开（组标题+子卡片 header）
     });
 
     testWidgets('ChatPage 全链路：加载含 reasoning 与 toolCalls 的历史会话，气泡内可展开查看', (
@@ -276,14 +267,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 历史消息正文、思考预览与工具卡片均已渲染
+      // 历史消息正文、工具卡片已渲染（思考已融合为工具卡子卡行）。
       expect(find.text('帮我分析代码'), findsOneWidget);
       expect(find.text('分析完毕，无任何错误。'), findsOneWidget);
-      expect(find.text('思考'), findsOneWidget);
-      expect(find.text(fullThinking), findsNothing);
+      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.text(fullThinking), findsNothing);
 
-      // 点击展开历史思考
+      // 展开工具卡 → think 行出现
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
+      expect(find.text('思考'), findsOneWidget);
+      expect(find.text(fullThinking), findsNothing); // think 行默认收起（预览）
+
+      // 点击 think 行展开完整思考文本
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullThinking), findsOneWidget);

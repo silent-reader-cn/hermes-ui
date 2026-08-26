@@ -87,7 +87,9 @@ void main() {
     }
   }
 
-  testWidgets('coalesce=false：think/text/tool 按事件到达顺序穿插', (tester) async {
+  testWidgets('coalesce=false：think 并入工具卡子卡，text 区段各自成卡（时间线正确）', (
+    tester,
+  ) async {
     final api = await pumpStreamingSession(
       tester,
       coalesceTools: false,
@@ -109,15 +111,17 @@ void main() {
     ]);
 
     // 断点序列号按事件到达递增：think1(1) text1(2) tools1(3) think2(4)
-    // text2(5) tools2(6)；关闭聚合 → 每段独立一卡。
+    // text2(5) tools2(6)。新语义：思考为工具卡的子卡行，按 text 区段
+    // 合并——区段1=[think1]→tools:1；区段2=[tool1,think2]→tools:3；
+    // 区段3(末尾)=[tool2]→tools:6。
     expectVerticalOrder(tester, [
-      'live:think:1',
+      'live:tools:1',
       'live:text:2',
       'live:tools:3',
-      'live:think:4',
       'live:text:5',
       'live:tools:6',
     ]);
+    expect(find.byKey(const ValueKey('live:tools:1')), findsOneWidget);
     expect(find.byKey(const ValueKey('live:tools:3')), findsOneWidget);
     expect(find.byKey(const ValueKey('live:tools:6')), findsOneWidget);
   });
@@ -143,15 +147,33 @@ void main() {
       ),
     ]);
 
-    // 合并卡：think 挂首个 thinking 断点、tools 挂首个 tools 断点；text 段保留独立。
+    // 合并卡：思考行 + 工具行同卡混排（行序=时间线），text 段保留独立。
     expectVerticalOrder(tester, [
-      'live:think:merged',
       'live:text:2',
-      'live:tools:merged',
       'live:text:5',
+      'live:tools:merged',
     ]);
     expect(find.byKey(const ValueKey('live:text:2')), findsOneWidget);
     expect(find.byKey(const ValueKey('live:text:5')), findsOneWidget);
+    // 展开合并卡 → 行序时间线：think1 → cd(工具) → think2 → ls。
+    final merged = find.byKey(const ValueKey('live:tools:merged'));
+    expect(merged, findsOneWidget);
+    await tester.tap(merged);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('思考'), findsNWidgets(2));
+    expect(
+      find.descendant(of: merged, matching: find.textContaining('think1')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: merged, matching: find.textContaining('think2')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: merged, matching: find.textContaining('cd')),
+      findsWidgets,
+    );
   });
 
   testWidgets('隐藏思考：think 卡不渲染，text/tools 顺序保持', (tester) async {
@@ -172,8 +194,7 @@ void main() {
       const TokenSseEvent('text2'),
     ]);
 
-    expect(find.byKey(const ValueKey('live:think:1')), findsNothing);
-    expect(find.byKey(const ValueKey('live:think:4')), findsNothing);
+    // 隐藏思考：think 行不产出（tools 块仅含工具行），text/tools 顺序保持。
     expectVerticalOrder(tester, ['live:text:2', 'live:tools:3', 'live:text:5']);
   });
 
@@ -190,20 +211,23 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 16));
-    expect(find.byKey(const ValueKey('live:think:merged')), findsOneWidget);
+    expect(find.byKey(const ValueKey('live:tools:merged')), findsOneWidget);
+    // 纯思考卡：标题即「思考」，展开可见思考文本。
+    await tester.tap(find.byKey(const ValueKey('live:tools:merged')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('首个思考段'), findsOneWidget);
   });
 
-  testWidgets(
-      'coalesce=false：无 text 打断时 think/tool 各自聚合为一卡（text 才分隔）',
-      (tester) async {
+  testWidgets('coalesce=false：无 text 打断时 think 行 + 工具行合并为一卡（行序=时间线）', (
+    tester,
+  ) async {
     final api = await pumpStreamingSession(
       tester,
       coalesceTools: false,
       coalesceThink: false,
     );
 
-    // think1 → tool1 → think2 → tool2（无 text 打断：think 与 tool 互不拆卡）。
+    // think1 → tool1 → think2 → tool2（无 text 打断：思考行/工具行同卡混排）。
     await drive(tester, api, [
       const ReasoningSseEvent('思考段1'),
       const ToolStartedSseEvent(
@@ -216,32 +240,30 @@ void main() {
       ),
     ]);
 
-    // 合并结果：思考 1 张（含两段）+ 工具 1 张（含两次调用），keys 取首现。
-    expectVerticalOrder(tester, ['live:think:1', 'live:tools:2']);
-    // 思考卡内容包含两段合并文本。
+    // 结果：单张工具卡（思考行 ×2 + 工具行 ×2），key 取首现断点序。
+    expectVerticalOrder(tester, ['live:tools:1']);
+    final card = find.byKey(const ValueKey('live:tools:1'));
+    expect(card, findsOneWidget);
+
+    // 展开 → 行序时间线：思考段1 → cd → 思考段2 → ls。
+    await tester.tap(card);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('思考'), findsNWidgets(2));
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('live:think:1')),
-        matching: find.textContaining('思考段1'),
-      ),
+      find.descendant(of: card, matching: find.textContaining('思考段1')),
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('live:think:1')),
-        matching: find.textContaining('思考段2'),
-      ),
+      find.descendant(of: card, matching: find.textContaining('思考段2')),
       findsOneWidget,
     );
-    // 工具卡合并两次调用（id 含 t1 与 t2 的标题行）。
-    final toolsCard = find.byKey(const ValueKey('live:tools:2'));
-    expect(toolsCard, findsOneWidget);
     expect(
-      find.descendant(of: toolsCard, matching: find.textContaining('cd')),
+      find.descendant(of: card, matching: find.textContaining('cd')),
       findsWidgets,
     );
     expect(
-      find.descendant(of: toolsCard, matching: find.textContaining('ls')),
+      find.descendant(of: card, matching: find.textContaining('ls')),
       findsWidgets,
     );
   });
@@ -259,13 +281,13 @@ void main() {
       const ReasoningSseEvent('思考段B'),
     ]);
 
-    // text 是分隔符：thinkA 与 thinkB 分属两个区段，各自成卡。
+    // text 是分隔符：thinkA 与 thinkB 分属两个区段（纯思考卡各一张）。
     expectVerticalOrder(tester, [
-      'live:think:1',
+      'live:tools:1',
       'live:text:2',
-      'live:think:3',
+      'live:tools:3',
     ]);
-    expect(find.byKey(const ValueKey('live:think:1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('live:think:3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('live:tools:1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('live:tools:3')), findsOneWidget);
   });
 }

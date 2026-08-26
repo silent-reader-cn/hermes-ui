@@ -18,7 +18,6 @@ import 'chat_media_view.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
-import 'reasoning_block.dart';
 import 'message_highlight.dart';
 import '../../settings/injected_notice_settings.dart';
 import '../../settings/tool_group_settings.dart';
@@ -518,7 +517,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final streaming = ref.watch(streamingMessageProvider(sessionId));
     final liveTimeline = ref.watch(liveTimelineProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
-    final reasoningGroups = ref.watch(reasoningGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
     final queuedMessages = ref.watch(
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
@@ -566,25 +564,36 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     // live 时间线模式：streaming 且 provider 非 null（null = 重连归档等
     // 无法还原段落边界的场景，回退旧分组式流式气泡）。
     final timelineActive = streaming != null && liveTimeline != null;
+    final liveReasoningText = ref
+        .read(chatControllerProvider(sessionId))
+        .liveReasoningText;
+    final hideThinking = ref.watch(hideReasoningProvider);
+    // legacy（非时间线）模式：live 思考并入工具组（think 子卡行前置）。
     final streamingTools = streaming == null || liveTimeline != null
         ? const <ToolCallGroup>[]
-        : toolGroups
-              .where((g) => g.anchorMessageID == streaming.messageId)
-              .toList();
-    final streamingReasoning = streaming == null || liveTimeline != null
-        ? const <ReasoningGroup>[]
-        : reasoningGroups
-              .where((g) => g.anchorMessageId == streaming.messageId)
-              .toList();
+        : [
+            for (final g in toolGroups)
+              if (g.anchorMessageID == streaming.messageId)
+                (hideThinking || liveReasoningText.trim().isEmpty)
+                    ? g
+                    : ToolCallGroup(
+                        id: g.id,
+                        anchorMessageID: g.anchorMessageID,
+                        toolCalls: [
+                          ToolCall.thinking(liveReasoningText.trim()),
+                          ...g.toolCalls,
+                        ],
+                      ),
+          ];
 
     final showQueuedBanner = queuedMessages.isNotEmpty;
-    // 落地兜底：仅在 coalesce==true 或 transcript 为空且无可挂载 anchor 时才渲染聚合视图
+    // 落地兜底：仅在 coalesce==true 且 transcript 为空且无可挂载 anchor 时渲染聚合视图
     final needFallback =
         coalesce &&
         transcript.isEmpty &&
         streaming == null &&
         phase != ChatPhase.sending &&
-        (toolGroups.isNotEmpty || reasoningGroups.isNotEmpty);
+        toolGroups.isNotEmpty;
 
     // live 段落条目数：时间线模式 = 段数（空段列表 = 思考中指示器 1 条）；
     // legacy 模式 = 单个流式气泡。
@@ -609,14 +618,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           final entry = transcript[index];
           final groups =
               entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
-          final reasoning = reasoningGroups
-              .where(
-                (g) =>
-                    g.anchorMessageId == entry.message.messageId ||
-                    (g.anchorMessageId != null &&
-                        g.anchorMessageId == entry.anchorId),
-              )
-              .toList();
           final noticeId = entry.message.id;
           final expanded = _expandedNoticeIds.contains(noticeId);
           final isHighlightTarget =
@@ -634,7 +635,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
                   key: ValueKey(entry.renderId),
                   message: entry.message,
                   toolGroups: groups,
-                  reasoningGroups: reasoning,
+                  hideThinking: hideThinking,
                   collapseInjectedEnabled: collapseEnabled,
                   injectedExpanded: expanded,
                   onToggleInjected: () {
@@ -668,7 +669,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             return _StreamingBubble(
               message: streaming,
               toolGroups: streamingTools,
-              reasoningGroups: streamingReasoning,
+              hideThinking: hideThinking,
             );
           }
           tail--;
@@ -682,6 +683,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               return _LiveTimelineItem(
                 entry: liveTimeline[tail],
                 streamingMessage: streaming,
+                hideThinking: hideThinking,
               );
             }
             tail -= liveTimeline.length;
@@ -695,7 +697,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           if (tail == 0) {
             return _FallbackToolReasoningCards(
               toolGroups: toolGroups,
-              reasoningGroups: reasoningGroups,
+              hideThinking: hideThinking,
             );
           }
           tail--;
@@ -711,23 +713,22 @@ class _StreamingBubble extends StatelessWidget {
   const _StreamingBubble({
     required this.message,
     required this.toolGroups,
-    required this.reasoningGroups,
+    required this.hideThinking,
   });
 
   final ChatMessage message;
   final List<ToolCallGroup> toolGroups;
-  final List<ReasoningGroup> reasoningGroups;
+  final bool hideThinking;
 
   @override
   Widget build(BuildContext context) {
     final hasContent = (message.content ?? '').isNotEmpty;
-    final isEmpty =
-        !hasContent && toolGroups.isEmpty && reasoningGroups.isEmpty;
+    final isEmpty = !hasContent && toolGroups.isEmpty;
     if (!isEmpty) {
       return ChatMessageBubble(
         message: message,
         toolGroups: toolGroups,
-        reasoningGroups: reasoningGroups,
+        hideThinking: hideThinking,
       );
     }
     // 空流式气泡 → 思考中指示器。
@@ -773,33 +774,31 @@ class _LiveTimelineItem extends StatelessWidget {
   const _LiveTimelineItem({
     required this.entry,
     required this.streamingMessage,
+    required this.hideThinking,
   });
 
   final LiveTimelineEntry entry;
   final ChatMessage streamingMessage;
+  final bool hideThinking;
 
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: ValueKey(entry.renderKey),
       child: switch (entry.kind) {
-        LiveSegmentKind.thinking => Padding(
-          // 与 text / tools 段同款外边距（12px 左右），对齐卡片左右对齐线。
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: ReasoningBlock(
-            group: ReasoningGroup(
-              anchorMessageId: streamingMessage.messageId,
-              text: entry.reasoningText,
-            ),
-          ),
-        ),
+        // 思考已并入工具卡子卡（think 行），不再产出独立思考条目；此分支
+        // 为防御（旧数据/异常路径），不渲染任何内容。
+        LiveSegmentKind.thinking => const SizedBox.shrink(),
         LiveSegmentKind.text => _LiveTextBlock(
           slice: entry.textSlice,
           streamingMessage: streamingMessage,
         ),
         LiveSegmentKind.tools => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: ToolCallGroupCard(group: entry.toolGroup!),
+          child: ToolCallGroupCard(
+            group: entry.toolGroup!,
+            hideThinking: hideThinking,
+          ),
         ),
       },
     );
@@ -908,11 +907,11 @@ class _SendingIndicator extends StatelessWidget {
 class _FallbackToolReasoningCards extends StatelessWidget {
   const _FallbackToolReasoningCards({
     required this.toolGroups,
-    required this.reasoningGroups,
+    required this.hideThinking,
   });
 
   final List<ToolCallGroup> toolGroups;
-  final List<ReasoningGroup> reasoningGroups;
+  final bool hideThinking;
 
   @override
   Widget build(BuildContext context) {
@@ -922,14 +921,8 @@ class _FallbackToolReasoningCards extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final group in reasoningGroups) ...[
-            ReasoningBlock(group: group),
-            if (group != reasoningGroups.last) const SizedBox(height: 8),
-          ],
-          if (reasoningGroups.isNotEmpty && toolGroups.isNotEmpty)
-            const SizedBox(height: 8),
           for (final group in toolGroups) ...[
-            ToolCallGroupCard(group: group),
+            ToolCallGroupCard(group: group, hideThinking: hideThinking),
             if (group != toolGroups.last) const SizedBox(height: 8),
           ],
         ],

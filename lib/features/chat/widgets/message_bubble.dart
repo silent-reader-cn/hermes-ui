@@ -13,7 +13,6 @@ import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
 import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
-import 'reasoning_block.dart';
 import 'selected_context_card.dart';
 import 'tool_call_card.dart';
 
@@ -40,6 +39,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.injectedExpanded,
     this.onToggleInjected,
     this.collapseInjectedEnabled = true,
+    this.hideThinking = false,
   });
 
   final ChatMessage message;
@@ -67,6 +67,9 @@ class ChatMessageBubble extends StatelessWidget {
 
   /// 是否启用注入卡片折叠（受设置开关控制，OFF 时退化为普通气泡）。
   final bool collapseInjectedEnabled;
+
+  /// 隐藏思考子卡行（设置「隐藏思考」开启时透传工具卡）。
+  final bool hideThinking;
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +150,7 @@ class ChatMessageBubble extends StatelessWidget {
               message: message,
               toolGroups: toolGroups,
               reasoningGroups: reasoningGroups,
+              hideThinking: hideThinking,
               baseUrl: effectiveBaseUrl,
               sessionId: sessionId,
               customHeaders: effectiveHeaders,
@@ -244,6 +248,7 @@ class _AssistantContent extends StatelessWidget {
     required this.message,
     required this.toolGroups,
     required this.reasoningGroups,
+    required this.hideThinking,
     this.baseUrl,
     this.sessionId,
     this.customHeaders,
@@ -252,6 +257,7 @@ class _AssistantContent extends StatelessWidget {
   final ChatMessage message;
   final List<ToolCallGroup> toolGroups;
   final List<ReasoningGroup> reasoningGroups;
+  final bool hideThinking;
   final String? baseUrl;
   final String? sessionId;
   final Map<String, String>? customHeaders;
@@ -266,20 +272,16 @@ class _AssistantContent extends StatelessWidget {
     final cleanText = selected.cleanText;
     final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
 
-    // 渲染层去重兜底：completed 与 live 双份（重连/重放场景）时只显示一份，
-    // 避免 double 思考卡 / double 工具卡。
-    final distinctReasoning = _distinctReasoning(reasoningGroups);
+    // 渲染层去重兜底：completed 与 live 双份（重连/重放场景）时只显示一份。
+    // 思考子卡已由 provider 融合进工具组（ToolCallGroup 内 think 行），
+    // 不再独立渲染思考卡。
     final distinctTools = _distinctToolGroups(toolGroups);
 
-    // 统一间距模型：各区块（选中上下文卡片 / 思考卡 / 正文 / 工具卡 / 速率）
-    // 之间固定 [kMessageSectionGap]，不再依赖卡片自身 margin 造成上下不均。
+    // 统一间距模型：各区块（选中上下文卡片 / 正文 / 工具卡 / 速率）之间
+    // 固定 [kMessageSectionGap]，不再依赖卡片自身 margin 造成上下不均。
     final sections = <Widget>[];
     if (blocks.isNotEmpty) {
       sections.add(SelectedContextCardGroup(blocks: blocks));
-    }
-    // 思考卡在工具卡上方（同聚合场景下思考优先展示）
-    for (final group in distinctReasoning) {
-      sections.add(ReasoningBlock(group: group));
     }
     if (parsedContent.isNotEmpty) {
       sections.add(
@@ -303,7 +305,7 @@ class _AssistantContent extends StatelessWidget {
       );
     }
     for (final group in distinctTools) {
-      sections.add(ToolCallGroupCard(group: group));
+      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (message.turnTps != null) {
       sections.add(
@@ -326,16 +328,6 @@ class _AssistantContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
     );
-  }
-
-  static List<ReasoningGroup> _distinctReasoning(List<ReasoningGroup> groups) {
-    final seen = <String>{};
-    final out = <ReasoningGroup>[];
-    for (final g in groups) {
-      final key = '${g.anchorMessageId ?? ''}:${g.text.trim()}';
-      if (seen.add(key)) out.add(g);
-    }
-    return out;
   }
 
   static List<ToolCallGroup> _distinctToolGroups(List<ToolCallGroup> groups) {
