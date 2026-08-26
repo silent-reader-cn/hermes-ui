@@ -327,6 +327,10 @@ class AppLocalizations {
   String localizeToolName(String name) {
     final key = name.trim().toLowerCase();
     switch (key) {
+      case 'thinking':
+      case 'think':
+      case 'reasoning':
+        return isEnglish ? 'Thinking' : '思考';
       case 'terminal':
       case 'exec':
       case 'shell':

@@ -241,6 +241,8 @@ void main() {
       expect(l10n.localizeToolName('agent'), '智能体');
       expect(l10n.localizeToolName('grep'), '搜索');
       expect(l10n.localizeToolName('glob'), '文件检索');
+      expect(l10n.localizeToolName('thinking'), '思考');
+      expect(l10n.localizeToolName('reasoning'), '思考');
       expect(l10n.localizeToolName('process'), '后台进程');
       expect(l10n.localizeToolName('mem0_search'), '记忆检索');
       expect(l10n.localizeToolName('mem0_add'), '记忆写入');

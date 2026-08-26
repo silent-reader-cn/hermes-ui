@@ -80,7 +80,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Icon(
                     failed
                         ? CupertinoIcons.exclamationmark_triangle
-                        : CupertinoIcons.wrench,
+                        : _toolIconFor(call.displayName),
                     size: 14,
                     color: accentColor,
                   ),
@@ -459,11 +459,172 @@ String _adaptiveActivityTitle({
   return '${entries.first.key} \u2026';
 }
 
-/// 思考子卡行（工具卡展开区内的思考条目）。
+/// 工具名 → 语义图标映射（告别统一扳手，按工具语义匹配 Icon）。
 ///
-/// 思考降级为工具卡的子卡后，think/tool 穿插序列合并进同一张工具卡；
-/// 本行保持 ReasoningBlock 的视觉语言（sparkles 紫 + 预览 + 点击展开全文），
-/// 行序即事件时间线。
+/// 覆盖 Hermes 内置工具与常见别名；未命中的工具回退 [CupertinoIcons.wrench]。
+IconData _toolIconFor(String name) {
+  final key = name.trim().toLowerCase();
+  switch (key) {
+    case 'thinking':
+    case 'think':
+    case 'reasoning':
+      return CupertinoIcons.sparkles;
+    case 'terminal':
+    case 'exec':
+    case 'shell':
+    case 'bash':
+    case 'cmd':
+    case 'powershell':
+    case 'zsh':
+      return CupertinoIcons.chevron_left_slash_chevron_right;
+    case 'execute_code':
+    case 'exec_code':
+    case 'code_execution':
+    case 'run_code':
+    case 'code':
+      return CupertinoIcons.chevron_left_slash_chevron_right;
+    case 'read':
+    case 'read_file':
+    case 'readfile':
+    case 'view_file':
+    case 'viewfile':
+    case 'cat':
+      return CupertinoIcons.doc_text;
+    case 'write':
+    case 'write_file':
+    case 'writefile':
+    case 'write_to_file':
+    case 'create_file':
+      return CupertinoIcons.pencil;
+    case 'patch':
+    case 'apply_patch':
+    case 'applypatch':
+    case 'edit_file':
+    case 'editfile':
+    case 'str_replace':
+      return CupertinoIcons.wrench;
+    case 'search_files':
+    case 'file_search':
+    case 'search':
+    case 'grep':
+    case 'grep_search':
+    case 'ripgrep':
+    case 'find':
+    case 'find_by_name':
+      return CupertinoIcons.search;
+    case 'glob':
+    case 'list_dir':
+    case 'listdir':
+    case 'list_files':
+    case 'listdir_files':
+      return CupertinoIcons.folder;
+    case 'web_search':
+    case 'websearch':
+      return CupertinoIcons.globe;
+    case 'web_extract':
+    case 'webextract':
+    case 'web_fetch':
+    case 'webfetch':
+    case 'read_url_content':
+    case 'fetch_web':
+      return CupertinoIcons.arrow_down_circle;
+    case 'memory':
+    case 'memory_write':
+    case 'memory_read':
+    case 'mem0':
+    case 'mem0_search':
+    case 'mem0_add':
+    case 'mem0_update':
+    case 'mem0_delete':
+      return CupertinoIcons.bookmark;
+    case 'skill_view':
+    case 'view_skill':
+    case 'skill':
+    case 'skill_manage':
+    case 'skillmanage':
+    case 'skills_list':
+    case 'list_skills':
+      return CupertinoIcons.book;
+    case 'cronjob':
+    case 'cron_job':
+    case 'cron':
+      return CupertinoIcons.clock;
+    case 'delegate_task':
+    case 'delegate-task':
+    case 'delegatetask':
+    case 'invoke_subagent':
+    case 'subagent_progress':
+    case 'subagentprogress':
+    case 'subagent':
+    case 'sub_agent':
+    case 'agent':
+      return CupertinoIcons.person_2;
+    case 'send_message':
+    case 'sendmessage':
+    case 'send_msg':
+      return CupertinoIcons.paperplane;
+    case 'browser':
+    case 'browse':
+    case 'browser_navigate':
+    case 'browsernavigate':
+    case 'browser_exec':
+    case 'browserexec':
+    case 'browser_action':
+      return CupertinoIcons.compass;
+    case 'vision_analyze':
+    case 'visionanalyze':
+    case 'vision':
+    case 'image_analyze':
+      return CupertinoIcons.eye;
+    case 'image_generate':
+    case 'image_gen':
+      return CupertinoIcons.photo;
+    case 'video_generate':
+    case 'video_gen':
+      return CupertinoIcons.film;
+    case 'video_analyze':
+      return CupertinoIcons.videocam;
+    case 'text_to_speech':
+    case 'tts':
+    case 'tts_speak':
+      return CupertinoIcons.speaker_2;
+    case 'process':
+    case 'proc':
+    case 'background_process':
+      return CupertinoIcons.gear_alt;
+    case 'kanban':
+    case 'kanban_list':
+    case 'kanban_create':
+    case 'kanban_show':
+    case 'kanban_complete':
+    case 'kanban_comment':
+    case 'kanban_heartbeat':
+      return CupertinoIcons.square_grid_2x2;
+    case 'clarify':
+    case 'clarification':
+      return CupertinoIcons.question_circle;
+    case 'session_search':
+    case 'search_sessions':
+      return CupertinoIcons.time;
+    case 'todo':
+    case 'task':
+    case 'todo_write':
+    case 'write_todo':
+    case 'todo_update':
+      return CupertinoIcons.list_bullet;
+    case 'tool_search':
+    case 'tool_describe':
+    case 'tool_call':
+    case 'invoke_tool':
+      return CupertinoIcons.square_stack_3d_up;
+    case 'x_search':
+      return CupertinoIcons.search;
+    default:
+      return CupertinoIcons.wrench;
+  }
+}
+
+/// 思考子卡行（工具卡展开区内的思考条目）。
 class _ThinkingRow extends StatefulWidget {
   const _ThinkingRow({required this.call});
 
