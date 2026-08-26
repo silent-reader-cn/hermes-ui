@@ -647,56 +647,68 @@ class _ThinkingRowState extends State<_ThinkingRow> {
         ? '${summary.substring(0, 80)}…'
         : summary;
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Row(
-            children: [
-              Icon(
-                CupertinoIcons.sparkles,
-                size: 14,
-                color: CupertinoColors.systemPurple.resolveFrom(context),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                l10n.thinkingLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.label.resolveFrom(context),
+    // 与工具行同构的「卡式子行」：淡紫底块 + 圆角 8（思考专属色调），
+    // 内部保持 ReasoningBlock 时代的标题/预览/展开交互。
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemPurple
+            .resolveFrom(context)
+            .withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.sparkles,
+                  size: 14,
+                  color: CupertinoColors.systemPurple.resolveFrom(context),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  preview,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: secondary),
+                const SizedBox(width: 6),
+                Text(
+                  l10n.thinkingLabel,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
                 ),
-              ),
-              Icon(
-                _expanded
-                    ? CupertinoIcons.chevron_up
-                    : CupertinoIcons.chevron_down,
-                size: 12,
-                color: secondary,
-              ),
-            ],
-          ),
-        ),
-        if (_expanded)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 12, height: 1.4),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: secondary),
+                  ),
+                ),
+                Icon(
+                  _expanded
+                      ? CupertinoIcons.chevron_up
+                      : CupertinoIcons.chevron_down,
+                  size: 12,
+                  color: secondary,
+                ),
+              ],
             ),
           ),
-      ],
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
