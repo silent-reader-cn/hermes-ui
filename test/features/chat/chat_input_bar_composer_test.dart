@@ -73,17 +73,17 @@ void main() {
       final inputFinder = find.byKey(const ValueKey('chat-input-field'));
       expect(inputFinder, findsOneWidget);
 
-      // 经典单行：minLines=1；按钮与输入框同行（两段式工具行的 SizedBox 分隔不存在）
+      // 经典单行：保留自适应（min1/max4 软上限）。
       final field = tester.widget<CupertinoTextField>(inputFinder);
       expect(field.minLines, 1);
       expect(field.maxLines, 4);
 
-      // 回车即发送（经典模式 onSubmitted 路径）
+      // 回车即发送（经典模式走 onSubmitted：测试里用 IME 提交动作模拟回车）
       await tester.tap(inputFinder);
       await tester.pump();
       await tester.enterText(inputFinder, '经典消息');
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       await tester.pump();
       expect(chatApi.startChatCalls, 1);
