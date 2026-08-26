@@ -353,6 +353,11 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
   }
 
   final entries = <LiveTimelineEntry>[];
+  // 关闭聚合的「text 区段缓冲」：同区段（无 text 打断）内的 think 段 /
+  // tool 段各自合并为一张卡；text 断点出现时 flush —— think 与 tool
+  // 互相穿插不打断对方（与历史关闭聚合语义一致）。
+  final pendingThink = <({int seq, String text})>[];
+  final pendingTools = <({int seq, List<ToolCall> calls})>[];
   // 重连/重锚定场景：首个断点前的内容无断点覆盖（如恢复时锚定到一条
   // 已有内容的 assistant 消息），作为「孤儿段」前置，保证旧内容不丢失。
   final orphanText = textStarts.isNotEmpty && textStarts.first > 0
@@ -381,13 +386,8 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
       // 与后续 thinking 段同卡（合并文本在首个 thinking 段输出时拼接）。
       orphanThinkMerged = true;
     } else {
-      entries.add(
-        LiveTimelineEntry(
-          kind: LiveSegmentKind.thinking,
-          renderKey: 'live:think:orphan',
-          reasoningText: orphanThink,
-        ),
-      );
+      // 关闭聚合：并入 text 区段缓冲，随区段内思考块合并输出。
+      pendingThink.add((seq: -1, text: orphanThink));
     }
   }
   if (orphanToolCount > 0) {
@@ -410,9 +410,64 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
   var textIndex = 0;
   var thinkIndex = 0;
   var toolIndex = 0;
+
+  void flushThinkBlock() {
+    if (pendingThink.isEmpty) return;
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.thinking,
+        renderKey: pendingThink.first.seq < 0
+            ? 'live:think:orphan'
+            : 'live:think:${pendingThink.first.seq}',
+        reasoningText: pendingThink
+            .map((e) => e.text.trim())
+            .where((t) => t.isNotEmpty)
+            .join('\n\n'),
+      ),
+    );
+    pendingThink.clear();
+  }
+
+  void flushToolsBlock() {
+    if (pendingTools.isEmpty) return;
+    final firstSeq = pendingTools.first.seq;
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.tools,
+        renderKey: 'live:tools:$firstSeq',
+        toolGroup: ToolCallGroup(
+          id: 'live-timeline-tools-$firstSeq',
+          anchorMessageID: id,
+          toolCalls: [for (final e in pendingTools) ...e.calls],
+        ),
+      ),
+    );
+    pendingTools.clear();
+  }
+
+  void flushPendingBlocks() {
+    // 块按「首现序列号」排序输出（think 与 tool 各自聚合，谁先出现谁先展示）。
+    final thinkFirstSeq = pendingThink.isEmpty ? null : pendingThink.first.seq;
+    final toolsFirstSeq = pendingTools.isEmpty ? null : pendingTools.first.seq;
+    final flushThinkFirst = switch ((thinkFirstSeq, toolsFirstSeq)) {
+      (null, _) => false,
+      (_, null) => true,
+      (final int a, final int b) => a <= b,
+    };
+    if (flushThinkFirst) {
+      flushThinkBlock();
+      flushToolsBlock();
+    } else {
+      flushToolsBlock();
+      flushThinkBlock();
+    }
+  }
+
   for (final point in points) {
     switch (point.kind) {
       case LiveSegmentKind.text:
+        // text 断点：flush 当前区段缓冲后输出文本条目。
+        flushPendingBlocks();
         if (textIndex < textSegments.length) {
           final segment = textSegments[textIndex];
           entries.add(
@@ -444,13 +499,11 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
               }
             }
           } else if (thinkIndex < thinkSegments.length) {
-            entries.add(
-              LiveTimelineEntry(
-                kind: LiveSegmentKind.thinking,
-                renderKey: 'live:think:${point.sequence}',
-                reasoningText: thinkSegments[thinkIndex],
-              ),
-            );
+            // 关闭聚合：累积到区段缓冲，text 断点 / 末尾统一合并输出。
+            pendingThink.add((
+              seq: point.sequence,
+              text: thinkSegments[thinkIndex],
+            ));
           }
         }
         thinkIndex++;
@@ -471,21 +524,16 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
             );
           }
         } else if (toolIndex < toolSegments.length) {
-          entries.add(
-            LiveTimelineEntry(
-              kind: LiveSegmentKind.tools,
-              renderKey: 'live:tools:${point.sequence}',
-              toolGroup: ToolCallGroup(
-                id: 'live-timeline-tools-${point.sequence}',
-                anchorMessageID: id,
-                toolCalls: toolSegments[toolIndex],
-              ),
-            ),
-          );
+          // 关闭聚合：累积到区段缓冲，text 断点 / 末尾统一合并输出。
+          pendingTools.add((
+            seq: point.sequence,
+            calls: toolSegments[toolIndex],
+          ));
         }
         toolIndex++;
     }
   }
+  flushPendingBlocks();
   return entries;
 });
 

@@ -421,14 +421,14 @@ class ToolCallGroup {
     }
 
     // 不打断（可视作“相邻”）的辅助判定：区间 (prev, cur) 内是否存在
-    // 带可见文本或推理的 assistant 消息。
+    // 带可见文本的 assistant 消息（仅 text 打断：思考段不打断工具组，
+    // think/tool 互相穿插时工具调用照常合并，与关闭聚合语义一致）。
     bool hasTextOrThinkBetween(int prevIndex, int curIndex) {
       for (var k = prevIndex + 1; k < curIndex; k++) {
         if (k < 0 || k >= messages.length) continue;
         final message = messages[k];
         if (message.role != 'assistant') continue;
         if (message.content?.trim().isNotEmpty == true) return true;
-        if (message.reasoning?.trim().isNotEmpty == true) return true;
       }
       return false;
     }

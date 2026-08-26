@@ -253,8 +253,10 @@ class ReasoningGroup {
         if (k < 0 || k >= messages.length) continue;
         final message = messages[k];
         if (message.role != 'assistant') continue;
+        // 仅「可见文本」打断：工具调用消息不打断思考段——think/tool
+        // 互相穿插时（think tool think tool）思考段照常合并为一张卡，
+        // 与主人定义的关闭聚合语义一致（text 才是分隔符）。
         if (message.content?.trim().isNotEmpty == true) return true;
-        if (message.toolCalls?.isNotEmpty == true) return true;
       }
       return false;
     }

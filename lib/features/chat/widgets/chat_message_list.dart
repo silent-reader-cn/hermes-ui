@@ -783,10 +783,14 @@ class _LiveTimelineItem extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey(entry.renderKey),
       child: switch (entry.kind) {
-        LiveSegmentKind.thinking => ReasoningBlock(
-          group: ReasoningGroup(
-            anchorMessageId: streamingMessage.messageId,
-            text: entry.reasoningText,
+        LiveSegmentKind.thinking => Padding(
+          // 与 text / tools 段同款外边距（12px 左右），对齐卡片左右对齐线。
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: ReasoningBlock(
+            group: ReasoningGroup(
+              anchorMessageId: streamingMessage.messageId,
+              text: entry.reasoningText,
+            ),
           ),
         ),
         LiveSegmentKind.text => _LiveTextBlock(

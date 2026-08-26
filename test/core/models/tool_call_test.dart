@@ -195,7 +195,7 @@ void main() {
       expect(broken[1].toolCalls.single.id, 'call_2');
     });
 
-    test('coalesce=false 时被 thinking 打断的相邻工具同样拆分为两组', () {
+    test('coalesce=false 时中间仅思考（无文本）不打断工具 → 仍合并为一组', () {
       const persisted = [
         PersistedToolCall(
           name: 'write_file',
@@ -214,12 +214,16 @@ void main() {
         ),
         const ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
       ];
+      // 关闭聚合语义：仅「可见文本」打断（text 才是分隔符），思考段不
+      // 打断工具调用——think/tool 互相穿插时工具调用照常相邻合并。
       final broken = ToolCallGroup.groups(
         persistedToolCalls: persisted,
         messages: brokenMessages,
         coalesce: false,
       );
-      expect(broken, hasLength(2));
+      expect(broken, hasLength(1));
+      expect(broken.single.anchorMessageID, 'm1');
+      expect(broken.single.toolCalls, hasLength(2));
     });
 
     test('无持久化调用时从消息元数据派生（OpenAI tool_calls）', () {

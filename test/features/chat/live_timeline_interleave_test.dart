@@ -193,4 +193,79 @@ void main() {
     expect(find.byKey(const ValueKey('live:think:merged')), findsOneWidget);
     expect(find.textContaining('首个思考段'), findsOneWidget);
   });
+
+  testWidgets(
+      'coalesce=false：无 text 打断时 think/tool 各自聚合为一卡（text 才分隔）',
+      (tester) async {
+    final api = await pumpStreamingSession(
+      tester,
+      coalesceTools: false,
+      coalesceThink: false,
+    );
+
+    // think1 → tool1 → think2 → tool2（无 text 打断：think 与 tool 互不拆卡）。
+    await drive(tester, api, [
+      const ReasoningSseEvent('思考段1'),
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'cd', args: {'path': 'x'}),
+      ),
+      const ToolCompletedSseEvent(ToolStreamEvent(stableId: 't1', name: 'cd')),
+      const ReasoningSseEvent('思考段2'),
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 't2', name: 'ls', args: {'p': '.'}),
+      ),
+    ]);
+
+    // 合并结果：思考 1 张（含两段）+ 工具 1 张（含两次调用），keys 取首现。
+    expectVerticalOrder(tester, ['live:think:1', 'live:tools:2']);
+    // 思考卡内容包含两段合并文本。
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('live:think:1')),
+        matching: find.textContaining('思考段1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('live:think:1')),
+        matching: find.textContaining('思考段2'),
+      ),
+      findsOneWidget,
+    );
+    // 工具卡合并两次调用（id 含 t1 与 t2 的标题行）。
+    final toolsCard = find.byKey(const ValueKey('live:tools:2'));
+    expect(toolsCard, findsOneWidget);
+    expect(
+      find.descendant(of: toolsCard, matching: find.textContaining('cd')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: toolsCard, matching: find.textContaining('ls')),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('coalesce=false：text 打断 → think 拆成两区段各一张卡', (tester) async {
+    final api = await pumpStreamingSession(
+      tester,
+      coalesceTools: false,
+      coalesceThink: false,
+    );
+
+    await drive(tester, api, [
+      const ReasoningSseEvent('思考段A'),
+      const TokenSseEvent('正文1 '),
+      const ReasoningSseEvent('思考段B'),
+    ]);
+
+    // text 是分隔符：thinkA 与 thinkB 分属两个区段，各自成卡。
+    expectVerticalOrder(tester, [
+      'live:think:1',
+      'live:text:2',
+      'live:think:3',
+    ]);
+    expect(find.byKey(const ValueKey('live:think:1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('live:think:3')), findsOneWidget);
+  });
 }
