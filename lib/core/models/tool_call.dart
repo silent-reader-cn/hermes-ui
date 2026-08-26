@@ -202,14 +202,14 @@ class ToolCallGroup {
     final counts = <String, int>{};
     final initialIndex = <String, int>{};
     for (var i = 0; i < toolCalls.length; i++) {
-      // 思考子卡行不计入工具标题统计（标题保持工具语义）。
-      if (toolCalls[i].isThinking) continue;
-      final name = l10n.localizeToolName(toolCalls[i].displayName);
+      // 思考子卡行也计入标题统计（「思考 ×N, 终端 ×M」）；纯思考卡标题即「思考 ×N」。
+      final call = toolCalls[i];
+      final name = call.isThinking
+          ? l10n.thinkingLabel
+          : l10n.localizeToolName(call.displayName);
       initialIndex.putIfAbsent(name, () => initialIndex.length);
       counts[name] = (counts[name] ?? 0) + 1;
     }
-    // 纯思考卡（无真实工具行）：标题显示「思考」。
-    if (counts.isEmpty) return l10n.thinkingLabel;
     final entries = counts.entries.toList()
       ..sort((a, b) {
         final cmp = b.value.compareTo(a.value);
