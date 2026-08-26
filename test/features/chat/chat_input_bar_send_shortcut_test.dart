@@ -54,8 +54,9 @@ void main() {
     };
     await pumpPage(tester, api);
 
-    expect(field(tester).maxLines, 1);
-    expect(field(tester).minLines, isNull);
+    // 布局开关默认关闭：经典单行形态（min1/max4 软上限）。
+    expect(field(tester).maxLines, 4);
+    expect(field(tester).minLines, 1);
 
     await unmount(tester);
   });
@@ -70,7 +71,7 @@ void main() {
     };
     await pumpPage(tester, api);
 
-    expect(field(tester).maxLines, isNull);
+    expect(field(tester).maxLines, 4);
     expect(field(tester).minLines, 1);
 
     await unmount(tester);
@@ -117,7 +118,8 @@ void main() {
     await tester.pump();
 
     expect(api.startChatCalls, 0);
-    expect(field(tester).controller!.text, 'hello');
+    // Enter 在 ctrlEnter 模式插入换行（InsertNewlineIntent），不发送。
+    expect(field(tester).controller!.text, 'hello\n');
 
     await unmount(tester);
   });

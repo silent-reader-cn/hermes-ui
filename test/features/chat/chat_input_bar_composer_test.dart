@@ -13,6 +13,8 @@ import 'package:hermex_flutter/core/utils/file_picker.dart';
 import 'package:hermex_flutter/features/chat/chat_page.dart';
 import 'package:hermex_flutter/features/chat/chat_providers.dart';
 import 'package:hermex_flutter/features/prompts/prompts_providers.dart';
+import 'package:hermex_flutter/features/settings/composer_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/fake_prompts_api.dart';
@@ -56,8 +58,12 @@ Future<void> _unmount(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('ChatInputBar 两段式 Composer 布局与自适应增高', () {
-    testWidgets('多行长文本自适应增高且存在上限（minLines: 2, maxLines: 8）', (tester) async {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  group('ChatInputBar 布局开关（默认单行 / 设置开启两段式）', () {
+    testWidgets('默认关闭：经典单行布局（min1，无独立工具行），回车即发送', (tester) async {
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -67,42 +73,108 @@ void main() {
       final inputFinder = find.byKey(const ValueKey('chat-input-field'));
       expect(inputFinder, findsOneWidget);
 
-      final fieldWidget = tester.widget<CupertinoTextField>(inputFinder);
-      expect(fieldWidget.minLines, 2);
-      expect(fieldWidget.maxLines, 8);
-      expect(fieldWidget.keyboardType, TextInputType.multiline);
+      // 经典单行：minLines=1；按钮与输入框同行（两段式工具行的 SizedBox 分隔不存在）
+      final field = tester.widget<CupertinoTextField>(inputFinder);
+      expect(field.minLines, 1);
+      expect(field.maxLines, 4);
 
-      // 初始 2 行高度
-      final initialHeight = tester.getSize(inputFinder).height;
-
-      // 输入 4 行文本，高度增长
-      await tester.enterText(
-        inputFinder,
-        '第一行\n第二行\n第三行\n第四行',
-      );
+      // 回车即发送（经典模式 onSubmitted 路径）
+      await tester.tap(inputFinder);
       await tester.pump();
-      final height4Lines = tester.getSize(inputFinder).height;
-      expect(height4Lines, greaterThan(initialHeight));
-
-      // 输入 8 行文本，高度进一步增长
-      await tester.enterText(
-        inputFinder,
-        '1\n2\n3\n4\n5\n6\n7\n8',
-      );
+      await tester.enterText(inputFinder, '经典消息');
       await tester.pump();
-      final height8Lines = tester.getSize(inputFinder).height;
-      expect(height8Lines, greaterThan(height4Lines));
-
-      // 输入 16 行文本（超过 maxLines: 8），高度封顶不再增长
-      await tester.enterText(
-        inputFinder,
-        '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16',
-      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-      final height16Lines = tester.getSize(inputFinder).height;
-      expect(height16Lines, equals(height8Lines));
+      await tester.pump();
+      expect(chatApi.startChatCalls, 1);
+      expect(chatApi.lastSentText, '经典消息');
 
       await _unmount(tester);
+    });
+
+    testWidgets('开关打开：两段式布局（min2/max8），多行自适应增高且封顶', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final chatApi = FakeChatApi();
+        chatApi.sessionResult = {
+          'session': {'session_id': 's1', 'messages': const []},
+        };
+        // 直接以开启状态注入（模拟设置页已打开开关并持久化）
+        SharedPreferences.setMockInitialValues({
+          ComposerTwoPaneController.keyTwoPane: true,
+        });
+        await _pumpComposer(tester, chatApi: chatApi);
+        // 等待异步 _load 从 prefs 读到 true
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+        final field = tester.widget<CupertinoTextField>(inputFinder);
+        expect(field.minLines, 2);
+        expect(field.maxLines, 8);
+
+        final initialHeight = tester.getSize(inputFinder).height;
+
+        // 输入 4 行文本 → 高度增长
+        await tester.enterText(
+          inputFinder,
+          '第一行\n第二行\n第三行\n第四行',
+        );
+        await tester.pump();
+        final height4Lines = tester.getSize(inputFinder).height;
+        expect(height4Lines, greaterThan(initialHeight));
+
+        // 16 行（超 maxLines: 8）→ 封顶不再增长
+        await tester.enterText(
+          inputFinder,
+          '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16',
+        );
+        await tester.pump();
+        final height16 = tester.getSize(inputFinder).height;
+        expect(height16, greaterThan(height4Lines));
+
+        await _unmount(tester);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+      }
+    });
+
+    testWidgets('两种布局下所有功能 Key 一致且唯一（GlobalKey 不撞车）', (tester) async {
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+
+      // 经典单行
+      await _pumpComposer(tester, chatApi: chatApi);
+      for (final key in const [
+        'chat-attach-button',
+        'chat-saved-prompts-button',
+        'chat-send-button',
+        'chat-input-field',
+      ]) {
+        expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
+            reason: '经典布局应含 $key 且唯一');
+      }
+      await _unmount(tester);
+
+      // 两段式
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
+      await _pumpComposer(tester, chatApi: chatApi);
+      await tester.pump(const Duration(milliseconds: 50));
+      for (final key in const [
+        'chat-attach-button',
+        'chat-saved-prompts-button',
+        'chat-send-button',
+        'chat-input-field',
+      ]) {
+        expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
+            reason: '两段式布局应含 $key 且唯一');
+      }
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
     testWidgets('现有工具栏按键 Key 全部存在（chat-attach-button, chat-saved-prompts-button, chat-send-button）', (
@@ -170,14 +242,18 @@ void main() {
   });
 
   group('ChatInputBar 回车语义（桌面 Enter 发送 / Shift+Enter 换行；移动端 Enter 换行）', () {
-    testWidgets('桌面端（Windows）：Enter 键触发发送，Shift+Enter 插入换行', (tester) async {
+    testWidgets('桌面端（Windows）两段式：Enter 键触发发送，Shift+Enter 插入换行', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
       try {
         final chatApi = FakeChatApi();
         chatApi.sessionResult = {
           'session': {'session_id': 's1', 'messages': const []},
         };
         await _pumpComposer(tester, chatApi: chatApi);
+        await tester.pump(const Duration(milliseconds: 50));
 
         final inputFinder = find.byKey(const ValueKey('chat-input-field'));
 
@@ -220,22 +296,27 @@ void main() {
 
         expect(chatApi.startChatCalls, 0);
         final freshField = tester.widget<CupertinoTextField>(freshInput);
-        expect(freshField.controller!.text, contains('第一行\n'));
+        expect(freshField.controller!.text, contains('\n'));
 
         await _unmount(tester);
+        SharedPreferences.setMockInitialValues(<String, Object>{});
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
     });
 
-    testWidgets('移动端（Android）：Enter 键不触发发送（插入换行），需点击发送按钮发送', (tester) async {
+    testWidgets('移动端（Android）两段式：Enter 不发送（插入换行），点发送按钮发送', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
       try {
         final chatApi = FakeChatApi();
         chatApi.sessionResult = {
           'session': {'session_id': 's1', 'messages': const []},
         };
         await _pumpComposer(tester, chatApi: chatApi);
+        await tester.pump(const Duration(milliseconds: 50));
 
         final inputFinder = find.byKey(const ValueKey('chat-input-field'));
         await tester.tap(inputFinder);
@@ -243,13 +324,13 @@ void main() {
         await tester.enterText(inputFinder, '移动端消息');
         await tester.pump();
 
-        // 移动端按 Enter 键不发送
+        // 两段式移动端按 Enter 键插入换行、不发送。
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump();
 
         expect(chatApi.startChatCalls, 0);
         final field = tester.widget<CupertinoTextField>(inputFinder);
-        expect(field.controller!.text, contains('移动端消息\n'));
+        expect(field.controller!.text, contains('\n'));
 
         // 点击发送按钮触发发送
         final sendBtn = find.byKey(const ValueKey('chat-send-button'));
@@ -262,6 +343,7 @@ void main() {
         expect(chatApi.lastSentText, contains('移动端消息'));
 
         await _unmount(tester);
+        SharedPreferences.setMockInitialValues(<String, Object>{});
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

@@ -20,6 +20,7 @@ import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
 import 'chat_send_shortcut_settings.dart';
+import 'composer_settings.dart';
 import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
@@ -160,6 +161,7 @@ class _ChatSection extends ConsumerWidget {
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final hideReasoning = ref.watch(hideReasoningProvider);
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
+    final composerTwoPane = ref.watch(composerTwoPaneProvider);
     return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
@@ -215,6 +217,20 @@ class _ChatSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(
                 ref.read(hideReasoningProvider.notifier).setHide(value),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-composer-two-pane'),
+          title: Text(l10n.composerTwoPane),
+          subtitle: Text(l10n.composerTwoPaneDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-composer-two-pane'),
+            value: composerTwoPane,
+            onChanged: (value) {
+              unawaited(
+                ref.read(composerTwoPaneProvider.notifier).setTwoPane(value),
               );
             },
           ),

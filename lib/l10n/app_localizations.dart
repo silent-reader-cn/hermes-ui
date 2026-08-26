@@ -949,6 +949,11 @@ class AppLocalizations {
   String get themeDark => isEnglish ? 'Dark' : '深色';
   String get chatSection => isEnglish ? 'Chat' : '对话';
   String get groupToolsByTurn => isEnglish ? 'Group tools by turn' : '工具按回合聚合';
+  String get composerTwoPane =>
+      isEnglish ? 'Two-pane input bar' : '两段式输入栏';
+  String get composerTwoPaneDesc => isEnglish
+      ? 'Multi-line text area with a separate tool row below'
+      : '多行文本区与独立工具行的输入栏布局（关闭为经典单行）';
   String get groupToolsByTurnDesc => isEnglish
       ? 'On: all tools of a turn collapse into one card. Off: only adjacent tools merge; text/thinking breaks them apart'
       : '开启：整轮工具合成一张折叠卡；关闭：仅相邻工具合并，被文本/思考打断则分离';

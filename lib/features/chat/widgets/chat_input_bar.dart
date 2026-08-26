@@ -16,6 +16,7 @@ import '../../chat/widgets/selection_chips.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/cupertino_popover.dart';
+import '../../../core/models/context_window_snapshot.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
@@ -26,6 +27,8 @@ import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/clipboard_paste.dart';
 import '../../../core/utils/file_picker.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../desktop/desktop_settings.dart';
+import '../../settings/composer_settings.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
 import '../../settings/chat_send_shortcut_settings.dart';
 
@@ -37,6 +40,16 @@ class PasteAttachmentIntent extends Intent {
 /// 触发发送消息意图（Ctrl+Enter / Cmd+Enter 快捷键；enter 模式下仅作兜底）。
 class SendMessageIntent extends Intent {
   const SendMessageIntent();
+}
+
+/// 触发发送意图（回车快捷键：经典单行全平台 / 两段式桌面端）。
+class SendIntent extends Intent {
+  const SendIntent();
+}
+
+/// 触发换行意图（Shift+Enter 或移动端两段式回车）。
+class InsertNewlineIntent extends Intent {
+  const InsertNewlineIntent();
 }
 
 /// 输入栏（chat_spec.md §4.2：idle 发送；流式期间 steer/停止；模型选择；附件）。
@@ -210,6 +223,32 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       pendingAttachmentsProvider(widget.sessionId),
     );
     return _hasText || pending.isNotEmpty || pendingAttachments.isNotEmpty;
+  }
+
+  /// 在光标处插入换行（两段式 Shift+Enter / 移动端 Enter 路径）。
+  void _insertNewline() {
+    final currentText = _textController.text;
+    final selection = _textController.selection;
+    final int start = selection.isValid ? selection.start : currentText.length;
+    final int end = selection.isValid ? selection.end : currentText.length;
+    final int min = start < end ? start : end;
+    final int max = start > end ? start : end;
+
+    final newText = currentText.replaceRange(min, max, '\n');
+    final newOffset = min + 1;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newOffset),
+    );
+
+    final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
+    final canSendWithPending =
+        pending.isNotEmpty ||
+        ref.read(pendingAttachmentsProvider(widget.sessionId)).isNotEmpty;
+    final hasText = newText.trim().isNotEmpty || canSendWithPending;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
+    }
   }
 
   Future<void> _handleAttachment() async {
@@ -489,7 +528,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         .watch(chatControllerProvider(widget.sessionId))
         .contextWindowSnapshot;
     final sendMode = ref.watch(chatSendShortcutSettingsProvider).mode;
-    final multiline = sendMode == ChatSendShortcutMode.ctrlEnter;
+    // 两段式输入栏开关（设置 → 对话；默认关闭=经典单行）。
+    final twoPane = ref.watch(composerTwoPaneProvider);
+    final isDesktop = isDesktopPlatform();
+    // 发送快捷键模式与布局开关共同决定回车语义：
+    // - ctrlEnter 模式（任一布局）：Enter 换行，Ctrl/Cmd+Enter 发送；
+    // - enter 模式 + 经典单行：回车即发送；
+    // - enter 模式 + 两段式：桌面端 Enter 发送 / Shift+Enter 换行，
+    //   移动端 Enter 换行、发送走按钮。
+    final multiline =
+        sendMode == ChatSendShortcutMode.ctrlEnter || (twoPane && !isDesktop);
+    final enterSends = !multiline;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -509,192 +558,291 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: SafeArea(
             top: false,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                AccessibleButton(
-                  key: const ValueKey('chat-attach-button'),
-                  label: l10n.addAttachment,
-                  onPressed: (!interactive || isSending || _uploading)
-                      ? null
-                      : _handleAttachment,
-                  padding: EdgeInsets.zero,
-                  child: _uploading
-                      ? const CupertinoActivityIndicator()
-                      : const Icon(
-                          CupertinoIcons.plus_circle,
-                          size: 22,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                ),
-                Container(
-                  key: _bookmarkKey,
-                  child: AccessibleButton(
-                    key: const ValueKey('chat-saved-prompts-button'),
-                    label: l10n.bookmarkPrompt,
-                    onPressed: (!interactive || isSending || _uploading)
-                        ? null
-                        : _showSavedPromptsSheet,
-                    padding: EdgeInsets.zero,
-                    child: const Icon(
-                      CupertinoIcons.bookmark,
-                      size: 22,
-                      color: CupertinoColors.systemGrey,
+            // 宽屏（双栏桌面）下输入区拉满整行会过长难读：钳制最大宽度并居中，
+            // 窄屏（手机）不受影响（ConstrainedBox 只在大宽度时生效）。
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 840),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Shortcuts(
+                  // 回车语义：
+                  // - 经典单行（默认）：回车即发送（走 onSubmitted），与旧版一致；
+                  // - 两段式桌面端：Enter 发送、Shift+Enter 换行（Shortcuts 拦截后
+                  //   onSubmitted 不再触发，换行走 InsertNewlineIntent）；
+                  // - 两段式移动端：Enter 换行，发送走按钮。
+                  shortcuts: <ShortcutActivator, Intent>{
+                    const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                        const PasteAttachmentIntent(),
+                    const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+                        const PasteAttachmentIntent(),
+                    // Ctrl+Enter / Cmd+Enter 发送（ctrlEnter 模式主路径；
+                    // enter 模式下也可发送，无副作用）。
+                    const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                        const SendMessageIntent(),
+                    const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                        const SendMessageIntent(),
+                    // 回车发送：enter 模式 + 经典单行（全平台）或两段式桌面端。
+                    // 注意不能依赖 onSubmitted——多行输入框的回车动作是
+                    // TextInputAction.newline，框架层直接吞掉不回调 onSubmitted。
+                    if (enterSends)
+                      const SingleActivator(LogicalKeyboardKey.enter):
+                          const SendIntent(),
+                    // 换行路径：ctrlEnter 模式的 Enter；两段式桌面 Shift+Enter；
+                    // 两段式移动端 Enter 本身。
+                    if (multiline)
+                      const SingleActivator(LogicalKeyboardKey.enter):
+                          const InsertNewlineIntent(),
+                    if (twoPane && isDesktop && !multiline)
+                      const SingleActivator(
+                              LogicalKeyboardKey.enter, shift: true):
+                          const InsertNewlineIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      PasteAttachmentIntent:
+                          CallbackAction<PasteAttachmentIntent>(
+                            onInvoke: (intent) {
+                              unawaited(_handlePaste());
+                              return null;
+                            },
+                          ),
+                      PasteTextIntent: CallbackAction<PasteTextIntent>(
+                        onInvoke: (intent) {
+                          unawaited(_handlePaste());
+                          return null;
+                        },
+                      ),
+                      InsertNewlineIntent:
+                          CallbackAction<InsertNewlineIntent>(
+                            onInvoke: (intent) {
+                              if (interactive && !isSending && !_uploading) {
+                                _insertNewline();
+                              }
+                              return null;
+                            },
+                          ),
+                      SendIntent: CallbackAction<SendIntent>(
+                        onInvoke: (intent) {
+                          if (interactive && !isSending && !_uploading) {
+                            final canSend = isStreaming
+                                ? _hasText
+                                : (_hasText || canSendWithPending);
+                            if (canSend) {
+                              unawaited(_submit());
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      SendMessageIntent: CallbackAction<SendMessageIntent>(
+                        onInvoke: (intent) {
+                          if (_canSendByShortcut()) {
+                            unawaited(_submit());
+                          }
+                          return null;
+                        },
+                      ),
+                    },
+                    child: CupertinoTextField(
+                      key: const ValueKey('chat-input-field'),
+                      controller: _textController,
+                      placeholder: !interactive
+                          ? l10n.readOnlySessionPlaceholder
+                          : (isStreaming
+                                ? l10n.steerPromptPlaceholder
+                                : l10n.sendMessagePlaceholder),
+                      enabled: !isSending && !_uploading && interactive,
+                      minLines: twoPane ? 2 : 1,
+                      maxLines: twoPane ? 8 : 4,
+                      keyboardType: TextInputType.multiline,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      contextMenuBuilder: (context, editableTextState) {
+                        final buttonItems = editableTextState
+                            .contextMenuButtonItems
+                            .map((item) {
+                              if (item.type == ContextMenuButtonType.paste) {
+                                return ContextMenuButtonItem(
+                                  type: item.type,
+                                  label: item.label,
+                                  onPressed: () {
+                                    ContextMenuController.removeAny();
+                                    unawaited(_handlePaste());
+                                  },
+                                );
+                              }
+                              return item;
+                            })
+                            .toList();
+                        return CupertinoAdaptiveTextSelectionToolbar.buttonItems(
+                          buttonItems: buttonItems,
+                          anchors: editableTextState.contextMenuAnchors,
+                        );
+                      },
+                      onChanged: (value) {
+                        ref
+                            .read(chatDraftProvider(widget.sessionId).notifier)
+                            .update(value);
+                        final hasText =
+                            value.trim().isNotEmpty || canSendWithPending;
+                        if (hasText != _hasText) {
+                          setState(() => _hasText = hasText);
+                        }
+                      },
+                      // 经典单行（默认）：回车即发送；两段式桌面端 Enter 被 Shortcuts
+                      // 拦截走 SendIntent，此回调只在移动端两段式（Enter=换行被拦截）
+                      // 之外的场景兜底，行为一致无害。
+                      onSubmitted: enterSends ? (_) => _submit() : null,
                     ),
                   ),
                 ),
-                Expanded(
-                  child: Shortcuts(
-                    shortcuts: const <ShortcutActivator, Intent>{
-                      SingleActivator(LogicalKeyboardKey.keyV, control: true):
-                          PasteAttachmentIntent(),
-                      SingleActivator(LogicalKeyboardKey.keyV, meta: true):
-                          PasteAttachmentIntent(),
-                      // Ctrl+Enter / Cmd+Enter 发送（ctrlEnter 模式主路径；
-                      // enter 模式下 Ctrl+Enter 也可发送，无副作用）
-                      SingleActivator(LogicalKeyboardKey.enter, control: true):
-                          SendMessageIntent(),
-                      SingleActivator(LogicalKeyboardKey.enter, meta: true):
-                          SendMessageIntent(),
-                    },
-                    child: Actions(
-                      actions: <Type, Action<Intent>>{
-                        PasteAttachmentIntent:
-                            CallbackAction<PasteAttachmentIntent>(
-                              onInvoke: (intent) {
-                                unawaited(_handlePaste());
-                                return null;
-                              },
-                            ),
-                        PasteTextIntent: CallbackAction<PasteTextIntent>(
-                          onInvoke: (intent) {
-                            unawaited(_handlePaste());
-                            return null;
-                          },
+                if (twoPane) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      AccessibleButton(
+                        key: const ValueKey('chat-attach-button'),
+                        label: l10n.addAttachment,
+                        onPressed: (!interactive || isSending || _uploading)
+                            ? null
+                            : _handleAttachment,
+                        padding: EdgeInsets.zero,
+                        child: _uploading
+                            ? const CupertinoActivityIndicator()
+                            : const Icon(
+                                CupertinoIcons.plus_circle,
+                                size: 22,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                      ),
+                      Container(
+                        key: _bookmarkKey,
+                        child: AccessibleButton(
+                          key: const ValueKey('chat-saved-prompts-button'),
+                          label: l10n.bookmarkPrompt,
+                          onPressed: (!interactive || isSending || _uploading)
+                              ? null
+                              : _showSavedPromptsSheet,
+                          padding: EdgeInsets.zero,
+                          child: const Icon(
+                            CupertinoIcons.bookmark,
+                            size: 22,
+                            color: CupertinoColors.systemGrey,
+                          ),
                         ),
-                        SendMessageIntent: CallbackAction<SendMessageIntent>(
-                          onInvoke: (intent) {
-                            if (_canSendByShortcut()) {
-                              unawaited(_submit());
-                            }
-                            return null;
-                          },
-                        ),
-                      },
-                      child: CupertinoTextField(
-                        key: const ValueKey('chat-input-field'),
-                        controller: _textController,
-                        placeholder: !interactive
-                            ? l10n.readOnlySessionPlaceholder
-                            : (isStreaming
-                                  ? l10n.steerPromptPlaceholder
-                                  : l10n.sendMessagePlaceholder),
-                        enabled: !isSending && !_uploading && interactive,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        // ctrlEnter 模式放开行数（Enter 换行）；enter 模式保持单行。
-                        minLines: multiline ? 1 : null,
-                        maxLines: multiline ? null : 1,
-                        contextMenuBuilder: (context, editableTextState) {
-                          final buttonItems = editableTextState
-                              .contextMenuButtonItems
-                              .map((item) {
-                                if (item.type == ContextMenuButtonType.paste) {
-                                  return ContextMenuButtonItem(
-                                    type: item.type,
-                                    label: item.label,
-                                    onPressed: () {
-                                      ContextMenuController.removeAny();
-                                      unawaited(_handlePaste());
-                                    },
-                                  );
-                                }
-                                return item;
-                              })
-                              .toList();
-                          return CupertinoAdaptiveTextSelectionToolbar.buttonItems(
-                            buttonItems: buttonItems,
-                            anchors: editableTextState.contextMenuAnchors,
-                          );
-                        },
-                        onChanged: (value) {
-                          ref
-                              .read(
-                                chatDraftProvider(widget.sessionId).notifier,
-                              )
-                              .update(value);
-                          final hasText =
-                              value.trim().isNotEmpty || canSendWithPending;
-                          if (hasText != _hasText) {
-                            setState(() => _hasText = hasText);
-                          }
-                        },
-                        onSubmitted: (_) {
-                          // ctrlEnter 模式防双发：Ctrl+Enter/Cmd+Enter 在部分
-                          // 平台可能同时触发 onSubmitted 与 Shortcuts——若修饰键
-                          // 按下则跳过，交给 Shortcuts 的 SendMessageIntent 处理。
-                          if (multiline &&
-                              (HardwareKeyboard.instance.isControlPressed ||
-                                  HardwareKeyboard.instance.isMetaPressed)) {
-                            return;
-                          }
-                          unawaited(_submit());
-                        },
+                      ),
+                      const Spacer(),
+                      ..._trailingControls(l10n, isStreaming, isSending,
+                          interactive, canSendWithPending, snapshot),
+                    ],
+                  ),
+                ] else ...[
+                  AccessibleButton(
+                    key: const ValueKey('chat-attach-button'),
+                    label: l10n.addAttachment,
+                    onPressed: (!interactive || isSending || _uploading)
+                        ? null
+                        : _handleAttachment,
+                    padding: EdgeInsets.zero,
+                    child: _uploading
+                        ? const CupertinoActivityIndicator()
+                        : const Icon(
+                            CupertinoIcons.plus_circle,
+                            size: 22,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                  ),
+                  Container(
+                    key: _bookmarkKey,
+                    child: AccessibleButton(
+                      key: const ValueKey('chat-saved-prompts-button'),
+                      label: l10n.bookmarkPrompt,
+                      onPressed: (!interactive || isSending || _uploading)
+                          ? null
+                          : _showSavedPromptsSheet,
+                      padding: EdgeInsets.zero,
+                      child: const Icon(
+                        CupertinoIcons.bookmark,
+                        size: 22,
+                        color: CupertinoColors.systemGrey,
                       ),
                     ),
                   ),
-                ),
-                if (isStreaming) ...[
-                  AccessibleButton(
-                    key: const ValueKey('chat-steer-button'),
-                    label: l10n.steerPrompt,
-                    onPressed: (interactive && _hasText) ? _submit : null,
-                    padding: EdgeInsets.zero,
-                    child: const Icon(
-                      CupertinoIcons.arrow_right_circle,
-                      size: 22,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                  ),
-                  AccessibleButton(
-                    key: const ValueKey('chat-stop-button'),
-                    label: l10n.stopGenerating,
-                    onPressed: _stop,
-                    padding: EdgeInsets.zero,
-                    child: const Icon(
-                      CupertinoIcons.stop_circle,
-                      size: 22,
-                      color: CupertinoColors.systemRed,
-                    ),
-                  ),
-                ] else if (!isSending)
-                  AccessibleButton(
-                    key: const ValueKey('chat-send-button'),
-                    label: l10n.sendMessage,
-                    onPressed: (interactive && (_hasText || canSendWithPending))
-                        ? _submit
-                        : null,
-                    padding: EdgeInsets.zero,
-                    child: const Icon(
-                      CupertinoIcons.arrow_up_circle,
-                      size: 22,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                  ),
-                Container(
-                  key: _contextIndicatorKey,
-                  child: ContextWindowIndicator(
-                    snapshot: snapshot,
-                    onTap: _showContextPopover,
-                  ),
-                ),
+                  ..._trailingControls(l10n, isStreaming, isSending, interactive,
+                      canSendWithPending, snapshot),
+                ],
               ],
+            ),
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// 右侧控件组：流式= steer+停止；空闲= 发送；末尾恒为上下文圆环。
+  /// 经典单行与两段式共用同一份按钮定义（key 一致，测试/金照不感知布局开关）。
+  List<Widget> _trailingControls(
+    AppLocalizations l10n,
+    bool isStreaming,
+    bool isSending,
+    bool interactive,
+    bool canSendWithPending,
+    ContextWindowSnapshot? snapshot,
+  ) {
+    return [
+      if (isStreaming) ...[
+        AccessibleButton(
+          key: const ValueKey('chat-steer-button'),
+          label: l10n.steerPrompt,
+          onPressed: (interactive && _hasText) ? _submit : null,
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.arrow_right_circle,
+            size: 22,
+            color: CupertinoColors.activeBlue,
+          ),
+        ),
+        AccessibleButton(
+          key: const ValueKey('chat-stop-button'),
+          label: l10n.stopGenerating,
+          onPressed: _stop,
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.stop_circle,
+            size: 22,
+            color: CupertinoColors.systemRed,
+          ),
+        ),
+      ] else if (!isSending)
+        AccessibleButton(
+          key: const ValueKey('chat-send-button'),
+          label: l10n.sendMessage,
+          onPressed:
+              (interactive && (_hasText || canSendWithPending))
+              ? _submit
+              : null,
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.arrow_up_circle,
+            size: 22,
+            color: CupertinoColors.activeBlue,
+          ),
+        ),
+      Container(
+        key: _contextIndicatorKey,
+        child: ContextWindowIndicator(
+          snapshot: snapshot,
+          onTap: _showContextPopover,
+        ),
+      ),
+    ];
   }
 }
