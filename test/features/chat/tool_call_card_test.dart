@@ -1,10 +1,10 @@
 ﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/models/tool_call.dart';
-import 'package:hermex_flutter/features/chat/widgets/tool_call_card.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/tool_call.dart';
+import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 
 Widget _buildTestApp({
   required Widget child,

@@ -4,11 +4,11 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_client_workspace.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/api/custom_header.dart';
-import 'package:hermex_flutter/core/api/endpoints.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_client_workspace.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/custom_header.dart';
+import 'package:hermes_ui/core/api/endpoints.dart';
 
 void main() {
   const base = 'http://hermes.local:8787';

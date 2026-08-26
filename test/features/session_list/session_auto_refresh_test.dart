@@ -5,16 +5,16 @@ import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/notifications/notification_providers.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
-import 'package:hermex_flutter/features/projects/project_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_auto_refresh.dart';
-import 'package:hermex_flutter/features/session_list/session_list_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';

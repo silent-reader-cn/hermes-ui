@@ -7,7 +7,7 @@ import 'app_database.dart';
 import 'cache_service.dart';
 import 'media_cache_service.dart';
 
-/// 单例持有：避免同名 `hermex_cache` 的 QueryExecutor 被实例化两次而争用
+/// 单例持有：避免同名 `hermes_cache` 的 QueryExecutor 被实例化两次而争用
 /// （main.dart 与 Provider 同时 new 会触发 drift 隔离冲突）。
 AppDatabase? _appDatabaseInstance;
 

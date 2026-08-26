@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/upload_response.dart';
+import 'package:hermes_ui/core/models/upload_response.dart';
 
 void main() {
   group('UploadResponse', () {

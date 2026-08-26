@@ -1,4 +1,4 @@
-import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
 
 /// 测试用内存版 [SecureStorage]（Map 实现，无平台通道）。
 class InMemorySecureStorage implements SecureStorage {

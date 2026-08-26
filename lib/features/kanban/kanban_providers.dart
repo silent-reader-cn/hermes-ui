@@ -507,7 +507,7 @@ class KanbanController extends AsyncNotifier<KanbanState> {
   }
 
   static String _newIdempotencyKey() =>
-      'hermex-${DateTime.now().microsecondsSinceEpoch}';
+      'hermes-${DateTime.now().microsecondsSinceEpoch}';
 
   static String? _firstBoardSlug(List<KanbanBoard> boards) {
     for (final board in boards) {

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/features/shared/app_back_button.dart';
+import 'package:hermes_ui/features/shared/app_back_button.dart';
 
 /// 迷你页面：导航栏带 [AppBackButton]，可选 push 出口与自定义 fallback。
 ///

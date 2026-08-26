@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/cookie_store.dart';
+import 'package:hermes_ui/core/api/cookie_store.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';
 

@@ -5,13 +5,13 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/memory.dart';
-import 'package:hermex_flutter/features/memory/memory_api.dart';
-import 'package:hermex_flutter/features/memory/memory_page.dart';
-import 'package:hermex_flutter/features/memory/memory_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/memory.dart';
+import 'package:hermes_ui/features/memory/memory_api.dart';
+import 'package:hermes_ui/features/memory/memory_page.dart';
+import 'package:hermes_ui/features/memory/memory_providers.dart';
 
 import '../../helpers/fake_memory_api.dart';
 
@@ -534,7 +534,7 @@ void main() {
           projectContext: '项目上下文内容',
           projectContextShadowed: true,
           projectContextName: 'HERMES.md',
-          projectContextWorkspace: 'D:/projects/hermex-flutter',
+          projectContextWorkspace: 'D:/projects/hermes-ui',
           projectContextMtime: DateTime.now()
               .subtract(const Duration(hours: 1))
               .millisecondsSinceEpoch /

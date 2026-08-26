@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/auxiliary_model.dart';
-import 'package:hermex_flutter/core/models/extensions.dart';
-import 'package:hermex_flutter/core/models/mcp.dart';
-import 'package:hermex_flutter/core/models/server_catalog.dart';
-import 'package:hermex_flutter/features/settings/settings_providers.dart';
+import 'package:hermes_ui/core/models/auxiliary_model.dart';
+import 'package:hermes_ui/core/models/extensions.dart';
+import 'package:hermes_ui/core/models/mcp.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 
 /// 可配置的 [SettingsApi] fake（测试注入，彻底绕开网络）。
 ///

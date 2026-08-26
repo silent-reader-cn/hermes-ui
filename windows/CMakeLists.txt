@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(hermex_flutter LANGUAGES CXX)
+project(hermes_ui LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "hermex_flutter")
+set(BINARY_NAME "hermes_ui")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -59,21 +59,21 @@ add_subdirectory("runner")
 # generated plugin lists at CMake configure time so the build never tries to compile them.
 # Windows clipboard paste is handled by pasteboard (pure Win32 C++) instead.
 # Remove after super_clipboard upgrade to 0.9+ (irondash 0.5+).
-set(_HERMEX_GENERATED_PLUGINS_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/flutter/generated_plugins.cmake")
-set(_HERMEX_GENERATED_REGISTRANT_CC "${CMAKE_CURRENT_SOURCE_DIR}/flutter/generated_plugin_registrant.cc")
-if(EXISTS "${_HERMEX_GENERATED_PLUGINS_CMAKE}")
-  file(READ "${_HERMEX_GENERATED_PLUGINS_CMAKE}" _HERMEX_PLUGINS_TXT)
-  string(REPLACE "  irondash_engine_context\n" "" _HERMEX_PLUGINS_TXT "${_HERMEX_PLUGINS_TXT}")
-  string(REPLACE "  super_native_extensions\n" "" _HERMEX_PLUGINS_TXT "${_HERMEX_PLUGINS_TXT}")
-  file(WRITE "${_HERMEX_GENERATED_PLUGINS_CMAKE}" "${_HERMEX_PLUGINS_TXT}")
+set(_HERMES_GENERATED_PLUGINS_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/flutter/generated_plugins.cmake")
+set(_HERMES_GENERATED_REGISTRANT_CC "${CMAKE_CURRENT_SOURCE_DIR}/flutter/generated_plugin_registrant.cc")
+if(EXISTS "${_HERMES_GENERATED_PLUGINS_CMAKE}")
+  file(READ "${_HERMES_GENERATED_PLUGINS_CMAKE}" _HERMES_PLUGINS_TXT)
+  string(REPLACE "  irondash_engine_context\n" "" _HERMES_PLUGINS_TXT "${_HERMES_PLUGINS_TXT}")
+  string(REPLACE "  super_native_extensions\n" "" _HERMES_PLUGINS_TXT "${_HERMES_PLUGINS_TXT}")
+  file(WRITE "${_HERMES_GENERATED_PLUGINS_CMAKE}" "${_HERMES_PLUGINS_TXT}")
 endif()
-if(EXISTS "${_HERMEX_GENERATED_REGISTRANT_CC}")
-  file(READ "${_HERMEX_GENERATED_REGISTRANT_CC}" _HERMEX_REG_TXT)
-  string(REPLACE "#include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>" "// disabled irondash FFI abort\n// #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>" _HERMEX_REG_TXT "${_HERMEX_REG_TXT}")
-  string(REPLACE "#include <super_native_extensions/super_native_extensions_plugin_c_api.h>" "// #include <super_native_extensions/super_native_extensions_plugin_c_api.h>" _HERMEX_REG_TXT "${_HERMEX_REG_TXT}")
-  string(REPLACE "  IrondashEngineContextPluginCApiRegisterWithRegistrar(\n      registry->GetRegistrarForPlugin(\"IrondashEngineContextPluginCApi\"));" "  // disabled irondash FFI abort\n  // IrondashEngineContextPluginCApiRegisterWithRegistrar(\n  //     registry->GetRegistrarForPlugin(\"IrondashEngineContextPluginCApi\"));" _HERMEX_REG_TXT "${_HERMEX_REG_TXT}")
-  string(REPLACE "  SuperNativeExtensionsPluginCApiRegisterWithRegistrar(\n      registry->GetRegistrarForPlugin(\"SuperNativeExtensionsPluginCApi\"));" "  // SuperNativeExtensionsPluginCApiRegisterWithRegistrar(\n  //     registry->GetRegistrarForPlugin(\"SuperNativeExtensionsPluginCApi\"));" _HERMEX_REG_TXT "${_HERMEX_REG_TXT}")
-  file(WRITE "${_HERMEX_GENERATED_REGISTRANT_CC}" "${_HERMEX_REG_TXT}")
+if(EXISTS "${_HERMES_GENERATED_REGISTRANT_CC}")
+  file(READ "${_HERMES_GENERATED_REGISTRANT_CC}" _HERMES_REG_TXT)
+  string(REPLACE "#include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>" "// disabled irondash FFI abort\n// #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>" _HERMES_REG_TXT "${_HERMES_REG_TXT}")
+  string(REPLACE "#include <super_native_extensions/super_native_extensions_plugin_c_api.h>" "// #include <super_native_extensions/super_native_extensions_plugin_c_api.h>" _HERMES_REG_TXT "${_HERMES_REG_TXT}")
+  string(REPLACE "  IrondashEngineContextPluginCApiRegisterWithRegistrar(\n      registry->GetRegistrarForPlugin(\"IrondashEngineContextPluginCApi\"));" "  // disabled irondash FFI abort\n  // IrondashEngineContextPluginCApiRegisterWithRegistrar(\n  //     registry->GetRegistrarForPlugin(\"IrondashEngineContextPluginCApi\"));" _HERMES_REG_TXT "${_HERMES_REG_TXT}")
+  string(REPLACE "  SuperNativeExtensionsPluginCApiRegisterWithRegistrar(\n      registry->GetRegistrarForPlugin(\"SuperNativeExtensionsPluginCApi\"));" "  // SuperNativeExtensionsPluginCApiRegisterWithRegistrar(\n  //     registry->GetRegistrarForPlugin(\"SuperNativeExtensionsPluginCApi\"));" _HERMES_REG_TXT "${_HERMES_REG_TXT}")
+  file(WRITE "${_HERMES_GENERATED_REGISTRANT_CC}" "${_HERMES_REG_TXT}")
 endif()
 
 # Generated plugin build rules, which manage building the plugins and adding

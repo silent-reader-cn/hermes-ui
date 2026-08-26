@@ -64,4 +64,4 @@ Phase 1-6 全功能完成 + Android 后台回合完成通知。
 
 - 2026-08-16：工具链就绪（Flutter 3.47.0 / JDK 17 / Android SDK 36）；脚手架 + 依赖 + lint 入仓
 - 2026-08-16：预研规格 4 份验收通过（models_spec 145 模型 / api_spec 123 端点 / chat_spec 9 态状态机 / app_shell_spec）
-- 2026-08-16 ~ 08-17：Phase 1 → Phase 6 分批提交（394 → 423 → 494 → 583 → 696 → 722 测试），详见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) 进度日志与 git 历史
+- 2026-08-16 ~ 08-17：Phase 1 → Phase 6 分批提交（394 → 423 → 494 → 583 → 696 → 722 测试），详见 git 历史

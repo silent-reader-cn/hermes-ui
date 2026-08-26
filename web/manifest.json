@@ -1,8 +1,8 @@
 {
     "id": "/",
-    "name": "Hermex",
-    "short_name": "Hermex",
-    "description": "Hermex - 全平台 Cupertino 风格客户端",
+    "name": "Hermes",
+    "short_name": "Hermes",
+    "description": "Hermes - 全平台 Cupertino 风格客户端",
     "lang": "zh-CN",
     "start_url": "/",
     "scope": "/",

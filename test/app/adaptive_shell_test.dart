@@ -3,23 +3,23 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/app/app.dart';
-import 'package:hermex_flutter/app/shell/adaptive_shell.dart';
-import 'package:hermex_flutter/app/shell/empty_detail_pane.dart';
-import 'package:hermex_flutter/app/shell/sidebar_utility_toolbar.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
-import 'package:hermex_flutter/features/tasks/tasks_page.dart';
-import 'package:hermex_flutter/features/tasks/tasks_providers.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/app/app.dart';
+import 'package:hermes_ui/app/shell/adaptive_shell.dart';
+import 'package:hermes_ui/app/shell/empty_detail_pane.dart';
+import 'package:hermes_ui/app/shell/sidebar_utility_toolbar.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/features/tasks/tasks_page.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fake_session_list_api.dart';
-import 'package:hermex_flutter/features/session_list/session_auto_refresh.dart';
+import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
 import '../helpers/fake_tasks_api.dart';
 import '../helpers/in_memory_secure_storage.dart';
 
@@ -504,7 +504,7 @@ void main() {
     });
   });
 
-  group('HermexApp 全局路由与外壳集成测试', () {
+  group('HermesApp 全局路由与外壳集成测试', () {
     testWidgets('未连接服务器时进入 /onboarding：无论是宽屏还是窄屏均无侧栏外壳', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -518,7 +518,7 @@ void main() {
               ConnectionStore(storage: storage),
             ),
           ],
-          child: const HermexApp(),
+          child: const HermesApp(),
         ),
       );
       await tester.pump();
@@ -554,7 +554,7 @@ void main() {
               (_) => FakeSessionListApi(),
             ),
           ],
-          child: const HermexApp(),
+          child: const HermesApp(),
         ),
       );
 
@@ -595,7 +595,7 @@ void main() {
             ),
             tasksApiFactoryProvider.overrideWithValue((_) => FakeTasksApi()),
           ],
-          child: const HermexApp(),
+          child: const HermesApp(),
         ),
       );
 

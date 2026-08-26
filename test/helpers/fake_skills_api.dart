@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/skills.dart';
-import 'package:hermex_flutter/features/skills/skills_api.dart';
+import 'package:hermes_ui/core/models/skills.dart';
+import 'package:hermes_ui/features/skills/skills_api.dart';
 
 /// 可配置的 [SkillsApi] fake（测试注入，彻底绕开网络）。
 ///

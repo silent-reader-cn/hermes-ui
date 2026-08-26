@@ -1,4 +1,4 @@
-# hermex-flutter 项目分析配置（规范见 docs/CODING_STYLE.md）
+# hermes-ui 项目分析配置（规范见 docs/CODING_STYLE.md）
 include: package:flutter_lints/flutter.yaml
 
 analyzer:

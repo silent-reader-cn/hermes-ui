@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/git_workspace.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/models/tool_call.dart';
-import 'package:hermex_flutter/core/models/turn_file_change.dart';
+import 'package:hermes_ui/core/models/git_workspace.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/tool_call.dart';
+import 'package:hermes_ui/core/models/turn_file_change.dart';
 
 void main() {
   group('TurnFileChange 基础', () {

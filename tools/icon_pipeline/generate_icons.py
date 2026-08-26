@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Icon generation pipeline for Hermex Flutter client.
+Icon generation pipeline for Hermes client.
 Generates all platform icons from a single source: assets/branding/hermes-agent-icon-1024.png
 Target platforms: Android, Windows, macOS.
 """
@@ -381,7 +381,7 @@ def verify_generated_artifacts() -> bool:
 def main() -> None:
     """Main execution entry point."""
     print("==================================================")
-    print(" Hermex Flutter Icon Generation Pipeline")
+    print(" Hermes Icon Generation Pipeline")
     print("==================================================")
     print(f"Pillow Version : {getattr(Image, '__version__', 'unknown')}")
     print(f"Repository Root: {REPO_ROOT}")

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/models/model_favorite.dart';
-import 'package:hermex_flutter/core/models/server_catalog.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/model_favorite.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
 
 void main() {
   group('Chat 流控制 / 后台任务 / 命令', () {

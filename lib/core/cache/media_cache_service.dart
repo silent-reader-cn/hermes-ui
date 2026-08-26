@@ -11,7 +11,7 @@ import '../api/api_client.dart';
 import 'app_database.dart';
 
 /// 媒体缓存目录相对文件名（相对平台私有应用数据目录）。
-const String kMediaCacheDirName = 'hermex_media';
+const String kMediaCacheDirName = 'hermes_media';
 
 /// 默认媒体缓存容量上限（200MB，超限按 LRU 淘汰）。
 const int kDefaultMaxMediaCacheBytes = 200 * 1024 * 1024;
@@ -21,7 +21,7 @@ const Duration kDefaultMediaTtl = Duration(days: 30);
 
 /// 媒体本地缓存服务。
 ///
-/// 二进制内容落文件系统（`getApplicationSupportDirectory()/hermex_media/`），
+/// 二进制内容落文件系统（`getApplicationSupportDirectory()/hermes_media/`），
 /// drift `cached_media` 表只存索引元数据（沿用现有 `CachedMessages`
 /// 「纯文本 payload、富媒体不进库」的既定方向，见 docs/cache_audit_report.md
 /// §3.2/§3.4）。

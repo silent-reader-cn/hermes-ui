@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart' show ValueKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/app.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/models/server_info.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/app/app.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/models/server_info.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
@@ -41,7 +41,7 @@ void main() {
             (_) => FakeSessionListApi(),
           ),
         ],
-        child: const HermexApp(),
+        child: const HermesApp(),
       ),
     );
     // 初始路由（守卫重定向到 onboarding）+ 页面过渡动画
@@ -73,7 +73,7 @@ void main() {
     await pumpApp(tester);
 
     // 路由守卫：无连接 → onboarding 单页
-    expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
+    expect(find.text('连接你的 Hermes 服务器'), findsOneWidget);
 
     await fillUrl(tester);
     await unfocusIntoHeader(tester);
@@ -219,7 +219,7 @@ void main() {
 
     expect(find.text('Header 名必须是合法 token，值不能包含换行'), findsOneWidget);
     expect(storage.data[ConnectionStore.connectionsKey], isNull); // 未保存
-    expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
+    expect(find.text('连接你的 Hermes 服务器'), findsOneWidget);
   });
 }
 

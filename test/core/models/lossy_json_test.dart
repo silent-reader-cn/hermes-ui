@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/utils/lossy_json.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/utils/lossy_json.dart';
 
 Map<String, Object?> map(Object? raw) {
   // 模拟 jsonDecode 后的 Map<String, dynamic>。

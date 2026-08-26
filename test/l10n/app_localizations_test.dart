@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 
 void main() {
   group('AppLocalizations (zh locale)', () {
@@ -49,7 +49,7 @@ void main() {
 
     test('Onboarding strings return Chinese values', () {
       expect(l10n.connectServer, '连接服务器');
-      expect(l10n.connectYourHermexServer, '连接你的 Hermex 服务器');
+      expect(l10n.connectYourHermesServer, '连接你的 Hermes 服务器');
       expect(l10n.testConnection, '连接测试');
       expect(l10n.haveApiKeySkipWizard, '已有 API Key？跳过向导');
       expect(l10n.checking, '正在检查…');

@@ -13,12 +13,12 @@ import 'theme/theme_provider.dart';
 /// 根 Widget（app_shell_spec.md §2.2）。
 ///
 /// 纯 Cupertino 壳：深浅色主题（跟随系统 + 手动三态）、go_router 路由表、
-/// 中英本地化。桌面端窗口标题 'Hermex'，移动端状态栏样式随系统。
+/// 中英本地化。桌面端窗口标题 'Hermes'，移动端状态栏样式随系统。
 ///
 /// 注：CupertinoApp 不支持 `darkTheme`/`themeMode` 参数（MaterialApp 专属），
 /// 深浅色在这里按三态模式 + 系统亮度手工解析出单一 [CupertinoThemeData]。
-class HermexApp extends ConsumerWidget {
-  const HermexApp({super.key});
+class HermesApp extends ConsumerWidget {
+  const HermesApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +33,7 @@ class HermexApp extends ConsumerWidget {
       child: WindowFocusObserver(
         child: NotificationLifecycleObserver(
           child: CupertinoApp.router(
-          title: 'Hermex',
+          title: 'Hermes',
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,
           locale: const Locale('zh'),

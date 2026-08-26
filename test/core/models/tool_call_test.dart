@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/chat_message.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/models/tool_call.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/tool_call.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 
 void main() {
   group('ToolCall（非 JSON 模型）', () {

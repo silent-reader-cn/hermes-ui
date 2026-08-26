@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/auxiliary_model.dart';
+import 'package:hermes_ui/core/models/auxiliary_model.dart';
 
 void main() {
   group('AuxiliaryTaskRow', () {

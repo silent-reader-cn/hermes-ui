@@ -1,5 +1,5 @@
-// Service Worker for Hermex PWA
-const CACHE_NAME = 'hermex-v1';
+// Service Worker for Hermes PWA
+const CACHE_NAME = 'hermes-v1';
 
 const PRECACHE_ASSETS = [
   './',

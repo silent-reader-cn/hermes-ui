@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 /// 可配置的 [SessionListApi] fake（测试注入，彻底绕开网络）。
 ///

@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/desktop/desktop_shortcuts.dart';
+import 'package:hermes_ui/features/desktop/desktop_shortcuts.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 void main() {

@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/desktop/desktop_settings.dart';
-import 'package:hermex_flutter/features/desktop/startup_registrar.dart';
-import 'package:hermex_flutter/features/settings/settings_subpages.dart';
+import 'package:hermes_ui/features/desktop/desktop_settings.dart';
+import 'package:hermes_ui/features/desktop/startup_registrar.dart';
+import 'package:hermes_ui/features/settings/settings_subpages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 开机启动注册器测试替身：只记录调用与命令值，绝不触碰真实注册表。
@@ -59,7 +59,7 @@ void main() {
     });
 
     test('Windows argv 首元素为可执行路径时仍能识别 --silent', () {
-      final argv = [r'C:\Program Files\Hermex\hermex.exe', '--silent'];
+      final argv = [r'C:\Program Files\Hermes\hermes.exe', '--silent'];
       expect(isSilentStart(args: argv), isTrue);
       expect(isSilentStart(executableArguments: argv), isTrue);
     });
@@ -76,10 +76,10 @@ void main() {
     test('可执行路径一律双引号包裹（含空格路径）', () {
       expect(
         buildStartupCommand(
-          executablePath: r'C:\Program Files\Hermex\hermex.exe',
+          executablePath: r'C:\Program Files\Hermes\hermes.exe',
           silent: false,
         ),
-        r'"C:\Program Files\Hermex\hermex.exe"',
+        r'"C:\Program Files\Hermes\hermes.exe"',
       );
     });
 
@@ -108,14 +108,14 @@ void main() {
 
     test('setRegistered(true) 构造 reg add 参数并透传命令值', () async {
       final registrar = buildRegistrar();
-      const command = r'"C:\Program Files\Hermex\hermex.exe" --silent';
+      const command = r'"C:\Program Files\Hermes\hermes.exe" --silent';
       await registrar.setRegistered(true, command: command);
 
       expect(recordedArgs!.single, [
         'add',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
         '/v',
-        'Hermex',
+        'Hermes',
         '/t',
         'REG_SZ',
         '/d',
@@ -133,7 +133,7 @@ void main() {
         'delete',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
         '/v',
-        'Hermex',
+        'Hermes',
         '/f',
       ]);
     });

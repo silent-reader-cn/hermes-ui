@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/insights.dart';
-import 'package:hermex_flutter/features/insights/insights_api.dart';
+import 'package:hermes_ui/core/models/insights.dart';
+import 'package:hermes_ui/features/insights/insights_api.dart';
 
 /// 可配置的 [InsightsApi] fake（测试注入，彻底绕开网络）。
 ///

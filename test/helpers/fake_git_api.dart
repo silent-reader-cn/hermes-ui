@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/git_workspace.dart';
-import 'package:hermex_flutter/features/git/git_api.dart';
+import 'package:hermes_ui/core/models/git_workspace.dart';
+import 'package:hermes_ui/features/git/git_api.dart';
 
 /// 可配置的 [GitApi] fake（测试注入，彻底绕开网络）。
 ///

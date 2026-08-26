@@ -2,9 +2,9 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/custom_header.dart';
-import 'package:hermex_flutter/core/api/ws_client.dart';
-import 'package:hermex_flutter/core/models/kanban.dart';
+import 'package:hermes_ui/core/api/custom_header.dart';
+import 'package:hermes_ui/core/api/ws_client.dart';
+import 'package:hermes_ui/core/models/kanban.dart';
 
 void main() {
   group('KanbanStreamFrame 数据结构与 Equality', () {

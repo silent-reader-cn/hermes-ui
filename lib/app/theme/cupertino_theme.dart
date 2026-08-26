@@ -1,11 +1,11 @@
 import 'package:flutter/cupertino.dart';
 
-/// Hermex 默认全局字体族名（MiSans）。
+/// Hermes 默认全局字体族名（MiSans）。
 const String kAppFontFamily = 'MiSans';
 
-/// Hermex Cupertino 主题（app_shell_spec.md §4）。
+/// Hermes Cupertino 主题（app_shell_spec.md §4）。
 ///
-/// 主色为 Hermex 风格 iOS 蓝 `0xFF007AFF`（与 Hermex 原生一致）；
+/// 主色为 Hermes 风格 iOS 蓝 `0xFF007AFF`（与 Hermes 原生一致）；
 /// 深色模式 scaffold 背景纯黑，浅色模式为系统分组背景；
 /// 全局文字绑定 [kAppFontFamily]（MiSans），提供清晰美观的中文与英文/数字排版体验。
 CupertinoThemeData buildCupertinoTheme(Brightness brightness) {

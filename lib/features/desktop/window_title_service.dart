@@ -15,7 +15,7 @@ import 'desktop_settings.dart';
 /// 3. 非桌面平台安全 no-op。
 class WindowTitleService {
   /// 默认应用标题。
-  static const String defaultTitle = 'Hermex';
+  static const String defaultTitle = 'Hermes';
 
   /// 会话标题最大字符长度（超出截断并追加省略号）。
   static const int maxSessionTitleLength = 40;
@@ -37,9 +37,9 @@ class WindowTitleService {
 
   /// 格式化窗口标题纯函数。
   ///
-  /// - [sessionTitle] 为 null、空白、或占位名（'untitled' / 'untitled session'）时，返回默认标题 `'Hermex'`；
+  /// - [sessionTitle] 为 null、空白、或占位名（'untitled' / 'untitled session'）时，返回默认标题 `'Hermes'`；
   /// - 字符长度超出 [maxTitleLength] 时截断并追加 `'...'`；
-  /// - 最终格式为 `'<处理后标题> - Hermex'`。
+  /// - 最终格式为 `'<处理后标题> - Hermes'`。
   static String formatWindowTitle(
     String? sessionTitle, {
     int maxTitleLength = maxSessionTitleLength,
@@ -87,7 +87,7 @@ class WindowTitleService {
     await setTitle(formatted);
   }
 
-  /// 重置为默认窗口标题 'Hermex'。
+  /// 重置为默认窗口标题 'Hermes'。
   Future<void> resetTitle() async {
     await setTitle(defaultTitle);
   }

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/workspace.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
 
 void main() {
   group('WorkspacesResponse / WorkspaceRoot', () {

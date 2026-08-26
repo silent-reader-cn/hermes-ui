@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/approval.dart';
+import 'package:hermes_ui/core/models/approval.dart';
 
 void main() {
   group('ApprovalChoice', () {

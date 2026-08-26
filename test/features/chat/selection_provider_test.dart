@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/chat/selection_provider.dart';
+import 'package:hermes_ui/features/chat/selection_provider.dart';
 
 void main() {
   group('selection_provider', () {

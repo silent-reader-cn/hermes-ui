@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/server_account.dart';
+import 'package:hermes_ui/core/models/server_account.dart';
 
 class _InMemoryServerRegistryStorage implements ServerRegistryStorage {
   _InMemoryServerRegistryStorage({this.value});

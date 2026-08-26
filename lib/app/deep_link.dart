@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 /// URL scheme 深链解析（app_shell_spec.md §3 路由表子集）。
 ///
 /// iOS/Android 通过 URL scheme 冷启动时，引擎会把原始 URL 塞进
-/// [PlatformDispatcher.defaultRouteName]（如 `hermex://chat/abc123` 或
+/// [PlatformDispatcher.defaultRouteName]（如 `hermes://chat/abc123` 或
 /// `/chat/abc123`）。本函数将其规范化为路由表内路径：
 ///
 /// - 剥掉 `scheme://` 前缀与 query/fragment；
@@ -20,7 +20,7 @@ String resolveInitialRoute(
   if (raw.isEmpty || raw == '/') return '/';
 
   var path = raw;
-  // 剥掉 scheme://（hermex://chat/abc → chat/abc）
+  // 剥掉 scheme://（hermes://chat/abc → chat/abc）
   final schemeIdx = path.indexOf('://');
   if (schemeIdx >= 0) path = path.substring(schemeIdx + 3);
   // 剥掉 query / fragment

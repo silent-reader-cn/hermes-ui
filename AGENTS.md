@@ -1,4 +1,4 @@
-# AGENTS.md — hermex-flutter 执行契约（agy 子代理必读）
+# AGENTS.md — hermes-ui 执行契约（agy 子代理必读）
 
 > 本文档是**执行契约**：所有编码子代理（agy / 任何 AI 代理）进本仓库前必读。
 > 与代码风格冲突时以本文档为准；协作与方向见 `HERMES.md`（主人 ↔ 柚子），与本文档冲突时本文档的硬规则优先。
@@ -13,7 +13,7 @@ API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002，经 frp 暴
 - 蓝本源码（只读参考，不进仓库）：`.reference/hermex-src/`（即 uzairansaruzi/hermex 的 HermesMobile 目录）
 - 上游 hermes-webui：https://github.com/nesquena/hermes-webui
 - 优先平台：Android + Windows；后置：macOS / Linux / Web
-- 公开仓库：https://github.com/silent-reader-cn/hermex-flutter
+- 公开仓库：https://github.com/silent-reader-cn/hermes-ui
 
 ## 2. 技术栈（锁死，不得私自更换）
 
@@ -283,8 +283,8 @@ python tools/fake_gateway/smoke_test.py
 
 每个 AGY 子代理任务书（`TASK.md`）必须包含：
 
-- 项目根路径 `D:\projects\hermex-flutter` 与 worktree 路径 `D:\worktrees\hermex-aug24-xxx`，以及 Windows/MSYS 环境坑说明（flutter/dart 必须走 `C:/tmp/f.bat`，见 `windows-terminal` skill `references/flutter-toolchain-msys-setup.md`）
-- 必读文档清单（绝对路径：本 AGENTS.md、`HERMES.md`、`DESIGN.md`、`IMPLEMENTATION_PLAN.md`、对应 `.reference` 源码、关键已有代码路径）
+- 项目根路径 `D:\projects\hermes-ui` 与 worktree 路径 `D:\worktrees\hermes-aug24-xxx`，以及 Windows/MSYS 环境坑说明（flutter/dart 必须走 `C:/tmp/f.bat`，见 `windows-terminal` skill `references/flutter-toolchain-msys-setup.md`）
+- 必读文档清单（绝对路径：本 AGENTS.md、`HERMES.md`、`DESIGN.md`、对应 `.reference` 源码、关键已有代码路径）
 - 文件级分区（例：`lib/features/chat/*` 归 A，`lib/core/models/*` 归 B，禁止交叉写）
 - 验收标准（具体命令与阈值：`C:/tmp/f.bat analyze` 零告警、`C:/tmp/f.bat test` 全绿 + `--update-goldens`、无 Material 混入）
 - Git 纪律：**不要 commit**，Leader 统一提交
@@ -321,13 +321,12 @@ agy --model "gemini-3.7-flash-high" -p "$(cat TASK.md)" --print-timeout 40m --da
 
 - `parallel-subagent-project-governance` — 并行治理主规范
 - `windows-terminal` — Windows 上 flutter 工具链封装与 MSYS 坑位
-- `hermex-flutter-codebase` — 本仓库代码导航与移植约束
+- `hermes-ui-codebase` — 本仓库代码导航与移植约束
 - `hermes-agent` — Hermes 本体能力查询（与 docs 冲突时以 docs 为准）
 
 ## 13. 索引（去哪看）
 
 - 协作与方向：`HERMES.md`（主人 ↔ 柚子）
 - 外壳：`DESIGN.md`
-- 实施计划：`IMPLEMENTATION_PLAN.md`
 - 规格：`docs/specs/` + `docs/PROTOCOL_NOTES.md`
 - 流水线：`.github/workflows/ci.yml`

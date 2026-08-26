@@ -69,7 +69,7 @@ SAMPLE_MEMORY = [
 ]
 
 SAMPLE_SKILLS = [
-    {"name": "hermex-flutter-codebase", "description": "调试 hermex-flutter 客户端。", "category": "开发"},
+    {"name": "hermes-ui-codebase", "description": "调试 hermes-ui 客户端。", "category": "开发"},
     {"name": "clash-verge-control", "description": "操作 Clash 代理。", "category": "网络"},
 ]
 

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/chat_message.dart';
-import 'package:hermex_flutter/features/chat/widgets/message_bubble.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 
 /// 电脑端双栏气泡溢出回归：气泡 maxWidth 必须基于「实际槽位宽度」而非
 /// 全窗口 MediaQuery 宽（双栏下 chat 区 = 窗口宽 − 320 侧栏），

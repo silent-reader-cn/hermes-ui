@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/utils/selected_context.dart';
+import 'package:hermes_ui/core/utils/selected_context.dart';
 
 // ignore_for_file: prefer_single_quotes
 void main() {

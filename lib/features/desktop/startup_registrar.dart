@@ -7,7 +7,7 @@ const String startupRunKeyPath =
     r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
 
 /// 开机启动注册表值名称。
-const String startupValueName = 'Hermex';
+const String startupValueName = 'Hermes';
 
 /// 静默启动命令行参数。
 const String silentStartArg = '--silent';

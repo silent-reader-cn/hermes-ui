@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/chat/widgets/markdown_styles.dart';
+import 'package:hermes_ui/features/chat/widgets/markdown_styles.dart';
 
 /// 聊天气泡 Markdown 样式契约测试。
 ///

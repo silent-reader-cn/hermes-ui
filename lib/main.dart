@@ -21,7 +21,7 @@ import 'features/notifications/notification_providers.dart';
 ///
 /// 用 `overrideWithValue` 注入 [appDatabaseProvider]，避免
 /// `overrideWith((ref) => AppDatabase.production())` 每次 rebuild 都 `new`
-/// 一个 `driftDatabase(name: 'hermex_cache')` 导致同名 QueryExecutor 争用
+/// 一个 `driftDatabase(name: 'hermes_cache')` 导致同名 QueryExecutor 争用
 /// （见渲染层崩溃族：GeneratedDatabase 被实例化两次）。
 final AppDatabase _productionDatabase = AppDatabase.production();
 
@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
   if (isDesktopPlatform()) {
     try {
       await windowManager.ensureInitialized();
-      await windowManager.setTitle('Hermex');
+      await windowManager.setTitle('Hermes');
       // 兜底最小窗口：避免拖到 0 宽/过窄时 Windows EGL 上下文丢失
       // （gpu_surface_gl_impeller.cc Context Lost 循环刷屏）。
       await windowManager.setMinimumSize(const Size(720, 480));
@@ -85,7 +85,7 @@ Future<void> main(List<String> args) async {
         // 单例注入：全进程唯一实例，避免 drift 同名库双开。
         appDatabaseProvider.overrideWithValue(_productionDatabase),
       ],
-      child: const HermexApp(),
+      child: const HermesApp(),
     ),
   );
 }

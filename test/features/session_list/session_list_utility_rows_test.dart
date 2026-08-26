@@ -2,14 +2,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/projects/project_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_entry_visibility.dart';
-import 'package:hermex_flutter/features/session_list/session_list_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_list_utility_rows.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/session_list/session_entry_visibility.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/features/session_list/session_list_utility_rows.dart';
 
 import '../../helpers/fake_session_list_api.dart';
 

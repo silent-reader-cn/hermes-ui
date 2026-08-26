@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/api/ws_client.dart';
-import 'package:hermex_flutter/core/models/kanban.dart';
-import 'package:hermex_flutter/features/kanban/kanban_api.dart';
+import 'package:hermes_ui/core/api/ws_client.dart';
+import 'package:hermes_ui/core/models/kanban.dart';
+import 'package:hermes_ui/features/kanban/kanban_api.dart';
 
 /// 可配置的 [KanbanApi] fake（测试注入，彻底绕开网络）。
 ///

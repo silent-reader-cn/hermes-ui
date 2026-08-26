@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// Lightweight localization facade for business text across Hermex.
+/// Lightweight localization facade for business text across Hermes.
 ///
 /// The catalog keeps Chinese as the product default and provides English
 /// fallbacks without requiring generated code.
@@ -61,8 +61,12 @@ class AppLocalizations {
   // 1. Onboarding
   // ---------------------------------------------------------------------------
   String get connectServer => isEnglish ? 'Connect Server' : '连接服务器';
+  String get connectYourHermesServer =>
+      isEnglish ? 'Connect your Hermes server' : '连接你的 Hermes 服务器';
+
+  @Deprecated('Use connectYourHermesServer')
   String get connectYourHermexServer =>
-      isEnglish ? 'Connect your Hermex server' : '连接你的 Hermex 服务器';
+      isEnglish ? 'Connect your Hermes server' : '连接你的 Hermes 服务器';
   String get inputServerAddressHint => isEnglish
       ? 'Enter the hermes-webui address (with port), e.g. https://hermes.example.com:30002'
       : '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:30002';
@@ -987,8 +991,8 @@ class AppLocalizations {
       : '启动时恢复上次窗口位置与尺寸';
   String get startOnLogin => isEnglish ? 'Start on Login' : '开机启动';
   String get startOnLoginSubtitle => isEnglish
-      ? 'Launch Hermex automatically when you sign in to Windows'
-      : '登录 Windows 时自动启动 Hermex';
+      ? 'Launch Hermes automatically when you sign in to Windows'
+      : '登录 Windows 时自动启动 Hermes';
   String get silentStart => isEnglish ? 'Silent Start' : '静默启动';
   String get silentStartSubtitle => isEnglish
       ? 'Start in the system tray without showing the main window'

@@ -2,12 +2,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/upload_response.dart';
-import 'package:hermex_flutter/features/chat/chat_draft_provider.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/pending_attachments_provider.dart';
-import 'package:hermex_flutter/features/settings/chat_send_shortcut_settings.dart';
+import 'package:hermes_ui/core/models/upload_response.dart';
+import 'package:hermes_ui/features/chat/chat_draft_provider.dart';
+import 'package:hermes_ui/features/chat/chat_page.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/pending_attachments_provider.dart';
+import 'package:hermes_ui/features/settings/chat_send_shortcut_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';

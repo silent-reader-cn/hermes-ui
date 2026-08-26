@@ -3,13 +3,13 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_client_extensions.dart';
-import 'package:hermex_flutter/core/api/api_client_mcp.dart';
-import 'package:hermex_flutter/core/api/api_client_server_panels.dart';
-import 'package:hermex_flutter/core/models/auxiliary_model.dart';
-import 'package:hermex_flutter/core/models/extensions.dart';
-import 'package:hermex_flutter/core/models/mcp.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_client_extensions.dart';
+import 'package:hermes_ui/core/api/api_client_mcp.dart';
+import 'package:hermes_ui/core/api/api_client_server_panels.dart';
+import 'package:hermes_ui/core/models/auxiliary_model.dart';
+import 'package:hermes_ui/core/models/extensions.dart';
+import 'package:hermes_ui/core/models/mcp.dart';
 
 void main() {
   const base = 'http://hermes.local:8787';

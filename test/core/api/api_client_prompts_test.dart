@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_client_prompts.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_client_prompts.dart';
 
 void main() {
   const base = 'http://hermes.local:8787';

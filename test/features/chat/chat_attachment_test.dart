@@ -5,15 +5,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/theme/status_colors.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/providers/file_picker_provider.dart';
-import 'package:hermex_flutter/core/utils/accessibility.dart';
-import 'package:hermex_flutter/core/utils/file_picker.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/widgets/chat_media_view.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/providers/file_picker_provider.dart';
+import 'package:hermes_ui/core/utils/accessibility.dart';
+import 'package:hermes_ui/core/utils/file_picker.dart';
+import 'package:hermes_ui/features/chat/chat_page.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 
 import '../../helpers/fake_chat_api.dart';
 

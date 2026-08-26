@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 /// 构造一个「旧版 schemaVersion=1」的 SQLite 文件库（两张旧表 + user_version=1），
@@ -34,7 +34,7 @@ void _createV1Database(String path) {
 void main() {
   group('AppDatabase drift schema 迁移', () {
     test('v1 生产库升级到 v2：补建 cached_media 表且旧表可用', () async {
-      final dir = Directory.systemTemp.createTempSync('hermex_migrate_');
+      final dir = Directory.systemTemp.createTempSync('hermes_migrate_');
       final file = File('${dir.path}${Platform.pathSeparator}old_v1.sqlite');
       addTearDown(() async {
         try {

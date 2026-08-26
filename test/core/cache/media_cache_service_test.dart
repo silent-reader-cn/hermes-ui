@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/media_cache_service.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/media_cache_service.dart';
 
 /// 装配一个基于内存 drift + 系统临时目录的 [MediaCacheService]。
 class _Rig {
@@ -30,7 +30,7 @@ _Rig _build({
   Duration ttl = kDefaultMediaTtl,
 }) {
   final db = AppDatabase.memory();
-  final root = Directory.systemTemp.createTempSync('hermex_media_unit_');
+  final root = Directory.systemTemp.createTempSync('hermes_media_unit_');
   final service = MediaCacheService.withDownloader(
     database: db,
     downloader: downloader ?? (_) async => Uint8List.fromList([1, 2, 3]),

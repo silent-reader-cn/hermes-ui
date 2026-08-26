@@ -1,6 +1,6 @@
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/models/server_info.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/models/server_info.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 
 /// 登录 fake：记录调用，可配置成功/失败。
 ///

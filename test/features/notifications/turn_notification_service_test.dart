@@ -1,6 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/notifications/turn_notification_service.dart';
+import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockPlugin extends Mock implements FlutterLocalNotificationsPlugin {}

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/core/models/context_window_snapshot.dart';
 
 void main() {
   group('ContextWindowSnapshot.fromJson 容错补充', () {

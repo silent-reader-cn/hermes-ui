@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
 
 void main() {
   group('ApiException 层次（api_spec.md §2.3）', () {

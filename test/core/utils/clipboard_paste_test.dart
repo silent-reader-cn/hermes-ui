@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/utils/clipboard_paste.dart';
+import 'package:hermes_ui/core/utils/clipboard_paste.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 

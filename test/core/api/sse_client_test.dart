@@ -2,13 +2,13 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/custom_header.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
-import 'package:hermex_flutter/core/models/approval.dart';
-import 'package:hermex_flutter/core/models/clarification.dart';
-import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
-import 'package:hermex_flutter/core/models/session.dart';
+import 'package:hermes_ui/core/api/custom_header.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/core/models/approval.dart';
+import 'package:hermes_ui/core/models/clarification.dart';
+import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/session.dart';
 
 void main() {
   group('SseWireParser（线上协议）', () {

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';
 

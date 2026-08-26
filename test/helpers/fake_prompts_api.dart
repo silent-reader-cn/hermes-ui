@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/saved_prompt.dart';
-import 'package:hermex_flutter/features/prompts/prompts_providers.dart';
+import 'package:hermes_ui/core/models/saved_prompt.dart';
+import 'package:hermes_ui/features/prompts/prompts_providers.dart';
 
 /// 可配置的 [PromptsApi] fake（测试注入，彻底绕开网络）.
 class FakePromptsApi implements PromptsApi {

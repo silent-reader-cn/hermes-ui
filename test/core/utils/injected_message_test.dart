@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hermex_flutter/core/models/chat_message.dart';
-import 'package:hermex_flutter/core/utils/injected_message.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/core/utils/injected_message.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 
 ChatMessage _msg(String content, {String role = 'user'}) =>
     ChatMessage(role: role, content: content);

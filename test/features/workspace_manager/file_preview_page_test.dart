@@ -4,12 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/workspace.dart';
-import 'package:hermex_flutter/features/workspace_manager/file_preview_page.dart';
-import 'package:hermex_flutter/features/workspace/workspace_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/features/workspace_manager/file_preview_page.dart';
+import 'package:hermes_ui/features/workspace/workspace_providers.dart';
 
 import '../../helpers/fake_workspace_api.dart';
 
@@ -132,7 +132,7 @@ void main() {
     testWidgets('文本预览：渲染内容 + 大小/行数元信息', (tester) async {
       final api = FakeWorkspaceApi();
       api.fileContents['pubspec.yaml'] = const FileResponse(
-        content: 'name: hermex_flutter\nversion: 1.0.0',
+        content: 'name: hermes_ui\nversion: 1.0.0',
         path: 'pubspec.yaml',
         size: 36,
         lines: 2,
@@ -140,7 +140,7 @@ void main() {
       await pumpPreview(tester, api, entry('pubspec.yaml'));
 
       expect(api.fetchFileCalls, ['s1|pubspec.yaml']);
-      expect(find.textContaining('name: hermex_flutter'), findsOneWidget);
+      expect(find.textContaining('name: hermes_ui'), findsOneWidget);
       expect(find.textContaining('36 B'), findsOneWidget);
       expect(find.textContaining('2 行'), findsOneWidget);
     });

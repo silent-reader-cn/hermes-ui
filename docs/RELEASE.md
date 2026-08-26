@@ -23,8 +23,8 @@
 ```bash
 # 在项目外安全位置生成（如 %USERPROFILE%\.android\），勿提交到仓库
 keytool -genkeypair -v \
-  -keystore ~/.android/hermex-release.jks \
-  -alias hermex \
+  -keystore ~/.android/hermes-release.jks \
+  -alias hermes_ui \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -storepass <你的密码> -keypass <你的密码>
 ```
@@ -70,9 +70,9 @@ android {
 `android/key.properties`（**加入 .gitignore，严禁提交**）：
 
 ```properties
-storeFile=C:/Users/<你>/.android/hermex-release.jks
+storeFile=C:/Users/<你>/.android/hermes-release.jks
 storePassword=<你的密码>
-keyAlias=hermex
+keyAlias=hermes_ui
 keyPassword=<你的密码>
 ```
 
@@ -93,7 +93,7 @@ flutter build apk --release
 flutter build appbundle --release   # build/app/outputs/bundle/release/app-release.aab
 ```
 
-> 已知参数：`applicationId` = `com.silentreader.hermex_flutter`，minSdk 24（Android 7.0+），
+> 已知参数：`applicationId` = `com.silentreader.hermes_ui`，minSdk 24（Android 7.0+），
 > targetSdk 36，compileSdk 37。
 
 ## 3. Windows 打包
@@ -103,7 +103,7 @@ flutter build appbundle --release   # build/app/outputs/bundle/release/app-relea
 ```bash
 flutter build windows --release
 # 产物：build/windows/x64/runner/Release/
-#   （hermex_flutter.exe + 依赖 DLL + data/ 目录，整体拷贝即可分发）
+#   （hermes_ui.exe + 依赖 DLL + data/ 目录，整体拷贝即可分发）
 ```
 
 前置条件：Visual Studio Build Tools 2022（含「使用 C++ 的桌面开发」工作负载）。
@@ -119,7 +119,7 @@ flutter build windows --release
 
 1. 安装 [Inno Setup](https://jrsoftware.org/isinfo.php)；
 2. 编写脚本将 `build/windows/x64/runner/Release/` 整体打包为 `Setup.exe`；
-3. 配置：应用名 `Hermex`、版本号与 §4 对齐、安装目录 `{autopf}\Hermex`、桌面快捷方式。
+3. 配置：应用名 `Hermes`、版本号与 §4 对齐、安装目录 `{autopf}\Hermes`、桌面快捷方式。
 
 ## 4. 版本号管理
 

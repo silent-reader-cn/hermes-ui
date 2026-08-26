@@ -2,7 +2,7 @@
     <!-- Android 13+ 通知权限：回合完成后台通知（flutter_local_notifications） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="Hermex"
+        android:label="Hermes"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

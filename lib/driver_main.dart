@@ -47,7 +47,7 @@ Future<void> main() async {
           (ref) => ref.watch(turnNotificationHookProvider),
         ),
       ],
-      child: const HermexApp(),
+      child: const HermesApp(),
     ),
   );
 }

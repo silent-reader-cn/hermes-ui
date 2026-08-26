@@ -42,7 +42,7 @@ abstract interface class WorkspaceManagerApi {
 
 /// [WorkspaceManagerApi] 的生产实现：包 [ApiClient]，把 typed 响应原样透传
 /// （**严禁二次 `fromJson(_asMap(...))`**——扩展层已解码，二次解析会丢字段，
-/// 见 hermex-flutter-codebase skill 的「双层解析陷阱」）。
+/// 见 hermes-ui-codebase skill 的「双层解析陷阱」）。
 ///
 /// 容错点（规格 §8.2）：服务器 worker 池过载时返回**裸 503**（空 body），
 /// 与 JSON 503 语义不同；[fetchWorkspaces] / 3 个 mutation 在裸 503 时重试一次。

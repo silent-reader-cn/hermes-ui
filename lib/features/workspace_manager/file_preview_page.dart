@@ -302,7 +302,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         final ext = _extOf(widget.entry.name ?? widget.entry.path ?? '');
         final tempDir = Directory.systemTemp;
         final tempFile = File(
-          '${tempDir.path}/hermex_preview_${DateTime.now().millisecondsSinceEpoch}$ext',
+          '${tempDir.path}/hermes_preview_${DateTime.now().millisecondsSinceEpoch}$ext',
         );
         await tempFile.writeAsBytes(bytes, flush: true);
         final player = Player();

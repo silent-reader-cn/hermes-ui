@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/session_list/session_row_subtitle_settings.dart';
+import 'package:hermes_ui/features/session_list/session_row_subtitle_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 会话行副标题显示项开关：默认值 / 持久化 / 持久化恢复。

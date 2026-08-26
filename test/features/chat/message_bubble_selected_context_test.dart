@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/chat_message.dart';
-import 'package:hermex_flutter/features/chat/widgets/message_bubble.dart';
-import 'package:hermex_flutter/features/chat/widgets/selected_context_card.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
+import 'package:hermes_ui/features/chat/widgets/selected_context_card.dart';
 
 Widget _wrap(Widget child) {
   return CupertinoApp(home: CupertinoPageScaffold(child: child));

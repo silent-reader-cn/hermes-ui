@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/message_attachment.dart';
-import 'package:hermex_flutter/core/utils/attachment_audio_detection.dart';
+import 'package:hermes_ui/core/models/message_attachment.dart';
+import 'package:hermes_ui/core/utils/attachment_audio_detection.dart';
 
 void main() {
   group('AttachmentAudioDetection.isAudio', () {

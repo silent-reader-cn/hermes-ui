@@ -1,7 +1,7 @@
 # 工作区管理（Workspace Manager）功能规格
 
 > 版本：1.0（2026-08-21）
-> 范围：hermex-flutter 客户端「工作区管理」功能预研 —— 后端 API 契约、认证机制、WebUI 交互行为、Flutter 端现状盘点、数据模型/端点/页面/schema 建议。
+> 范围：hermes-ui 客户端「工作区管理」功能预研 —— 后端 API 契约、认证机制、WebUI 交互行为、Flutter 端现状盘点、数据模型/端点/页面/schema 建议。
 > 后端事实来源：主人 fork 的 nesquena/hermes-webui（本机 `D:/hermes-webui`，运行于 `http://localhost:30002`）。
 > 证据规则：所有 API 形状均来自**后端源码行号引用**或 **curl 实测输出摘录**，禁止凭空猜测；凡标注 `实测` 的为登录态 curl 直连 :30002 的真实响应，标注 `源码` 的为 `D:/hermes-webui` 内指定文件行号。
 
@@ -11,7 +11,7 @@
 
 - 工作区管理 = **两类端点**：① 工作区注册表 CRUD（`/api/workspaces` 家族，6 个，**与 session 无关**，操作的是 `state_dir/workspaces.json`）；② 单会话工作区的文件浏览/内容/下载（`/api/list`、`/api/file`、`/api/file/raw` 等，**必须带 `session_id`**，以该会话的 `workspace` 为根）。
 - 认证：所有工作区端点都走 **cookie 会话**（`hermes_session=<token>.<hmac>`），服务器开启密码登录时未认证一律 `{"error":"Authentication required"}`（HTTP 401）；无 API key。Flutter 端 `ApiClient` 已内置完整 cookie 会话 + 自动重登机制，可零改动复用。
-- 实测：`GET /api/workspaces` 带 cookie 返回 `{"workspaces":[{"path","name"}...],"last":"D:\\projects\\hermex-flutter","terminal_remote_backend":false}`。
+- 实测：`GET /api/workspaces` 带 cookie 返回 `{"workspaces":[{"path","name"}...],"last":"D:\\projects\\hermes-ui","terminal_remote_backend":false}`。
 - Flutter 现状：模型层（`workspace.dart`）与 API 层（`api_client_workspace.dart` + `workspace_api.dart`）**已覆盖两端点全族**，但缺 `terminal_remote_backend`、`signature`、`mtime_ns`（现状读的是不存在的 `modified`）、symlink 字段；UI 层只有**文件浏览页**（`workspace_page.dart`），**没有**工作区列表/管理页，也没有文件内容预览页。
 - 交付建议：新增 `WorkspaceManagerController`（AsyncNotifier，family 无需 session）+ `WorkspaceManagerPage`（Cupertino 列表页）+ 新建/重命名弹窗（带 `/api/workspaces/suggest` 补全）+ 文件预览页（文本用 `/api/file`，图片/媒体用 `/api/file/raw`）。
 - ⚠️ 实测坑：后端 worker 池（128 线程）满载时**任何端点**返回裸 `HTTP/1.1 503` + `Connection: close` + 空 body（`server.py:124-129`），客户端必须把「传输级 503」当可重试错误（与 JSON body 的 503 语义不同）。
@@ -35,7 +35,7 @@
 | 请求参数 | 无 |
 | 响应 JSON | `{"workspaces": [{"path": str, "name": str}, ...], "last": str, "terminal_remote_backend": bool}` |
 | 源码 | `routes.py:13123-13131`；`load_workspaces()`：`workspace.py:337-367`；`get_last_workspace()`：`workspace.py:415` |
-| 实测 | 登录态 curl 返回（节选）：`{"workspaces":[{"path":"C:\\Users\\Admin\\workspace","name":"Home"},{"path":"D:\\projects\\hermex-flutter","name":"HERMEX"},…共 9 项],"last":"D:\\projects\\hermex-flutter","terminal_remote_backend":false}` |
+| 实测 | 登录态 curl 返回（节选）：`{"workspaces":[{"path":"C:\\Users\\Admin\\workspace","name":"Home"},{"path":"D:\\projects\\hermes-ui","name":"HERMEX"},…共 9 项],"last":"D:\\projects\\hermes-ui","terminal_remote_backend":false}` |
 
 - `workspaces.json` 持久化路径：`STATE_DIR/workspaces.json`（`config.py:86`；本机 `C:\Users\Admin\AppData\Local\hermes\webui_30002\workspaces.json`）。条目**恒为 `{path, name}` 对象**（实测与文件一致）；早期版本可能存裸字符串，Flutter 模型已兼容（见 §4.1）。
 - 无任何配置文件时不建文件，返回单条默认 `[{"path": <profile default>, "name": "Home"}]`（`workspace.py:351/367`）。
@@ -139,7 +139,7 @@
 | 源码 | `_handle_file_read`：`routes.py:19203-19220`；`read_file_content()`：`workspace.py:1458-1479`；office：`office_documents.py:555-586` |
 | 错误 | 404 `Not a file: <path>`；400 `path is required`；503（office 依赖缺失时）|
 | 语义 | UTF-8 解码（`errors='replace'`，坏字节不报错）；> `MAX_FILE_BYTES` 的文件直接 400 `File too large`（长度上限见 `workspace.py:1471-1473`）；`content.count('\n')+1` 为行数 |
-| 实测 | 200 OK（`path=pubspec.yaml`）：`{"content": "name: hermex_flutter\\r\\n...", "lines": 105, "path": "pubspec.yaml", "size": 4011}` —— `keys: content/lines/path/size` 与源码一致 |
+| 实测 | 200 OK（`path=pubspec.yaml`）：`{"content": "name: hermes_ui\\r\\n...", "lines": 105, "path": "pubspec.yaml", "size": 4011}` —— `keys: content/lines/path/size` 与源码一致 |
 
 #### GET `/api/file/raw?session_id=&path=[&download=1][&inline=1]` — 原始字节（下载 / 图片 / 媒体）
 
@@ -553,11 +553,11 @@ $ curl -s -b "hermes_session=<valid cookie>" http://localhost:30002/api/workspac
 {"workspaces":[
   {"path":"C:\\Users\\Admin\\workspace","name":"Home"},
   {"path":"D:\\projects\\末世生存小队","name":"末世生存小队"},
-  {"path":"D:\\projects\\hermex-flutter","name":"HERMEX"}, …共 9 项],
- "last":"D:\\projects\\hermex-flutter","terminal_remote_backend":false}
+  {"path":"D:\\projects\\hermes-ui","name":"HERMEX"}, …共 9 项],
+ "last":"D:\\projects\\hermes-ui","terminal_remote_backend":false}
 
 $ curl -s -b "hermes_session=<valid cookie>" "http://localhost:30002/api/sessions"
-（会话列表，含 session_id/title/workspace；首条 workspace = "D:\\projects\\hermex-flutter"）
+（会话列表，含 session_id/title/workspace；首条 workspace = "D:\\projects\\hermes-ui"）
 
 # 文件浏览三端点（服务器恢复后补测，均为 200）
 $ curl -s -b cookie "http://localhost:30002/api/list?session_id=<webui会话>&path=."
@@ -565,7 +565,7 @@ $ curl -s -b cookie "http://localhost:30002/api/list?session_id=<webui会话>&pa
    "path":".","signature":"567213e156933a5e704208427bc7681f..."}
 
 $ curl -s -b cookie "http://localhost:30002/api/file?session_id=<webui会话>&path=pubspec.yaml"
-→ {"content":"name: hermex_flutter\\r\\n…","lines":105,"path":"pubspec.yaml","size":4011}
+→ {"content":"name: hermes_ui\\r\\n…","lines":105,"path":"pubspec.yaml","size":4011}
 
 $ curl -s -b cookie -D - -o /dev/null "http://localhost:30002/api/file/raw?session_id=<webui会话>&path=pubspec.yaml"
 → HTTP/1.1 200 · Content-Type: application/octet-stream · Content-Disposition: inline; filename="pubspec.yaml" · 4011 字节
@@ -625,4 +625,4 @@ $ curl -s -b cookie -D - -o /dev/null "http://localhost:30002/api/file/raw?sessi
 - `.reference/hermex-src/Features/Workspace/WorkspaceManagerView.swift`（iOS 蓝本管理页/新建 sheet 结构）
 - `.reference/hermex-src/Features/Workspace/WorkspaceRegistryViewModel.swift`（isMutating/竞态守卫语义）
 - `docs/specs/auto_reauth_spec.md`（401 自动重登机制）
-- skill `hermex-flutter-codebase` references/workspace-file-ops-2026-08.md（delete/rename 既有契约）
+- skill `hermes-ui-codebase` references/workspace-file-ops-2026-08.md（delete/rename 既有契约）

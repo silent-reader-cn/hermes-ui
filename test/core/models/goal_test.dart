@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/goal.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/goal.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
 
 void main() {
   group('GoalSubmissionResponse', () {

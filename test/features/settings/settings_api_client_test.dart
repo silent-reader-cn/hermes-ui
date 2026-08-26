@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/features/settings/settings_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 
 /// SettingsApiClient（生产包装层）回归测试。
 ///

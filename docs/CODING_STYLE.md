@@ -1,4 +1,4 @@
-# hermex-flutter 代码风格规范（CODING STYLE）
+# hermes-ui 代码风格规范（CODING STYLE）
 
 > 所有参与本仓库工作的开发者/AI 代理的强制规范。开工前必读。
 > 与本规范冲突的写法一律以 `AGENTS.md` 为准（同源，`AGENTS.md` 为权威）。

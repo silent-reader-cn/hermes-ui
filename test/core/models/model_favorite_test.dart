@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/model_favorite.dart';
+import 'package:hermes_ui/core/models/model_favorite.dart';
 
 void main() {
   group('ModelFavoriteKey', () {

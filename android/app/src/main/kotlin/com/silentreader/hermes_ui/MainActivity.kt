@@ -1,4 +1,4 @@
-package com.silentreader.hermex_flutter
+package com.silentreader.hermes_ui
 
 import io.flutter.embedding.android.FlutterActivity
 

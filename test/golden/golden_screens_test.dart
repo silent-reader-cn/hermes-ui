@@ -1,42 +1,42 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/core/models/cron.dart';
-import 'package:hermex_flutter/core/models/git_workspace.dart';
-import 'package:hermex_flutter/core/models/insights.dart';
-import 'package:hermex_flutter/core/models/kanban.dart';
-import 'package:hermex_flutter/core/models/memory.dart';
-import 'package:hermex_flutter/core/models/server_catalog.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/core/models/skills.dart';
-import 'package:hermex_flutter/core/models/workspace.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/core/models/cron.dart';
+import 'package:hermes_ui/core/models/git_workspace.dart';
+import 'package:hermes_ui/core/models/insights.dart';
+import 'package:hermes_ui/core/models/kanban.dart';
+import 'package:hermes_ui/core/models/memory.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/core/models/skills.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/features/chat/chat_page.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
 import '../helpers/fake_chat_api.dart';
-import 'package:hermex_flutter/features/git/git_api.dart';
-import 'package:hermex_flutter/features/git/git_page.dart';
-import 'package:hermex_flutter/features/insights/insights_api.dart';
-import 'package:hermex_flutter/features/insights/insights_page.dart';
-import 'package:hermex_flutter/features/kanban/kanban_page.dart';
-import 'package:hermex_flutter/features/kanban/kanban_providers.dart';
-import 'package:hermex_flutter/features/memory/memory_api.dart';
-import 'package:hermex_flutter/features/memory/memory_page.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_page.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
-import 'package:hermex_flutter/features/projects/project_providers.dart';
-import 'package:hermex_flutter/features/settings/settings_page.dart';
-import 'package:hermex_flutter/features/settings/settings_providers.dart';
-import 'package:hermex_flutter/features/skills/skills_api.dart';
-import 'package:hermex_flutter/features/skills/skills_page.dart';
-import 'package:hermex_flutter/features/tasks/tasks_page.dart';
-import 'package:hermex_flutter/features/tasks/tasks_providers.dart';
-import 'package:hermex_flutter/features/workspace/workspace_page.dart';
-import 'package:hermex_flutter/features/workspace/workspace_providers.dart';
+import 'package:hermes_ui/features/git/git_api.dart';
+import 'package:hermes_ui/features/git/git_page.dart';
+import 'package:hermes_ui/features/insights/insights_api.dart';
+import 'package:hermes_ui/features/insights/insights_page.dart';
+import 'package:hermes_ui/features/kanban/kanban_page.dart';
+import 'package:hermes_ui/features/kanban/kanban_providers.dart';
+import 'package:hermes_ui/features/memory/memory_api.dart';
+import 'package:hermes_ui/features/memory/memory_page.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/settings/settings_page.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
+import 'package:hermes_ui/features/skills/skills_api.dart';
+import 'package:hermes_ui/features/skills/skills_page.dart';
+import 'package:hermes_ui/features/tasks/tasks_page.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
+import 'package:hermes_ui/features/workspace/workspace_page.dart';
+import 'package:hermes_ui/features/workspace/workspace_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fake_git_api.dart';
@@ -158,7 +158,7 @@ void goldenPair(
   for (final brightness in Brightness.values) {
     final themeName = brightness == Brightness.light ? 'light' : 'dark';
     testWidgets('$pageName $themeName', (tester) async {
-      await pumpHermexPage(
+      await pumpHermesPage(
         tester,
         page: page(),
         brightness: brightness,
@@ -169,7 +169,7 @@ void goldenPair(
         find.byType(CupertinoApp),
         matchesGoldenFile('goldens/${pageName}_$themeName.png'),
       );
-      await unmountHermexPage(tester);
+      await unmountHermesPage(tester);
     });
   }
 }
@@ -187,7 +187,7 @@ List<Override> apiOverrides(Override factoryOverride) {
 
 void main() {
   setUpAll(() async {
-    await loadHermexGoldenFonts();
+    await loadHermesGoldenFonts();
   });
 
   setUp(() {
@@ -219,7 +219,7 @@ void main() {
             {
               'role': 'user',
               'content':
-                  '帮我把 Hermex 客户端的所有页面文字对比度检查一遍，'
+                  '帮我把 Hermes 客户端的所有页面文字对比度检查一遍，'
                   '特别是深色模式下次要文字的可读性，同时排查列表行标题被截断的问题。',
               'message_id': 'u1',
             },
@@ -333,16 +333,16 @@ void main() {
           response: const MemoryResponse(
             memory:
                 '用户偏好：界面使用中文，喜欢 iOS 风格设计；'
-                '正在推进 hermex-flutter 客户端移植，关注主题对比度与文字溢出问题。\n'
+                '正在推进 hermes-ui 客户端移植，关注主题对比度与文字溢出问题。\n'
                 '常用命令通过 f.bat 封装执行 Flutter 命令。',
             user: '用户名：Admin\n偏好：深色模式\n活跃时间：夜间',
             soul:
                 '你是一个乐于助人的 AI 助手，回答使用中文，'
                 '注重可读性与排版细节。',
             projectContext:
-                '当前项目 hermex-flutter（Flutter + Cupertino 移植 iOS Hermex '
+                '当前项目 hermes-ui（Flutter + Cupertino 移植 iOS Hermex '
                 '客户端）。并行推进：主题对比度修复、golden 截图回归基建。',
-            projectContextName: 'hermex-flutter (D:/projects/hermex-flutter)',
+            projectContextName: 'hermes-ui (D:/projects/hermes-ui)',
           ),
         ),
       ),

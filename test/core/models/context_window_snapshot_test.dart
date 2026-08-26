@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
-import 'package:hermex_flutter/core/utils/context_window_formatter.dart';
+import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/core/utils/context_window_formatter.dart';
 
 void main() {
   group('ContextWindowSnapshot.fromJson', () {

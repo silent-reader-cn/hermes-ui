@@ -26,7 +26,7 @@ Future<String> prepareTrayIconFile({
   AssetBundle? assetBundle,
   Directory? tempDir,
   String assetPath = 'assets/branding/tray_icon_32.png',
-  String fileName = 'hermex_tray_icon_32.png',
+  String fileName = 'hermes_tray_icon_32.png',
 }) async {
   final bundle = assetBundle ?? rootBundle;
   final dir = tempDir ?? Directory.systemTemp;
@@ -163,13 +163,13 @@ class TrayManagerService with TrayListener {
       } else if (defaultTargetPlatform == TargetPlatform.windows) {
         iconPath = await prepareTrayIconFile(
           assetPath: 'assets/branding/tray_icon.ico',
-          fileName: 'hermex_tray_icon.ico',
+          fileName: 'hermes_tray_icon.ico',
         );
       } else {
         iconPath = await prepareTrayIconFile();
       }
       await trayManager.setIcon(iconPath);
-      await trayManager.setToolTip('Hermex');
+      await trayManager.setToolTip('Hermes');
     } catch (e, st) {
       developer.log(
         'Failed to set tray icon / tooltip',

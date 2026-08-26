@@ -2,9 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/shell/sidebar_utility_toolbar.dart';
-import 'package:hermex_flutter/app/widgets/adaptive_sliver_navigation_bar.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/app/shell/sidebar_utility_toolbar.dart';
+import 'package:hermes_ui/app/widgets/adaptive_sliver_navigation_bar.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 宽屏双栏 Header 对齐探针：侧栏工具条（44px）与内容区紧凑导航条等高。

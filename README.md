@@ -1,9 +1,8 @@
-# Hermex Flutter Port
+# Hermes UI
 
 将 Hermex（iOS 原生 SwiftUI 客户端）移植为 Flutter + Cupertino 的全平台客户端
 （iOS / Android / Windows / macOS / Linux / Web），API 契约对齐 nesquena/hermes-webui。
 
-- 详细实施计划 → [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - 蓝本：https://github.com/uzairansaruzi/hermex (MIT)
 - 服务端：`D:\hermes-webui`（fork of nesquena/hermes-webui，:30002）
 
@@ -18,7 +17,7 @@
 **Hermex** 是 hermes-webui 生态中最成熟的移动端控制台——一个 iOS 18+ 原生 SwiftUI App
 （MIT 开源，约 6.9 万行业务代码），但它**只支持 iOS**，没有 Android 计划，三个社区移植 PR 均被上游拒绝。
 
-**hermex-flutter** 用 Flutter + Cupertino 把 Hermex 完整重写为跨平台客户端，解决：
+**hermes-ui** 用 Flutter + Cupertino 把 Hermex 完整重写为跨平台客户端，解决：
 
 - **Android 缺口**：Hermex 覆盖不到的 Android 手机端（主人主要诉求）；
 - **桌面统一体验**：Windows / macOS / Linux 一套代码；
@@ -84,8 +83,8 @@
 ### 安装与运行
 
 ```bash
-git clone https://github.com/silent-reader-cn/hermex-flutter.git
-cd hermex-flutter
+git clone https://github.com/silent-reader-cn/hermes-ui.git
+cd hermes-ui
 flutter pub get
 
 # Android 真机 / 模拟器
@@ -159,7 +158,6 @@ ApiClient 请求路径与参数（mocktail）、关键页面 widget 测试（会
 
 | 文档 | 内容 |
 |---|---|
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 实施计划、决策记录、进度日志 |
 | [docs/RELEASE.md](docs/RELEASE.md) | 发布指南（签名/打包/版本号/真机验证） |
 | [docs/QA.md](docs/QA.md) | 无障碍/国际化检查清单与已知待完善项 |
 | [docs/CODING_STYLE.md](docs/CODING_STYLE.md) | 代码风格规范 |

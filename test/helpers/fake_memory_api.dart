@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/memory.dart';
-import 'package:hermex_flutter/features/memory/memory_api.dart';
+import 'package:hermes_ui/core/models/memory.dart';
+import 'package:hermes_ui/features/memory/memory_api.dart';
 
 /// 可配置的 [MemoryApi] fake（测试注入，彻底绕开网络）。
 ///

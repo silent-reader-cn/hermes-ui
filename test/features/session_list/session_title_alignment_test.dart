@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/session_list/session_list_page.dart';
-import 'package:hermex_flutter/features/skills/skills_page.dart';
-import 'package:hermex_flutter/features/workspace_manager/workspace_manager_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/skills/skills_page.dart';
+import 'package:hermes_ui/features/workspace_manager/workspace_manager_page.dart';
 
 import '../../golden/golden_screens_test.dart' show sessionListOverrides;
 

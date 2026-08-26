@@ -1,15 +1,15 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/app.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/app/app.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/fake_session_list_api.dart';
-import 'package:hermex_flutter/features/session_list/session_auto_refresh.dart';
+import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
 import 'helpers/in_memory_secure_storage.dart';
 
 /// App 壳冒烟测试（替换模板 Counter 测试）。
@@ -40,13 +40,13 @@ void main() {
             ConnectionStore(storage: storage),
           ),
         ],
-        child: const HermexApp(),
+        child: const HermesApp(),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('连接你的 Hermex 服务器'), findsOneWidget);
+    expect(find.text('连接你的 Hermes 服务器'), findsOneWidget);
     expect(find.text('暂无会话'), findsNothing);
   });
 
@@ -66,7 +66,7 @@ void main() {
             (_) => FakeSessionListApi(),
           ),
         ],
-        child: const HermexApp(),
+        child: const HermesApp(),
       ),
     );
     // 连接/active 异步加载完成 → refreshListenable 触发守卫重定向 →
@@ -76,7 +76,7 @@ void main() {
     }
 
     expect(find.text('暂无会话'), findsOneWidget);
-    expect(find.text('连接你的 Hermex 服务器'), findsNothing);
+    expect(find.text('连接你的 Hermes 服务器'), findsNothing);
   });
 
   testWidgets('默认主题浅色（跟随系统，测试环境为 light）', (tester) async {
@@ -88,7 +88,7 @@ void main() {
             ConnectionStore(storage: storage),
           ),
         ],
-        child: const HermexApp(),
+        child: const HermesApp(),
       ),
     );
     await tester.pump();

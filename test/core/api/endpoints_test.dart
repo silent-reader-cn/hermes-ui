@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/endpoints.dart';
+import 'package:hermes_ui/core/api/endpoints.dart';
 
 void main() {
   const base = 'http://hermes.local:8787';

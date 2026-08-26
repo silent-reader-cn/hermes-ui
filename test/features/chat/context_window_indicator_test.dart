@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
-import 'package:hermex_flutter/features/chat/widgets/context_window_indicator.dart';
+import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/features/chat/widgets/context_window_indicator.dart';
 
 void main() {
   Widget wrap(Widget child) =>

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/extensions.dart';
+import 'package:hermes_ui/core/models/extensions.dart';
 
 void main() {
   group('ExtensionInfo', () {

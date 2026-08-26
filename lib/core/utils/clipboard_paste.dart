@@ -243,7 +243,7 @@ Future<PastedAttachment?> _readVirtualFallback(ClipboardDataReader reader) async
   try {
     final receiver = await reader.getVirtualFileReceiver();
     if (receiver != null) {
-      final tempDir = await Directory.systemTemp.createTemp('hermex_paste_');
+      final tempDir = await Directory.systemTemp.createTemp('hermes_paste_');
       try {
         final pair = receiver.receiveVirtualFile(targetFolder: tempDir.path);
         final filePath = await pair.first;
@@ -287,7 +287,7 @@ Future<Uint8List?> _readVirtualData(
   try {
     final receiver = await reader.getVirtualFileReceiver(format: format);
     if (receiver == null) return null;
-    final tempDir = await Directory.systemTemp.createTemp('hermex_paste_');
+    final tempDir = await Directory.systemTemp.createTemp('hermes_paste_');
     try {
       final pair = receiver.receiveVirtualFile(targetFolder: tempDir.path);
       final filePath = await pair.first;

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/json_value.dart';
+import 'package:hermes_ui/core/models/json_value.dart';
 
 void main() {
   group('JsonValue.fromJson 解析顺序与类型', () {

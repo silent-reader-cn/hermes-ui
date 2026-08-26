@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hermex_flutter/features/settings/chat_send_shortcut_settings.dart';
+import 'package:hermes_ui/features/settings/chat_send_shortcut_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

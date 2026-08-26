@@ -4,21 +4,21 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
-import 'package:hermex_flutter/app/theme/theme_provider.dart';
-import 'package:hermex_flutter/app/widgets/adaptive_sliver_navigation_bar.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/core/models/auxiliary_model.dart';
-import 'package:hermex_flutter/core/models/extensions.dart';
-import 'package:hermex_flutter/core/models/mcp.dart';
-import 'package:hermex_flutter/core/models/server_catalog.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
-import 'package:hermex_flutter/features/settings/settings_page.dart';
-import 'package:hermex_flutter/features/settings/settings_providers.dart';
+import 'package:hermes_ui/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/app/theme/theme_provider.dart';
+import 'package:hermes_ui/app/widgets/adaptive_sliver_navigation_bar.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/core/models/auxiliary_model.dart';
+import 'package:hermes_ui/core/models/extensions.dart';
+import 'package:hermes_ui/core/models/mcp.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/features/settings/settings_page.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../golden/golden_helpers.dart';
@@ -1174,7 +1174,7 @@ void main() {
     testWidgets(
         '深色模式 + 真实主题 + 金照字体：保存文本完全落在 CupertinoNavigationBar 内 (scale 1.0 & 1.3)',
         (tester) async {
-      await loadHermexGoldenFonts();
+      await loadHermesGoldenFonts();
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());

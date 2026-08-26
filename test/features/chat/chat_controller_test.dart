@@ -3,22 +3,22 @@ import 'dart:async';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
-import 'package:hermex_flutter/features/chat/chat_controller.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/chat_state.dart';
-import 'package:hermex_flutter/features/settings/tool_group_settings.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/features/chat/chat_controller.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/chat_state.dart';
+import 'package:hermes_ui/features/settings/tool_group_settings.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
 
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/cache_providers.dart';
-import 'package:hermex_flutter/core/cache/cache_service.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/cache/cache_service.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
 
 void main() {
   group('ChatPhase 九态（chat_spec.md §2.1）', () {

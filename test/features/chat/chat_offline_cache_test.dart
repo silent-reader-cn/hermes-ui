@@ -4,13 +4,13 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/cache_providers.dart';
-import 'package:hermex_flutter/core/cache/cache_service.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/cache/cache_service.dart';
+import 'package:hermes_ui/features/chat/chat_page.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
 import '../../helpers/fake_chat_api.dart';
 
 void main() {

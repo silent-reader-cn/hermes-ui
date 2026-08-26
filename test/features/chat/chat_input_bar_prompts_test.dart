@@ -1,13 +1,13 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/saved_prompt.dart';
-import 'package:hermex_flutter/core/utils/accessibility.dart';
-import 'package:hermex_flutter/features/chat/chat_page.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/prompts/prompts_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/saved_prompt.dart';
+import 'package:hermes_ui/core/utils/accessibility.dart';
+import 'package:hermes_ui/features/chat/chat_page.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/prompts/prompts_providers.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/fake_prompts_api.dart';

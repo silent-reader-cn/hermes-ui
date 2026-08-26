@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/cron.dart';
+import 'package:hermes_ui/core/models/cron.dart';
 
 void main() {
   group('CronJobsResponse / CronMutationResponse', () {

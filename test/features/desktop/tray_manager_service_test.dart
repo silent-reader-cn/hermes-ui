@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/desktop/tray_manager_service.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/desktop/tray_manager_service.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 class _FakeAssetBundle extends CachingAssetBundle {
@@ -328,7 +328,7 @@ void main() {
         assetBundle: fakeBundle,
         tempDir: tempDir,
         assetPath: 'assets/branding/tray_icon.ico',
-        fileName: 'hermex_tray_icon.ico',
+        fileName: 'hermes_tray_icon.ico',
       );
 
       expect(iconPath.endsWith('.ico'), isTrue);
@@ -350,7 +350,7 @@ void main() {
         assetBundle: fakeBundle,
         tempDir: tempDir,
         assetPath: 'assets/branding/tray_icon.ico',
-        fileName: 'hermex_tray_icon.ico',
+        fileName: 'hermes_tray_icon.ico',
       );
       expect(File(iconPath).isAbsolute, isTrue);
     });

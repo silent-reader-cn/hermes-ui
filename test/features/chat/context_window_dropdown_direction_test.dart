@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/widgets/popover_dropdown.dart';
-import 'package:hermex_flutter/core/models/context_window_snapshot.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/widgets/context_window_popover.dart';
+import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
+import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/context_window_popover.dart';
 
 import '../../helpers/fake_chat_api.dart';
 

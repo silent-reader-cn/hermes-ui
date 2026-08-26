@@ -3,16 +3,16 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/features/git/git_api.dart';
-import 'package:hermex_flutter/features/insights/insights_api.dart';
-import 'package:hermex_flutter/features/kanban/kanban_api.dart';
-import 'package:hermex_flutter/features/memory/memory_api.dart';
-import 'package:hermex_flutter/features/projects/project_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
-import 'package:hermex_flutter/features/skills/skills_api.dart';
-import 'package:hermex_flutter/features/tasks/tasks_api.dart';
-import 'package:hermex_flutter/features/workspace/workspace_api.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/features/git/git_api.dart';
+import 'package:hermes_ui/features/insights/insights_api.dart';
+import 'package:hermes_ui/features/kanban/kanban_api.dart';
+import 'package:hermes_ui/features/memory/memory_api.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/features/skills/skills_api.dart';
+import 'package:hermes_ui/features/tasks/tasks_api.dart';
+import 'package:hermes_ui/features/workspace/workspace_api.dart';
 
 /// 各 feature 生产包装层（*ApiClient）回归测试。
 ///
@@ -133,14 +133,14 @@ void main() {
     test('fetchSkills 透传解码技能列表', () async {
       final (client, adapter) = buildClient(jsonEncode({
         'skills': [
-          {'name': 'hermex-flutter-codebase'},
+          {'name': 'hermes-ui-codebase'},
         ],
       }));
       final response = await SkillsApiClient(client).fetchSkills();
 
       expect(adapter.requests.single.uri.path, '/api/skills');
       expect(response.skills, hasLength(1));
-      expect(response.skills!.first.name, 'hermex-flutter-codebase');
+      expect(response.skills!.first.name, 'hermes-ui-codebase');
     });
   });
 
@@ -148,7 +148,7 @@ void main() {
     test('fetchProjects 透传解码项目列表', () async {
       final (client, adapter) = buildClient(jsonEncode({
         'projects': [
-          {'id': 'p1', 'name': 'hermex-flutter'},
+          {'id': 'p1', 'name': 'hermes-ui'},
         ],
       }));
       final response = await ProjectApiClient(client).fetchProjects();

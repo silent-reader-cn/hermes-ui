@@ -4,12 +4,12 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/cache/cache_providers.dart';
-import 'package:hermex_flutter/core/cache/cache_service.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/chat_server_api.dart';
-import 'package:hermex_flutter/features/chat/chat_state.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/cache/cache_service.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/chat_server_api.dart';
+import 'package:hermes_ui/features/chat/chat_state.dart';
 
 /// 聊天模块生产包装层（[ChatApiClient]）与 [ChatController] 全链路回归测试。
 ///

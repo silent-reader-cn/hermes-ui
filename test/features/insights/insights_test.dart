@@ -6,14 +6,14 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/insights.dart';
-import 'package:hermex_flutter/features/insights/insights_api.dart';
-import 'package:hermex_flutter/features/insights/insights_page.dart';
-import 'package:hermex_flutter/features/insights/insights_providers.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/insights.dart';
+import 'package:hermes_ui/features/insights/insights_api.dart';
+import 'package:hermes_ui/features/insights/insights_page.dart';
+import 'package:hermes_ui/features/insights/insights_providers.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/fake_insights_api.dart';
 

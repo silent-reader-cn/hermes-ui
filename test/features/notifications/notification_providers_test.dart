@@ -4,12 +4,12 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/chat/chat_state.dart';
-import 'package:hermex_flutter/features/notifications/notification_lifecycle_observer.dart';
-import 'package:hermex_flutter/features/notifications/notification_providers.dart';
-import 'package:hermex_flutter/features/notifications/turn_notification_service.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/chat_state.dart';
+import 'package:hermes_ui/features/notifications/notification_lifecycle_observer.dart';
+import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import '../../helpers/fake_chat_api.dart';
 
 void main() {

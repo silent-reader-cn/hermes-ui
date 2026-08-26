@@ -1,13 +1,13 @@
 ﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/features/session_list/session_entry_visibility.dart';
-import 'package:hermex_flutter/features/settings/cron_visibility_settings.dart';
-import 'package:hermex_flutter/features/settings/settings_page.dart';
-import 'package:hermex_flutter/features/settings/settings_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/features/session_list/session_entry_visibility.dart';
+import 'package:hermes_ui/features/settings/cron_visibility_settings.dart';
+import 'package:hermes_ui/features/settings/settings_page.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_settings_api.dart';

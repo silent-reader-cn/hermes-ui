@@ -1,22 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/chat/chat_providers.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
-import 'package:hermex_flutter/features/projects/project_providers.dart';
-import 'package:hermex_flutter/features/session_list/session_list_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/cache_providers.dart';
-import 'package:hermex_flutter/core/cache/cache_service.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/cache/cache_service.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
 
 ServerConnection _conn() {
   return ServerConnection(

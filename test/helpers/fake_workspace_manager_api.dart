@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/workspace.dart';
-import 'package:hermex_flutter/features/workspace_manager/workspace_manager_api.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/features/workspace_manager/workspace_manager_api.dart';
 
 /// 可配置的 [WorkspaceManagerApi] fake（测试注入，彻底绕开网络）。
 ///

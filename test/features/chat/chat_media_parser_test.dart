@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/message_attachment.dart';
-import 'package:hermex_flutter/features/chat/widgets/chat_media_parser.dart';
+import 'package:hermes_ui/core/models/message_attachment.dart';
+import 'package:hermes_ui/features/chat/widgets/chat_media_parser.dart';
 
 void main() {
   group('ChatMediaParser 媒体标记解析单元测试', () {

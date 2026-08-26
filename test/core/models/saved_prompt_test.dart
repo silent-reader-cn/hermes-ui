@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/saved_prompt.dart';
+import 'package:hermes_ui/core/models/saved_prompt.dart';
 
 void main() {
   group('SavedPrompt', () {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/skills.dart';
-import 'package:hermex_flutter/core/models/slash_skill_formatter.dart';
+import 'package:hermes_ui/core/models/skills.dart';
+import 'package:hermes_ui/core/models/slash_skill_formatter.dart';
 
 void main() {
   group('SlashSkillFormatter.slug', () {

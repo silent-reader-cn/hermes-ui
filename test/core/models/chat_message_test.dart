@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/chat_message.dart';
-import 'package:hermex_flutter/core/models/message_attachment.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/core/models/message_attachment.dart';
 
 void main() {
   group('ChatMessage.fromJson 正常解析', () {

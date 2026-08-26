@@ -1,6 +1,6 @@
 # Hermex Flutter 客户端已对接接口清单与架构审计报告
 
-> 审计基准：`hermex-flutter` 客户端全量代码（端点定义表 `lib/core/api/endpoints.dart` 共 128 个端点定义，`lib/core/api/api_client*.dart` 共 136 个请求方法，以及 `lib/features/` 下 16 个功能模块）。
+> 审计基准：`hermes-ui` 客户端全量代码（端点定义表 `lib/core/api/endpoints.dart` 共 128 个端点定义，`lib/core/api/api_client*.dart` 共 136 个请求方法，以及 `lib/features/` 下 16 个功能模块）。
 
 ## 📊 审计数据概览
 
@@ -1439,7 +1439,7 @@ lib/features/chat/chat_controller.dart:887, 889` | 连接建立时的初始状�
 
 ### 验收结论
 
-本清单已完成对 `hermex-flutter` 客户端全量代码的静态提取与动态调用链交叉比对：
+本清单已完成对 `hermes-ui` 客户端全量代码的静态提取与动态调用链交叉比对：
 
 1. 全量提取并核实了 `endpoints.dart` 中全部 **130 个端点定义**，无一遗漏；
 

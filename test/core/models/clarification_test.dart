@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/clarification.dart';
+import 'package:hermes_ui/core/models/clarification.dart';
 
 void main() {
   group('PendingClarification', () {

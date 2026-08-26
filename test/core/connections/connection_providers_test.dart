@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/theme/theme_provider.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/connections/connection_store.dart';
-import 'package:hermex_flutter/core/connections/server_connection.dart';
-import 'package:hermex_flutter/core/models/server_info.dart';
-import 'package:hermex_flutter/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/app/theme/theme_provider.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/connections/server_connection.dart';
+import 'package:hermes_ui/core/models/server_info.dart';
+import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';

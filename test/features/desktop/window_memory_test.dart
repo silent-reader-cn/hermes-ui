@@ -2,7 +2,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/features/desktop/window_memory.dart';
+import 'package:hermes_ui/features/desktop/window_memory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

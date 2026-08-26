@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
-import 'package:hermex_flutter/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 
 /// 截图逻辑尺寸（iPhone 12/13/14 尺寸 390x844，2x 物理像素）。
 const Size goldenSurfaceSize = Size(780, 1688);
@@ -22,7 +22,7 @@ const double goldenDevicePixelRatio = 2.0;
 ///
 /// 字体文件缺失的环境（如 CI Linux）静默跳过：中文退化为方块，测试仍可运行，
 /// 只是截图不具人工核对价值（符合「无字体环境不稳」的预期）。
-Future<void> loadHermexGoldenFonts() async {
+Future<void> loadHermesGoldenFonts() async {
   await loadAppFonts();
   // flutter_tester.exe → <flutter>/bin/cache/artifacts/engine/<platform>/，
   // 向上 6 级即 Flutter SDK 根目录。
@@ -61,7 +61,7 @@ Future<void> _registerFontFile(String family, String path) async {
 ///
 /// [size] 缺省为竖屏 [goldenSurfaceSize]；需要横屏的页面（如 workspace）
 /// 可传 [goldenLandscapeSize]。
-Future<void> pumpHermexPage(
+Future<void> pumpHermesPage(
   WidgetTester tester, {
   required Widget page,
   required Brightness brightness,
@@ -86,7 +86,7 @@ Future<void> pumpHermexPage(
 }
 
 /// 卸载页面并释放 ProviderScope（让控制器 dispose 取消定时器，避免 pending timer）。
-Future<void> unmountHermexPage(WidgetTester tester) async {
+Future<void> unmountHermesPage(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump();
 }

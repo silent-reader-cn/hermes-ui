@@ -2,13 +2,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/connections/connection_providers.dart';
-import 'package:hermex_flutter/core/models/workspace.dart';
-import 'package:hermex_flutter/features/shared/app_back_button.dart';
-import 'package:hermex_flutter/features/workspace_manager/workspace_manager_page.dart';
-import 'package:hermex_flutter/features/workspace_manager/workspace_manager_providers.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/features/shared/app_back_button.dart';
+import 'package:hermes_ui/features/workspace_manager/workspace_manager_page.dart';
+import 'package:hermes_ui/features/workspace_manager/workspace_manager_providers.dart';
 
 import '../../helpers/fake_workspace_manager_api.dart';
 

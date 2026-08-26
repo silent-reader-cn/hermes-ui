@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/models/cron.dart';
-import 'package:hermex_flutter/features/tasks/tasks_api.dart';
+import 'package:hermes_ui/core/models/cron.dart';
+import 'package:hermes_ui/features/tasks/tasks_api.dart';
 
 /// 可配置的 [TasksApi] fake（测试注入，彻底绕开网络）。
 ///

@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/app/theme/status_colors.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
 
 void main() {
   group('secondaryText 暗黑与浅色模式解析回归测试', () {

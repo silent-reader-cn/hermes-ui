@@ -1,4 +1,4 @@
-# Agent 代发消息折叠卡片规格（hermex-flutter）
+# Agent 代发消息折叠卡片规格（hermes-ui）
 
 > 目标：把所有 **agent 代发用户消息** 在聊天流里折成紧凑卡片，默认折叠、点击展开；不在 `hermes-agent` 砍输出，只在 Flutter 端做 UI 收敛。对齐 `D:\hermes-webui` 的 Background process 折叠并扩展到全量类型。
 > 分支：`feat/desktop-ui-polish`；Cupertino 全量；Riverpod；`flutter analyze` 零告警。
@@ -26,7 +26,7 @@
 ### 1.1 当前 hermes-webui 已处理 vs 遗漏
 
 - 已处理：`static/ui.js:15337 isProcessNoticeText = /^\\[IMPORTANT: Background process /` 仅折叠类别 1（含 watch_match 的同一前缀），聚合 3/4 在 webui 以同样前缀命中故亦被折叠；样式 `static/style.css:2330 .process-notice-*` + 折叠态 `Set` + `renderMessages` 分支 `process-wakeup-notice`。
-- 遗漏：类别 6/7/8/9/10 均以 `[IMPORTANT:` 开头但非 `Background process`，在 webui 仍以普通 user 气泡展开，易与真实用户输入混淆且刷屏。本规格要求 hermex-flutter **全量折叠 1-10**（6 为 system 可同卡片样式或 system 样式复用，见 §3）。
+- 遗漏：类别 6/7/8/9/10 均以 `[IMPORTANT:` 开头但非 `Background process`，在 webui 仍以普通 user 气泡展开，易与真实用户输入混淆且刷屏。本规格要求 hermes-ui **全量折叠 1-10**（6 为 system 可同卡片样式或 system 样式复用，见 §3）。
 
 ## 2. Flutter 端检测与分类
 

@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/api/api_client.dart';
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/features/workspace_manager/workspace_manager_api.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/features/workspace_manager/workspace_manager_api.dart';
 
 /// 工作区管理注册表域生产包装层（[WorkspaceManagerApiClient]）回归测试。
 ///
@@ -38,9 +38,9 @@ void main() {
           _json({
             'workspaces': [
               {'path': 'C:\\Users\\Admin\\workspace', 'name': 'Home'},
-              {'path': 'D:\\projects\\hermex-flutter', 'name': 'HERMEX'},
+              {'path': 'D:\\projects\\hermes-ui', 'name': 'HERMEX'},
             ],
-            'last': 'D:\\projects\\hermex-flutter',
+            'last': 'D:\\projects\\hermes-ui',
             'terminal_remote_backend': true,
           }),
         ]);
@@ -52,7 +52,7 @@ void main() {
         expect(response.workspaces, hasLength(2));
         expect(response.workspaces!.first.path, r'C:\Users\Admin\workspace');
         expect(response.workspaces!.first.name, 'Home');
-        expect(response.last, r'D:\projects\hermex-flutter');
+        expect(response.last, r'D:\projects\hermes-ui');
         expect(response.terminalRemoteBackend, isTrue);
       },
     );
@@ -117,7 +117,7 @@ void main() {
             {
               'session_id': 's1',
               'title': 'Home',
-              'workspace': r'D:\Projects\Hermex-Flutter',
+              'workspace': r'D:\Projects\Hermes-UI',
             },
             {'session_id': 's2', 'title': 'Other', 'workspace': '/tmp/x'},
             {'session_id': 's3', 'title': 'No workspace'},
@@ -128,12 +128,12 @@ void main() {
 
       // 字面匹配（服务器原样回传的路径）
       expect(
-        await api.findSessionIdForWorkspace(r'D:\Projects\Hermex-Flutter'),
+        await api.findSessionIdForWorkspace(r'D:\Projects\Hermes-UI'),
         's1',
       );
       // 规范化匹配：斜杠/小写等价
       expect(
-        await api.findSessionIdForWorkspace('d:/projects/hermex-flutter'),
+        await api.findSessionIdForWorkspace('d:/projects/hermes-ui'),
         's1',
       );
       // 无匹配

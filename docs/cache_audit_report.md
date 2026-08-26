@@ -1,4 +1,4 @@
-# hermex-flutter 本地缓存机制盘点报告 + 媒体缓存复用设计方案
+# hermes-ui 本地缓存机制盘点报告 + 媒体缓存复用设计方案
 
 - 日期：2026-08-21
 - 范围：只读排查 + 文档级设计，**未修改任何 `lib/` 代码**
@@ -61,7 +61,7 @@ cacheServiceProvider（:24）→ CacheService(database)
 
 - 无任何索引（除主键）、无外键、无 serverURL 维度。Swift 蓝本（`.reference/hermex-src/Persistence/CacheStore.swift`）按 `serverURLString + sessionID` 双键隔离多服务器缓存，**Dart 端没有** → 切换服务器后缓存会串（A 服务器的会话/消息可能被 B 服务器当成离线兜底读走）。
 - `CachedMessages.messageId` 是全局主键：不同会话若出现相同 messageId 会互相覆盖（后端 messageId 通常全局唯一，风险低，但会话删除后缓存行不会联动清理）。
-- 生产文件库：`AppDatabase.production()` → `driftDatabase(name: 'hermex_cache')`（drift_flutter，Windows 走 sqlite3，路径由 drift_flutter 管理）。测试库 `AppDatabase.memory()` 用 `NativeDatabase.memory()`。
+- 生产文件库：`AppDatabase.production()` → `driftDatabase(name: 'hermes_cache')`（drift_flutter，Windows 走 sqlite3，路径由 drift_flutter 管理）。测试库 `AppDatabase.memory()` 用 `NativeDatabase.memory()`。
 - 容量/时间策略现状：`CacheService`（cache_service.dart）内 `maxSessions = 50`、`ttl = 7 天`（仅 `readSessions` 过滤用过期的，删除动作只在下次 `writeSessions` 全量重写时隐式发生）；消息侧写入取最近 **50 条**、读取 `limit(50)`、**无 TTL**。
   - 对照蓝本：`CachePolicy.ttl = 7*24*3600`、`maxMessages = 5000`、过期主动清理 + 超量 LRU 淘汰（`evictOldestMessagesIfNeeded`）——Dart 端只有「截断无淘汰」。
 - 会话缓存写入是**全量覆盖**：`writeSessions` 先 `delete` 全表再插入 top-50（session_list_providers 每次 fetchSessions 成功都触发 → 每次启动首次拉全会重写一次）。
@@ -128,7 +128,7 @@ cacheServiceProvider（:24）→ CacheService(database)
 
 ### 3.2 缓存介质：文件系统（推荐）vs SQLite blob
 
-| 维度 | 文件系统（`getApplicationSupportDirectory()/hermex_media/`） | SQLite blob（新表存 bytes） |
+| 维度 | 文件系统（`getApplicationSupportDirectory()/hermes_media/`） | SQLite blob（新表存 bytes） |
 |---|---|---|
 | 读放大 | 低：`Image.file` 直接解码，零拷贝 | 高：每次读 blob 出库为临时内存，大图反复读 |
 | 与现有 drift 关系 | 互不干扰；drift 只存索引元数据 | 与消息缓存共享一个库，事务一致性好 |
@@ -224,7 +224,7 @@ final mediaCacheServiceProvider = Provider<MediaCacheService>((ref) {
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| P0（一行修复） | `main.dart` override `appDatabaseProvider → persistentAppDatabaseProvider` | 重启 App 后会话列表离线兜底仍然可用；`hermex_cache.sqlite` 出现在应用数据目录 |
+| P0（一行修复） | `main.dart` override `appDatabaseProvider → persistentAppDatabaseProvider` | 重启 App 后会话列表离线兜底仍然可用；`hermes_cache.sqlite` 出现在应用数据目录 |
 | P1 | MediaCacheService + `cached_media` 表（schemaVersion=2）+ LRU/TTL | 单测全绿；同图二次渲染 0 网络请求 |
 | P2 | `ChatInlineMediaWidget` 渲染切换（Image.network → 缓存文件） | 内联图 + Lightbox 走缓存路径；401 占位符行为不回归 |
 | P3（可选） | 离线先显后刷：进入会话页先读缓存渲染再网络刷新（stale-while-revalidate）；会话删除联动清理 | 离线浏览历史会话体验完整 |
@@ -253,5 +253,5 @@ final mediaCacheServiceProvider = Provider<MediaCacheService>((ref) {
 ### 4.2 待验证清单（建议开工前用 curl/真机确认）
 
 1. `curl -c cookies.txt -X POST http://127.0.0.1:30002/api/auth/login -d '{"password":"<pw>"}'` → `-b cookies.txt -o /dev/null -w "%{http_code}" "http://127.0.0.1:30002/api/media?path=<encoded>&session_id=<sid>"`：确认当前图片是否 401（验证 §2.4 高危发现）。
-2. 确认 `getApplicationSupportDirectory()` 路径下 drift_flutter 实际落盘位置（`hermex_cache.sqlite`）在 Windows 上可写（P0 验收点）。
+2. 确认 `getApplicationSupportDirectory()` 路径下 drift_flutter 实际落盘位置（`hermes_cache.sqlite`）在 Windows 上可写（P0 验收点）。
 3. 确认 `/api/media` 对同 URL 的响应是否稳定（同 path 不同时间内容是否变化——决定缓存 key 是否够用；已知会话媒体由 session token 授权，内容不变）。

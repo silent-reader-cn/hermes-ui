@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/cache_service.dart';
-import 'package:hermex_flutter/core/models/session.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_service.dart';
+import 'package:hermes_ui/core/models/session.dart';
 
 void main() {
   late AppDatabase db;

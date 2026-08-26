@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:hermex_flutter/core/api/api_exception.dart';
-import 'package:hermex_flutter/core/api/sse_client.dart';
-import 'package:hermex_flutter/core/models/approval.dart';
-import 'package:hermex_flutter/core/models/clarification.dart';
-import 'package:hermex_flutter/core/models/server_catalog.dart';
-import 'package:hermex_flutter/core/models/session.dart';
-import 'package:hermex_flutter/features/chat/chat_server_api.dart';
+import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/core/models/approval.dart';
+import 'package:hermes_ui/core/models/clarification.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/chat/chat_server_api.dart';
 
 /// 可配置的 [ChatServerApi] fake（测试注入，彻底绕开网络/事件循环）。
 class FakeChatApi implements ChatServerApi {

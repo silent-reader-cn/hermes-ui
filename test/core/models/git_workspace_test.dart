@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermex_flutter/core/models/git_workspace.dart';
+import 'package:hermes_ui/core/models/git_workspace.dart';
 
 void main() {
   group('GitInfoResponse / GitInfo', () {

@@ -3,11 +3,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermex_flutter/app/widgets/adaptive_sliver_navigation_bar.dart';
-import 'package:hermex_flutter/app/widgets/narrow_navigation_dropdown.dart';
-import 'package:hermex_flutter/core/utils/accessibility.dart';
-import 'package:hermex_flutter/features/session_list/session_entry_visibility.dart';
-import 'package:hermex_flutter/l10n/app_localizations.dart';
+import 'package:hermes_ui/app/widgets/adaptive_sliver_navigation_bar.dart';
+import 'package:hermes_ui/app/widgets/narrow_navigation_dropdown.dart';
+import 'package:hermes_ui/core/utils/accessibility.dart';
+import 'package:hermes_ui/features/session_list/session_entry_visibility.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _DefaultVisibilityNotifier extends SessionEntryVisibilityController {

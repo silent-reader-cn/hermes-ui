@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hermex_flutter/core/cache/app_database.dart';
-import 'package:hermex_flutter/core/cache/cache_providers.dart';
-import 'package:hermex_flutter/core/cache/media_cache_service.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/cache/media_cache_service.dart';
 
 /// 一次假的媒体缓存装配（内存 drift + 系统临时目录），用于 widget 测试注入
 /// `mediaCacheServiceProvider`。构造后记得在 tearDown 中 [FakeMediaCacheRig.dispose]。
@@ -13,7 +13,7 @@ FakeMediaCacheRig buildFakeMediaCache({
   AppDatabase? database,
 }) {
   final db = database ?? AppDatabase.memory();
-  final root = Directory.systemTemp.createTempSync('hermex_media_test_');
+  final root = Directory.systemTemp.createTempSync('hermes_media_test_');
   final service = MediaCacheService.withDownloader(
     database: db,
     downloader:
