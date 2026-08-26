@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../chat/chat_providers.dart';
+import '../../chat/chat_draft_provider.dart';
 import '../../chat/chat_state.dart';
 import '../../chat/pending_attachments_provider.dart';
 import '../../chat/selection_provider.dart';
@@ -60,6 +61,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   late GlobalKey _bookmarkKey;
   late GlobalKey _contextIndicatorKey;
   bool _hasText = false;
+  bool _draftApplied = false;
 
   @override
   void initState() {
@@ -68,6 +70,37 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _contextIndicatorKey = GlobalKey(
       debugLabel: 'chat-context-${widget.sessionId}',
     );
+    // 挂载后恢复本会话草稿（postFrame 避开 build 期 setState）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _restoreDraft();
+    });
+  }
+
+  /// 从本会话草稿存储恢复输入框（仅当输入框为空时，避免覆盖 prefill）。
+  void _restoreDraft() {
+    if (_draftApplied || !mounted) return;
+    if (_textController.text.isNotEmpty) {
+      _draftApplied = true;
+      return;
+    }
+    final draft = ref.read(chatDraftProvider(widget.sessionId));
+    if (draft.isNotEmpty) {
+      _textController.text = draft;
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: draft.length),
+      );
+    }
+    _draftApplied = true;
+    final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
+    final pendingAttachments = ref.read(
+      pendingAttachmentsProvider(widget.sessionId),
+    );
+    final hasText =
+        draft.trim().isNotEmpty ||
+        pending.isNotEmpty ||
+        pendingAttachments.isNotEmpty;
+    if (hasText != _hasText) setState(() => _hasText = hasText);
   }
 
   @override
@@ -78,6 +111,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _contextIndicatorKey = GlobalKey(
         debugLabel: 'chat-context-${widget.sessionId}',
       );
+      // 切会话：清空旧文本，postFrame 恢复新会话草稿（各会话草稿独立）。
+      _textController.clear();
+      _draftApplied = false;
+      _appliedPrefill = null;
+      setState(() => _hasText = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _restoreDraft();
+      });
     }
   }
 
@@ -97,6 +139,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _appliedPrefill = prefill;
       _textController.text = prefill;
       _hasText = prefill.trim().isNotEmpty;
+      // prefill 视为一次性的草稿内容：同步写入本会话草稿存储，后续编辑覆盖。
+      ref.read(chatDraftProvider(widget.sessionId).notifier).update(prefill);
       ref
           .read(chatControllerProvider(widget.sessionId).notifier)
           .clearComposerPrefill();
@@ -134,12 +178,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ref.read(pendingSelectionsProvider(widget.sessionId).notifier).clear();
       }
       ref.read(pendingAttachmentsProvider(widget.sessionId).notifier).clear();
+      // 发送成功：清空本会话草稿（prefill 也已随发送消费）。
+      ref.read(chatDraftProvider(widget.sessionId).notifier).clear();
     } else if (!sent) {
       _textController.text = raw;
       _textController.selection = TextSelection.fromPosition(
         TextPosition(offset: _textController.text.length),
       );
       setState(() => _hasText = raw.trim().isNotEmpty);
+      // 发送失败：草稿同步回填内容（继续编辑保留）。
+      ref.read(chatDraftProvider(widget.sessionId).notifier).update(raw);
     }
   }
 
@@ -572,6 +620,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           );
                         },
                         onChanged: (value) {
+                          ref
+                              .read(
+                                chatDraftProvider(widget.sessionId).notifier,
+                              )
+                              .update(value);
                           final hasText =
                               value.trim().isNotEmpty || canSendWithPending;
                           if (hasText != _hasText) {

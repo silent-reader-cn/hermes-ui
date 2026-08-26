@@ -1251,8 +1251,20 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
     return [SessionListSection(title: '搜索结果', sessions: visible)];
   }
   final showCron = ref.watch(cronVisibilityProvider).showCron;
-  return buildSessionSections(visible, showCron: showCron);
+  return buildSessionSections(
+    visible,
+    showCron: showCron,
+    now: ref.watch(sessionListNowProvider)(),
+  );
 });
+
+/// 会话分区参考时间工厂（生产返回 [DateTime.now] 实时时钟）。
+///
+/// 金照/分组测试可 override 成固定日历日，避免相对时间戳跨午夜漂移
+/// （「昨天」会话在凌晨变成「今天」导致金照不稳定）。
+final sessionListNowProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
 
 /// 按类型与时间把会话分组为 置顶 / 今天 / 昨天 / 更早，组内时间倒序；空组剔除。
 ///

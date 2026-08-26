@@ -59,10 +59,7 @@ void main() {
       expect(l10n.cannotConnectToServer, '无法连接到服务器');
       expect(l10n.authentication, '认证');
       expect(l10n.detectingServerAuth, '正在检测服务器认证…');
-      expect(
-        l10n.serverNoPasswordRequired,
-        '该服务器未启用密码认证，可直接继续',
-      );
+      expect(l10n.serverNoPasswordRequired, '该服务器未启用密码认证，可直接继续');
       expect(l10n.serverPasswordRequired, '该服务器需要密码认证，请登录');
       expect(l10n.usernameOptional, '用户名（可选）');
       expect(l10n.password, '密码');
@@ -93,10 +90,7 @@ void main() {
         l10n.serverUrlInvalid,
         '请输入有效的服务器地址，例如 https://hermes.example.com:30002',
       );
-      expect(
-        l10n.headerValidationFailed,
-        'Header 名必须是合法 token，值不能包含换行',
-      );
+      expect(l10n.headerValidationFailed, 'Header 名必须是合法 token，值不能包含换行');
     });
 
     test('Session List strings return Chinese values', () {
@@ -131,10 +125,7 @@ void main() {
       expect(l10n.batchArchiveTitle, '批量归档');
       expect(l10n.confirmBatchArchivePrompt, '归档选中的会话？');
       expect(l10n.batchDeleteTitle, '批量删除');
-      expect(
-        l10n.confirmBatchDeletePrompt(5),
-        '删除选中的 5 个会话？此操作不可撤销。',
-      );
+      expect(l10n.confirmBatchDeletePrompt(5), '删除选中的 5 个会话？此操作不可撤销。');
       expect(l10n.noMore, '没有更多了');
       expect(l10n.noMatchingSessionsFound, '未找到相关会话');
       expect(l10n.noSessions, '暂无会话');
@@ -177,10 +168,7 @@ void main() {
       expect(l10n.markdownCopiedToClipboard, 'Markdown 已复制到剪贴板。');
       expect(l10n.approvalNeeded, '需要审批');
       expect(l10n.clarificationNeeded, '需要澄清');
-      expect(
-        l10n.queuedBannerMessage(2),
-        '已排队 2 条消息，将在当前回复结束后自动发送',
-      );
+      expect(l10n.queuedBannerMessage(2), '已排队 2 条消息，将在当前回复结束后自动发送');
       expect(l10n.pendingUserMessageBanner, '（该会话有一条待处理消息…）');
       expect(l10n.pickFileFailed, '选择文件失败');
       expect(l10n.selectFileFailed, '选择文件失败');
@@ -212,10 +200,7 @@ void main() {
       expect(l10n.editAndResend, '编辑并重新发送');
       expect(l10n.branchFromHere, '从此处创建分支');
       expect(l10n.truncateFromHere, '从此处截断');
-      expect(
-        l10n.confirmTruncatePrompt,
-        '删除此消息之后的所有消息？此操作不可撤销。',
-      );
+      expect(l10n.confirmTruncatePrompt, '删除此消息之后的所有消息？此操作不可撤销。');
       expect(l10n.truncate, '截断');
       expect(l10n.attachmentFallback, '附件');
       expect(l10n.thinkingBlock, '思考');
@@ -256,7 +241,27 @@ void main() {
       expect(l10n.localizeToolName('agent'), '智能体');
       expect(l10n.localizeToolName('grep'), '搜索');
       expect(l10n.localizeToolName('glob'), '文件检索');
-      expect(l10n.localizeToolName('unknown_custom_tool'), 'unknown_custom_tool');
+      expect(l10n.localizeToolName('process'), '后台进程');
+      expect(l10n.localizeToolName('mem0_search'), '记忆检索');
+      expect(l10n.localizeToolName('mem0_add'), '记忆写入');
+      expect(l10n.localizeToolName('mem0_update'), '记忆更新');
+      expect(l10n.localizeToolName('mem0_delete'), '记忆删除');
+      expect(l10n.localizeToolName('clarify'), '澄清确认');
+      expect(l10n.localizeToolName('session_search'), '会话搜索');
+      expect(l10n.localizeToolName('skills_list'), '技能列表');
+      expect(l10n.localizeToolName('text_to_speech'), '语音合成');
+      expect(l10n.localizeToolName('image_generate'), '图片生成');
+      expect(l10n.localizeToolName('tool_search'), '工具搜索');
+      expect(l10n.localizeToolName('tool_describe'), '工具详情');
+      expect(l10n.localizeToolName('tool_call'), '调用工具');
+      expect(l10n.localizeToolName('browser_exec'), '浏览器执行');
+      expect(l10n.localizeToolName('kanban'), '看板');
+      expect(l10n.localizeToolName('video_generate'), '视频生成');
+      expect(l10n.localizeToolName('video_analyze'), '视频分析');
+      expect(
+        l10n.localizeToolName('unknown_custom_tool'),
+        'unknown_custom_tool',
+      );
       expect(l10n.localizeToolName(''), '工具');
     });
 
@@ -282,10 +287,7 @@ void main() {
         l10n.confirmDeleteTaskPrompt('Daily Sync'),
         '确定删除「Daily Sync」？此操作不可撤销。',
       );
-      expect(
-        l10n.confirmDeleteTask('Daily Sync'),
-        '确定删除「Daily Sync」？此操作不可撤销。',
-      );
+      expect(l10n.confirmDeleteTask('Daily Sync'), '确定删除「Daily Sync」？此操作不可撤销。');
       expect(l10n.taskActions, '任务操作');
       expect(l10n.lastRunTime('10:00'), '上次运行 10:00');
       expect(l10n.taskOutput, '任务输出');
@@ -343,10 +345,7 @@ void main() {
       expect(l10n.memoryNotesEmpty, '暂无笔记');
       expect(l10n.memoryUserEmpty, '暂无画像');
       expect(l10n.memorySoulEmpty, '暂无灵魂设定');
-      expect(
-        l10n.projectContextShadowedWarning,
-        '工作区本地文件正在覆盖全局项目上下文。',
-      );
+      expect(l10n.projectContextShadowedWarning, '工作区本地文件正在覆盖全局项目上下文。');
     });
 
     test('Workspace strings return Chinese values', () {
@@ -369,10 +368,7 @@ void main() {
         l10n.confirmDeleteFilePrompt('main.dart'),
         '确定要删除「main.dart」吗？此操作不可撤销。',
       );
-      expect(
-        l10n.confirmDeleteFile('main.dart'),
-        '确定要删除「main.dart」吗？此操作不可撤销。',
-      );
+      expect(l10n.confirmDeleteFile('main.dart'), '确定要删除「main.dart」吗？此操作不可撤销。');
       expect(l10n.filePickerNotAvailable, '文件选择功能待接入');
       expect(
         l10n.filePickerPendingPlatformSupport,
@@ -459,10 +455,7 @@ void main() {
       expect(l10n.gitPanelTitle, 'Git 面板');
       expect(l10n.refreshGitStatus, '刷新 Git 状态');
       expect(l10n.notAGitRepo, '不是 Git 仓库');
-      expect(
-        l10n.notAGitRepoDetail,
-        '该工作区不是 git 仓库，无法使用 Git 功能。',
-      );
+      expect(l10n.notAGitRepoDetail, '该工作区不是 git 仓库，无法使用 Git 功能。');
       expect(l10n.stagedSection, '已暂存');
       expect(l10n.unstagedSection, '未暂存');
       expect(l10n.tooManyChangedFilesWarning, '变更文件过多，仅显示前 500 个。');
@@ -521,22 +514,13 @@ void main() {
       expect(l10n.serverSection, '服务器');
       expect(l10n.serverSectionDisconnected, '服务器（未连接）');
       expect(l10n.noServerConfigured, '尚未配置服务器');
-      expect(
-        l10n.noServerConfiguredSubtitle,
-        '点击下方「添加服务器」或从引导页配置',
-      );
+      expect(l10n.noServerConfiguredSubtitle, '点击下方「添加服务器」或从引导页配置');
       expect(l10n.addServer, '添加服务器');
       expect(l10n.editServer, '编辑服务器');
       expect(l10n.deleteServer, '删除服务器');
-      expect(
-        l10n.confirmDeleteServer('Main Server'),
-        '确定删除「Main Server」吗？',
-      );
+      expect(l10n.confirmDeleteServer('Main Server'), '确定删除「Main Server」吗？');
       expect(l10n.serverNamePlaceholder, '名称（可选，默认使用主机名）');
-      expect(
-        l10n.serverPasswordPlaceholder,
-        '密码（可选；编辑时留空保持原密码）',
-      );
+      expect(l10n.serverPasswordPlaceholder, '密码（可选；编辑时留空保持原密码）');
       expect(l10n.loadingModels, '正在加载模型…');
       expect(l10n.modelsLoadFailed, '模型加载失败');
       expect(l10n.defaultModel, '默认模型');
@@ -560,10 +544,7 @@ void main() {
       expect(l10n.projectManagement, '项目管理');
       expect(l10n.renameProject, '重命名项目');
       expect(l10n.deleteProject, '删除项目');
-      expect(
-        l10n.deleteProjectWarning,
-        '删除后项目内会话不会被删除，仅解除归类。',
-      );
+      expect(l10n.deleteProjectWarning, '删除后项目内会话不会被删除，仅解除归类。');
     });
   });
 
@@ -641,10 +622,7 @@ void main() {
         'Source: Server statistics over the last 7 days.',
       );
       expect(l10n.aheadBehind(3, 2), 'ahead 3 · behind 2');
-      expect(
-        l10n.changesSummary(20, 10, 3),
-        '+20 −10 · 3 files in total',
-      );
+      expect(l10n.changesSummary(20, 10, 3), '+20 −10 · 3 files in total');
       expect(
         l10n.confirmDeleteServer('Alpha Server'),
         'Are you sure you want to delete "Alpha Server"?',
@@ -679,7 +657,10 @@ void main() {
       expect(l10n.localizeToolName('agent'), 'Agent');
       expect(l10n.localizeToolName('grep'), 'Search');
       expect(l10n.localizeToolName('glob'), 'Glob');
-      expect(l10n.localizeToolName('unknown_custom_tool'), 'unknown_custom_tool');
+      expect(
+        l10n.localizeToolName('unknown_custom_tool'),
+        'unknown_custom_tool',
+      );
       expect(l10n.localizeToolName(''), 'Tool');
     });
   });

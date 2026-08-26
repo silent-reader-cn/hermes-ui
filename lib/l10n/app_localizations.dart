@@ -436,6 +436,60 @@ class AppLocalizations {
       case 'find_by_name':
       case 'find':
         return isEnglish ? 'List Files' : '文件列表';
+      case 'process':
+      case 'proc':
+      case 'background_process':
+        return isEnglish ? 'Process' : '后台进程';
+      case 'mem0':
+      case 'mem0_search':
+        return isEnglish ? 'Memory Search' : '记忆检索';
+      case 'mem0_add':
+        return isEnglish ? 'Memory Add' : '记忆写入';
+      case 'mem0_update':
+        return isEnglish ? 'Memory Update' : '记忆更新';
+      case 'mem0_delete':
+        return isEnglish ? 'Memory Delete' : '记忆删除';
+      case 'clarify':
+      case 'clarification':
+        return isEnglish ? 'Clarify' : '澄清确认';
+      case 'session_search':
+      case 'search_sessions':
+        return isEnglish ? 'Session Search' : '会话搜索';
+      case 'skills_list':
+      case 'list_skills':
+        return isEnglish ? 'Skills List' : '技能列表';
+      case 'text_to_speech':
+      case 'tts':
+      case 'tts_speak':
+        return isEnglish ? 'Text to Speech' : '语音合成';
+      case 'image_generate':
+      case 'image_gen':
+        return isEnglish ? 'Image Generate' : '图片生成';
+      case 'tool_search':
+        return isEnglish ? 'Tool Search' : '工具搜索';
+      case 'tool_describe':
+        return isEnglish ? 'Tool Describe' : '工具详情';
+      case 'tool_call':
+      case 'invoke_tool':
+        return isEnglish ? 'Tool Call' : '调用工具';
+      case 'browser_exec':
+      case 'browserexec':
+        return isEnglish ? 'Browser Execute' : '浏览器执行';
+      case 'kanban':
+      case 'kanban_list':
+      case 'kanban_create':
+      case 'kanban_show':
+      case 'kanban_complete':
+      case 'kanban_comment':
+      case 'kanban_heartbeat':
+        return isEnglish ? 'Kanban' : '看板';
+      case 'video_generate':
+      case 'video_gen':
+        return isEnglish ? 'Video Generate' : '视频生成';
+      case 'video_analyze':
+        return isEnglish ? 'Video Analyze' : '视频分析';
+      case 'x_search':
+        return isEnglish ? 'X Search' : 'X 搜索';
       default:
         final trimmed = name.trim();
         return trimmed.isEmpty ? (isEnglish ? 'Tool' : '工具') : trimmed;

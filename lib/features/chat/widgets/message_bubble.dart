@@ -7,13 +7,13 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../core/utils/injected_message.dart';
-import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import '../../../core/utils/selected_context.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
 import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
+import 'reasoning_block.dart';
 import 'selected_context_card.dart';
 import 'tool_call_card.dart';
 
@@ -279,7 +279,7 @@ class _AssistantContent extends StatelessWidget {
     }
     // 思考卡在工具卡上方（同聚合场景下思考优先展示）
     for (final group in distinctReasoning) {
-      sections.add(_ReasoningBlock(group: group));
+      sections.add(ReasoningBlock(group: group));
     }
     if (parsedContent.isNotEmpty) {
       sections.add(
@@ -437,91 +437,4 @@ class _FallbackInjectedNoticeCardState
   }
 }
 
-/// reasoning 折叠块（默认折叠，点击展开）。
-class _ReasoningBlock extends StatefulWidget {
-  const _ReasoningBlock({required this.group});
-
-  final ReasoningGroup group;
-
-  @override
-  State<_ReasoningBlock> createState() => _ReasoningBlockState();
-}
-
-class _ReasoningBlockState extends State<_ReasoningBlock> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final text = widget.group.text.trim();
-    if (text.isEmpty) return const SizedBox.shrink();
-    final summary = text.replaceAll(RegExp(r'\s+'), ' ');
-    final preview = summary.length > 80
-        ? '${summary.substring(0, 80)}…'
-        : summary;
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        // 与工具调用卡片同款视觉（思考按 tool 样式折叠卡渲染）。
-        color: CupertinoColors.systemGrey6.resolveFrom(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Row(
-              children: [
-                Icon(
-                  CupertinoIcons.sparkles,
-                  size: 14,
-                  color: CupertinoColors.systemPurple.resolveFrom(context),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  l10n.thinkingLabel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label.resolveFrom(context),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: secondary),
-                  ),
-                ),
-                Icon(
-                  _expanded
-                      ? CupertinoIcons.chevron_up
-                      : CupertinoIcons.chevron_down,
-                  size: 12,
-                  color: secondary,
-                ),
-              ],
-            ),
-          ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                text,
-                style: const TextStyle(fontSize: 12, height: 1.4),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
+/// 发送中指示器（sending 相位，未拿到 stream_id）。

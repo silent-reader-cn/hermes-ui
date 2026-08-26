@@ -92,39 +92,47 @@ CronJob buildJob(String id, {String? name, String? state, bool? enabled}) {
 
 /// 会话列表页的静态数据。
 Future<List<Override>> sessionListOverrides() async {
+  // 固定分区参考时钟（2026-08-10 周一 12:00）——mock 会话用绝对时间戳，
+  // 分组结果与运行时刻/跨午夜无关，金照稳定。
+  final fixedNow = DateTime(2026, 8, 10, 12, 0, 0);
   final api = FakeSessionListApi(
     sessions: [
       buildSession(
         's-pin',
         '置顶会话：长期进行中的金色回归与主题对比度修复项目讨论纪要（标题很长用于测试两行省略）',
         pinned: true,
-        at: secAgo(const Duration(minutes: 10)),
+        at: secOf(DateTime(2026, 8, 10, 11, 50)),
       ),
       buildSession(
         's-stream',
         '正在生成的会话',
         isStreaming: true,
-        at: secAgo(const Duration(minutes: 30)),
+        at: secOf(DateTime(2026, 8, 10, 11, 30)),
       ),
       buildSession(
         's-today',
         '今天：Flutter 主题对比度修复进展',
-        at: secAgo(const Duration(hours: 1)),
+        at: secOf(DateTime(2026, 8, 10, 10, 0)),
       ),
-      buildSession('s-y1', '昨天会话', at: secAgo(const Duration(days: 1))),
+      buildSession(
+        's-y1',
+        '昨天会话',
+        at: secOf(DateTime(2026, 8, 9, 10, 0)),
+      ),
       buildSession(
         's-old',
         '更早：golden 截图回归计划',
-        at: secAgo(const Duration(days: 3)),
+        at: secOf(DateTime(2026, 8, 7, 10, 0)),
       ),
       buildSession(
         's-old2',
         '更早的另一个会话标题也很长用来测试元数据行与标题行的换行表现是否正常',
-        at: secAgo(const Duration(days: 10)),
+        at: secOf(DateTime(2026, 8, 1, 10, 0)),
       ),
     ],
   );
   return [
+    sessionListNowProvider.overrideWithValue(() => fixedNow),
     apiClientProvider.overrideWithValue(
       ApiClient(baseUrl: 'http://test.local:30002'),
     ),

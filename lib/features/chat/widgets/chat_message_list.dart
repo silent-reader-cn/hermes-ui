@@ -18,6 +18,7 @@ import 'chat_media_view.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
+import 'reasoning_block.dart';
 import 'message_highlight.dart';
 import '../../settings/injected_notice_settings.dart';
 import '../../settings/tool_group_settings.dart';
@@ -782,7 +783,7 @@ class _LiveTimelineItem extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey(entry.renderKey),
       child: switch (entry.kind) {
-        LiveSegmentKind.thinking => _FallbackReasoningBlock(
+        LiveSegmentKind.thinking => ReasoningBlock(
           group: ReasoningGroup(
             anchorMessageId: streamingMessage.messageId,
             text: entry.reasoningText,
@@ -918,7 +919,7 @@ class _FallbackToolReasoningCards extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final group in reasoningGroups) ...[
-            _FallbackReasoningBlock(group: group),
+            ReasoningBlock(group: group),
             if (group != reasoningGroups.last) const SizedBox(height: 8),
           ],
           if (reasoningGroups.isNotEmpty && toolGroups.isNotEmpty)
@@ -928,98 +929,6 @@ class _FallbackToolReasoningCards extends StatelessWidget {
             if (group != toolGroups.last) const SizedBox(height: 8),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _FallbackReasoningBlock extends StatefulWidget {
-  const _FallbackReasoningBlock({required this.group});
-
-  final ReasoningGroup group;
-
-  @override
-  State<_FallbackReasoningBlock> createState() =>
-      _FallbackReasoningBlockState();
-}
-
-class _FallbackReasoningBlockState extends State<_FallbackReasoningBlock> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final text = widget.group.text.trim();
-    if (text.isEmpty) return const SizedBox.shrink();
-    final summary = text.replaceAll(RegExp(r'\s+'), ' ');
-    final preview = summary.length > 80
-        ? '${summary.substring(0, 80)}…'
-        : summary;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
-        onTap: () => setState(() => _expanded = !_expanded),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5.resolveFrom(context),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _expanded
-                        ? CupertinoIcons.chevron_down
-                        : CupertinoIcons.chevron_right,
-                    size: 12,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    l10n.thinkingLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
-                        context,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_expanded)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
       ),
     );
   }
