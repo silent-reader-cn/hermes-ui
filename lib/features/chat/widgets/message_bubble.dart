@@ -277,11 +277,17 @@ class _AssistantContent extends StatelessWidget {
     // 不再独立渲染思考卡。
     final distinctTools = _distinctToolGroups(toolGroups);
 
-    // 统一间距模型：各区块（选中上下文卡片 / 正文 / 工具卡 / 速率）之间
-    // 固定 [kMessageSectionGap]，不再依赖卡片自身 margin 造成上下不均。
+    // 统一间距模型：各区块（选中上下文卡片 / 工具卡(思考+工具) / 正文 / 速率）
+    // 之间固定 [kMessageSectionGap]。
     final sections = <Widget>[];
     if (blocks.isNotEmpty) {
       sections.add(SelectedContextCardGroup(blocks: blocks));
+    }
+    // 真实时序对齐（Hermes 流序：思考 → 工具 → 文本）：工具卡
+    // （含思考子卡行）渲染在正文文本上方——遇 think/tool 建卡吸收连续
+    // think/tool，遇 text 打断为独立正文段。
+    for (final group in distinctTools) {
+      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (parsedContent.isNotEmpty) {
       sections.add(
@@ -303,9 +309,6 @@ class _AssistantContent extends StatelessWidget {
           },
         ),
       );
-    }
-    for (final group in distinctTools) {
-      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (message.turnTps != null) {
       sections.add(
