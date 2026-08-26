@@ -1027,6 +1027,10 @@ class ToolCallGroup {
   }
 
   static String _toolCallFingerprint(ToolCall toolCall) {
+    // 思考子卡行按内容参与指纹：不同思考段不得互相去重（同 name 无 args）。
+    if (toolCall.isThinking) {
+      return 'fallback:thinking:${toolCall.thinking ?? ''}';
+    }
     return [
       'fallback',
       toolCall.displayName,
@@ -1056,10 +1060,22 @@ class ToolCallGroup {
       duration: existing.duration ?? fallbackCall.duration,
       isError: _mergedErrorState(existing.isError, fallbackCall.isError),
       isCompleted: existing.isCompleted || fallbackCall.isCompleted,
+      thinking: _mergedThinking(existing, fallbackCall),
       startedAt: existing.startedAt < fallbackCall.startedAt
           ? existing.startedAt
           : fallbackCall.startedAt,
     );
+  }
+
+  /// 合并思考子卡内容：existing 优先；两者都有时拼接（思考段合并不丢文本）。
+  /// 同内容（重放/重连出现两次）→ 去重只保留一份。
+  static String? _mergedThinking(ToolCall existing, ToolCall fallback) {
+    final a = existing.thinking?.trim();
+    final b = fallback.thinking?.trim();
+    if (a == null || a.isEmpty) return b;
+    if (b == null || b.isEmpty) return a;
+    if (a == b) return a;
+    return '$a\n\n$b';
   }
 
   static bool? _mergedErrorState(bool? existing, bool? fallback) {

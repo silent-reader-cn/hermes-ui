@@ -655,10 +655,10 @@ class _ThinkingRowState extends State<_ThinkingRow> {
           onTap: () => setState(() => _expanded = !_expanded),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 CupertinoIcons.sparkles,
                 size: 14,
-                color: CupertinoColors.systemPurple,
+                color: CupertinoColors.systemPurple.resolveFrom(context),
               ),
               const SizedBox(width: 6),
               Text(
