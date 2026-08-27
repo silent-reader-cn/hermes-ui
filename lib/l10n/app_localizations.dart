@@ -1179,9 +1179,45 @@ class AppLocalizations {
   String get connectionErrorPrefix => isEnglish ? 'Connection error:' : '连接异常：';
   String connectionErrorWithDetail(String detail) =>
       '$connectionErrorPrefix $detail';
-  String get connectionErrorMalformedDone => isEnglish
-      ? 'Connection error: malformed completion event'
-      : '连接异常：完成事件格式异常';
+  // ---------------------------------------------------------------------------
+  // 15. Diagnostics & Debugging
+  // ---------------------------------------------------------------------------
+  String get diagnostics => isEnglish ? 'Diagnostics' : '调试/诊断';
+  String get diagnosticsTitle => isEnglish ? 'Diagnostics' : '调试/诊断';
+  String get diagnosticsSection => isEnglish ? 'Diagnostics' : '调试/诊断';
+  String get diagnosticsEnabled => isEnglish ? 'Debug Mode' : '调试模式';
+  String get diagnosticsEnabledDesc => isEnglish
+      ? 'Collect network requests, SSE events, and system errors when enabled'
+      : '开启后采集网络请求、SSE 事件及系统错误日志';
+  String get diagnosticsEmptyDisabled => isEnglish
+      ? 'Enable debug mode to start recording logs'
+      : '打开调试模式后开始记录';
+  String get diagnosticsEmptyNoLogs =>
+      isEnglish ? 'No logs recorded' : '暂无日志记录';
+  String get diagnosticsEmptyNoMatch =>
+      isEnglish ? 'No matching logs' : '无匹配的日志';
+  String get diagnosticsTimeRangeAll => isEnglish ? 'All' : '全部';
+  String get diagnosticsTimeRangeToday => isEnglish ? 'Today' : '今天';
+  String get diagnosticsTimeRangeLast7Days => isEnglish ? 'Last 7 Days' : '近 7 天';
+  String get diagnosticsTimeRangeCustom => isEnglish ? 'Custom' : '自定义';
+  String get diagnosticsSearchPlaceholder => isEnglish
+      ? 'Search timestamp, level, tag, message, details…'
+      : '搜索时间、级别、Tag、内容或详情…';
+  String get diagnosticsCopySingle => isEnglish ? 'Copy Log' : '复制日志';
+  String get diagnosticsCopySelected => isEnglish ? 'Copy Selected' : '复制选中';
+  String get diagnosticsClear => isEnglish ? 'Clear Logs' : '清空日志';
+  String get diagnosticsConfirmClear => isEnglish
+      ? 'Are you sure you want to clear all diagnostic logs?'
+      : '确定要清空所有诊断日志吗？';
+  String get diagnosticsExport => isEnglish ? 'Export' : '导出';
+  String get diagnosticsExportSuccess => isEnglish
+      ? 'Diagnostic logs exported and copied to clipboard'
+      : '诊断日志已导出并复制到剪贴板';
+  String get diagnosticsSelectMode => isEnglish ? 'Select' : '多选';
+  String get diagnosticsExitSelectMode => isEnglish ? 'Done' : '完成';
+  String diagnosticsSelectedCount(int count) =>
+      isEnglish ? '$count selected' : '已选择 $count 条';
+  String get diagnosticsDetailsTitle => isEnglish ? 'Log Details' : '日志详情';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??

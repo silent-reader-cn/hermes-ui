@@ -9,6 +9,7 @@ import 'cookie_store.dart';
 import 'custom_header.dart';
 import 'endpoints.dart';
 import '../models/server_info.dart';
+import '../../features/diagnostics/diagnostics_interceptor.dart';
 
 /// 401 时的自动重登回调：返回 true 表示已用保存的凭证重登成功。
 typedef AutoReauthHandler = Future<bool> Function();
@@ -366,6 +367,8 @@ class ApiClient {
   // -------------------------------------------------------------------------
 
   void _installInterceptors() {
+    _dio.interceptors.add(DiagnosticsInterceptor());
+    _publicMediaDio.interceptors.add(DiagnosticsInterceptor());
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {

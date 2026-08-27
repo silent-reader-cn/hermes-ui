@@ -16,6 +16,8 @@ import 'core/connections/connection_store.dart';
 import 'features/chat/chat_providers.dart';
 import 'features/desktop/desktop_settings.dart';
 import 'features/desktop/startup_registrar.dart';
+import 'features/diagnostics/diagnostics_models.dart';
+import 'features/diagnostics/diagnostics_service.dart';
 import 'features/notifications/notification_providers.dart';
 
 /// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8）。
@@ -123,6 +125,17 @@ Future<void> main(List<String> args) async {
       error: details.exception,
       stackTrace: details.stack,
     );
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.error,
+      tag: 'flutter_error',
+      message: details.exceptionAsString(),
+      details: {
+        'library': details.library,
+        'context': details.context?.toString(),
+        if (details.stack != null) 'stackTrace': details.stack.toString(),
+      },
+      errorKind: details.exception.runtimeType.toString(),
+    );
     FlutterError.presentError(details);
   };
   PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
@@ -131,6 +144,15 @@ Future<void> main(List<String> args) async {
       name: 'hermes.error',
       error: error,
       stackTrace: stack,
+    );
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.error,
+      tag: 'platform_error',
+      message: error.toString(),
+      details: {
+        'stackTrace': stack.toString(),
+      },
+      errorKind: error.runtimeType.toString(),
     );
     return true;
   };
@@ -141,8 +163,21 @@ Future<void> main(List<String> args) async {
       error: details.exception,
       stackTrace: details.stack,
     );
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.error,
+      tag: 'error_widget',
+      message: details.exceptionAsString(),
+      details: {
+        'library': details.library,
+        'context': details.context?.toString(),
+        if (details.stack != null) 'stackTrace': details.stack.toString(),
+      },
+      errorKind: details.exception.runtimeType.toString(),
+    );
     return RecoverableErrorCard(details: details);
   };
+
+  unawaited(DiagnosticsService.instance.init());
 
   final silentStart = isSilentStart(
     args: args,

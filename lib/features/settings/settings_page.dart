@@ -16,6 +16,7 @@ import '../../core/models/server_catalog.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import '../diagnostics/diagnostics_page.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
@@ -330,6 +331,20 @@ class _AdvancedSettingsSection extends StatelessWidget {
           onTap: () => Navigator.of(context).push(
             CupertinoPageRoute<void>(
               builder: (_) => const DesktopSettingsPage(),
+            ),
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-entry-diagnostics'),
+          title: Text(l10n.diagnosticsTitle),
+          trailing: const Icon(
+            CupertinoIcons.chevron_right,
+            size: 18,
+            color: CupertinoColors.systemGrey,
+          ),
+          onTap: () => Navigator.of(context).push(
+            CupertinoPageRoute<void>(
+              builder: (_) => const DiagnosticsPage(),
             ),
           ),
         ),

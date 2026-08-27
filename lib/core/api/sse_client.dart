@@ -8,6 +8,8 @@ import '../models/clarification.dart';
 import '../models/context_window_snapshot.dart';
 import '../models/json_value.dart';
 import '../models/session.dart';
+import '../../features/diagnostics/diagnostics_models.dart';
+import '../../features/diagnostics/diagnostics_service.dart';
 import 'custom_header.dart';
 
 // ---------------------------------------------------------------------------
@@ -723,21 +725,158 @@ class SseClient {
       cancelToken: _cancelToken,
       onEvent: (wire) {
         if (wire.heartbeat) {
-          onEvent(const HeartbeatSseEvent());
+          const hb = HeartbeatSseEvent();
+          _logSseEvent(hb);
+          onEvent(hb);
           return;
         }
         if (wire.id != null && wire.id!.isNotEmpty) {
           _lastEventId = wire.id;
           onEventId?.call(wire.id!);
         }
-        onEvent(SseEventDecoder.decode(wire.eventType, wire.data));
+        final event = SseEventDecoder.decode(wire.eventType, wire.data);
+        _logSseEvent(event);
+        onEvent(event);
       },
-      onTransportError: onTransportError ?? (_) {},
+      onTransportError: (message) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'sse',
+          message: 'SSE transport error: $message',
+          errorKind: 'TransportError',
+        );
+        onTransportError?.call(message);
+      },
       onClosed: onClosed ?? () {},
     );
   }
 
   void stop() => _cancelToken?.cancel();
+}
+
+void _logSseEvent(SseEvent event) {
+  final service = DiagnosticsService.instance;
+  if (!service.enabled) return;
+  switch (event) {
+    case TokenSseEvent(:final text):
+      service.log(
+        level: DiagnosticsLogLevel.verbose,
+        tag: 'sse',
+        message: 'token: "${truncateText(text, 100)}"',
+      );
+    case ReasoningSseEvent(:final text):
+      service.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'sse',
+        message: 'reasoning: "${truncateText(text, 100)}"',
+      );
+    case ToolStartedSseEvent(:final event):
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message:
+            'tool start: ${event.name ?? 'unknown'} (${event.stableId ?? ''})',
+        details: {
+          'name': event.name,
+          'stableId': event.stableId,
+          if (event.preview != null) 'preview': event.preview,
+        },
+      );
+    case ToolCompletedSseEvent(:final event):
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message:
+            'tool complete: ${event.name ?? 'unknown'} (${event.stableId ?? ''}) duration=${event.duration ?? 0}s',
+        details: {
+          'name': event.name,
+          'stableId': event.stableId,
+          if (event.duration != null) 'duration': event.duration,
+          if (event.isError != null) 'isError': event.isError,
+        },
+      );
+    case HeartbeatSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.verbose,
+        tag: 'sse',
+        message: 'heartbeat (:comment)',
+      );
+    case DoneSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message: 'done',
+      );
+    case TitleSseEvent(:final title, :final sessionId):
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message: 'title: "$title" (session: $sessionId)',
+      );
+    case MeteringSseEvent(:final tps, :final sessionId):
+      service.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'sse',
+        message: 'metering: tps=$tps (session: $sessionId)',
+      );
+    case ApprovalPendingSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'sse',
+        message: 'approval pending',
+      );
+    case ClarificationPendingSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'sse',
+        message: 'clarification pending',
+      );
+    case PendingSteerLeftoverSseEvent(:final text):
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message: 'pending_steer_leftover: "${truncateText(text, 100)}"',
+      );
+    case StreamEndSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'sse',
+        message: 'stream_end',
+      );
+    case CancelledSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'sse',
+        message: 'cancel',
+      );
+    case ErrorSseEvent(:final message):
+      service.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'sse',
+        message: 'error: $message',
+        errorKind: 'ErrorSseEvent',
+      );
+    case TransportErrorSseEvent(:final message):
+      service.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'sse',
+        message: 'transportError: $message',
+        errorKind: 'TransportError',
+      );
+    case InterimAssistantSseEvent(:final text, :final alreadyStreamed):
+      service.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'sse',
+        message:
+            'interim_assistant: alreadyStreamed=$alreadyStreamed "${truncateText(text, 100)}"',
+      );
+    case IgnoredSseEvent():
+      service.log(
+        level: DiagnosticsLogLevel.verbose,
+        tag: 'sse',
+        message: 'ignored event',
+      );
+  }
 }
 
 // ---------------------------------------------------------------------------
