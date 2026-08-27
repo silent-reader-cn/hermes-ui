@@ -912,6 +912,52 @@ void main() {
         expect(api.createCount, 1);
         expect(find.text('chat-desktop-new-1'), findsOneWidget);
       });
+
+      testWidgets('窄屏大标题模式：快捷导航 ▾ 贴在「会话」大标题右侧，筛选和设置在右侧', (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final api = FakeSessionListApi(
+          sessions: [
+            buildSession('s1', '会话 1'),
+          ],
+        );
+
+        await pumpSessionList(tester, api);
+        await tester.pumpAndSettle();
+
+        final narrowNavRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-narrow-nav')),
+        );
+        final filterRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-filter-trigger')),
+        );
+        final settingsRect = tester.getRect(
+          find.byKey(const ValueKey('session-list-settings')),
+        );
+
+        // 验证水平排列结构: [会话 ▾] —————————— [筛选] [设置]
+        // 1. 下拉按钮紧随标题右侧（left 大于 20，小于 150）
+        expect(narrowNavRect.left, greaterThan(20.0));
+        expect(narrowNavRect.left, lessThan(150.0));
+
+        // 2. 下拉按钮与右侧操作栏之间存在明显空隙
+        expect(narrowNavRect.right, lessThan(filterRect.left));
+
+        // 3. 右侧操作栏为 [筛选] [设置]
+        expect(filterRect.right, lessThanOrEqualTo(settingsRect.left));
+
+        // 4. 垂直居中对齐
+        expect(
+          (narrowNavRect.center.dy - filterRect.center.dy).abs(),
+          lessThanOrEqualTo(1.0),
+        );
+        expect(
+          (filterRect.center.dy - settingsRect.center.dy).abs(),
+          lessThanOrEqualTo(1.0),
+        );
+      });
     });
   });
 
@@ -948,6 +994,98 @@ void main() {
       expect(d1.shouldRebuild(d2), isTrue);
       expect(d2.shouldRebuild(d3), isTrue);
       expect(d1.shouldRebuild(d1), isFalse);
+    });
+
+    test('shouldRebuild 涵盖 titleTrailing 差异', () {
+      const d1 = SessionListHeaderDelegate(title: 'A');
+      const d2 = SessionListHeaderDelegate(
+        title: 'A',
+        titleTrailing: SizedBox(key: ValueKey('trailing')),
+      );
+
+      expect(d1.shouldRebuild(d2), isTrue);
+      expect(d2.shouldRebuild(d1), isTrue);
+    });
+
+    testWidgets('titleTrailing 紧贴大标题右侧并在滚动时平滑过渡', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: CustomScrollView(
+              controller: scrollController,
+              slivers: const [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: SessionListHeaderDelegate(
+                    title: '会话',
+                    titleTrailing: SizedBox(
+                      key: ValueKey('test-title-trailing'),
+                      width: 44,
+                      height: 44,
+                    ),
+                    actions: [
+                      SizedBox(
+                        key: ValueKey('test-action-button'),
+                        width: 44,
+                        height: 44,
+                      ),
+                    ],
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 1000),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final trailingFinder = find.byKey(const ValueKey('test-title-trailing'));
+      final actionFinder = find.byKey(const ValueKey('test-action-button'));
+      expect(trailingFinder, findsOneWidget);
+      expect(actionFinder, findsOneWidget);
+
+      final expandedTrailingRect = tester.getRect(trailingFinder);
+      final expandedActionRect = tester.getRect(actionFinder);
+
+      // 展开态：trailing 在左侧标题之后，action 在屏幕右侧
+      expect(expandedTrailingRect.left, greaterThan(20.0));
+      expect(expandedTrailingRect.right, lessThan(expandedActionRect.left));
+      expect(expandedActionRect.right, lessThanOrEqualTo(400.0));
+
+      // 展开态：trailing 与 action 垂直居中对齐
+      expect(
+        (expandedTrailingRect.center.dy - expandedActionRect.center.dy).abs(),
+        lessThanOrEqualTo(1.0),
+      );
+
+      // 向上滚动收起
+      scrollController.jumpTo(100);
+      await tester.pumpAndSettle();
+
+      final collapsedTrailingRect = tester.getRect(trailingFinder);
+      final collapsedActionRect = tester.getRect(actionFinder);
+
+      // 收起态：trailing 与 action 同轴上升至导航栏高度
+      expect(
+        collapsedTrailingRect.center.dy,
+        lessThan(expandedTrailingRect.center.dy),
+      );
+      expect(
+        (collapsedTrailingRect.center.dy - collapsedActionRect.center.dy).abs(),
+        lessThanOrEqualTo(1.0),
+      );
+      // 收起态中标题比大标题短，trailing 水平位置也向左收缩
+      expect(collapsedTrailingRect.left, lessThan(expandedTrailingRect.left));
     });
   });
 }

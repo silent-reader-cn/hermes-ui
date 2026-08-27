@@ -4,17 +4,19 @@ import 'package:flutter/cupertino.dart';
 ///
 /// Flutter 的 `CupertinoSliverNavigationBar` 在展开大标题时，`trailing`
 /// 按钮固定在顶部 persistent 栏（44pt），大标题在其下方独立展开——视觉上
-/// 呈现「标题一行、按钮一行」的割裂效果，且展开态顶部遗留一条无内容空带。
+/// 会话列表顶部导航栏 Delegate（TASK W3-2 窄屏大标题 + 导航下拉 + 桌面紧凑单行）。
 ///
-/// 本组件支持两种模式：
-/// - **移动端大标题模式**（[compactHeader] = false）：大标题与右上角操作按钮同行，
-///   滚动平滑过渡到导航栏高度（状态栏 + 44），大标题上移淡出、中标题淡入；大标题与下方
-///   搜索栏之间无分隔线，无缝衔接。
-/// - **桌面端紧凑单行模式**（[compactHeader] = true）：彻底移除「会话」大标题文案，
+/// 支持两种显示模式：
+/// - **移动端大标题模式（默认）**：展开时呈现 34pt 大标题，紧贴标题右侧支持渲染
+///   [titleTrailing]（如窄屏快捷导航下拉按钮 ▾，间距 4pt），右侧为操作按钮 [actions]；
+///   滚动时大标题平滑淡出过渡为 17pt 居左收起态中标题，[titleTrailing] 与 [actions]
+///   沿垂直中线（[buttonCenterY]）同轴平滑上升至持久导航栏。
+/// - **桌面紧凑单行模式（`compactHeader == true`）**：彻底移除「会话」大标题，将
 ///   搜索框（[searchField]）与操作按钮（[actions]）并入同一行 pinned 头部，节省垂直空间。
 class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   const SessionListHeaderDelegate({
     required this.title,
+    this.titleTrailing,
     this.actions = const [],
     this.topPadding = 0,
     this.brightness = Brightness.light,
@@ -28,6 +30,12 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   /// 大标题 / 收起态中标题共用文案（移动端模式使用）。
   final String title;
+
+  /// 紧贴标题右侧的尾随组件（如窄屏快捷导航下拉按钮 ▾）。
+  ///
+  /// 仅在非紧凑模式（大标题模式）下渲染，紧随标题右侧（间距 4pt），
+  /// 随滚动参与 [buttonCenterY] 与文本宽度的展开/收起过渡动画。
+  final Widget? titleTrailing;
 
   /// 右侧操作按钮列表（设置 / 筛选 / 新建会话等）。
   final List<Widget> actions;
@@ -85,6 +93,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(SessionListHeaderDelegate oldDelegate) =>
       oldDelegate.title != title ||
+      oldDelegate.titleTrailing != titleTrailing ||
       oldDelegate.actions != actions ||
       oldDelegate.topPadding != topPadding ||
       oldDelegate.brightness != brightness ||
@@ -167,6 +176,51 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
         4 * collapsed -
         4 * (1 - progress);
 
+    double largeTitleWidth = 0.0;
+    double collapsedTitleWidth = 0.0;
+    if (titleTrailing != null) {
+      final direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
+      final textScaler =
+          MediaQuery.maybeTextScalerOf(context) ?? TextScaler.noScaling;
+
+      final largePainter = TextPainter(
+        text: TextSpan(
+          text: title,
+          style: TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.w700,
+            color: labelColor,
+          ),
+        ),
+        textDirection: direction,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      largeTitleWidth = largePainter.width;
+
+      final collapsedPainter = TextPainter(
+        text: TextSpan(
+          text: title,
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: labelColor,
+          ),
+        ),
+        textDirection: direction,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      collapsedTitleWidth = collapsedPainter.width;
+    }
+
+    final trailingLeft =
+        20.0 +
+        (collapsedTitleWidth +
+            (largeTitleWidth - collapsedTitleWidth) * progress) +
+        4.0;
+    final trailingTop = buttonCenterY - _buttonHalfSize;
+
     return Stack(
       key: const ValueKey('session-list-header'),
       fit: StackFit.expand,
@@ -209,6 +263,13 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           ),
         ),
+        // 紧贴标题右侧的尾随组件（如窄屏快捷导航下拉按钮 ▾），随展开/收起平滑过渡。
+        if (titleTrailing != null)
+          Positioned(
+            left: trailingLeft,
+            top: trailingTop,
+            child: titleTrailing!,
+          ),
         // 右上角操作按钮：展开时与大标题同行，收起时平滑升至导航栏。
         if (actions.isNotEmpty)
           Positioned(

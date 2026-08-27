@@ -131,9 +131,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     searchField: !widget.showUtilityRows
                         ? _buildSearchField()
                         : null,
+                    titleTrailing: !isWide && !isSearchMode
+                        ? _buildNarrowNavigationAction()
+                        : null,
                     actions: [
-                      if (!isWide && !isSearchMode)
-                        _buildNarrowNavigationAction(),
                       if (!isSearchMode) _buildFilterAction(state),
                       if (widget.showSettingsTrailing)
                         _buildSettingsOrDoneAction(state),
