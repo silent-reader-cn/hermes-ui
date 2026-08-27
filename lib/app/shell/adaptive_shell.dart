@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../widgets/adaptive_popover.dart';
 import 'empty_detail_pane.dart';
 import 'session_sidebar.dart';
 import 'sidebar_resize_handle.dart';
@@ -32,11 +35,12 @@ const double kAdaptiveSidebarWidth = kAdaptiveSidebarDefaultWidth;
 /// 侧栏宽度在 [SharedPreferences] 中的持久化键名。
 const String kAdaptiveSidebarWidthStorageKey = 'adaptive_sidebar_width';
 
-/// 自适应宽屏双栏外壳（TASK W2 / TASK-SIDEBAR-RESIZE）。
+/// 自适应宽屏双栏外壳（TASK W2 / TASK-SIDEBAR-RESIZE / Android 系统返回三级分流）。
 ///
 /// - 窄屏（width < 900）：直接展示当前页面 [child]，保持单栈 Cupertino 体验。
 /// - 宽屏（width >= 900）：左侧展示常驻 [SessionSidebar]（宽度可拖拽调整并在 [280, 420] 之间 clamp，且持久化到本地存储），
 ///   中间展示拖拽手柄 [SidebarResizeHandle]，右侧展示详情内容 [child]（若路由为 `/` 则展示 [EmptyDetailPane]）。
+/// - 系统返回（Android）：三级分流接管（① 弹层/覆盖层关闭；② 二级页回退到主页 `/`；③ 主页 2 秒内双击退出应用），其他平台行为空转。
 class AdaptiveShell extends StatefulWidget {
   const AdaptiveShell({
     super.key,
@@ -56,11 +60,29 @@ class AdaptiveShell extends StatefulWidget {
 
 class _AdaptiveShellState extends State<AdaptiveShell> {
   double _sidebarWidth = kAdaptiveSidebarDefaultWidth;
+  DateTime? _lastBackPressTime;
+  bool _showExitToast = false;
+  Timer? _exitToastTimer;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadPersistedWidth());
+  }
+
+  @override
+  void didUpdateWidget(covariant AdaptiveShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.matchedLocation != widget.state.matchedLocation) {
+      _lastBackPressTime = null;
+      _dismissExitToast();
+    }
+  }
+
+  @override
+  void dispose() {
+    _exitToastTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPersistedWidth() async {
@@ -110,34 +132,166 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
     await prefs.setDouble(kAdaptiveSidebarWidthStorageKey, width);
   }
 
+  void _dismissExitToast() {
+    _exitToastTimer?.cancel();
+    if (_showExitToast && mounted) {
+      setState(() {
+        _showExitToast = false;
+      });
+    }
+  }
+
+  void _showExitToastMessage() {
+    _exitToastTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _showExitToast = true;
+      });
+    }
+    _exitToastTimer = Timer(const Duration(seconds: 2), () {
+      _lastBackPressTime = null;
+      if (mounted) {
+        setState(() {
+          _showExitToast = false;
+        });
+      }
+    });
+  }
+
+  void _handlePopInvoked(bool didPop, dynamic result) {
+    if (didPop) return;
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    _handleAndroidBack();
+  }
+
+  void _handleAndroidBack() {
+    // 1. 先关 overlay 弹层（AdaptiveActionMenu / ContextWindowPopover 等）
+    if (AdaptivePopover.closeTopOverlay()) {
+      _lastBackPressTime = null;
+      _dismissExitToast();
+      return;
+    }
+
+    // 2. 再关 Navigator route 覆盖层（bottom sheet / modal popup）
+    if (Navigator.of(context).canPop()) {
+      _lastBackPressTime = null;
+      _dismissExitToast();
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final location = widget.state.matchedLocation;
+    // 3. 无覆盖层且非首页（/onboarding 除外）→ canPop ? pop : go('/')
+    if (location != '/' && location != '/onboarding') {
+      _lastBackPressTime = null;
+      _dismissExitToast();
+      context.go('/');
+      return;
+    }
+
+    // 4. 首页 / → 首次按返回提示，2s 内再按退出应用
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+      _lastBackPressTime = now;
+      _showExitToastMessage();
+    } else {
+      _dismissExitToast();
+      _lastBackPressTime = null;
+      unawaited(SystemNavigator.pop());
+    }
+  }
+
+  Widget _buildExitToast(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 48),
+          child: IgnorePointer(
+            child: Container(
+              key: const ValueKey('android-back-exit-toast'),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              decoration: BoxDecoration(
+                color: CupertinoColors.black.withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: CupertinoColors.black.withValues(alpha: 0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Text(
+                '再按一次退出应用',
+                style: TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
-    if (!isWide) {
-      return widget.child;
-    }
-
     final isRootSessionList = widget.state.matchedLocation == '/';
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
 
-    return ColoredBox(
-      color: CupertinoTheme.of(context).scaffoldBackgroundColor,
-      child: Row(
-        key: const ValueKey('adaptive-shell-wide-layout'),
-        children: [
-          SizedBox(
-            key: const ValueKey('adaptive-shell-sidebar-container'),
-            width: _sidebarWidth,
-            child: SessionSidebar(
-              currentLocation: widget.state.matchedLocation,
+    final Widget content = isWide
+        ? ColoredBox(
+            color: CupertinoTheme.of(context).scaffoldBackgroundColor,
+            child: Row(
+              key: const ValueKey('adaptive-shell-wide-layout'),
+              children: [
+                SizedBox(
+                  key: const ValueKey('adaptive-shell-sidebar-container'),
+                  width: _sidebarWidth,
+                  child: SessionSidebar(
+                    currentLocation: widget.state.matchedLocation,
+                  ),
+                ),
+                SidebarResizeHandle(
+                  onDragUpdate: _handleDragUpdate,
+                  onDragEnd: _handleDragEnd,
+                ),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (isRootSessionList)
+                        const EmptyDetailPane()
+                      else
+                        widget.child,
+                      if (isRootSessionList)
+                        Offstage(
+                          offstage: true,
+                          child: widget.child,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          SidebarResizeHandle(
-            onDragUpdate: _handleDragUpdate,
-            onDragEnd: _handleDragEnd,
-          ),
-          Expanded(
-            child: isRootSessionList ? const EmptyDetailPane() : widget.child,
-          ),
+          )
+        : widget.child;
+
+    return PopScope(
+      key: const ValueKey('adaptive-shell-pop-scope'),
+      canPop: !isAndroid,
+      onPopInvokedWithResult: _handlePopInvoked,
+      child: Stack(
+        children: [
+          content,
+          if (_showExitToast) _buildExitToast(context),
         ],
       ),
     );

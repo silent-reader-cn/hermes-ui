@@ -26,8 +26,34 @@ enum PopoverAlign {
   end,
 }
 
-/// 全应用可复用锚点弹层（popover）。
+/// 管理 [showAdaptivePopover] 弹出的 overlay 弹层栈。
+class AdaptivePopover {
+  const AdaptivePopover._();
 
+  static final List<VoidCallback> _activeOverlayClosers = <VoidCallback>[];
+
+  /// 关闭当前最顶层的 overlay 弹层。
+  ///
+  /// 若栈非空，则取出并调用栈顶回调关闭弹层，返回 true；若栈为空，返回 false。
+  static bool closeTopOverlay() {
+    if (_activeOverlayClosers.isEmpty) return false;
+    final closer = _activeOverlayClosers.removeLast();
+    closer();
+    return true;
+  }
+
+  /// 测试辅助：获取当前活跃 overlay 数量。
+  @visibleForTesting
+  static int get activeOverlayCount => _activeOverlayClosers.length;
+
+  /// 测试辅助：清空 overlay 栈。
+  @visibleForTesting
+  static void debugReset() {
+    _activeOverlayClosers.clear();
+  }
+}
+
+/// 全应用可复用锚点弹层（popover）。
 ///
 /// 特性：
 /// - 基于 [anchorKey] 的 overlay 定位，支持 [placement]（top/bottom/auto）与
@@ -141,6 +167,20 @@ Future<void> showAdaptivePopover({
   final verticalOffset = offset.dy;
 
   late final OverlayEntry entry;
+  late final VoidCallback close;
+
+  bool isClosed = false;
+  close = () {
+    if (isClosed) return;
+    isClosed = true;
+    AdaptivePopover._activeOverlayClosers.remove(close);
+    if (entry.mounted) {
+      entry.remove();
+    }
+  };
+
+  AdaptivePopover._activeOverlayClosers.add(close);
+
   entry = OverlayEntry(
     builder: (overlayContext) => _AdaptivePopoverHost(
       left: left,
@@ -158,7 +198,7 @@ Future<void> showAdaptivePopover({
       maxHeight: maxHeight,
       barrierDismissible: barrierDismissible,
       barrierColor: barrierColor,
-      close: entry.remove,
+      close: close,
       builder: builder,
     ),
   );
@@ -226,6 +266,11 @@ class _AdaptivePopoverHost extends StatefulWidget {
 }
 
 class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
+  @override
+  void dispose() {
+    widget.close();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) {
     final isTop = widget.placement == PopoverPlacement.top;
