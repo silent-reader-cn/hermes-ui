@@ -6,10 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
-import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
-import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import 'onboarding_providers.dart';
@@ -30,8 +28,7 @@ enum _LoginState { idle, verifying, ok, failed }
 ///    auth 状态（GET /api/auth/status），结果即时显示在输入框下方。
 /// 2. 认证：服务端启用密码时显示密码框，失焦即试探登录（POST /api/auth/login），
 ///    成功/失败就地提示（不跳转）；未启用密码则显示「无需密码」文案。
-/// 3. 自定义 Headers（可选，不参与校验流程）。
-/// 4. 底部「连接并保存」：校验 URL + headers（+ 必填密码）后保存
+/// 3. 底部「连接并保存」：校验 URL（+ 必填密码）后保存
 ///    [ServerConnection] 并跳转 `/`。
 ///
 /// 后端 hermes-webui 只认密码（无用户名），保存连接时 username 恒为 null。
@@ -42,34 +39,17 @@ class OnboardingPage extends ConsumerStatefulWidget {
   ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
 }
 
-/// 单行自定义头输入（key + value 各自持有控制器，便于增删行）。
-class _HeaderField {
-  _HeaderField()
-    : nameController = TextEditingController(),
-      valueController = TextEditingController();
-
-  final TextEditingController nameController;
-  final TextEditingController valueController;
-
-  void dispose() {
-    nameController.dispose();
-    valueController.dispose();
-  }
-}
-
 class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _urlController = TextEditingController();
   final _passwordController = TextEditingController();
   final _urlFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
-  final List<_HeaderField> _headers = [_HeaderField()];
 
   _HealthState _health = _HealthState.idle;
   String _healthMessage = '';
   _AuthState _auth = _AuthState.checking;
   _LoginState _loginState = _LoginState.idle;
   String _loginMessage = '';
-  String _headerError = '';
   bool _saving = false;
 
   @override
@@ -86,23 +66,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     _passwordFocusNode.dispose();
     _urlController.dispose();
     _passwordController.dispose();
-    for (final field in _headers) {
-      field.dispose();
-    }
     super.dispose();
   }
 
   /// 根据已填 URL 构建 onboarding API 客户端（测试经 factory Provider 注入 fake）。
   OnboardingServerApi _buildClient() {
     final factory = ref.read(onboardingApiFactoryProvider);
-    return factory(_urlController.text.trim(), [
-      for (final field in _headers)
-        if (field.nameController.text.trim().isNotEmpty)
-          CustomHeader(
-            name: field.nameController.text.trim(),
-            value: field.valueController.text,
-          ),
-    ]);
+    return factory(_urlController.text.trim(), const []);
   }
 
   String? _validateUrl(String raw) {
@@ -238,45 +208,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   // 自定义 Headers + 完成
   // ---------------------------------------------------------------------------
 
-  void _addHeaderField() {
-    setState(() {
-      _headers.add(_HeaderField());
-      _headerError = '';
-    });
-  }
-
-  void _removeHeaderField(int index) {
-    setState(() {
-      _headers.removeAt(index).dispose();
-      _headerError = '';
-      if (_headers.isEmpty) _headers.add(_HeaderField());
-    });
-  }
-
-  /// Header 校验：空行跳过；非空行必须 name 为合法 token 且 value 无换行。
-  String? _headerErrorText() {
-    final l10n = AppLocalizations.of(context);
-    for (final field in _headers) {
-      final name = field.nameController.text.trim();
-      final value = field.valueController.text;
-      if (name.isEmpty && value.trim().isEmpty) continue;
-      if (!CustomHeader(name: name, value: value).isApplicable) {
-        return l10n.headerValidationFailed;
-      }
-    }
-    return null;
-  }
-
   Future<void> _finish() async {
     if (_saving) return;
     final l10n = AppLocalizations.of(context);
     final urlError = _validateUrl(_urlController.text);
-    final headerError = _headerErrorText();
     final passwordMissing =
         _auth == _AuthState.required && _passwordController.text.isEmpty;
-    if (urlError != null || headerError != null || passwordMissing) {
+    if (urlError != null || passwordMissing) {
       setState(() {
-        _headerError = headerError ?? '';
         _healthMessage = urlError ?? _healthMessage;
         if (urlError != null) _health = _HealthState.failed;
         if (passwordMissing) {
@@ -298,11 +237,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       password: _passwordController.text.isEmpty
           ? null
           : _passwordController.text,
-      customHeaders: {
-        for (final field in _headers)
-          if (field.nameController.text.trim().isNotEmpty)
-            field.nameController.text.trim(): field.valueController.text,
-      },
+      customHeaders: const {},
       createdAt: DateTime.now().toUtc(),
     );
 
@@ -378,35 +313,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           const SizedBox(height: 20),
           _buildAuthSection(),
         ],
-        const SizedBox(height: 24),
-        Text(
-          l10n.customHeadersOptional,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          l10n.customHeadersDescription,
-          style: TextStyle(
-            fontSize: 15,
-            color: secondaryText.resolveFrom(context),
-          ),
-        ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < _headers.length; i++) _buildHeaderRow(i),
-        if (_headerError.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              _headerError,
-              style: TextStyle(color: statusRedText.resolveFrom(context)),
-            ),
-          ),
-        const SizedBox(height: 8),
-        CupertinoButton(
-          key: const ValueKey('onboarding-add-header'),
-          onPressed: _addHeaderField,
-          child: Text(l10n.addHeader),
-        ),
       ],
     );
   }
@@ -550,47 +456,5 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           style: TextStyle(fontSize: 14, color: statusRedText.resolveFrom(context)),
         );
     }
-  }
-
-  Widget _buildHeaderRow(int index) {
-    final l10n = AppLocalizations.of(context);
-    final field = _headers[index];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: CupertinoTextField(
-              key: ValueKey('onboarding-header-name-$index'),
-              controller: field.nameController,
-              placeholder: l10n.headerName,
-              autocorrect: false,
-              padding: const EdgeInsets.all(10),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: CupertinoTextField(
-              key: ValueKey('onboarding-header-value-$index'),
-              controller: field.valueController,
-              placeholder: l10n.value,
-              autocorrect: false,
-              padding: const EdgeInsets.all(10),
-            ),
-          ),
-          const SizedBox(width: 4),
-          AccessibleButton(
-            key: ValueKey('onboarding-header-remove-$index'),
-            label: l10n.deleteHeader,
-            padding: EdgeInsets.zero,
-            onPressed: () => _removeHeaderField(index),
-            child: const Icon(
-              CupertinoIcons.delete,
-              color: CupertinoColors.systemRed,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
