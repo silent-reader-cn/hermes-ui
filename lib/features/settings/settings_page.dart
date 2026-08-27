@@ -17,6 +17,7 @@ import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_page.dart';
+import '../notifications/notification_providers.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
@@ -79,6 +80,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SliverToBoxAdapter(child: _ServerSection()),
           const SliverToBoxAdapter(child: _ModelSection()),
           const SliverToBoxAdapter(child: _CronSection()),
+          const SliverToBoxAdapter(child: _NotificationSection()),
           const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
           const SliverToBoxAdapter(child: _AboutSection()),
         ],
@@ -378,6 +380,64 @@ class _CronSection extends ConsumerWidget {
               unawaited(
                 ref.read(cronVisibilityProvider.notifier).setShowCron(value),
               );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 通知
+// ---------------------------------------------------------------------------
+
+/// 通知设置分组（回合完成 / 澄清请求 / 异常中断 三类开关）。
+class _NotificationSection extends ConsumerWidget {
+  const _NotificationSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final settings = ref.watch(notificationSettingsProvider);
+    final notifier = ref.read(notificationSettingsProvider.notifier);
+
+    return CupertinoListSection(
+      header: Text(l10n.notificationsSection),
+      children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-notify-turns'),
+          title: Text(l10n.notifyTurnsTitle),
+          subtitle: Text(l10n.notifyTurnsSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-notify-turns'),
+            value: settings.notifyTurnsEnabled,
+            onChanged: (value) {
+              unawaited(notifier.setNotifyTurnsEnabled(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-notify-clarify'),
+          title: Text(l10n.notifyClarifyTitle),
+          subtitle: Text(l10n.notifyClarifySubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-notify-clarify'),
+            value: settings.notifyClarifyEnabled,
+            onChanged: (value) {
+              unawaited(notifier.setNotifyClarifyEnabled(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-notify-errors'),
+          title: Text(l10n.notifyErrorsTitle),
+          subtitle: Text(l10n.notifyErrorsSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-notify-errors'),
+            value: settings.notifyErrorsEnabled,
+            onChanged: (value) {
+              unawaited(notifier.setNotifyErrorsEnabled(value));
             },
           ),
         ),

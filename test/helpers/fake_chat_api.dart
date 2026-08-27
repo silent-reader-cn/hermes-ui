@@ -98,6 +98,9 @@ class FakeChatApi implements ChatServerApi {
   String? lastUpdatedWorkspace;
   String? lastUpdatedModel;
   bool? lastYoloEnabled;
+  int respondClarificationCalls = 0;
+  String? lastClarificationSessionId;
+  String? lastClarificationResponse;
 
   final List<String> streamIds = [];
   final List<int?> replaySeqs = [];
@@ -198,6 +201,9 @@ class FakeChatApi implements ChatServerApi {
     required String response,
     String? clarifyId,
   }) async {
+    respondClarificationCalls++;
+    lastClarificationSessionId = sessionId;
+    lastClarificationResponse = response;
     return respondClarificationResponse ??
         const ClarificationRespondResponse(ok: true);
   }
@@ -398,6 +404,47 @@ class FakeChatApi implements ChatServerApi {
   void stopStream() {
     stopStreamCalls++;
   }
+
+  void Function(SseEvent event)? _onClarifyEvent;
+  void Function(String message)? _onClarifyTransportError;
+  void Function()? _onClarifyClosed;
+  ClarificationPendingResponse? clarifyPendingResponse;
+  int startClarifyStreamCalls = 0;
+  int stopClarifyStreamCalls = 0;
+  int clarifyPendingCalls = 0;
+
+  @override
+  Future<ClarificationPendingResponse> clarifyPending(String sessionId) async {
+    clarifyPendingCalls++;
+    return clarifyPendingResponse ?? const ClarificationPendingResponse();
+  }
+
+  @override
+  Future<void> startClarifyStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  }) async {
+    startClarifyStreamCalls++;
+    _onClarifyEvent = onEvent;
+    _onClarifyTransportError = onTransportError;
+    _onClarifyClosed = onClosed;
+  }
+
+  @override
+  void stopClarifyStream() {
+    stopClarifyStreamCalls++;
+    _onClarifyEvent = null;
+    _onClarifyTransportError = null;
+    _onClarifyClosed = null;
+  }
+
+  void emitClarify(SseEvent event) => _onClarifyEvent?.call(event);
+
+  void failClarify(String message) => _onClarifyTransportError?.call(message);
+
+  void closeClarifyStream() => _onClarifyClosed?.call();
 
   void emit(SseEvent event) => _onEvent?.call(event);
 

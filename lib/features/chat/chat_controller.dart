@@ -53,6 +53,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Timer? _revealTimer;
   Timer? _watchdogTimer;
   Timer? _transcriptRefreshTimer;
+  Timer? _clarifyPollTimer;
 
   /// 词级 reveal 队列（合并缓冲产出、逐 tick 消费）。
   final List<String> _revealQueue = [];
@@ -120,6 +121,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
     });
     if (sessionId.isNotEmpty) {
+      _startClarifyChannel(sessionId);
       // build 期间 state 未初始化，推迟到微任务再加载（读 state 安全）。
       scheduleMicrotask(() {
         if (_disposed) return;
@@ -154,6 +156,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer?.cancel();
     _watchdogTimer?.cancel();
     _transcriptRefreshTimer?.cancel();
+    _stopClarifyChannel();
     _api?.stopStream();
   }
 
@@ -965,6 +968,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         final newSessionId = sessionId;
         state = state.copyWith(sessionId: newSessionId);
         _onNewSessionCreated(newSessionId, text);
+        _startClarifyChannel(newSessionId);
       }
       _beginStream(streamId);
       return true;
@@ -1055,6 +1059,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (streamId == null) return;
     await _api?.cancelChat(streamId);
     if (_disposed) return;
+    _notifySessionError('响应已取消', state.displayTitle);
     _finishStream(endPhase: ChatPhase.cancelled);
   }
 
@@ -1651,6 +1656,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyClarificationUpdate(Map<String, Object?> payload) {
     final pending = payload['pending'];
     if (pending is Map) {
+      final isNew = state.phase != ChatPhase.clarifyPending ||
+          state.pendingAction.clarificationPrompt == null;
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.warn,
         tag: 'chat',
@@ -1662,10 +1669,23 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           clarificationPrompt: Map<String, Object?>.from(pending),
         ),
       );
+      if (isNew) {
+        final q = (pending['question'] as String?)?.trim();
+        _notifyClarificationNeeded(
+          q != null && q.isNotEmpty ? q : 'Agent 需要你澄清问题',
+        );
+      }
     } else {
       _clearClarificationCard();
     }
     _markProgress();
+  }
+
+  /// 澄清卡片超时收卡 + 提示。
+  void handleClarificationTimeout() {
+    if (_disposed) return;
+    _clearClarificationCard();
+    setNotice('澄清已超时');
   }
 
   void _clearApprovalCard() {
@@ -1684,6 +1704,90 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           : ChatPhase.idle,
       pendingAction: state.pendingAction.copyWith(clearClarification: true),
     );
+  }
+
+  /// 启动独立 Clarify SSE 流 + 轮询兜底通道。
+  void _startClarifyChannel(String sessionId) {
+    if (sessionId.isEmpty) return;
+    _stopClarifyChannel();
+    _connectClarifyStream(sessionId);
+    _startClarifyPolling(sessionId);
+  }
+
+  /// 停止 Clarify SSE 流与轮询。
+  void _stopClarifyChannel() {
+    try {
+      ref.read(chatApiProvider).stopClarifyStream();
+    } catch (_) {}
+    _clarifyPollTimer?.cancel();
+    _clarifyPollTimer = null;
+  }
+
+  /// 连接 `/api/clarify/stream?session_id=` 独立 SSE 流。
+  void _connectClarifyStream(String sessionId) {
+    if (_disposed || sessionId.isEmpty) return;
+    try {
+      final api = ref.read(chatApiProvider);
+      unawaited(
+        api.startClarifyStream(
+          sessionId,
+          onEvent: (event) {
+            if (_disposed) return;
+            if (event is ClarificationPendingSseEvent) {
+              _applyClarificationUpdate(event.payload);
+            }
+          },
+          onTransportError: (_) {
+            // 静默容错，由轮询兜底
+          },
+          onClosed: () {},
+        ),
+      );
+    } catch (_) {
+      // 静默容错
+    }
+  }
+
+  /// 启动静默轮询兜底（20s 周期，会话打开时拉取）。
+  void _startClarifyPolling(String sessionId) {
+    _clarifyPollTimer?.cancel();
+    _clarifyPollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      unawaited(_pollClarifyPending(sessionId));
+    });
+    scheduleMicrotask(() => _pollClarifyPending(sessionId));
+  }
+
+  /// 静默拉取 `/api/clarify/pending`。
+  Future<void> _pollClarifyPending(String sessionId) async {
+    if (_disposed || state.sessionId != sessionId) return;
+    final gen = _generation;
+    try {
+      final api = ref.read(chatApiProvider);
+      final response = await api.clarifyPending(sessionId);
+      if (_disposed || gen != _generation || state.sessionId != sessionId) {
+        return;
+      }
+      if (response.pending != null) {
+        final p = response.pending!;
+        _applyClarificationUpdate({
+          'pending': {
+            'clarify_id': p.clarifyId,
+            'question': p.question,
+            'choices_offered': p.choicesOffered,
+            'session_id': p.sessionId ?? sessionId,
+            'kind': p.kind,
+            'requested_at': p.requestedAt,
+            'timeout_seconds': p.timeoutSeconds,
+            'expires_at': p.expiresAt,
+          },
+          'pending_count': response.pendingCount ?? 1,
+        });
+      } else if (state.pendingAction.clarificationPrompt != null) {
+        _clearClarificationCard();
+      }
+    } catch (_) {
+      // 静默容错
+    }
   }
 
   void _handlePendingSteerLeftover(String text) {
@@ -2059,6 +2163,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     ref.read(chatTurnCompletedCallbackProvider)(sessionId, title, preview);
   }
 
+  /// 澄清请求通知。
+  void _notifyClarificationNeeded(String question) {
+    if (_disposed) return;
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    ref.read(chatClarificationNeededCallbackProvider)(sessionId, question);
+  }
+
+  /// 异常中断通知。
+  void _notifySessionError(String title, String preview) {
+    if (_disposed) return;
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    ref.read(chatSessionErrorCallbackProvider)(sessionId, title, preview);
+  }
+
   /// 最近一条非空 assistant 消息内容（通知预览用）；无则空串。
   String _lastAssistantContent(ChatState state) {
     for (final message in state.messages.reversed) {
@@ -2092,6 +2212,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         needsTranscriptRefresh: false,
         completedStreamId: state.stream.activeStreamId,
       );
+      _notifySessionError('响应已取消', state.displayTitle);
     }
     _finishStream(endPhase: ChatPhase.cancelled);
   }
@@ -2103,6 +2224,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         needsTranscriptRefresh: false,
         completedStreamId: state.stream.activeStreamId,
       );
+      _notifySessionError('响应出错', message);
       _finishStream(endPhase: ChatPhase.error);
     } else {
       // done 已收尾：不显示错误，仅清理残留。
@@ -2370,6 +2492,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _finishStream();
     } else {
       state = state.copyWith(sendErrorMessage: '连接已断开，未能恢复流。');
+      _notifySessionError('连接已断开', '未能恢复流，会话已终止。');
       _finishStream(endPhase: ChatPhase.error);
     }
   }

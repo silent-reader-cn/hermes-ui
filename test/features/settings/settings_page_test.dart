@@ -321,6 +321,7 @@ void main() {
         '_ServerSection',
         '_ModelSection',
         '_CronSection',
+        '_NotificationSection',
         '_AdvancedSettingsSection',
         '_AboutSection',
       ]);
@@ -1300,6 +1301,36 @@ void main() {
 
         expect(controller.offset, offsetBefore);
       }
+    });
+  });
+
+  group('通知设置分组', () {
+    testWidgets('展示 3 个通知开关并支持切换持久化', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container, size: const Size(800, 1200));
+
+      expect(find.byKey(const ValueKey('settings-switch-notify-turns')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-switch-notify-clarify')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-switch-notify-errors')), findsOneWidget);
+
+      final turnsSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+      );
+      expect(turnsSwitch.value, isTrue);
+
+      // 切换 turns 开关
+      await tester.tap(find.byKey(const ValueKey('settings-switch-notify-turns')));
+      await tester.pumpAndSettle();
+
+      final updatedSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+      );
+      expect(updatedSwitch.value, isFalse);
     });
   });
 }

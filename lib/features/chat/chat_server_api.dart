@@ -126,6 +126,20 @@ abstract interface class ChatServerApi {
 
   /// 主动断开当前 SSE 连接（静默，不触发 onTransportError）。
   void stopStream();
+
+  /// 建立 Clarify SSE 独立流连接（`/api/clarify/stream?session_id=`）。
+  Future<void> startClarifyStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  });
+
+  /// 主动断开 Clarify SSE 连接。
+  void stopClarifyStream();
+
+  /// GET /api/clarify/pending?session_id= → ClarificationPendingResponse。
+  Future<ClarificationPendingResponse> clarifyPending(String sessionId);
 }
 
 /// [ChatServerApi] 的生产实现（包 [ApiClient]，SSE 复用其 dio 继承 header/cookie）。
@@ -330,4 +344,35 @@ class ChatApiClient implements ChatServerApi {
 
   @override
   void stopStream() => _sseClient.stop();
+
+  SseClient? _clarifySseClient;
+
+  @override
+  Future<ClarificationPendingResponse> clarifyPending(String sessionId) =>
+      _client.clarifyPending(sessionId);
+
+  @override
+  Future<void> startClarifyStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  }) async {
+    _clarifySseClient?.stop();
+    final sse = SseClient(dio: _client.dio, baseUrl: _client.baseUrl);
+    _clarifySseClient = sse;
+    final url = _client.clarifyStreamUrl(sessionId);
+    await sse.start(
+      url,
+      onEvent: onEvent,
+      onTransportError: onTransportError,
+      onClosed: onClosed,
+    );
+  }
+
+  @override
+  void stopClarifyStream() {
+    _clarifySseClient?.stop();
+    _clarifySseClient = null;
+  }
 }

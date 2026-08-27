@@ -235,6 +235,37 @@ class AppLocalizations {
       isEnglish ? 'Markdown copied to clipboard.' : 'Markdown 已复制到剪贴板。';
   String get approvalNeeded => isEnglish ? 'Approval Needed' : '需要审批';
   String get clarificationNeeded => isEnglish ? 'Clarification Needed' : '需要澄清';
+  String get clarifyInputPlaceholder =>
+      isEnglish ? 'Type your response…' : '输入你的回答…';
+  String get clarifySend => isEnglish ? 'Send' : '发送';
+  String get clarificationTimedOut =>
+      isEnglish ? 'Clarification timed out' : '澄清已超时';
+  String get clarifyHint => isEnglish
+      ? 'Please choose one option, or type your own response below.'
+      : '请选择一个选项，或在下方输入你的回答。';
+  String get collapseClarification =>
+      isEnglish ? 'Collapse clarification' : '折叠澄清';
+  String get expandClarification =>
+      isEnglish ? 'Expand clarification' : '展开澄清';
+  String get notificationsSection => isEnglish ? 'Notifications' : '通知';
+  String get notificationsTitle => isEnglish ? 'Notifications' : '通知';
+  String get notifyTurnsTitle =>
+      isEnglish ? 'Turn Completed Notifications' : '回合完成通知';
+  String get notifyTurnsSubtitle =>
+      isEnglish ? 'Notify when an agent turn completes' : 'Agent 回合完成时推送通知';
+  String get notifyClarifyTitle =>
+      isEnglish ? 'Clarification Notifications' : '澄清请求通知';
+  String get notifyClarifySubtitle =>
+      isEnglish ? 'Notify when clarification is needed' : 'Agent 需要你澄清时推送通知';
+  String get notifyErrorsTitle =>
+      isEnglish ? 'Error Notifications' : '异常中断通知';
+  String get notifyErrorsSubtitle =>
+      isEnglish ? 'Notify on session errors or interruption' : '会话异常中断或出错时推送通知';
+  String get sessionErrorTitle => isEnglish ? 'Session Error' : '会话异常';
+  String get sessionCancelledTitle =>
+      isEnglish ? 'Response Cancelled' : '响应已取消';
+  String get sessionDisconnectedTitle =>
+      isEnglish ? 'Connection Disconnected' : '连接已断开';
   String queuedBannerMessage(int count) => isEnglish
       ? '$count messages queued, will be sent automatically when current reply ends'
       : '已排队 $count 条消息，将在当前回复结束后自动发送';

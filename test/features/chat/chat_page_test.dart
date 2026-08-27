@@ -544,6 +544,146 @@ void main() {
       await _unmount(tester);
     });
   });
+
+  group('澄清卡片 UI 测试', () {
+    testWidgets('渲染澄清卡片：倒计时、问题、选项按钮、文本输入框与提交按钮', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+
+      // 发送消息并收到 clarifyPending 事件
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-input-field')),
+        '开始任务',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      api.emit(const ClarificationPendingSseEvent({
+        'pending': {
+          'clarify_id': 'clarify-1',
+          'question': '请选择目标环境：',
+          'choices_offered': ['开发环境', '生产环境'],
+          'timeout_seconds': 120,
+        },
+        'pending_count': 1,
+      }));
+      await tester.pump();
+
+      expect(find.text('需要澄清'), findsOneWidget);
+      expect(find.text('请选择目标环境：'), findsOneWidget);
+      expect(find.text('开发环境'), findsOneWidget);
+      expect(find.text('生产环境'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-prompt-clarify-input')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-prompt-clarify-submit')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-prompt-clarify-countdown')), findsOneWidget);
+
+      // 点击选项按钮作答
+      await tester.tap(find.byKey(const ValueKey('chat-prompt-choice-开发环境')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.lastClarificationSessionId, 's1');
+      expect(api.lastClarificationResponse, '开发环境');
+      expect(find.text('需要澄清'), findsNothing);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('自由文本输入并提交作答', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-input-field')),
+        '执行操作',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      api.emit(const ClarificationPendingSseEvent({
+        'pending': {
+          'clarify_id': 'clarify-2',
+          'question': '请输入配置项：',
+          'choices_offered': <String>[],
+          'timeout_seconds': 60,
+        },
+        'pending_count': 1,
+      }));
+      await tester.pump();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-prompt-clarify-input')),
+        'MY_CONFIG=123',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-prompt-clarify-submit')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.lastClarificationSessionId, 's1');
+      expect(api.lastClarificationResponse, 'MY_CONFIG=123');
+      expect(find.text('需要澄清'), findsNothing);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('折叠与展开澄清卡片', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-input-field')),
+        '执行',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      api.emit(const ClarificationPendingSseEvent({
+        'pending': {
+          'clarify_id': 'clarify-3',
+          'question': '是否继续执行？',
+          'choices_offered': ['是', '否'],
+          'timeout_seconds': 120,
+        },
+        'pending_count': 1,
+      }));
+      await tester.pump();
+
+      expect(find.text('是否继续执行？'), findsOneWidget);
+
+      // 点击折叠按钮
+      await tester.tap(find.byIcon(CupertinoIcons.chevron_up));
+      await tester.pump();
+
+      // 折叠后问题与输入框隐藏
+      expect(find.text('是否继续执行？'), findsNothing);
+      expect(find.byKey(const ValueKey('chat-prompt-clarify-input')), findsNothing);
+
+      // 再次点击展开
+      await tester.tap(find.byIcon(CupertinoIcons.chevron_down));
+      await tester.pump();
+
+      expect(find.text('是否继续执行？'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-prompt-clarify-input')), findsOneWidget);
+
+      await _unmount(tester);
+    });
+  });
 }
 
 /// 组装 ChatPage（override chatApiProvider 注入 fake）。

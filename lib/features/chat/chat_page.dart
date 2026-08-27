@@ -621,76 +621,13 @@ Future<void> _exportSession(
 }
 
 /// 审批/澄清卡片（chat_spec.md §2.3：approval/clarify 是主流报警事件，流不中断）。
-class _PendingPromptCard extends ConsumerWidget {
+class _PendingPromptCard extends ConsumerStatefulWidget {
   const _PendingPromptCard({required this.sessionId});
 
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final state = ref.watch(chatControllerProvider(sessionId));
-    final pending = state.pendingAction;
-    final isApproval = pending.approvalPrompt != null;
-    final prompt = isApproval
-        ? pending.approvalPrompt!
-        : pending.clarificationPrompt!;
-    final question = _stringOf(prompt, const ['question', 'prompt', 'text']);
-    final choices = _stringListOf(prompt, const [
-      'choices_offered',
-      'choicesOffered',
-      'choices',
-    ]);
-    final controller = ref.read(chatControllerProvider(sessionId).notifier);
-
-    Future<void> respond(String answer) async {
-      if (isApproval) {
-        await controller.respondToApproval(answer);
-      } else {
-        await controller.respondToClarification(answer);
-      }
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isApproval
-            ? CupertinoColors.systemOrange.withValues(alpha: 0.12)
-            : CupertinoColors.systemIndigo.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isApproval ? l10n.approvalNeeded : l10n.clarificationNeeded,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: CupertinoColors.systemOrange,
-            ),
-          ),
-          if (question != null) ...[
-            const SizedBox(height: 4),
-            Text(question, style: const TextStyle(fontSize: 14)),
-          ],
-          if (choices.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final choice in choices)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: CupertinoButton.filled(
-                  key: ValueKey('chat-prompt-choice-$choice'),
-                  onPressed: () => respond(choice),
-                  child: Text(choice),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
+  ConsumerState<_PendingPromptCard> createState() => _PendingPromptCardState();
 
   static String? _stringOf(Map<String, Object?> map, List<String> keys) {
     for (final key in keys) {
@@ -712,6 +649,311 @@ class _PendingPromptCard extends ConsumerWidget {
       }
     }
     return const [];
+  }
+}
+
+class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
+  final TextEditingController _textController = TextEditingController();
+  Timer? _countdownTimer;
+  int _remainingSeconds = 0;
+  bool _isCollapsed = false;
+  bool _submitting = false;
+  Map<String, Object?>? _lastClarifyPrompt;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndStartCountdown();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PendingPromptCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _checkAndStartCountdown();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  void _checkAndStartCountdown() {
+    final state = ref.read(chatControllerProvider(widget.sessionId));
+    final pending = state.pendingAction;
+    if (pending.approvalPrompt != null) {
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      return;
+    }
+    final clarifyPrompt = pending.clarificationPrompt;
+    if (clarifyPrompt == null) {
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      return;
+    }
+    if (_lastClarifyPrompt == clarifyPrompt && _countdownTimer != null) {
+      return;
+    }
+    _lastClarifyPrompt = clarifyPrompt;
+    _initCountdown(clarifyPrompt);
+  }
+
+  void _initCountdown(Map<String, Object?> prompt) {
+    _countdownTimer?.cancel();
+    final expiresAt = (prompt['expires_at'] as num?)?.toDouble() ??
+        (prompt['expiresAt'] as num?)?.toDouble();
+    final requestedAt = (prompt['requested_at'] as num?)?.toDouble() ??
+        (prompt['requestedAt'] as num?)?.toDouble();
+    final timeoutSec = (prompt['timeout_seconds'] as num?)?.toInt() ??
+        (prompt['timeoutSeconds'] as num?)?.toInt() ??
+        120;
+
+    final double targetEpochSec;
+    if (expiresAt != null && expiresAt > 0) {
+      targetEpochSec = expiresAt;
+    } else if (requestedAt != null && requestedAt > 0) {
+      targetEpochSec = requestedAt + timeoutSec;
+    } else {
+      targetEpochSec =
+          (DateTime.now().millisecondsSinceEpoch / 1000) + timeoutSec;
+    }
+
+    final nowSec = DateTime.now().millisecondsSinceEpoch / 1000;
+    _remainingSeconds = (targetEpochSec - nowSec).ceil();
+    if (_remainingSeconds <= 0) {
+      _remainingSeconds = 0;
+      scheduleMicrotask(_handleTimeout);
+      return;
+    }
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch / 1000;
+      final rem = (targetEpochSec - now).ceil();
+      if (rem <= 0) {
+        timer.cancel();
+        setState(() => _remainingSeconds = 0);
+        _handleTimeout();
+      } else {
+        setState(() => _remainingSeconds = rem);
+      }
+    });
+  }
+
+  void _handleTimeout() {
+    _countdownTimer?.cancel();
+    final controller =
+        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    controller.handleClarificationTimeout();
+  }
+
+  Future<void> _submitText([String? val]) async {
+    final text = (val ?? _textController.text).trim();
+    if (text.isEmpty || _submitting) return;
+    setState(() => _submitting = true);
+    final controller =
+        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final ok = await controller.respondToClarification(text);
+    if (mounted) {
+      setState(() => _submitting = false);
+      if (ok) {
+        _textController.clear();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final state = ref.watch(chatControllerProvider(widget.sessionId));
+    final pending = state.pendingAction;
+    final isApproval = pending.approvalPrompt != null;
+    final prompt = isApproval
+        ? pending.approvalPrompt!
+        : pending.clarificationPrompt!;
+    final question = _PendingPromptCard._stringOf(
+      prompt,
+      const ['question', 'prompt', 'text'],
+    );
+    final choices = _PendingPromptCard._stringListOf(
+      prompt,
+      const ['choices_offered', 'choicesOffered', 'choices'],
+    );
+    final controller =
+        ref.read(chatControllerProvider(widget.sessionId).notifier);
+
+    if (isApproval) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemOrange.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.approvalNeeded,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.systemOrange,
+              ),
+            ),
+            if (question != null) ...[
+              const SizedBox(height: 4),
+              Text(question, style: const TextStyle(fontSize: 14)),
+            ],
+            if (choices.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final choice in choices)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: CupertinoButton.filled(
+                    key: ValueKey('chat-prompt-choice-$choice'),
+                    onPressed: () => controller.respondToApproval(choice),
+                    child: Text(choice),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Clarification 分支
+    final mm = (_remainingSeconds ~/ 60).toString().padLeft(2, '0');
+    final ss = (_remainingSeconds % 60).toString().padLeft(2, '0');
+    final countdownStr = '$mm:$ss';
+    final isUrgent = _remainingSeconds < 10;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemIndigo.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                CupertinoIcons.question_circle_fill,
+                size: 16,
+                color: CupertinoColors.systemIndigo,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                l10n.clarificationNeeded,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.systemIndigo,
+                ),
+              ),
+              const Spacer(),
+              if (_remainingSeconds > 0)
+                Text(
+                  key: const ValueKey('chat-prompt-clarify-countdown'),
+                  countdownStr,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isUrgent
+                        ? statusOrangeText.resolveFrom(context)
+                        : CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                // ignore: deprecated_member_use
+                minSize: 24,
+                onPressed: () => setState(() => _isCollapsed = !_isCollapsed),
+                child: Icon(
+                  _isCollapsed
+                      ? CupertinoIcons.chevron_down
+                      : CupertinoIcons.chevron_up,
+                  size: 16,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+          if (!_isCollapsed) ...[
+            if (question != null && question.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                question,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+            if (choices.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final choice in choices)
+                    CupertinoButton.filled(
+                      key: ValueKey('chat-prompt-choice-$choice'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      onPressed: () =>
+                          controller.respondToClarification(choice),
+                      child: Text(choice),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    key: const ValueKey('chat-prompt-clarify-input'),
+                    controller: _textController,
+                    placeholder: l10n.clarifyInputPlaceholder,
+                    onSubmitted: _submitText,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton.filled(
+                  key: const ValueKey('chat-prompt-clarify-submit'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  onPressed: _submitting ? null : _submitText,
+                  child: Text(l10n.clarifySend),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.clarifyHint,
+              style: TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

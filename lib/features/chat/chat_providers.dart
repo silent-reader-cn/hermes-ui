@@ -75,6 +75,30 @@ final chatTurnCompletedCallbackProvider = Provider<ChatTurnCompletedCallback>(
   (ref) => (sessionId, title, preview) {},
 );
 
+/// 澄清请求回调（clarify 事件触发时由 [ChatController] 调用）。
+typedef ChatClarificationNeededCallback = void Function(
+  String sessionId,
+  String question,
+);
+
+/// 澄清请求回调 Provider（notifications feature 注入点）。
+final chatClarificationNeededCallbackProvider =
+    Provider<ChatClarificationNeededCallback>(
+  (ref) => (sessionId, question) {},
+);
+
+/// 会话异常回调（cancel / error / 重连失败时由 [ChatController] 调用）。
+typedef ChatSessionErrorCallback = void Function(
+  String sessionId,
+  String title,
+  String preview,
+);
+
+/// 会话异常回调 Provider（notifications feature 注入点）。
+final chatSessionErrorCallbackProvider = Provider<ChatSessionErrorCallback>(
+  (ref) => (sessionId, title, preview) {},
+);
+
 /// 当前相位（UI 主分支只 switch 它）。
 final chatPhaseProvider = Provider.family<ChatPhase, String>((ref, sessionId) {
   return ref.watch(chatControllerProvider(sessionId)).phase;

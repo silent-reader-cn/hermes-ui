@@ -74,6 +74,7 @@ void main() {
         expect(details.android!.channelDescription, isNotEmpty);
         expect(details.android!.importance, Importance.high);
         expect(details.android!.priority, Priority.high);
+        expect(details.windows, isNotNull);
       });
 
       test('重复通知：initialize 仅一次、固定 id 替换旧通知', () async {
@@ -109,6 +110,50 @@ void main() {
             payload: any(named: 'payload'),
           ),
         );
+      });
+    });
+
+    group('notifyClarificationNeeded 参数组装', () {
+      test('show 到 "clarify" 通道、id 为 1101', () async {
+        await service.notifyClarificationNeeded('sess-2', '请问您需要选择哪种模式？');
+
+        final details = verify(
+          () => plugin.show(
+            id: 1101,
+            title: '需要澄清',
+            body: '请问您需要选择哪种模式？',
+            notificationDetails: captureAny(named: 'notificationDetails'),
+            payload: 'sess-2',
+          ),
+        ).captured.single as NotificationDetails;
+
+        expect(details.android, isNotNull);
+        expect(details.android!.channelId, 'clarify');
+        expect(details.android!.channelName, '需要澄清');
+        expect(details.android!.importance, Importance.high);
+        expect(details.windows, isNotNull);
+      });
+    });
+
+    group('notifySessionError 参数组装', () {
+      test('show 到 "errors" 通道、id 为 1201', () async {
+        await service.notifySessionError('sess-3', '响应已取消', '用户已停止');
+
+        final details = verify(
+          () => plugin.show(
+            id: 1201,
+            title: '响应已取消',
+            body: '用户已停止',
+            notificationDetails: captureAny(named: 'notificationDetails'),
+            payload: 'sess-3',
+          ),
+        ).captured.single as NotificationDetails;
+
+        expect(details.android, isNotNull);
+        expect(details.android!.channelId, 'errors');
+        expect(details.android!.channelName, '异常中断');
+        expect(details.android!.importance, Importance.high);
+        expect(details.windows, isNotNull);
       });
     });
 

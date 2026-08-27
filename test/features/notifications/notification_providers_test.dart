@@ -10,9 +10,15 @@ import 'package:hermes_ui/features/chat/chat_state.dart';
 import 'package:hermes_ui/features/notifications/notification_lifecycle_observer.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../helpers/fake_chat_api.dart';
 
 void main() {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('turnNotificationHookProvider（后台发 / 前台不发）', () {
     late _FakeTurnNotificationService service;
     late ProviderContainer container;
@@ -114,6 +120,12 @@ void main() {
           turnNotificationServiceProvider.overrideWithValue(service),
           chatTurnCompletedCallbackProvider.overrideWith(
             (ref) => ref.watch(turnNotificationHookProvider),
+          ),
+          chatClarificationNeededCallbackProvider.overrideWith(
+            (ref) => ref.watch(clarificationNotificationHookProvider),
+          ),
+          chatSessionErrorCallbackProvider.overrideWith(
+            (ref) => ref.watch(sessionErrorNotificationHookProvider),
           ),
         ],
       );
@@ -238,7 +250,7 @@ void main() {
       });
     });
 
-    test('取消（cancel）→ 不发通知', () {
+    test('取消（cancel）→ 触发异常中断通知', () {
       fakeAsync((async) {
         final container =
             buildContainer(lifecycle: AppLifecycleState.paused);
@@ -251,10 +263,12 @@ void main() {
         async.flushMicrotasks();
 
         expect(service.notifyCalls, isEmpty);
+        expect(service.errorCalls, hasLength(1));
+        expect(service.errorCalls.single.$2, '响应已取消');
       });
     });
 
-    test('错误事件 → 不发通知', () {
+    test('错误事件 → 触发异常中断通知', () {
       fakeAsync((async) {
         final container =
             buildContainer(lifecycle: AppLifecycleState.paused);
@@ -267,6 +281,35 @@ void main() {
         async.flushMicrotasks();
 
         expect(service.notifyCalls, isEmpty);
+        expect(service.errorCalls, hasLength(1));
+        expect(service.errorCalls.single.$3, '服务器内部错误');
+      });
+    });
+
+    test('澄清事件 → 触发澄清请求通知', () {
+      fakeAsync((async) {
+        final container =
+            buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller =
+            container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('你好'));
+        async.flushMicrotasks();
+        api.emit(const ClarificationPendingSseEvent({
+          'pending': {
+            'clarify_id': 'c1',
+            'question': '请选择模式',
+            'choices_offered': ['A', 'B'],
+          },
+          'pending_count': 1,
+        }));
+        async.flushMicrotasks();
+
+        expect(service.clarifyCalls, [('sess-new', '请选择模式')]);
+        expect(
+          container.read(chatControllerProvider('')).phase,
+          ChatPhase.clarifyPending,
+        );
       });
     });
 
@@ -289,6 +332,100 @@ void main() {
 
         expect(container.read(chatControllerProvider('')).phase, ChatPhase.idle);
       });
+    });
+  });
+
+  group('三类通知与设置联动测试', () {
+    late _FakeTurnNotificationService service;
+    late ProviderContainer container;
+
+    setUp(() {
+      service = _FakeTurnNotificationService();
+      container = ProviderContainer(
+        overrides: [
+          turnNotificationServiceProvider.overrideWithValue(service),
+        ],
+      );
+      addTearDown(container.dispose);
+    });
+
+    test('澄清通知：后台触发', () {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      final hook = container.read(clarificationNotificationHookProvider);
+
+      hook('sess-1', '需要输入密码吗？');
+
+      expect(service.clarifyCalls, [('sess-1', '需要输入密码吗？')]);
+    });
+
+    test('澄清通知：开关关闭时不触发', () async {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      await container
+          .read(notificationSettingsProvider.notifier)
+          .setNotifyClarifyEnabled(false);
+      final hook = container.read(clarificationNotificationHookProvider);
+
+      hook('sess-1', '需要输入密码吗？');
+
+      expect(service.clarifyCalls, isEmpty);
+    });
+
+    test('错误通知：后台触发', () {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      final hook = container.read(sessionErrorNotificationHookProvider);
+
+      hook('sess-1', '连接失败', '超时');
+
+      expect(service.errorCalls, [('sess-1', '连接失败', '超时')]);
+    });
+
+    test('错误通知：开关关闭时不触发', () async {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      await container
+          .read(notificationSettingsProvider.notifier)
+          .setNotifyErrorsEnabled(false);
+      final hook = container.read(sessionErrorNotificationHookProvider);
+
+      hook('sess-1', '连接失败', '超时');
+
+      expect(service.errorCalls, isEmpty);
+    });
+
+    test('回合完成通知：开关关闭时不触发', () async {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      await container
+          .read(notificationSettingsProvider.notifier)
+          .setNotifyTurnsEnabled(false);
+      final hook = container.read(turnNotificationHookProvider);
+
+      hook('sess-1', '标题', '预览');
+
+      expect(service.notifyCalls, isEmpty);
+    });
+
+    test('前台不同会话触发 → 推送至 inAppNotificationProvider', () {
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.resumed);
+      final hook = container.read(clarificationNotificationHookProvider);
+
+      hook('sess-other', '请澄清');
+
+      final inApp = container.read(inAppNotificationProvider);
+      expect(inApp, isNotNull);
+      expect(inApp!.sessionId, 'sess-other');
+      expect(inApp.message, '请澄清');
+      expect(inApp.type, InAppNotificationType.clarificationNeeded);
     });
   });
 
@@ -347,6 +484,8 @@ void main() {
 
 class _FakeTurnNotificationService implements TurnNotificationService {
   final List<(String, String, String)> notifyCalls = [];
+  final List<(String, String)> clarifyCalls = [];
+  final List<(String, String, String)> errorCalls = [];
   int clearAllCalls = 0;
   int permissionRequests = 0;
   String? launchSessionId;
@@ -358,6 +497,23 @@ class _FakeTurnNotificationService implements TurnNotificationService {
     String preview,
   ) async {
     notifyCalls.add((sessionId, title, preview));
+  }
+
+  @override
+  Future<void> notifyClarificationNeeded(
+    String sessionId,
+    String question,
+  ) async {
+    clarifyCalls.add((sessionId, question));
+  }
+
+  @override
+  Future<void> notifySessionError(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {
+    errorCalls.add((sessionId, title, preview));
   }
 
   @override
