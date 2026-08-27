@@ -169,8 +169,7 @@ void main() {
       expect(l10n.approvalNeeded, '需要审批');
       expect(l10n.clarificationNeeded, '需要澄清');
       expect(l10n.queuedBannerMessage(2), '已排队 2 条消息，将在当前回复结束后自动发送');
-      expect(l10n.pendingUserMessageBanner, '（该会话有一条待处理消息…）');
-      expect(l10n.pickFileFailed, '选择文件失败');
+            expect(l10n.pickFileFailed, '选择文件失败');
       expect(l10n.selectFileFailed, '选择文件失败');
       expect(l10n.uploadSucceeded, '上传成功');
       expect(l10n.uploadSuccess, '上传成功');
@@ -182,8 +181,8 @@ void main() {
       expect(l10n.addAttachment, '添加附件');
       expect(l10n.sessionIsReadOnly, '此会话为只读');
       expect(l10n.readOnlySessionPlaceholder, '此会话为只读');
-      expect(l10n.steerCurrentReplyPlaceholder, '提示当前回复（steer）…');
-      expect(l10n.steerPromptPlaceholder, '提示当前回复（steer）…');
+      expect(l10n.steerCurrentReplyPlaceholder, '提示当前回复…');
+      expect(l10n.steerPromptPlaceholder, '提示当前回复…');
       expect(l10n.sendMessagePlaceholder, '发送消息…');
       expect(l10n.steerCurrentReply, '提示当前回复');
       expect(l10n.steerPrompt, '提示当前回复');

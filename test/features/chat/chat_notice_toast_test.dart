@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/steer_banner.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -214,6 +215,133 @@ void main() {
       expect(text.style?.fontSize, 13);
 
       await _unmount(tester);
+    });
+
+    testWidgets('Toast 内边距纵向为 6，文字固定单行 ellipsis', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+      final container = _containerOf(tester);
+
+      container
+          .read(chatControllerProvider('s1').notifier)
+          .setNotice('已复制到剪贴板这是一段很长的提示');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final toastContainer = tester.widget<Container>(
+        find.byKey(const ValueKey('chat-notice-toast')),
+      );
+      final padding = toastContainer.padding as EdgeInsets?;
+      expect(padding?.top, 6);
+      expect(padding?.bottom, 6);
+
+      final text = tester.widget<Text>(find.text('已复制到剪贴板这是一段很长的提示'));
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('SteerNoticeToast 内边距纵向为 6，文字固定单行 ellipsis', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+      final container = _containerOf(tester);
+
+      await container.read(chatControllerProvider('s1').notifier).send('hello');
+      await tester.pump();
+      await tester.pump();
+
+      await container
+          .read(chatControllerProvider('s1').notifier)
+          .send('这是一段很长很长的 steer 提示文案用来测试单行');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const ValueKey('chat-steer-notice')), findsOneWidget);
+      final steerContainer = tester.widget<Container>(
+        find.byKey(const ValueKey('chat-steer-notice')),
+      );
+      final padding = steerContainer.padding as EdgeInsets?;
+      expect(padding?.top, 6);
+      expect(padding?.bottom, 6);
+
+      final text = tester.widget<Text>(find.text('这是一段很长很长的 steer 提示文案用来测试单行'));
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('hasPendingUserMessage 为 true 时不渲染待处理消息横幅', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': const [],
+          'pending_user_message': '一条待处理消息',
+        },
+      };
+      await _pumpPage(tester, api);
+
+      expect(find.byKey(const ValueKey('chat-pending-banner')), findsNothing);
+      expect(find.textContaining('待处理消息'), findsNothing);
+
+      await _unmount(tester);
+    });
+  });
+
+  group('SteerBanner & QueuedBanner widget 测试', () {
+    testWidgets('SteerBanner padding 垂直为 6，文字固定单行 ellipsis', (tester) async {
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: SteerBanner(text: '这是一条很长的 steer 提示'),
+          ),
+        ),
+      );
+
+      final container = tester.widget<Container>(
+        find.byKey(const ValueKey('chat-steer-banner')),
+      );
+      final padding = container.padding as EdgeInsets?;
+      expect(padding?.top, 6);
+      expect(padding?.bottom, 6);
+
+      final text = tester.widget<Text>(find.byType(Text));
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+    });
+
+    testWidgets('QueuedBanner padding 垂直为 6，文字固定单行 ellipsis', (tester) async {
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: QueuedBanner(
+              count: 2,
+              preview: '这是一条很长很长的排队预览文本',
+            ),
+          ),
+        ),
+      );
+
+      final container = tester.widget<Container>(
+        find.byKey(const ValueKey('chat-queued-banner')),
+      );
+      final padding = container.padding as EdgeInsets?;
+      expect(padding?.top, 6);
+      expect(padding?.bottom, 6);
+
+      final texts = tester.widgetList<Text>(find.byType(Text)).toList();
+      expect(texts[0].maxLines, 1);
+      expect(texts[0].overflow, TextOverflow.ellipsis);
+      expect(texts[1].maxLines, 1);
+      expect(texts[1].overflow, TextOverflow.ellipsis);
     });
   });
 }

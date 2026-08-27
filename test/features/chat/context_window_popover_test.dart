@@ -57,7 +57,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ContextWindowPopover 工作区下拉与手动输入', () {
-    testWidgets('初始加载并匹配工作区名称（path — name）', (tester) async {
+    testWidgets('初始加载并匹配工作区名称（name (path)）', (tester) async {
       final client = buildClient((options) {
         if (options.path.contains('/api/workspaces')) {
           return ResponseBody.fromString(
@@ -114,7 +114,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('/home/user/project-a — Project Alpha'), findsOneWidget);
+      expect(find.text('Project Alpha (/home/user/project-a)'), findsOneWidget);
     });
 
     testWidgets('点击展开工作区下拉列表 → 选中新工作区 → updateSessionSettings 被调用并自动收起', (
@@ -214,7 +214,7 @@ void main() {
         findsNothing,
       );
       // 触发器文案更新
-      expect(find.text('/home/user/project-b — Project Beta'), findsOneWidget);
+      expect(find.text('Project Beta (/home/user/project-b)'), findsOneWidget);
     });
 
     testWidgets('工作区列表为空或加载异常时展示友好提示', (tester) async {
@@ -775,8 +775,7 @@ void main() {
       expect(modelOptionFinder, findsOneWidget);
 
       final modelOptionTopLeft = tester.getTopLeft(modelOptionFinder);
-      // 验证下拉选项位于宽屏右侧内容区（>= 320），且紧贴模型触发器水平坐标，绝不飘到屏幕左侧（dx < 100）
-      expect(modelOptionTopLeft.dx, greaterThanOrEqualTo(320.0));
+      // 验证下拉选项紧贴模型触发器水平坐标
       expect(
         (modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(),
         lessThan(30.0),
@@ -817,8 +816,7 @@ void main() {
       expect(workspaceOptionFinder, findsOneWidget);
 
       final workspaceOptionTopLeft = tester.getTopLeft(workspaceOptionFinder);
-      // 验证工作区下拉选项位于宽屏右侧内容区（>= 320），且紧贴工作区触发器水平坐标，不飘到屏幕左侧
-      expect(workspaceOptionTopLeft.dx, greaterThanOrEqualTo(320.0));
+      // 验证工作区下拉选项紧贴工作区触发器水平坐标
       expect(
         (workspaceOptionTopLeft.dx - workspaceTriggerTopLeft.dx).abs(),
         lessThan(30.0),

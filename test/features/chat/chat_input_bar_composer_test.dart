@@ -150,6 +150,7 @@ void main() {
       for (final key in const [
         'chat-attach-button',
         'chat-saved-prompts-button',
+        'chat-context-indicator-button',
         'chat-send-button',
         'chat-input-field',
       ]) {
@@ -167,6 +168,7 @@ void main() {
       for (final key in const [
         'chat-attach-button',
         'chat-saved-prompts-button',
+        'chat-context-indicator-button',
         'chat-send-button',
         'chat-input-field',
       ]) {
@@ -347,6 +349,64 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    });
+  });
+
+  group('ChatInputBar 上下文窗口指示器位置与排列顺序（todo #1）', () {
+    testWidgets('经典单行布局：[＋] [书签] [上下文圆环] [输入框] [发送] 水平从左到右排列', (tester) async {
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpComposer(tester, chatApi: chatApi);
+
+      final attachX = tester.getTopLeft(find.byKey(const ValueKey('chat-attach-button'))).dx;
+      final bookmarkX = tester.getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button'))).dx;
+      final indicatorX = tester.getTopLeft(find.byKey(const ValueKey('chat-context-indicator-button'))).dx;
+      final inputX = tester.getTopLeft(find.byKey(const ValueKey('chat-input-field'))).dx;
+      final sendX = tester.getTopLeft(find.byKey(const ValueKey('chat-send-button'))).dx;
+
+      expect(attachX, lessThan(bookmarkX));
+      expect(bookmarkX, lessThan(indicatorX));
+      expect(indicatorX, lessThan(inputX));
+      expect(inputX, lessThan(sendX));
+
+      await _unmount(tester);
+    });
+
+    testWidgets('两段式布局：工具行 [附件] [书签] [上下文圆环] | Spacer | [发送] 排列', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpComposer(tester, chatApi: chatApi);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final attachX = tester.getTopLeft(find.byKey(const ValueKey('chat-attach-button'))).dx;
+      final bookmarkX = tester.getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button'))).dx;
+      final indicatorX = tester.getTopLeft(find.byKey(const ValueKey('chat-context-indicator-button'))).dx;
+      final sendX = tester.getTopLeft(find.byKey(const ValueKey('chat-send-button'))).dx;
+
+      expect(attachX, lessThan(bookmarkX));
+      expect(bookmarkX, lessThan(indicatorX));
+      expect(indicatorX, lessThan(sendX));
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('只读会话下仍显示上下文圆环指示器', (tester) async {
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const [], 'is_read_only': true},
+      };
+      await _pumpComposer(tester, chatApi: chatApi);
+
+      expect(find.byKey(const ValueKey('chat-context-indicator-button')), findsOneWidget);
+      await _unmount(tester);
     });
   });
 }

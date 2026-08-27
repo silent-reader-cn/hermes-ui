@@ -242,10 +242,8 @@ class AppLocalizations {
       ? 'Offline cache mode. Content may not be up to date.'
       : '离线缓存模式，部分内容可能不是最新';
   String get dismissOfflineBanner =>
-      isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
-  String get pendingUserMessageBanner =>
-      isEnglish ? '(This session has a pending message…)' : '（该会话有一条待处理消息…）';
-  String get pickFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
+        isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
+    String get pickFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
   String get selectFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
   String get uploadSucceeded => isEnglish ? 'Upload Succeeded' : '上传成功';
   String get uploadSuccess => isEnglish ? 'Upload Succeeded' : '上传成功';
@@ -292,9 +290,9 @@ class AppLocalizations {
   String get readOnlySessionPlaceholder =>
       isEnglish ? 'This session is read-only' : '此会话为只读';
   String get steerCurrentReplyPlaceholder =>
-      isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
+      isEnglish ? 'Steer current reply…' : '提示当前回复…';
   String get steerPromptPlaceholder =>
-      isEnglish ? 'Steer current reply…' : '提示当前回复（steer）…';
+      isEnglish ? 'Steer current reply…' : '提示当前回复…';
   String get sendMessagePlaceholder => isEnglish ? 'Send a message…' : '发送消息…';
   String get steerCurrentReply => isEnglish ? 'Steer current reply' : '提示当前回复';
   String get steerPrompt => isEnglish ? 'Steer current reply' : '提示当前回复';

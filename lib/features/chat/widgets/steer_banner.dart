@@ -25,7 +25,7 @@ class SteerBanner extends StatelessWidget {
     return Container(
       key: const ValueKey('chat-steer-banner'),
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF2C2C2E)
@@ -82,7 +82,7 @@ class QueuedBanner extends StatelessWidget {
     return Container(
       key: const ValueKey('chat-queued-banner'),
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF2C2C2E)
@@ -108,6 +108,8 @@ class QueuedBanner extends StatelessWidget {
               children: [
                 Text(
                   text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

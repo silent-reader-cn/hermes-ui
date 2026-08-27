@@ -228,7 +228,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     .dismissError(),
               ),
             if (queued > 0) _QueuedBanner(count: queued),
-            if (state.hasPendingUserMessage) const _PendingUserMessageBanner(),
             if (state.noticeMessage != null)
               _TransientNoticeToast(
                 key: ValueKey('chat-notice-toast-${state.noticeMessage}'),
@@ -729,7 +728,7 @@ class _OfflineCacheBanner extends StatelessWidget {
     return Container(
       key: const ValueKey('chat-offline-cache-banner'),
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -745,6 +744,8 @@ class _OfflineCacheBanner extends StatelessWidget {
           Expanded(
             child: Text(
               l10n.offlineCacheBanner,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.systemBlue,
@@ -794,7 +795,7 @@ class _ErrorBanner extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: CupertinoColors.systemRed.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -810,6 +811,8 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 color: statusRedText.resolveFrom(context),
@@ -849,56 +852,12 @@ class _QueuedBanner extends StatelessWidget {
       ),
       child: Text(
         l10n.queuedBannerMessage(count),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 12,
           color: CupertinoColors.systemBrown,
         ),
-      ),
-    );
-  }
-}
-
-/// 待处理消息提示条（会话有一条 pending 消息在服务端排着）。
-class _PendingUserMessageBanner extends StatelessWidget {
-  const _PendingUserMessageBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
-    return Container(
-      key: const ValueKey('chat-pending-banner'),
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF2C2C2E)
-            : CupertinoColors.systemGrey6.resolveFrom(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            CupertinoIcons.clock,
-            size: 14,
-            color: secondaryText.resolveFrom(context),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              l10n.pendingUserMessageBanner,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: secondaryText.resolveFrom(context),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -919,7 +878,7 @@ class _NoticeBanner extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: CupertinoColors.systemGreen.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
@@ -935,6 +894,8 @@ class _NoticeBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 color: statusGreenText.resolveFrom(context),
@@ -1043,7 +1004,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
       child: Container(
         key: const ValueKey('chat-notice-toast'),
         margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
@@ -1076,6 +1037,8 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
             Expanded(
               child: Text(
                 widget.message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -1121,7 +1084,7 @@ class _SteerNoticeToast extends StatelessWidget {
     return Container(
       key: const ValueKey('chat-steer-notice'),
       margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
@@ -1154,7 +1117,7 @@ class _SteerNoticeToast extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,

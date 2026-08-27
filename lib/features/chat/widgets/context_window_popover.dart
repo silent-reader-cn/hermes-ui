@@ -292,7 +292,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                         _WorkspaceRow(
                           key: ValueKey('workspace-item-${w.path}'),
                           label: (w.name != null && w.name!.trim().isNotEmpty)
-                              ? '${w.path} — ${w.name}'
+                              ? '${w.name} (${w.path})'
                               : (w.path ?? ''),
                           selected: currentWorkspace == w.path,
                           onTap: () => _selectWorkspace(w.path),
@@ -468,7 +468,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       if (match != null &&
           match.name != null &&
           match.name!.trim().isNotEmpty) {
-        currentWorkspaceLabel = '${match.path} — ${match.name}';
+        currentWorkspaceLabel = '${match.name} (${match.path})';
       } else {
         currentWorkspaceLabel = currentWorkspace;
       }

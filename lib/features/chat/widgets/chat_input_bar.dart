@@ -587,6 +587,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     ),
                   ),
                 ),
+                Container(
+                  key: _contextIndicatorKey,
+                  child: ContextWindowIndicator(
+                    snapshot: snapshot,
+                    onTap: _showContextPopover,
+                  ),
+                ),
                 Expanded(
                   child: Shortcuts(
                     shortcuts: const <ShortcutActivator, Intent>{
@@ -728,13 +735,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       color: CupertinoColors.activeBlue,
                     ),
                   ),
-                Container(
-                  key: _contextIndicatorKey,
-                  child: ContextWindowIndicator(
-                    snapshot: snapshot,
-                    onTap: _showContextPopover,
-                  ),
-                ),
               ],
             ),
           ),
@@ -888,23 +888,34 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 ),
               ),
             ),
+            Container(
+              key: _contextIndicatorKey,
+              child: ContextWindowIndicator(
+                snapshot: snapshot,
+                onTap: _showContextPopover,
+              ),
+            ),
             const Spacer(),
             ..._buildTrailingControls(
-                l10n, isStreaming, isSending, interactive, canSendWithPending, snapshot),
+              l10n,
+              isStreaming,
+              isSending,
+              interactive,
+              canSendWithPending,
+            ),
           ],
         ),
       ],
     );
   }
 
-  /// 右侧控件组：流式= steer+停止；空闲= 发送；末尾恒为上下文圆环。
+  /// 右侧控件组：流式= steer+停止；空闲= 发送。
   List<Widget> _buildTrailingControls(
     AppLocalizations l10n,
     bool isStreaming,
     bool isSending,
     bool interactive,
     bool canSendWithPending,
-    ContextWindowSnapshot? snapshot,
   ) {
     return [
       if (isStreaming) ...[
@@ -944,13 +955,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             color: CupertinoColors.activeBlue,
           ),
         ),
-      Container(
-        key: _contextIndicatorKey,
-        child: ContextWindowIndicator(
-          snapshot: snapshot,
-          onTap: _showContextPopover,
-        ),
-      ),
     ];
   }
 }
