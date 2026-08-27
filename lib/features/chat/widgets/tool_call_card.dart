@@ -260,11 +260,59 @@ class ToolCallGroupCard extends StatefulWidget {
 class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
   bool _expanded = false;
 
+  String get _storageKey {
+    final group = widget.group;
+    if (group.toolCalls.isNotEmpty) {
+      final first = group.toolCalls.first;
+      if (first.id.isNotEmpty && !first.id.startsWith('uuid-')) {
+        return 'tool-${first.id}';
+      }
+    }
+    return 'group-${group.anchorMessageID ?? group.id}';
+  }
+
+  void _syncExpandedFromStorage() {
+    final key = _storageKey;
+    final stored = PageStorage.maybeOf(context)?.readState(
+      context,
+      identifier: 'tool-group-expanded-$key',
+    );
+    if (stored is bool) {
+      _expanded = stored;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    // 默认一律收起（含 live），需用户手动展开查看（task 追加需求）
     _expanded = false;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncExpandedFromStorage();
+  }
+
+  @override
+  void didUpdateWidget(covariant ToolCallGroupCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.group.id != widget.group.id ||
+        oldWidget.group.anchorMessageID != widget.group.anchorMessageID) {
+      _syncExpandedFromStorage();
+    }
+  }
+
+  void _toggleExpanded() {
+    setState(() {
+      _expanded = !_expanded;
+      final key = _storageKey;
+      PageStorage.maybeOf(context)?.writeState(
+        context,
+        _expanded,
+        identifier: 'tool-group-expanded-$key',
+      );
+    });
   }
 
   @override
@@ -295,7 +343,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: _toggleExpanded,
             child: Row(
               children: [
                 if (running)

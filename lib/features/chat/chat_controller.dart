@@ -16,6 +16,8 @@ import '../../core/models/tool_call.dart';
 import '../../core/models/upload_response.dart';
 import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
+import '../diagnostics/diagnostics_models.dart';
+import '../diagnostics/diagnostics_service.dart';
 import '../session_list/session_list_providers.dart';
 import '../settings/tool_group_settings.dart';
 import 'chat_diff_merge.dart';
@@ -134,7 +136,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messageOffset: state.messagesOffset,
       coalesce: coalesce,
     );
-    state = state.copyWith(completedToolCallGroups: serverDerivedGroups);
+    if (serverDerivedGroups.isNotEmpty) {
+      state = state.copyWith(completedToolCallGroups: serverDerivedGroups);
+    } else if (state.completedToolCallGroups.isNotEmpty) {
+      final nextToolGroups = ToolCallGroup.merging(
+        primaryGroups: serverDerivedGroups,
+        fallbackGroups: state.completedToolCallGroups,
+      );
+      state = state.copyWith(completedToolCallGroups: nextToolGroups);
+    }
   }
 
   void _dispose() {
@@ -417,6 +427,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 并刷新消息列表；返回该文本供调用方直接使用。
   Future<String?> retryLastTurn() async {
     if (state.sessionId.isEmpty || state.isReadOnly) return null;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat',
+      message: 'Retrying last turn for session: ${state.sessionId}',
+    );
     try {
       final response = await _api!.retrySession(state.sessionId);
       final lastText = response.lastUserText;
@@ -708,8 +723,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final hasServerTools =
         persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
     if (hasServerTools) {
-      // 服务端 transcript 已含工具 → 以服务端为准，live 清空。
-      nextCompletedGroups = serverDerivedGroups;
+      // 服务端 transcript 已含工具 → 以服务端为准合并已有完成组保底，live 清空。
+      nextCompletedGroups = ToolCallGroup.merging(
+        primaryGroups: serverDerivedGroups,
+        fallbackGroups: state.completedToolCallGroups,
+      );
       nextLiveToolCalls = const [];
     } else {
       if (state.liveToolCalls.isNotEmpty) {
@@ -907,6 +925,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearSendErrorMessage: true,
       clearErrorMessage: true,
     );
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat',
+      message:
+          'Message sending initiated (phase: sending, session: ${state.sessionId})',
+    );
     final gen = ++_generation;
     try {
       final response = await api.startChat(
@@ -1073,6 +1097,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     // 空流式气泡立即锚定（思考中指示器依赖它）。
     _ensureStreamingAssistantMessage();
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat',
+      message:
+          'Stream started (phase: streaming, streamId: $streamId, session: ${state.sessionId})',
+    );
     _connectStream(streamId);
     _markProgress();
     _recordTransportActivity();
@@ -1601,6 +1631,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyApprovalUpdate(Map<String, Object?> payload) {
     final pending = payload['pending'];
     if (pending is Map) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat',
+        message: 'Phase changed to approvalPending (session: ${state.sessionId})',
+      );
       state = state.copyWith(
         phase: ChatPhase.approvalPending,
         pendingAction: state.pendingAction.copyWith(
@@ -1616,6 +1651,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyClarificationUpdate(Map<String, Object?> payload) {
     final pending = payload['pending'];
     if (pending is Map) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat',
+        message: 'Phase changed to clarifyPending (session: ${state.sessionId})',
+      );
       state = state.copyWith(
         phase: ChatPhase.clarifyPending,
         pendingAction: state.pendingAction.copyWith(
@@ -1775,19 +1815,32 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messageOffset: state.messagesOffset,
       coalesce: _coalesceTools,
     );
+    final lastAssistant = _lastAssistantMessageId(merged);
     final liveGroups = _archiveLiveToolCallsToGroups();
+    final reanchoredLiveGroups = _reanchorGroupsToMessages(
+      liveGroups,
+      merged,
+      currentStreamingId,
+      lastAssistant,
+    );
     final groups = ToolCallGroup.merging(
       primaryGroups: persistedGroups,
-      fallbackGroups: liveGroups,
+      fallbackGroups: reanchoredLiveGroups,
     );
     final serverDerivedReasoning = ReasoningGroup.groups(
       messages: merged,
       messageOffset: state.messagesOffset,
     );
     final liveReasoning = _archiveLiveReasoningToGroups();
+    final reanchoredLiveReasoning = _reanchorReasoningToMessages(
+      liveReasoning,
+      merged,
+      currentStreamingId,
+      lastAssistant,
+    );
     final reasoningGroups = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
-      fallbackGroups: liveReasoning,
+      fallbackGroups: reanchoredLiveReasoning,
     );
     final title = detail.title?.trim();
     // 同步上下文快照（对齐 Swift applyCompletedStreamSession）
@@ -1950,8 +2003,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     String? completedStreamId,
   }) {
     _api?.stopStream();
+    final nextToolGroups = _archiveLiveToolCallsToGroups();
+    final nextReasoningGroups = _archiveLiveReasoningToGroups();
     state = state.copyWith(
       phase: ChatPhase.idle,
+      completedToolCallGroups: nextToolGroups,
+      completedReasoningGroups: nextReasoningGroups,
+      liveToolCalls: const [],
+      liveReasoningText: '',
+      liveTimelinePoints: const [],
       clearLastSteerHint: true,
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
@@ -2053,6 +2113,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// finishStream：清残留（flush、卡片、pinned notices、队列顺次发送），
   /// 相位经瞬态 endPhase 后立即回 idle。
   void _finishStream({ChatPhase endPhase = ChatPhase.idle}) {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat',
+      message:
+          'Stream finished (endPhase: ${endPhase.name}, session: ${state.sessionId})',
+    );
     flushPendingStreamingContent();
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
@@ -2185,6 +2251,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _finishStream(endPhase: ChatPhase.error);
       return;
     }
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat',
+      message: 'Transport error handled, phase -> recovering: $message',
+    );
     // 挂起：lastEventID 已由 onEventId 记录；快照即当前 state。
     state = state.copyWith(
       phase: ChatPhase.recovering,
@@ -2200,6 +2271,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<void> _reconnectIfNeeded() async {
     final streamId = state.stream.activeStreamId;
     if (streamId == null) return;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_reconnect',
+      message: 'Stream reconnection checking status (streamId: $streamId)',
+    );
     final gen = _generation;
     try {
       final status = await _api!.chatStreamStatus(streamId);
@@ -2301,6 +2377,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 强制重连（status 失败 / 看门狗超时；带 replay 若可用）。
   void _forceReconnect(String streamId) {
     final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_reconnect',
+      message:
+          'Force reconnecting stream (streamId: $streamId, afterSeq: $afterSeq)',
+    );
     state = state.copyWith(
       stream: state.stream.copyWith(
         isSuspended: true,
@@ -2358,6 +2440,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final cooldown = _statusCheckCooldownUntil;
       if (cooldown == null || now.isAfter(cooldown)) {
         _statusCheckCooldownUntil = now.add(config.statusPollCooldown);
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.warn,
+          tag: 'chat_watchdog',
+          message:
+              'Watchdog detected stale stream activity, polling status (session: ${state.sessionId})',
+        );
         state = state.copyWith(
           stream: state.stream.copyWith(
             recovery: ActiveStreamRecoveryState.checking,
@@ -2371,6 +2459,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         : config.forceReconnectThreshold;
     if (lastTransport != null &&
         now.difference(lastTransport) >= forceThreshold) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'chat_watchdog',
+        message:
+            'Watchdog force reconnecting due to transport silence (session: ${state.sessionId})',
+      );
       _forceReconnect(state.stream.activeStreamId!);
     }
   }
@@ -2457,11 +2551,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
-  List<ReasoningGroup> _archiveLiveReasoningToGroups() {
+  List<ReasoningGroup> _archiveLiveReasoningToGroups([String? overrideAnchor]) {
     if (state.liveReasoningText.isEmpty) return state.completedReasoningGroups;
     final anchor =
+        overrideAnchor ??
         state.stream.reasoningAnchorMessageId ??
-        state.stream.streamingAssistantMessageId;
+        state.stream.streamingAssistantMessageId ??
+        _lastAssistantMessageId(state.messages);
     final group = ReasoningGroup(
       anchorMessageId: anchor,
       text: state.liveReasoningText,
@@ -2482,11 +2578,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
-  List<ToolCallGroup> _archiveLiveToolCallsToGroups() {
+  List<ToolCallGroup> _archiveLiveToolCallsToGroups([String? overrideAnchor]) {
     if (state.liveToolCalls.isEmpty) return state.completedToolCallGroups;
     final anchor =
+        overrideAnchor ??
         state.stream.toolCallAnchorMessageId ??
-        state.stream.streamingAssistantMessageId;
+        state.stream.streamingAssistantMessageId ??
+        _lastAssistantMessageId(state.messages);
     final group = ToolCallGroup.live(
       anchorMessageID: anchor,
       toolCalls: List<ToolCall>.of(state.liveToolCalls),
@@ -2495,6 +2593,65 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       primaryGroups: state.completedToolCallGroups,
       fallbackGroups: [group],
     );
+  }
+
+  List<ToolCallGroup> _reanchorGroupsToMessages(
+    List<ToolCallGroup> groups,
+    List<ChatMessage> messages,
+    String? oldStreamingId,
+    String? newAnchorId,
+  ) {
+    if (groups.isEmpty || newAnchorId == null || newAnchorId.isEmpty) {
+      return groups;
+    }
+    final messageIds = messages
+        .map((m) => m.messageId)
+        .whereType<String>()
+        .toSet();
+    return groups.map((g) {
+      final anchor = g.anchorMessageID;
+      final needsReanchor = anchor == null ||
+          anchor == oldStreamingId ||
+          ((anchor.startsWith('local-') || anchor == 'unanchored') &&
+              !messageIds.contains(anchor));
+      if (needsReanchor) {
+        return ToolCallGroup(
+          id: g.id,
+          anchorMessageID: newAnchorId,
+          toolCalls: g.toolCalls,
+        );
+      }
+      return g;
+    }).toList();
+  }
+
+  List<ReasoningGroup> _reanchorReasoningToMessages(
+    List<ReasoningGroup> groups,
+    List<ChatMessage> messages,
+    String? oldStreamingId,
+    String? newAnchorId,
+  ) {
+    if (groups.isEmpty || newAnchorId == null || newAnchorId.isEmpty) {
+      return groups;
+    }
+    final messageIds = messages
+        .map((m) => m.messageId)
+        .whereType<String>()
+        .toSet();
+    return groups.map((g) {
+      final anchor = g.anchorMessageId;
+      final needsReanchor = anchor == null ||
+          anchor == oldStreamingId ||
+          ((anchor.startsWith('local-') || anchor == 'unanchored') &&
+              !messageIds.contains(anchor));
+      if (needsReanchor) {
+        return ReasoningGroup(
+          anchorMessageId: newAnchorId,
+          text: g.text,
+        );
+      }
+      return g;
+    }).toList();
   }
 
   void _rollbackOptimisticMessage(String messageId) {
