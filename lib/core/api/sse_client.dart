@@ -519,13 +519,24 @@ class SseEventDecoder {
   static SseEvent _decodeDone(String data) {
     final json = _jsonOrNull(data);
     final map = _asMap(json);
-    final rawEvent = map['event'];
-    // DonePayload.event 缺失/畸形 → transportError（唯一视为 transportError 的）。
-    // 友好化：中英前缀由调用方 AppLocalizations.connectionErrorMalformedDone 统一，此处保留中文默认
-    if (rawEvent is! Map<String, Object?>) {
+    if (map.isEmpty) {
       return const TransportErrorSseEvent('连接异常：完成事件格式异常');
     }
-    final event = Map<String, Object?>.from(rawEvent);
+    // 兼容两种形态：
+    // 1) 旧契约/测试：{"event": {"session":..., "usage":...}}
+    // 2) 真实服务端（gateway_chat.py / streaming.py）：{"session":..., "usage":...} 平铺
+    // Swift DonePayload 同样从平铺的 usage/session 构造 event。
+    Map<String, Object?>? event;
+    final rawEvent = map['event'];
+    if (rawEvent is Map<String, Object?>) {
+      event = Map<String, Object?>.from(rawEvent);
+    } else if (rawEvent is Map) {
+      event = Map<String, Object?>.from(rawEvent);
+    } else if (map.containsKey('session') || map.containsKey('usage')) {
+      event = map;
+    } else {
+      return const TransportErrorSseEvent('连接异常：完成事件格式异常');
+    }
     final rawUsage = event['usage'];
     final rawSession = event['session'];
     final usageMap = rawUsage is Map<String, Object?>
