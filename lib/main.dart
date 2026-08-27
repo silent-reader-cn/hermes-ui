@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
@@ -17,6 +18,91 @@ import 'features/desktop/desktop_settings.dart';
 import 'features/desktop/startup_registrar.dart';
 import 'features/notifications/notification_providers.dart';
 
+/// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8）。
+class RecoverableErrorCard extends StatefulWidget {
+  const RecoverableErrorCard({
+    super.key,
+    this.details,
+    this.onRetry,
+    this.message,
+  });
+
+  final FlutterErrorDetails? details;
+  final VoidCallback? onRetry;
+  final String? message;
+
+  @override
+  State<RecoverableErrorCard> createState() => _RecoverableErrorCardState();
+}
+
+class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
+  bool _retried = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayText = widget.message ?? '已断开 / 网络错误，重试';
+    Widget card = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: CupertinoColors.systemRed.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            CupertinoIcons.exclamationmark_triangle_fill,
+            color: CupertinoColors.systemRed,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              displayText,
+              style: const TextStyle(
+                fontSize: 14,
+                color: CupertinoColors.label,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            color: CupertinoColors.activeBlue,
+            borderRadius: BorderRadius.circular(8),
+            onPressed: () {
+              setState(() => _retried = true);
+              widget.onRetry?.call();
+            },
+            child: Text(
+              _retried ? '已重试' : '重试',
+              style: const TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (Directionality.maybeOf(context) == null) {
+      card = Directionality(
+        textDirection: TextDirection.ltr,
+        child: card,
+      );
+    }
+    return Center(child: card);
+  }
+}
+
 /// 进程级唯一持久库单例
 ///
 /// 用 `overrideWithValue` 注入 [appDatabaseProvider]，避免
@@ -28,6 +114,36 @@ final AppDatabase _productionDatabase = AppDatabase.production();
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+
+  // 注册全局错误处理与可恢复卡片 builder（todo.md #8 渲染层兜底）
+  FlutterError.onError = (FlutterErrorDetails details) {
+    developer.log(
+      'FlutterError caught: ${details.exceptionAsString()}',
+      name: 'hermes.error',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    developer.log(
+      'PlatformDispatcher error caught: $error',
+      name: 'hermes.error',
+      error: error,
+      stackTrace: stack,
+    );
+    return true;
+  };
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    developer.log(
+      'ErrorWidget.builder caught: ${details.exceptionAsString()}',
+      name: 'hermes.error',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    return RecoverableErrorCard(details: details);
+  };
+
   final silentStart = isSilentStart(
     args: args,
     executableArguments: Platform.executableArguments,

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,6 +27,71 @@ import '../../settings/tool_group_settings.dart';
 import 'selected_context_card.dart';
 import 'steer_banner.dart';
 import 'tool_call_card.dart';
+
+/// 阅读锚点快照（离底阅读时记录视口顶部第一条可见条目及偏移，todo.md #14）。
+class _ReadingAnchor {
+  const _ReadingAnchor({
+    required this.candidateKey,
+    this.renderId,
+    this.liveRenderKey,
+    this.toolGroupId,
+    this.messageId,
+    required this.topOffset,
+  });
+
+  final String candidateKey;
+  final String? renderId;
+  final String? liveRenderKey;
+  final String? toolGroupId;
+  final String? messageId;
+  final double topOffset;
+}
+
+/// 安全 Markdown 渲染组件（增量流式解析异常兜底为纯文本，防止大灰屏，todo.md #8）。
+class _SafeMarkdownBody extends StatelessWidget {
+  const _SafeMarkdownBody({
+    required this.data,
+    required this.styleSheet,
+    required this.builders,
+    required this.imageBuilder,
+    this.selectable = true,
+  });
+
+  final String data;
+  final MarkdownStyleSheet styleSheet;
+  final Map<String, MarkdownElementBuilder> builders;
+  final Widget Function(Uri, String?, String?) imageBuilder;
+  final bool selectable;
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      return MarkdownBody(
+        data: data,
+        selectable: selectable,
+        styleSheet: styleSheet,
+        builders: builders,
+        // ignore: deprecated_member_use
+        imageBuilder: imageBuilder,
+      );
+    } catch (e, st) {
+      developer.log(
+        'MarkdownBody incremental parse error, fallback to Text',
+        name: 'chat.markdown',
+        error: e,
+        stackTrace: st,
+      );
+      return Text(
+        data,
+        style: TextStyle(
+          fontSize: 15,
+          height: 1.4,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
+      );
+    }
+  }
+}
 
 /// 消息列表（ListView.builder + 稳定 renderId key + 自动滚动跟随）。
 ///
@@ -51,6 +119,10 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   final GlobalKey<State<StatefulWidget>> _highlightKey =
       GlobalKey<State<StatefulWidget>>();
   final Set<String> _expandedNoticeIds = <String>{};
+  final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
+  _ReadingAnchor? _readingAnchor;
+  double? _lastBottomInset;
+
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -66,6 +138,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   late ProviderSubscription<int> _scrollTriggerSub;
   late ProviderSubscription<ChatPhase> _phaseSub;
+  ChatPhase? _lastPhase;
+  bool _justSent = false;
+  bool _isAnimatingToBottom = false;
 
   @override
   void initState() {
@@ -76,15 +151,28 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           .select((s) => s.streamingScrollTrigger),
       (_, _) {
         if (!mounted) return;
-        if (_nearBottom) _scrollToBottom();
+        if (_nearBottom) _scrollToBottom(animated: false);
       },
     );
     _phaseSub = ref.listenManual<ChatPhase>(
       chatPhaseProvider(widget.sessionId),
       (previous, next) {
         if (!mounted) return;
-        if (next == ChatPhase.sending || next == ChatPhase.streaming) {
-          _scrollToBottom();
+        if (next == ChatPhase.sending) {
+          // 刚发送门控：用户刚发送，置位门控，重置离底阅读标志（#13/#14）
+          _justSent = true;
+          _userHasScrolled = false;
+          _nearBottom = true;
+          _readingAnchor = null;
+        } else if (next == ChatPhase.streaming) {
+          final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+          final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
+          if (_justSent || _nearBottom || previous == ChatPhase.sending || isUserLast) {
+            _justSent = true;
+            _userHasScrolled = false;
+            _nearBottom = true;
+            _readingAnchor = null;
+          }
         }
       },
     );
@@ -110,6 +198,12 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _highlightSettled = false;
       _highlightPositioned = false;
       _expandedNoticeIds.clear();
+      _itemKeys.clear();
+      _readingAnchor = null;
+      _lastBottomInset = null;
+      _lastPhase = null;
+      _justSent = false;
+      _isAnimatingToBottom = false;
       _nearBottom = true;
       _layoutGeneration++;
       _scrollTriggerSub = ref.listenManual<int>(
@@ -117,15 +211,27 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             .select((s) => s.streamingScrollTrigger),
         (_, _) {
           if (!mounted) return;
-          if (_nearBottom) _scrollToBottom();
+          if (_nearBottom) _scrollToBottom(animated: false);
         },
       );
       _phaseSub = ref.listenManual<ChatPhase>(
         chatPhaseProvider(widget.sessionId),
         (previous, next) {
           if (!mounted) return;
-          if (next == ChatPhase.sending || next == ChatPhase.streaming) {
-            _scrollToBottom();
+          if (next == ChatPhase.sending) {
+            _justSent = true;
+            _userHasScrolled = false;
+            _nearBottom = true;
+            _readingAnchor = null;
+          } else if (next == ChatPhase.streaming) {
+            final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+            final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
+            if (_justSent || _nearBottom || previous == ChatPhase.sending || isUserLast) {
+              _justSent = true;
+              _userHasScrolled = false;
+              _nearBottom = true;
+              _readingAnchor = null;
+            }
           }
         },
       );
@@ -169,8 +275,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!_restoringOlderPosition &&
         _initialPositioned &&
         !_initialPositioning) {
-      if (!nearBottom) _userHasScrolled = true;
-      if (nearBottom != _nearBottom) {
+      if (nearBottom) {
+        _userHasScrolled = false;
+        _readingAnchor = null;
+      } else {
+        if (_userHasScrolled) {
+          _updateReadingAnchor();
+        }
+      }
+      if (nearBottom != _nearBottom && !_isAnimatingToBottom) {
         if (mounted) setState(() => _nearBottom = nearBottom);
       }
     }
@@ -178,6 +291,122 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         _initialPositioned &&
         !_restoringOlderPosition) {
       unawaited(_loadOlderMessages());
+    }
+  }
+
+  /// 记录视口顶部第一条可见条目 + 偏移（候选锚点优先级：renderId → liveRenderKey → toolGroupId → messageId，todo.md #14）。
+  void _updateReadingAnchor() {
+    if (!_controller.hasClients || _nearBottom || !mounted) return;
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return;
+
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+    final liveTimeline = ref.read(liveTimelineProvider(widget.sessionId));
+    final toolGroups = ref.read(toolGroupsProvider(widget.sessionId));
+
+    _ReadingAnchor? candidate;
+
+    // 1. 优先扫描 transcript 消息
+    for (final entry in transcript) {
+      final key = _itemKeys[entry.renderId];
+      if (key?.currentContext == null) continue;
+      final box = key!.currentContext!.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
+      final dy = localOffset.dy;
+      if (dy + box.size.height > 0) {
+        final group = toolGroups
+            .where(
+              (g) =>
+                  g.anchorMessageID == entry.message.messageId ||
+                  g.anchorMessageID == entry.anchorId,
+            )
+            .firstOrNull;
+        candidate = _ReadingAnchor(
+          candidateKey: entry.renderId,
+          renderId: entry.renderId,
+          toolGroupId: group?.id,
+          messageId: entry.message.messageId ?? entry.message.id,
+          topOffset: dy,
+        );
+        break;
+      }
+    }
+
+    // 2. 其次扫描 liveTimeline 段落
+    if (candidate == null && liveTimeline != null) {
+      for (final entry in liveTimeline) {
+        final key = _itemKeys[entry.renderKey];
+        if (key?.currentContext == null) continue;
+        final box = key!.currentContext!.findRenderObject() as RenderBox?;
+        if (box == null || !box.attached) continue;
+        final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
+        final dy = localOffset.dy;
+        if (dy + box.size.height > 0) {
+          candidate = _ReadingAnchor(
+            candidateKey: entry.renderKey,
+            liveRenderKey: entry.renderKey,
+            toolGroupId: entry.toolGroup?.id,
+            topOffset: dy,
+          );
+          break;
+        }
+      }
+    }
+
+    if (candidate != null) {
+      _readingAnchor = candidate;
+    }
+  }
+
+  /// 内容变化 postFrame 无动画跳回锚点，绝不拉回底部（todo.md #14）。
+  void _maybeRestoreReadingAnchor() {
+    if (!mounted ||
+        !_controller.hasClients ||
+        _nearBottom ||
+        !_userHasScrolled ||
+        !_initialPositioned ||
+        _positioningActive ||
+        _restoringOlderPosition) {
+      return;
+    }
+    final anchor = _readingAnchor;
+    if (anchor == null) return;
+
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return;
+
+    // 按优先级解析锚点：transcript renderId → live entry.renderKey → 工具组 id → messageId
+    GlobalKey? targetKey;
+    if (anchor.renderId != null && _itemKeys.containsKey(anchor.renderId)) {
+      targetKey = _itemKeys[anchor.renderId];
+    } else if (anchor.liveRenderKey != null &&
+        _itemKeys.containsKey(anchor.liveRenderKey)) {
+      targetKey = _itemKeys[anchor.liveRenderKey];
+    } else if (anchor.toolGroupId != null &&
+        _itemKeys.containsKey(anchor.toolGroupId)) {
+      targetKey = _itemKeys[anchor.toolGroupId];
+    } else if (anchor.messageId != null &&
+        _itemKeys.containsKey(anchor.messageId)) {
+      targetKey = _itemKeys[anchor.messageId];
+    }
+
+    if (targetKey?.currentContext == null) return;
+    final box = targetKey!.currentContext!.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+
+    final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
+    final currentDy = localOffset.dy;
+    final diff = currentDy - anchor.topOffset;
+
+    if (diff.abs() > 0.5) {
+      final newPixels = (_controller.position.pixels + diff).clamp(
+        0.0,
+        _controller.position.maxScrollExtent,
+      );
+      if ((newPixels - _controller.position.pixels).abs() > 0.5) {
+        _controller.jumpTo(newPixels);
+      }
     }
   }
 
@@ -374,12 +603,20 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final target = _controller.position.maxScrollExtent;
     if (target <= 0) return;
     if (animated) {
-      _controller.animateTo(
-        target,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
+      _isAnimatingToBottom = true;
+      unawaited(
+        _controller
+            .animateTo(
+              target,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            )
+            .whenComplete(() {
+              if (mounted) _isAnimatingToBottom = false;
+            }),
       );
     } else {
+      if (_isAnimatingToBottom) return;
       _controller.jumpTo(target);
     }
   }
@@ -561,6 +798,57 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       });
     }
 
+    final phaseChanged = _lastPhase != phase;
+    _lastPhase = phase;
+
+    // Android 输入法软键盘监听（仅 defaultTargetPlatform == android 生效，todo.md #13）
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    final currentBottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    if (isAndroid) {
+      if (_lastBottomInset != null && _lastBottomInset != currentBottomInset) {
+        if (_nearBottom &&
+            _initialPositioned &&
+            !_positioningActive &&
+            !_restoringOlderPosition) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_controller.hasClients) return;
+            if (_nearBottom &&
+                !_positioningActive &&
+                !_restoringOlderPosition) {
+              _scrollToBottom(animated: false);
+            }
+          });
+        }
+      }
+      _lastBottomInset = currentBottomInset;
+    }
+
+    // 消息刷新与内容变化：若 _nearBottom 则无动画 jump 回底（#13）；若离底阅读则保持锚点不拉底（#14）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
+      if (_justSent ||
+          (phaseChanged &&
+              (phase == ChatPhase.sending ||
+                  isUserLast ||
+                  (phase == ChatPhase.streaming && _nearBottom)))) {
+        // 用户刚发送或阶段切换（sending/streaming 开始）保持 200ms animateTo 平滑动画（#13/#14）
+        _justSent = false;
+        _scrollToBottom(animated: true);
+      } else if (_nearBottom &&
+          _initialPositioned &&
+          !_positioningActive &&
+          !_restoringOlderPosition) {
+        // 消息刷新与增量更新无动画 jump 回底（#13）
+        _scrollToBottom(animated: false);
+      } else if (!_nearBottom &&
+          _userHasScrolled &&
+          !_justSent &&
+          _initialPositioned) {
+        _maybeRestoreReadingAnchor();
+      }
+    });
+
     // live 时间线模式：streaming 且 provider 非 null（null = 重连归档等
     // 无法还原段落边界的场景，回退旧分组式流式气泡）。
     final timelineActive = streaming != null && liveTimeline != null;
@@ -608,102 +896,147 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
 
-    return ListView.builder(
-      controller: _controller,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: itemCount,
-      itemBuilder: (context, index) {
-        // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-        if (index < transcript.length) {
-          final entry = transcript[index];
-          final groups =
-              entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
-          final noticeId = entry.message.id;
-          final expanded = _expandedNoticeIds.contains(noticeId);
-          final isHighlightTarget =
-              _highlightTargetRenderId != null &&
-              entry.renderId == _highlightTargetRenderId;
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPress: () => _showMessageActions(entry.message),
-            onSecondaryTapDown: (_) => _showMessageActions(entry.message),
-            child: KeyedSubtree(
-              key: isHighlightTarget ? _highlightKey : null,
-              child: SearchMessageHighlight(
-                highlight: isHighlightTarget,
-                child: ChatMessageBubble(
-                  key: ValueKey(entry.renderId),
-                  message: entry.message,
-                  toolGroups: groups,
-                  hideThinking: hideThinking,
-                  collapseInjectedEnabled: collapseEnabled,
-                  injectedExpanded: expanded,
-                  onToggleInjected: () {
-                    if (!mounted) return;
-                    setState(() {
-                      if (_expandedNoticeIds.contains(noticeId)) {
-                        _expandedNoticeIds.remove(noticeId);
-                      } else {
-                        _expandedNoticeIds.add(noticeId);
-                      }
-                    });
-                  },
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is UserScrollNotification) {
+          if (notification.direction != ScrollDirection.idle) {
+            if (_initialPositioned &&
+                !_initialPositioning &&
+                !_restoringOlderPosition) {
+              _userHasScrolled = true;
+            }
+          }
+        } else if (notification is ScrollUpdateNotification) {
+          if (notification.dragDetails != null) {
+            if (_initialPositioned &&
+                !_initialPositioning &&
+                !_restoringOlderPosition) {
+              _userHasScrolled = true;
+            }
+          }
+        }
+        return false;
+      },
+      child: ListView.builder(
+        controller: _controller,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
+          if (index < transcript.length) {
+            final entry = transcript[index];
+            final groups =
+                entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+            final noticeId = entry.message.id;
+            final expanded = _expandedNoticeIds.contains(noticeId);
+            final isHighlightTarget =
+                _highlightTargetRenderId != null &&
+                entry.renderId == _highlightTargetRenderId;
+            final entryKey = _itemKeys.putIfAbsent(
+              entry.renderId,
+              () => GlobalKey(),
+            );
+            if (entry.message.messageId != null &&
+                entry.message.messageId!.isNotEmpty) {
+              _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
+            }
+            for (final g in groups) {
+              _itemKeys.putIfAbsent(g.id, () => entryKey);
+            }
+
+            return KeyedSubtree(
+              key: isHighlightTarget ? _highlightKey : entryKey,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPress: () => _showMessageActions(entry.message),
+                onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+                child: SearchMessageHighlight(
+                  highlight: isHighlightTarget,
+                  child: ChatMessageBubble(
+                    key: ValueKey(entry.renderId),
+                    message: entry.message,
+                    toolGroups: groups,
+                    hideThinking: hideThinking,
+                    collapseInjectedEnabled: collapseEnabled,
+                    injectedExpanded: expanded,
+                    onToggleInjected: () {
+                      if (!mounted) return;
+                      setState(() {
+                        if (_expandedNoticeIds.contains(noticeId)) {
+                          _expandedNoticeIds.remove(noticeId);
+                        } else {
+                          _expandedNoticeIds.add(noticeId);
+                        }
+                      });
+                    },
+                  ),
                 ),
               ),
-            ),
-          );
-        }
-        var tail = index - transcript.length;
-        if (showQueuedBanner) {
-          if (tail == 0) {
-            return QueuedBanner(
-              count: queuedMessages.length,
-              preview: queuedMessages.first,
             );
           }
-          tail--;
-        }
-        if (streaming != null && !timelineActive) {
-          // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
-          if (tail == 0) {
-            return _StreamingBubble(
-              message: streaming,
-              toolGroups: streamingTools,
-              hideThinking: hideThinking,
-            );
-          }
-          tail--;
-        }
-        if (streaming != null && timelineActive) {
-          if (liveTimeline.isEmpty) {
-            if (tail == 0) return const _StreamingThinkingIndicator();
+          var tail = index - transcript.length;
+          if (showQueuedBanner) {
+            if (tail == 0) {
+              return QueuedBanner(
+                count: queuedMessages.length,
+                preview: queuedMessages.first,
+              );
+            }
             tail--;
-          } else {
-            if (tail < liveTimeline.length) {
-              return _LiveTimelineItem(
-                entry: liveTimeline[tail],
-                streamingMessage: streaming,
+          }
+          if (streaming != null && !timelineActive) {
+            // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
+            if (tail == 0) {
+              return _StreamingBubble(
+                message: streaming,
+                toolGroups: streamingTools,
                 hideThinking: hideThinking,
               );
             }
-            tail -= liveTimeline.length;
+            tail--;
           }
-        }
-        if (phase == ChatPhase.sending) {
-          if (tail == 0) return const _SendingIndicator();
-          tail--;
-        }
-        if (needFallback) {
-          if (tail == 0) {
-            return _FallbackToolReasoningCards(
-              toolGroups: toolGroups,
-              hideThinking: hideThinking,
-            );
+          if (streaming != null && timelineActive) {
+            if (liveTimeline.isEmpty) {
+              if (tail == 0) return const _StreamingThinkingIndicator();
+              tail--;
+            } else {
+              if (tail < liveTimeline.length) {
+                final liveEntry = liveTimeline[tail];
+                final liveKey = _itemKeys.putIfAbsent(
+                  liveEntry.renderKey,
+                  () => GlobalKey(),
+                );
+                if (liveEntry.toolGroup != null) {
+                  _itemKeys.putIfAbsent(liveEntry.toolGroup!.id, () => liveKey);
+                }
+                return KeyedSubtree(
+                  key: liveKey,
+                  child: _LiveTimelineItem(
+                    entry: liveEntry,
+                    streamingMessage: streaming,
+                    hideThinking: hideThinking,
+                  ),
+                );
+              }
+              tail -= liveTimeline.length;
+            }
           }
-          tail--;
-        }
-        return const SizedBox.shrink();
-      },
+          if (phase == ChatPhase.sending) {
+            if (tail == 0) return const _SendingIndicator();
+            tail--;
+          }
+          if (needFallback) {
+            if (tail == 0) {
+              return _FallbackToolReasoningCards(
+                toolGroups: toolGroups,
+                hideThinking: hideThinking,
+              );
+            }
+            tail--;
+          }
+          return const SizedBox.shrink();
+        },
+      ),
     );
   }
 }
@@ -805,7 +1138,7 @@ class _LiveTimelineItem extends StatelessWidget {
   }
 }
 
-/// 流式文本段（Markdown 渲染，镜像历史 assistant 气泡的 content 处理管线）。
+/// 流式文本段（Markdown 渲染，增量解析 try/catch 兜底，镜像历史 assistant 气泡的 content 处理管线）。
 class _LiveTextBlock extends StatelessWidget {
   const _LiveTextBlock({required this.slice, required this.streamingMessage});
 
@@ -814,21 +1147,31 @@ class _LiveTextBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = SelectedContextParser.parse(slice);
+    SelectedContextParse selected;
+    try {
+      selected = SelectedContextParser.parse(slice);
+    } catch (_) {
+      selected = SelectedContextParse(blocks: const [], cleanText: slice);
+    }
     final blocks = selected.blocks;
     final cleanText = selected.cleanText;
     final hasMediaMarker =
         cleanText.contains('MEDIA:') || cleanText.contains('file://');
-    final parsedContent = hasMediaMarker
-        ? ChatMediaParser.parseMediaMarkers(cleanText)
-        : cleanText;
+    String parsedContent;
+    try {
+      parsedContent = hasMediaMarker
+          ? ChatMediaParser.parseMediaMarkers(cleanText)
+          : cleanText;
+    } catch (_) {
+      parsedContent = cleanText;
+    }
     final sections = <Widget>[];
     if (blocks.isNotEmpty) {
       sections.add(SelectedContextCardGroup(blocks: blocks));
     }
     if (parsedContent.isNotEmpty) {
       sections.add(
-        MarkdownBody(
+        _SafeMarkdownBody(
           data: parsedContent,
           selectable: true,
           styleSheet: buildAssistantMarkdownStyleSheet(context),
