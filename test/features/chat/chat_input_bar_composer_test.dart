@@ -38,12 +38,12 @@ Future<void> _pumpComposer(
         chatApiProvider.overrideWithValue(chatApi),
         promptsApiFactoryProvider.overrideWithValue((_) => prompts),
         filePickerServiceProvider.overrideWithValue(FakeFilePickerService()),
-        clipboardPasteServiceProvider.overrideWithValue(FakeClipboardPasteService()),
+        clipboardPasteServiceProvider.overrideWithValue(
+          FakeClipboardPasteService(),
+        ),
         apiClientProvider.overrideWithValue(client),
       ],
-      child: CupertinoApp(
-        home: ChatPage(sessionId: sessionId),
-      ),
+      child: CupertinoApp(home: ChatPage(sessionId: sessionId)),
     ),
   );
   await tester.pump();
@@ -115,10 +115,7 @@ void main() {
         final initialHeight = tester.getSize(inputFinder).height;
 
         // 输入 4 行文本 → 高度增长
-        await tester.enterText(
-          inputFinder,
-          '第一行\n第二行\n第三行\n第四行',
-        );
+        await tester.enterText(inputFinder, '第一行\n第二行\n第三行\n第四行');
         await tester.pump();
         final height4Lines = tester.getSize(inputFinder).height;
         expect(height4Lines, greaterThan(initialHeight));
@@ -154,8 +151,11 @@ void main() {
         'chat-send-button',
         'chat-input-field',
       ]) {
-        expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
-            reason: '经典布局应含 $key 且唯一');
+        expect(
+          find.byKey(ValueKey<String>(key)),
+          findsOneWidget,
+          reason: '经典布局应含 $key 且唯一',
+        );
       }
       await _unmount(tester);
 
@@ -172,37 +172,45 @@ void main() {
         'chat-send-button',
         'chat-input-field',
       ]) {
-        expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
-            reason: '两段式布局应含 $key 且唯一');
+        expect(
+          find.byKey(ValueKey<String>(key)),
+          findsOneWidget,
+          reason: '两段式布局应含 $key 且唯一',
+        );
       }
       await _unmount(tester);
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    testWidgets('现有工具栏按键 Key 全部存在（chat-attach-button, chat-saved-prompts-button, chat-send-button）', (
-      tester,
-    ) async {
-      final chatApi = FakeChatApi();
-      chatApi.sessionResult = {
-        'session': {'session_id': 's1', 'messages': const []},
-      };
-      await _pumpComposer(tester, chatApi: chatApi);
+    testWidgets(
+      '现有工具栏按键 Key 全部存在（chat-attach-button, chat-saved-prompts-button, chat-send-button）',
+      (tester) async {
+        final chatApi = FakeChatApi();
+        chatApi.sessionResult = {
+          'session': {'session_id': 's1', 'messages': const []},
+        };
+        await _pumpComposer(tester, chatApi: chatApi);
 
-      expect(find.byKey(const ValueKey('chat-attach-button')), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-saved-prompts-button')), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-send-button')), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-input-field')), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-steer-button')), findsNothing);
-      expect(find.byKey(const ValueKey('chat-stop-button')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('chat-attach-button')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('chat-saved-prompts-button')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('chat-send-button')), findsOneWidget);
+        expect(find.byKey(const ValueKey('chat-input-field')), findsOneWidget);
+        expect(find.byKey(const ValueKey('chat-steer-button')), findsNothing);
+        expect(find.byKey(const ValueKey('chat-stop-button')), findsNothing);
 
-      await _unmount(tester);
-    });
+        await _unmount(tester);
+      },
+    );
   });
 
   group('ChatInputBar 流式状态工具行按钮', () {
-    testWidgets('流式期间（streaming）显示 steer 与 stop 按钮，隐藏 send 按钮', (
-      tester,
-    ) async {
+    testWidgets('流式期间（streaming）显示 steer 与 stop 按钮，隐藏 send 按钮', (tester) async {
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -234,9 +242,14 @@ void main() {
       await tester.pump();
       expect(_isButtonEnabled(tester, steerBtn), isTrue);
 
-      // 点击停止按钮调用 cancelChat
+      // 点击停止按钮 → #19 二次确认框出现，确认后才真正停止
       await tester.tap(stopBtn);
       await tester.pump();
+      expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+      // 点「停止生成」确认（输入栏 stop 按钮为 icon-only 无文本，
+      // 页面上文本「停止生成」唯一，可安全定位）。
+      await tester.tap(find.text('停止生成'));
+      await tester.pumpAndSettle();
       expect(chatApi.cancelCalls, 1);
 
       await _unmount(tester);
@@ -360,11 +373,23 @@ void main() {
       };
       await _pumpComposer(tester, chatApi: chatApi);
 
-      final attachX = tester.getTopLeft(find.byKey(const ValueKey('chat-attach-button'))).dx;
-      final bookmarkX = tester.getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button'))).dx;
-      final indicatorX = tester.getTopLeft(find.byKey(const ValueKey('chat-context-indicator-button'))).dx;
-      final inputX = tester.getTopLeft(find.byKey(const ValueKey('chat-input-field'))).dx;
-      final sendX = tester.getTopLeft(find.byKey(const ValueKey('chat-send-button'))).dx;
+      final attachX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-attach-button')))
+          .dx;
+      final bookmarkX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button')))
+          .dx;
+      final indicatorX = tester
+          .getTopLeft(
+            find.byKey(const ValueKey('chat-context-indicator-button')),
+          )
+          .dx;
+      final inputX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-input-field')))
+          .dx;
+      final sendX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-send-button')))
+          .dx;
 
       expect(attachX, lessThan(bookmarkX));
       expect(bookmarkX, lessThan(indicatorX));
@@ -374,7 +399,9 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('两段式布局：工具行 [附件] [书签] [上下文圆环] | Spacer | [发送] 排列', (tester) async {
+    testWidgets('两段式布局：工具行 [附件] [书签] [上下文圆环] | Spacer | [发送] 排列', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         ComposerTwoPaneController.keyTwoPane: true,
       });
@@ -385,10 +412,20 @@ void main() {
       await _pumpComposer(tester, chatApi: chatApi);
       await tester.pump(const Duration(milliseconds: 50));
 
-      final attachX = tester.getTopLeft(find.byKey(const ValueKey('chat-attach-button'))).dx;
-      final bookmarkX = tester.getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button'))).dx;
-      final indicatorX = tester.getTopLeft(find.byKey(const ValueKey('chat-context-indicator-button'))).dx;
-      final sendX = tester.getTopLeft(find.byKey(const ValueKey('chat-send-button'))).dx;
+      final attachX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-attach-button')))
+          .dx;
+      final bookmarkX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button')))
+          .dx;
+      final indicatorX = tester
+          .getTopLeft(
+            find.byKey(const ValueKey('chat-context-indicator-button')),
+          )
+          .dx;
+      final sendX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-send-button')))
+          .dx;
 
       expect(attachX, lessThan(bookmarkX));
       expect(bookmarkX, lessThan(indicatorX));
@@ -401,11 +438,18 @@ void main() {
     testWidgets('只读会话下仍显示上下文圆环指示器', (tester) async {
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
-        'session': {'session_id': 's1', 'messages': const [], 'is_read_only': true},
+        'session': {
+          'session_id': 's1',
+          'messages': const [],
+          'is_read_only': true,
+        },
       };
       await _pumpComposer(tester, chatApi: chatApi);
 
-      expect(find.byKey(const ValueKey('chat-context-indicator-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-context-indicator-button')),
+        findsOneWidget,
+      );
       await _unmount(tester);
     });
   });
