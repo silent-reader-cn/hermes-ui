@@ -29,9 +29,7 @@ class _BottomPage extends StatelessWidget {
         child: Builder(
           builder: (context) => CupertinoButton(
             onPressed: () => Navigator.of(context).push(
-              HermesPageRoute<void>(
-                builder: (context) => const _DetailPage(),
-              ),
+              HermesPageRoute<void>(builder: (context) => const _DetailPage()),
             ),
             child: const Text('push'),
           ),
@@ -46,9 +44,7 @@ class _DetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const CupertinoPageScaffold(
-      child: Center(child: Text('detail')),
-    );
+    return const CupertinoPageScaffold(child: Center(child: Text('detail')));
   }
 }
 
@@ -68,7 +64,7 @@ double _slideDx(WidgetTester tester) {
 
 Future<void> _pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
-    CupertinoApp(home: const _BottomPage(key: _bottomKey)),
+    const CupertinoApp(home: _BottomPage(key: _bottomKey)),
   );
 }
 
