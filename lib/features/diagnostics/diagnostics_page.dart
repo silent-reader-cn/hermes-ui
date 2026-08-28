@@ -10,6 +10,7 @@ import 'diagnostics_detail_sheet.dart';
 import 'diagnostics_models.dart';
 import 'diagnostics_providers.dart';
 import 'diagnostics_service.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 诊断日志主页面（纯 Cupertino 风格，零 Material 组件）。
 class DiagnosticsPage extends ConsumerStatefulWidget {
@@ -113,7 +114,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
 
   void _showDetailSheet(DiagnosticsLogEntry entry) {
     Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => DiagnosticsDetailSheet(entry: entry),
       ),

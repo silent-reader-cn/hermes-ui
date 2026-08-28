@@ -28,6 +28,7 @@ import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
 import 'tool_group_settings.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
@@ -266,7 +267,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
+            HermesPageRoute<void>(
               builder: (_) => const AuxiliaryModelsPage(),
             ),
           ),
@@ -280,7 +281,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context)
-              .push(CupertinoPageRoute<void>(builder: (_) => const McpPage())),
+              .push(HermesPageRoute<void>(builder: (_) => const McpPage())),
         ),
         CupertinoListTile(
           key: const ValueKey('settings-entry-extensions'),
@@ -291,7 +292,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(builder: (_) => const ExtensionsPage()),
+            HermesPageRoute<void>(builder: (_) => const ExtensionsPage()),
           ),
         ),
         CupertinoListTile(
@@ -303,7 +304,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
+            HermesPageRoute<void>(
               builder: (_) => const SessionListEntriesPage(),
             ),
           ),
@@ -317,7 +318,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
+            HermesPageRoute<void>(
               builder: (_) => const SessionRowSubtitlePage(),
             ),
           ),
@@ -331,7 +332,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
+            HermesPageRoute<void>(
               builder: (_) => const DesktopSettingsPage(),
             ),
           ),
@@ -345,7 +346,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            CupertinoPageRoute<void>(
+            HermesPageRoute<void>(
               builder: (_) => const DiagnosticsPage(),
             ),
           ),
@@ -547,7 +548,7 @@ class _ServerSection extends ConsumerWidget {
     ServerConnection? connection,
   }) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => _ServerEditorPage(connection: connection),
       ),
     );
@@ -1035,7 +1036,7 @@ class _ModelSection extends ConsumerWidget {
     SettingsState state,
   ) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => _ModelPickerPage(state: state),
       ),
     );

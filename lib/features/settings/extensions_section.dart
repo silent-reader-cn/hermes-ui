@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/extensions.dart';
 import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 扩展生态分组（`_ExtensionsSection`，key: `settings-extensions-section`）。
 ///
@@ -199,7 +200,7 @@ class ExtensionsSection extends ConsumerWidget {
     List<ExtensionRegistryItem> registry,
   ) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => ExtensionInstallPage(registry: registry),
       ),
     );

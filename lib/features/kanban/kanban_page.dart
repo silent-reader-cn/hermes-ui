@@ -11,6 +11,7 @@ import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// Kanban 状态展示标题（对齐 Hermex KanbanStatusPresentation.title）。
 String kanbanStatusTitle(String? rawValue, [BuildContext? context]) {
@@ -358,7 +359,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
 
   void _openCreate(BuildContext context) {
     Navigator.of(context).push(
-      CupertinoPageRoute<void>(builder: (_) => const KanbanCreateCardPage()),
+      HermesPageRoute<void>(builder: (_) => const KanbanCreateCardPage()),
     );
   }
 
@@ -590,7 +591,7 @@ class _KanbanCardTile extends StatelessWidget {
   void _openDetail(BuildContext context, String cardId) {
     if (cardId.isEmpty) return;
     Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (_) => KanbanCardDetailPage(cardId: cardId),
       ),
     );
