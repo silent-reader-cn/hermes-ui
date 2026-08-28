@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
@@ -18,6 +19,7 @@ import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
+import '../notifications/notification_providers.dart';
 import '../session_list/session_list_providers.dart';
 import '../settings/tool_group_settings.dart';
 import 'chat_diff_merge.dart';
@@ -48,6 +50,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// reveal 最大滞后（积压超过该时长一次性排空）。
   static const maxRevealLag = Duration(seconds: 1);
 
+  /// reveal 队列词单元硬上限（超限直接落全文，防后台/锁屏积压爆吐卡死）。
+  static const maxRevealQueueUnits = 2000;
+
   ChatServerApi? _api;
   Timer? _mergeTimer;
   Timer? _revealTimer;
@@ -77,6 +82,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   int _generation = 0;
 
   bool _disposed = false;
+
+  /// App 生命周期非 resumed（后台/锁屏/隐藏）期间暂停 reveal/merge 消费，
+  /// resumed 后直接铺全文并重新校准看门狗基线。
+  bool _appPaused = false;
 
   /// SSE 连接当前是否存活（409 恢复路径判断是否需要重连）。
   bool _streamConnected = false;
@@ -113,8 +122,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _statusCheckCooldownUntil = null;
     _revealQueue.clear();
     _revealQueueStart = null;
+    _appPaused = false;
     _startWatchdog();
     ref.onDispose(_dispose);
+    // 后台/锁屏暂停 reveal 消费、resumed 铺全文并重新校准 watchdog 基线。
+    ref.listen<AppLifecycleState>(appLifecycleStateProvider, (previous, next) {
+      _handleAppLifecycleChange(previous, next);
+    });
     ref.listen(toolGroupCoalesceProvider, (prev, next) {
       if (prev != next) {
         _recomputeToolGroups(next);
@@ -1256,7 +1270,62 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     return true;
   }
 
+  /// 生命周期变化处理（修复①背景/锁屏暂停消费 + 修复③watchdog 基线校准）。
+  ///
+  /// - 非 resumed（后台/锁屏/隐藏）：暂停 16ms 合并与 48ms 逐词 reveal 消费，
+  ///   避免后台空转 CPU 与解锁后积压爆吐。
+  /// - resumed：先直接铺全文（积压缓冲一次性落消息），再重新校准看门狗基线，
+  ///   避免锁屏冻结计时器在解锁瞬间被误判为断线超时触发重连。
+  void _handleAppLifecycleChange(
+    AppLifecycleState? previous,
+    AppLifecycleState next,
+  ) {
+    final nowPaused = next != AppLifecycleState.resumed;
+    if (nowPaused == _appPaused) return;
+    _appPaused = nowPaused;
+    if (nowPaused) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat',
+        message: 'App lifecycle paused/hidden: reveal & merge consumption paused',
+      );
+      _mergeTimer?.cancel();
+      _mergeTimer = null;
+      _revealTimer?.cancel();
+      _revealTimer = null;
+      return;
+    }
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat',
+      message: 'App lifecycle resumed: flushing pending text + watchdog rebaseline',
+    );
+    // 直接铺全文：先入队（queue）的文本在前、pending 在后，保持到达顺序。
+    _flushPendingRevealToFullText();
+    _startRevealTimerIfNeeded();
+    // 看门狗基线重新校准：锁屏冻结期间的时间差不参与超时判定。
+    _lastProgress = _now();
+    _lastTransportActivity = _now();
+    _statusCheckCooldownUntil = null;
+  }
+
+  /// 把 merge/reveal 积压一次性写入消息（保持时间顺序：queue 先、pending 后）。
+  void _flushPendingRevealToFullText() {
+    _mergeTimer?.cancel();
+    _mergeTimer = null;
+    _revealTimer?.cancel();
+    _revealTimer = null;
+    final text = _revealQueue.join() + state.pendingAssistantTokenChunks.join();
+    _revealQueue.clear();
+    _revealQueueStart = null;
+    if (text.isNotEmpty) {
+      state = state.copyWith(pendingAssistantTokenChunks: const []);
+      _appendToStreamingMessage(text);
+    }
+  }
+
   void _scheduleMerge() {
+    if (_appPaused) return; // 后台/锁屏不调度合并（resumed 统一铺全文）
     _mergeTimer ??= Timer(mergeDelay, () {
       _mergeTimer = null;
       _mergePendingTokens();
@@ -1268,20 +1337,35 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (chunks.isNotEmpty) {
       final text = chunks.join();
       state = state.copyWith(pendingAssistantTokenChunks: const []);
-      if (_revealQueue.isEmpty) _revealQueueStart = _now();
-      _revealQueue.addAll(splitIntoWordUnits(text));
-      _startRevealTimerIfNeeded();
+      final units = splitIntoWordUnits(text);
+      _revealQueue.addAll(units);
+      if (_revealQueue.length > maxRevealQueueUnits) {
+        // 修复②队列硬上限：积压超过阈值直接落全文（一次铺完不再逐词），
+        // 防止后台/锁屏期间无上限积压导致解锁后爆吐 + 卡死。
+        final overflow = _revealQueue.join();
+        _revealQueue.clear();
+        _revealQueueStart = null;
+        if (overflow.isNotEmpty) {
+          _appendToStreamingMessage(overflow);
+          _markProgress();
+        }
+      } else {
+        _revealQueueStart ??= _now();
+        _startRevealTimerIfNeeded();
+      }
     }
     // 同一 tick 内 token 先、reasoning 后。
     _flushReasoningChunks();
   }
 
   void _startRevealTimerIfNeeded() {
+    if (_appPaused) return; // 后台/锁屏不启动逐词消费
     if (_revealTimer != null) return;
     _revealTimer = Timer.periodic(revealInterval, (_) => _drainReveal());
   }
 
   void _drainReveal() {
+    if (_appPaused) return; // 后台/锁屏暂停逐词消费（resumed 统一铺全文）
     if (_revealQueue.isEmpty) {
       _revealTimer?.cancel();
       _revealTimer = null;
@@ -1461,12 +1545,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final currentContent = _currentStreamingContent();
     String append;
     if (stream.isReplayConnection) {
+      // 修复④：与 token 路径共用 matchedPrefixLength 游标并回写，interim
+      // 整段去重不再恒 0 失效（否则整段重复文本直接入 content）。
       final deduped = deduplicatedReplayText(
         text: text,
         existingContent: currentContent,
-        matchedLength: 0,
+        matchedLength: stream.matchedPrefixLength,
       );
       append = deduped.remainder;
+      state = state.copyWith(
+        stream: state.stream.copyWith(
+          matchedPrefixLength: deduped.newCursor,
+          isReplayConnection: deduped.stillReplay,
+        ),
+      );
       if (append.isEmpty) return false;
       // replay 直连：直接拼接不加分隔符。
     } else {
@@ -2549,6 +2641,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _recoverStaleStreamIfNeeded() {
     if (_disposed) return;
+    if (_appPaused) return; // 修复③后台/锁屏豁免看门狗（冻结计时器不判超时）
     if (state.stream.activeStreamId == null) return;
     if (state.stream.hasCompletedResponse) return;
     if (state.pendingAction.hasPendingPrompt) return; // 卡片期间暂停
