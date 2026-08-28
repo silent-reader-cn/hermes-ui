@@ -40,7 +40,9 @@ class _NotificationLifecycleObserverState
       if (defaultTargetPlatform == TargetPlatform.android) {
         // 仅 Android：冷启动恢复 + 通知权限（桌面端无 POST_NOTIFICATIONS）。
         unawaited(_handleLaunchDetails());
-        unawaited(ref.read(turnNotificationServiceProvider).requestPermission());
+        unawaited(
+          ref.read(turnNotificationServiceProvider).requestPermission(),
+        );
       }
     });
   }
@@ -64,8 +66,9 @@ class _NotificationLifecycleObserverState
 
   /// 冷启动由通知拉起 → 跳转对应会话并清除通知。
   Future<void> _handleLaunchDetails() async {
-    final sessionId =
-        await ref.read(turnNotificationServiceProvider).getLaunchSessionId();
+    final sessionId = await ref
+        .read(turnNotificationServiceProvider)
+        .getLaunchSessionId();
     if (sessionId == null || sessionId.isEmpty) return;
     ref.read(routerProvider).go('/chat/$sessionId');
     unawaited(ref.read(turnNotificationServiceProvider).clearAll());
@@ -177,10 +180,10 @@ class _InAppNotificationBanner extends StatelessWidget {
                     item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                   if (item.message.isNotEmpty) ...[

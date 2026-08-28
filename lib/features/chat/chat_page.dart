@@ -702,11 +702,14 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
 
   void _initCountdown(Map<String, Object?> prompt) {
     _countdownTimer?.cancel();
-    final expiresAt = (prompt['expires_at'] as num?)?.toDouble() ??
+    final expiresAt =
+        (prompt['expires_at'] as num?)?.toDouble() ??
         (prompt['expiresAt'] as num?)?.toDouble();
-    final requestedAt = (prompt['requested_at'] as num?)?.toDouble() ??
+    final requestedAt =
+        (prompt['requested_at'] as num?)?.toDouble() ??
         (prompt['requestedAt'] as num?)?.toDouble();
-    final timeoutSec = (prompt['timeout_seconds'] as num?)?.toInt() ??
+    final timeoutSec =
+        (prompt['timeout_seconds'] as num?)?.toInt() ??
         (prompt['timeoutSeconds'] as num?)?.toInt() ??
         120;
 
@@ -747,8 +750,9 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
 
   void _handleTimeout() {
     _countdownTimer?.cancel();
-    final controller =
-        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final controller = ref.read(
+      chatControllerProvider(widget.sessionId).notifier,
+    );
     controller.handleClarificationTimeout();
   }
 
@@ -756,8 +760,9 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
     final text = (val ?? _textController.text).trim();
     if (text.isEmpty || _submitting) return;
     setState(() => _submitting = true);
-    final controller =
-        ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final controller = ref.read(
+      chatControllerProvider(widget.sessionId).notifier,
+    );
     final ok = await controller.respondToClarification(text);
     if (mounted) {
       setState(() => _submitting = false);
@@ -776,16 +781,19 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
     final prompt = isApproval
         ? pending.approvalPrompt!
         : pending.clarificationPrompt!;
-    final question = _PendingPromptCard._stringOf(
-      prompt,
-      const ['question', 'prompt', 'text'],
+    final question = _PendingPromptCard._stringOf(prompt, const [
+      'question',
+      'prompt',
+      'text',
+    ]);
+    final choices = _PendingPromptCard._stringListOf(prompt, const [
+      'choices_offered',
+      'choicesOffered',
+      'choices',
+    ]);
+    final controller = ref.read(
+      chatControllerProvider(widget.sessionId).notifier,
     );
-    final choices = _PendingPromptCard._stringListOf(
-      prompt,
-      const ['choices_offered', 'choicesOffered', 'choices'],
-    );
-    final controller =
-        ref.read(chatControllerProvider(widget.sessionId).notifier);
 
     if (isApproval) {
       return Container(
@@ -800,10 +808,10 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
           children: [
             Text(
               l10n.approvalNeeded,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.systemOrange,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
               ),
             ),
             if (question != null) ...[
@@ -1096,9 +1104,9 @@ class _QueuedBanner extends StatelessWidget {
         l10n.queuedBannerMessage(count),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
-          color: CupertinoColors.systemBrown,
+          color: CupertinoColors.systemBrown.resolveFrom(context),
         ),
       ),
     );
