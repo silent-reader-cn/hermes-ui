@@ -14,6 +14,7 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
 import 'workspace_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
 class WorkspacePickedFile {
@@ -361,7 +362,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// 打开文件预览页（文本/图片走 /api/file、/api/file/raw）。
   void _openPreview(WorkspaceEntry entry) {
     Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) =>
             FilePreviewPage(sessionId: widget.sessionId, entry: entry),
       ),

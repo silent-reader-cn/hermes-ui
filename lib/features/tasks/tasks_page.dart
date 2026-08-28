@@ -12,6 +12,7 @@ import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 任务状态文案（运行中 / 已暂停 / 已停用 / 出错 / 需关注 / 正常）。
 ///
@@ -269,7 +270,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   void _openEditor(BuildContext context, {CronJob? job}) {
     Navigator.of(
       context,
-    ).push(CupertinoPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
+    ).push(HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
   }
 
   void _showRowActions(BuildContext context, CronJob job, GlobalKey anchorKey) {
@@ -705,7 +706,7 @@ class _TaskOutputSheet extends StatelessWidget {
   }
 }
 
-/// 新建 / 编辑定时任务表单页（CupertinoPageRoute push 进入）。
+/// 新建 / 编辑定时任务表单页（HermesPageRoute push 进入）。
 ///
 /// 字段：名称（可选）/ 调度表达式（必填）/ 提示词（必填）/ 推送通知。
 /// 调度表达式与提示词为空时保存按钮禁用（对齐 Hermex 编辑草稿校验）。

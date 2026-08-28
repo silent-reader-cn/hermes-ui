@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/auxiliary_model.dart';
 import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// 辅助模型分组（`_AuxiliaryModelsSection`，key: `settings-auxiliary-section`）。
 ///
@@ -158,7 +159,7 @@ class AuxiliaryModelsSection extends ConsumerWidget {
     AuxiliaryTaskRow taskRow,
   ) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => AuxTaskPickerPage(taskRow: taskRow),
       ),
     );

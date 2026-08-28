@@ -19,6 +19,7 @@ import '../features/skills/skills_page.dart';
 import '../features/tasks/tasks_page.dart';
 import '../features/workspace/workspace_page.dart';
 import '../features/workspace_manager/workspace_manager_page.dart';
+import 'widgets/hermes_page_route.dart';
 
 /// 全局路由表（app_shell_spec.md §3 / TASK W2 自适应外壳）。
 ///
@@ -106,17 +107,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/workspace/:sessionId',
-            builder: (context, state) => WorkspacePage(
-              sessionId: state.pathParameters['sessionId'] ?? '',
-              filePicker: () async {
-                final service = ref.read(filePickerServiceProvider);
-                final picked = await service.pickFile();
-                if (picked == null) return null;
-                return WorkspacePickedFile(
-                  name: picked.name,
-                  bytes: picked.bytes,
-                );
-              },
+            // pageBuilder + HermesPage：context.push 进入/返回统一走 Hermes
+            // 转场（push 从右滑入、pop 当前页向左滑出，与详情页一致）。
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: ValueKey(
+                'workspace-${state.pathParameters['sessionId']}',
+              ),
+              builder: (_) => WorkspacePage(
+                sessionId: state.pathParameters['sessionId'] ?? '',
+                filePicker: () async {
+                  final service = ref.read(filePickerServiceProvider);
+                  final picked = await service.pickFile();
+                  if (picked == null) return null;
+                  return WorkspacePickedFile(
+                    name: picked.name,
+                    bytes: picked.bytes,
+                  );
+                },
+              ),
             ),
           ),
           GoRoute(
@@ -129,8 +137,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/git/:sessionId',
-            builder: (context, state) =>
-                GitPage(sessionId: state.pathParameters['sessionId'] ?? ''),
+            // pageBuilder + HermesPage：context.push 进入/返回统一走 Hermes
+            // 转场（push 从右滑入、pop 当前页向左滑出，与详情页一致）。
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: ValueKey('git-${state.pathParameters['sessionId']}'),
+              builder: (_) => GitPage(
+                sessionId: state.pathParameters['sessionId'] ?? '',
+              ),
+            ),
           ),
           GoRoute(
             path: '/insights',

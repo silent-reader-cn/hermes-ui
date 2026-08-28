@@ -9,6 +9,7 @@ import '../../../core/cache/cache_providers.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../l10n/app_localizations.dart';
 import 'chat_media_parser.dart';
+import '../../../app/widgets/hermes_page_route.dart';
 
 /// 单个网络媒体 URL → 本地缓存文件。
 ///
@@ -174,7 +175,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
     String? altText,
   }) {
     Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         fullscreenDialog: true,
         builder: (dialogContext) {
           Widget viewerContent;

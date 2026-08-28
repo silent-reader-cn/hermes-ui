@@ -9,6 +9,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/mcp.dart';
 import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
+import '../../app/widgets/hermes_page_route.dart';
 
 /// MCP 服务器管理分组（`_McpSection`，key: `settings-mcp-section`）。
 ///
@@ -205,7 +206,7 @@ class McpSection extends ConsumerWidget {
     McpServer? server,
   }) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => McpServerEditorPage(server: server),
       ),
     );
@@ -217,7 +218,7 @@ class McpSection extends ConsumerWidget {
     List<McpTool> tools,
   ) {
     return Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+      HermesPageRoute<void>(
         builder: (context) => McpToolsPage(server: server, tools: tools),
       ),
     );
