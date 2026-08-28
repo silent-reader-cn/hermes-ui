@@ -245,8 +245,7 @@ class AppLocalizations {
       : '请选择一个选项，或在下方输入你的回答。';
   String get collapseClarification =>
       isEnglish ? 'Collapse clarification' : '折叠澄清';
-  String get expandClarification =>
-      isEnglish ? 'Expand clarification' : '展开澄清';
+  String get expandClarification => isEnglish ? 'Expand clarification' : '展开澄清';
   String get notificationsSection => isEnglish ? 'Notifications' : '通知';
   String get notificationsTitle => isEnglish ? 'Notifications' : '通知';
   String get notifyTurnsTitle =>
@@ -257,8 +256,7 @@ class AppLocalizations {
       isEnglish ? 'Clarification Notifications' : '澄清请求通知';
   String get notifyClarifySubtitle =>
       isEnglish ? 'Notify when clarification is needed' : 'Agent 需要你澄清时推送通知';
-  String get notifyErrorsTitle =>
-      isEnglish ? 'Error Notifications' : '异常中断通知';
+  String get notifyErrorsTitle => isEnglish ? 'Error Notifications' : '异常中断通知';
   String get notifyErrorsSubtitle =>
       isEnglish ? 'Notify on session errors or interruption' : '会话异常中断或出错时推送通知';
   String get sessionErrorTitle => isEnglish ? 'Session Error' : '会话异常';
@@ -273,8 +271,8 @@ class AppLocalizations {
       ? 'Offline cache mode. Content may not be up to date.'
       : '离线缓存模式，部分内容可能不是最新';
   String get dismissOfflineBanner =>
-        isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
-    String get pickFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
+      isEnglish ? 'Dismiss offline cache notice' : '关闭离线提示';
+  String get pickFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
   String get selectFileFailed => isEnglish ? 'Failed to Select File' : '选择文件失败';
   String get uploadSucceeded => isEnglish ? 'Upload Succeeded' : '上传成功';
   String get uploadSuccess => isEnglish ? 'Upload Succeeded' : '上传成功';
@@ -328,6 +326,12 @@ class AppLocalizations {
   String get steerCurrentReply => isEnglish ? 'Steer current reply' : '提示当前回复';
   String get steerPrompt => isEnglish ? 'Steer current reply' : '提示当前回复';
   String get stopGenerating => isEnglish ? 'Stop generating' : '停止生成';
+  // todo #19 停止生成二次确认框（拍板稿：标题「停止生成？」+ 正文
+  // 「确定要停止当前回复吗？已生成的内容会保留。」+ 取消/停止）
+  String get stopGeneratingTitle => isEnglish ? 'Stop generating?' : '停止生成？';
+  String get stopGeneratingConfirmPrompt => isEnglish
+      ? 'Stop this reply? Already generated content will be kept.'
+      : '确定要停止当前回复吗？已生成的内容会保留。';
   String get sendMessage => isEnglish ? 'Send message' : '发送消息';
   String get copiedToClipboardNotice =>
       isEnglish ? 'Copied to clipboard' : '已复制到剪贴板';
@@ -982,8 +986,7 @@ class AppLocalizations {
   String get themeDark => isEnglish ? 'Dark' : '深色';
   String get chatSection => isEnglish ? 'Chat' : '对话';
   String get groupToolsByTurn => isEnglish ? 'Group tools by turn' : '工具按回合聚合';
-  String get composerTwoPane =>
-      isEnglish ? 'Two-pane input bar' : '两段式输入栏';
+  String get composerTwoPane => isEnglish ? 'Two-pane input bar' : '两段式输入栏';
   String get composerTwoPaneDesc => isEnglish
       ? 'Multi-line text area with a separate tool row below'
       : '多行文本区与独立工具行的输入栏布局（关闭为经典单行）';
@@ -1220,16 +1223,16 @@ class AppLocalizations {
   String get diagnosticsEnabledDesc => isEnglish
       ? 'Collect network requests, SSE events, and system errors when enabled'
       : '开启后采集网络请求、SSE 事件及系统错误日志';
-  String get diagnosticsEmptyDisabled => isEnglish
-      ? 'Enable debug mode to start recording logs'
-      : '打开调试模式后开始记录';
+  String get diagnosticsEmptyDisabled =>
+      isEnglish ? 'Enable debug mode to start recording logs' : '打开调试模式后开始记录';
   String get diagnosticsEmptyNoLogs =>
       isEnglish ? 'No logs recorded' : '暂无日志记录';
   String get diagnosticsEmptyNoMatch =>
       isEnglish ? 'No matching logs' : '无匹配的日志';
   String get diagnosticsTimeRangeAll => isEnglish ? 'All' : '全部';
   String get diagnosticsTimeRangeToday => isEnglish ? 'Today' : '今天';
-  String get diagnosticsTimeRangeLast7Days => isEnglish ? 'Last 7 Days' : '近 7 天';
+  String get diagnosticsTimeRangeLast7Days =>
+      isEnglish ? 'Last 7 Days' : '近 7 天';
   String get diagnosticsTimeRangeCustom => isEnglish ? 'Custom' : '自定义';
   String get diagnosticsSearchPlaceholder => isEnglish
       ? 'Search timestamp, level, tag, message, details…'
