@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -108,6 +109,7 @@ class ChatMessageList extends ConsumerStatefulWidget {
     super.key,
     required this.sessionId,
     this.highlightQuery,
+    this.listKey,
   });
 
   final String sessionId;
@@ -115,11 +117,16 @@ class ChatMessageList extends ConsumerStatefulWidget {
   /// 搜索结果定位关键词（匹配 content 的第一条消息滚动+高亮；null 关闭）。
   final String? highlightQuery;
 
+  /// 外部持有的 GlobalKey，用于调用 [ChatMessageListState.outlineJumpTo]
+  /// 实现大纲点击跳转（chat_page.dart 中由标题栏大纲面板回调触发）。
+  final GlobalKey<ChatMessageListState>? listKey;
+
   @override
-  ConsumerState<ChatMessageList> createState() => _ChatMessageListState();
+  ConsumerState<ChatMessageList> createState() => ChatMessageListState();
 }
 
-class _ChatMessageListState extends ConsumerState<ChatMessageList> {
+/// 消息列表状态（公开以暴露 [outlineJumpTo] 给大纲面板调用）。
+class ChatMessageListState extends ConsumerState<ChatMessageList> {
   final ScrollController _controller = ScrollController();
   final GlobalKey<State<StatefulWidget>> _highlightKey =
       GlobalKey<State<StatefulWidget>>();
@@ -830,6 +837,97 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           alignment: 0.25,
         );
       });
+    });
+  }
+
+  /// 大纲跳转：将指定 renderId 的用户气泡顶部贴至视口顶部（alignment 0.0）。
+  ///
+  /// 策略与 [_scrollToHighlight] 双步法一致（chat_message_list.dart:766-789）：
+  /// 1. 若目标已在 DOM 中构建（[_itemKeys] 已包含 renderId），直接
+  ///    `Scrollable.ensureVisible(alignment: 0.0, padding: navBarHeight)` 精跳；
+  /// 2. 否则按 `loadedIndex / transcriptLength * maxExtent` 比率粗跳，
+  ///    下一帧目标多已入视口，再 `ensureVisible` 精定。
+  ///
+  /// `alignment: 0.0` + `alignmentPolicy: preferLeading` 令目标贴视口顶部；
+  /// `scrollOffset` 校准导航栏高度（44）+ 安全区 top，避免被遮挡。
+  void outlineJumpTo(String renderId, int loadedIndex) {
+    if (!mounted || !_controller.hasClients) return;
+    const kNavBarHeight = 44.0;
+    final topPadding = MediaQuery.of(context).padding.top + kNavBarHeight;
+
+    // 1. 尝试精跳（目标已构建）
+    final key = _itemKeys[renderId];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      final renderObject = ctx.findRenderObject();
+      if (renderObject != null && renderObject.attached) {
+        if (ctx is! Element || ctx.mounted) {
+          unawaited(
+            Scrollable.ensureVisible(
+              ctx,
+              alignment: 0.0,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ).then((_) {
+              // 校准：额外补偿导航栏高度（ensureVisible 不知道导航栏存在）
+              if (!mounted || !_controller.hasClients) return;
+              final current = _controller.position.pixels;
+              final adjusted = math.max(0.0, current - topPadding);
+              if ((adjusted - current).abs() > 1) {
+                _controller.animateTo(
+                  adjusted,
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOut,
+                );
+              }
+            }),
+          );
+          return;
+        }
+      }
+    }
+
+    // 2. 粗跳后再精定（目标未构建，懒加载场景）
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+    if (!mounted || !_controller.hasClients) return;
+    final ratio = transcript.isEmpty
+        ? 0.0
+        : loadedIndex / transcript.length;
+    final coarse = _controller.position.maxScrollExtent * ratio;
+    _controller.jumpTo(coarse.clamp(
+      _controller.position.minScrollExtent,
+      _controller.position.maxScrollExtent,
+    ));
+    // 下一帧再精确对准（目标多已入视口构建）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final retryKey = _itemKeys[renderId];
+      final retryCtx = retryKey?.currentContext;
+      if (retryCtx == null) return;
+      final renderObject = retryCtx.findRenderObject();
+      if (renderObject == null || !renderObject.attached) return;
+      if (retryCtx is Element && !retryCtx.mounted) return;
+      unawaited(
+        Scrollable.ensureVisible(
+          retryCtx,
+          alignment: 0.0,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        ).then((_) {
+          if (!mounted || !_controller.hasClients) return;
+          final current = _controller.position.pixels;
+          final adjusted = math.max(0.0, current - topPadding);
+          if ((adjusted - current).abs() > 1) {
+            _controller.animateTo(
+              adjusted,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+            );
+          }
+        }),
+      );
     });
   }
 

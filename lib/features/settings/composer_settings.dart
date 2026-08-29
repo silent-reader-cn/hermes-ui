@@ -26,13 +26,14 @@ class ComposerTwoPaneController extends Notifier<bool> {
   bool build() {
     _hasCustomState = false;
     unawaited(_load());
-    return false; // 默认关闭：保持经典单行输入栏
+    return true; // 默认开启：全新安装使用两段式输入栏
   }
 
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final value = prefs.getBool(keyTwoPane) ?? false;
+      // ?? true：无历史值（新装）默认开；已显式 false 的老用户尊重其选择。
+      final value = prefs.getBool(keyTwoPane) ?? true;
       if (!_hasCustomState) {
         state = value;
       }

@@ -20,6 +20,7 @@ import 'chat_providers.dart';
 import 'chat_state.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_message_list.dart';
+import 'widgets/chat_outline_sheet.dart';
 
 /// 聊天页（chat_spec.md §6：消息气泡列表 + 流式渲染 + 工具卡片 + 输入栏）。
 ///
@@ -48,6 +49,20 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
   final GlobalKey _actionsKey = GlobalKey();
+
+  /// 标题栏 middle Widget 锚点 GlobalKey（供大纲面板定位用）。
+  final GlobalKey _titleAnchorKey = GlobalKey();
+
+  /// ChatMessageList 的 GlobalKey，用于调用 outlineJumpTo。
+  final GlobalKey<ChatMessageListState> _listKey =
+      GlobalKey<ChatMessageListState>();
+
+  /// 当前展开的大纲 OverlayEntry（null = 关闭）。
+  OverlayEntry? _outlineEntry;
+
+  /// 当前视口首条可见用户轮次 renderId（大纲高亮用）。
+  String? _outlineSelectedRenderId;
+
   String? _yoloLoadedFor;
   Timer? _syncDebounceTimer;
 
@@ -65,6 +80,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     _syncDebounceTimer?.cancel();
+    _dismissOutline();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -82,6 +98,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (oldWidget.sessionId != widget.sessionId) {
       _syncDebounceTimer?.cancel();
       _syncDebounceTimer = null;
+      _dismissOutline();
+      _outlineSelectedRenderId = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _ensureYoloLoaded();
@@ -113,6 +131,60 @@ class _ChatPageState extends ConsumerState<ChatPage>
           .read(chatControllerProvider(widget.sessionId).notifier)
           .loadYoloState(),
     );
+  }
+
+  /// 收起大纲面板。
+  void _dismissOutline() {
+    if (_outlineEntry != null && _outlineEntry!.mounted) {
+      _outlineEntry!.remove();
+    }
+    _outlineEntry = null;
+  }
+
+  /// 展开/收起大纲面板（toggle）。
+  ///
+  /// <2 轮用户消息时静默无动作（规格 §7：不置灰，不弹空态）。
+  void _toggleOutline() {
+    // 已展开则收起
+    if (_outlineEntry != null) {
+      _dismissOutline();
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // <2 轮用户消息：静默无动作
+    final entries = ref.read(chatOutlineEntriesProvider(widget.sessionId));
+    if (entries.length < 2) return;
+
+    // 计算锚点矩形（标题 middle widget 在 overlay 坐标系中的位置）
+    final overlay = Overlay.of(context);
+    final anchorRect = _resolveAnchorRect(_titleAnchorKey, overlay);
+    if (anchorRect == null) return;
+
+    _outlineEntry = ChatOutlineSheet.insert(
+      overlay: overlay,
+      ref: ref,
+      anchorRect: anchorRect,
+      sessionId: widget.sessionId,
+      selectedRenderId: _outlineSelectedRenderId,
+      onJump: (renderId, loadedIndex) {
+        _listKey.currentState?.outlineJumpTo(renderId, loadedIndex);
+      },
+      onDismiss: () {
+        _dismissOutline();
+        if (mounted) setState(() {});
+      },
+    );
+    if (mounted) setState(() {});
+  }
+
+  /// 换算 widget 在 overlay 坐标系中的全局矩形（复用 context_window_popover 的方式）。
+  Rect? _resolveAnchorRect(GlobalKey key, OverlayState overlay) {
+    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (overlayBox == null || box == null || !box.attached) return null;
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
+    return Rect.fromLTWH(topLeft.dx, topLeft.dy, box.size.width, box.size.height);
   }
 
   @override
@@ -148,10 +220,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
-        middle: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(state.displayTitle, overflow: TextOverflow.ellipsis),
+        middle: GestureDetector(
+          key: const ValueKey('chat-title-outline-trigger'),
+          onTap: _toggleOutline,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            key: _titleAnchorKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(state.displayTitle, overflow: TextOverflow.ellipsis),
             if (state.parentSessionId != null)
               CupertinoButton(
                 key: const ValueKey('chat-branch-badge'),
@@ -178,7 +256,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ],
                 ),
               ),
-          ],
+              ],
+            ),
+          ),
         ),
         trailing: KeyedSubtree(
           key: _actionsKey,
@@ -214,6 +294,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               ),
             Expanded(
               child: ChatMessageList(
+                key: _listKey,
                 sessionId: widget.sessionId,
                 highlightQuery: widget.matchType == 'content'
                     ? widget.searchQuery

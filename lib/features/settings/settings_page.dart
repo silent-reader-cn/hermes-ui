@@ -25,6 +25,7 @@ import 'chat_send_shortcut_settings.dart';
 import 'composer_settings.dart';
 import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
+import 'perf_monitor_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
 import 'smooth_streaming_settings.dart';
@@ -168,6 +169,7 @@ class _ChatSection extends ConsumerWidget {
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     final composerTwoPane = ref.watch(composerTwoPaneProvider);
     final smoothStreaming = ref.watch(smoothStreamingProvider);
+    final showPerfMonitor = ref.watch(perfMonitorProvider);
     return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
@@ -254,9 +256,35 @@ class _ChatSection extends ConsumerWidget {
               unawaited(
                 ref.read(composerTwoPaneProvider.notifier).setTwoPane(value),
               );
+              // 联动：切到经典单行时自动关闭性能监控，保证事务性。
+              if (!value) {
+                unawaited(
+                  ref
+                      .read(perfMonitorProvider.notifier)
+                      .setShowPerfMonitor(false),
+                );
+              }
             },
           ),
         ),
+        // 性能监控开关：仅两段式开启时显示。
+        if (composerTwoPane)
+          CupertinoListTile(
+            key: const ValueKey('settings-perf-monitor'),
+            title: Text(l10n.perfMonitor),
+            subtitle: Text(l10n.perfMonitorDesc),
+            trailing: CupertinoSwitch(
+              key: const ValueKey('settings-switch-perf-monitor'),
+              value: showPerfMonitor,
+              onChanged: (value) {
+                unawaited(
+                  ref
+                      .read(perfMonitorProvider.notifier)
+                      .setShowPerfMonitor(value),
+                );
+              },
+            ),
+          ),
       ],
     );
   }

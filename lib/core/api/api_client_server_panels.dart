@@ -3,6 +3,7 @@ import 'endpoints.dart';
 import '../models/auxiliary_model.dart';
 import '../models/insights.dart';
 import '../models/server_catalog.dart';
+import '../models/system_health.dart';
 
 /// models/commands/设置/更新（1.9，9 个端点）+ profiles（1.10，5 个）+
 /// insights（1.11，1 个）+ auxiliary models（1.19，2 个）。
@@ -246,6 +247,19 @@ extension ApiClientServerPanels on ApiClient {
       },
     );
     return ModelSetResponse.fromJson(_asMap(json));
+  }
+
+  // -------------------------------------------------------------------------
+  // system health（1.20）
+  // -------------------------------------------------------------------------
+
+  /// GET /api/system/health（系统健康状态：CPU/内存/磁盘）。
+  ///
+  /// 后端轻量采样（_CPU_SAMPLE_SECONDS 0.05），前端 10-15s 轮询足够。
+  /// 不可用时抛异常，调用方需 try/catch 静默处理。
+  Future<SystemHealthResponse> systemHealth() async {
+    final json = await sendJson(Endpoint.systemHealth);
+    return SystemHealthResponse.fromJson(_asMap(json));
   }
 }
 

@@ -8,6 +8,7 @@ import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/pending_attachments_provider.dart';
 import 'package:hermes_ui/features/settings/chat_send_shortcut_settings.dart';
+import 'package:hermes_ui/features/settings/composer_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -142,6 +143,7 @@ void main() {
   testWidgets('发送成功后草稿清空', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = makeApi();
     final container = makeContainer(api);

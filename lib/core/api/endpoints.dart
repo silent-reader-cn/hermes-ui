@@ -92,13 +92,15 @@ class Endpoint {
   };
 
   // ---------------------------------------------------------------------------
-  // 1.1 server — 4 个
+  // 1.1 server — 5 个
   // ---------------------------------------------------------------------------
 
   static const health = Endpoint('/health');
   static const authStatus = Endpoint('/api/auth/status');
   static const login = Endpoint('/api/auth/login');
   static const logout = Endpoint('/api/auth/logout');
+  /// GET /api/system/health（系统健康状态：CPU/内存/磁盘）。
+  static const systemHealth = Endpoint('/api/system/health');
 
   // ---------------------------------------------------------------------------
   // 1.2 sessions — 18 个

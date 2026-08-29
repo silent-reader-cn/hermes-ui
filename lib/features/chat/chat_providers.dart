@@ -490,3 +490,74 @@ final queuedCountProvider = Provider.family<int, String>((ref, sessionId) {
 
 /// 模型选择器可选项（默认空 = 仅"跟随服务器默认"；测试可 override）。
 final chatAvailableModelsProvider = Provider<List<String>>((ref) => const []);
+
+/// 聊天大纲条目（active.md §7 聊天大纲）。
+///
+/// 派生自 [transcriptMessagesProvider]，过滤 `role=='user'`，
+/// 实时响应流式追加用户轮次。
+class OutlineEntry {
+  const OutlineEntry({
+    required this.index,
+    required this.renderId,
+    required this.messageId,
+    required this.preview,
+    required this.loadedIndex,
+  });
+
+  /// 用户轮次序号（从 1 起）。
+  final int index;
+
+  /// transcript renderId（`transcript:${offset+loadedIndex}` 格式，
+  /// 与 `_itemKeys` 中的 key 一一对应）。
+  final String renderId;
+
+  /// 消息 id（messageId 或 id；懒加载时定位用）。
+  final String? messageId;
+
+  /// 首 40 字预览（空内容时为"用户轮次 N"）。
+  final String preview;
+
+  /// 在 transcript 中的 loadedIndex（懒加载粗跳比率计算用）。
+  final int loadedIndex;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OutlineEntry &&
+          runtimeType == other.runtimeType &&
+          renderId == other.renderId &&
+          preview == other.preview &&
+          index == other.index;
+
+  @override
+  int get hashCode => Object.hash(renderId, preview, index);
+}
+
+/// 大纲条目列表 Provider（by sessionId，实时响应 transcript 变化）。
+final chatOutlineEntriesProvider =
+    Provider.family<List<OutlineEntry>, String>((ref, sessionId) {
+      final transcript = ref.watch(transcriptMessagesProvider(sessionId));
+      var userIndex = 0;
+      final result = <OutlineEntry>[];
+      for (final entry in transcript) {
+        if (entry.message.role != 'user') continue;
+        userIndex++;
+        final raw = entry.message.content?.trim() ?? '';
+        final preview = raw.isEmpty
+            ? '用户轮次 $userIndex'
+            : (raw.length > 40 ? '${raw.substring(0, 40)}\u2026' : raw);
+        result.add(
+          OutlineEntry(
+            index: userIndex,
+            renderId: entry.renderId,
+            messageId:
+                entry.message.messageId?.isNotEmpty == true
+                    ? entry.message.messageId
+                    : entry.message.id,
+            preview: preview,
+            loadedIndex: entry.loadedIndex,
+          ),
+        );
+      }
+      return result;
+    });

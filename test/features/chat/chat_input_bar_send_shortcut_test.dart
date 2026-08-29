@@ -6,6 +6,7 @@ import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_input_bar.dart';
 import 'package:hermes_ui/features/settings/chat_send_shortcut_settings.dart';
+import 'package:hermes_ui/features/settings/composer_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -14,7 +15,7 @@ import '../../helpers/fake_chat_api.dart';
 /// Ctrl+Enter/Cmd+Enter 发送、Enter 换行、流式/发送中不发送。
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({ComposerTwoPaneController.keyTwoPane: false});
   });
 
   Future<void> pumpPage(WidgetTester tester, FakeChatApi api) async {
@@ -48,6 +49,7 @@ void main() {
   }
 
   testWidgets('默认 enter 模式：输入框保持单行（maxLines == 1）', (tester) async {
+    SharedPreferences.setMockInitialValues({ComposerTwoPaneController.keyTwoPane: false});
     final api = FakeChatApi();
     api.sessionResult = {
       'session': {'session_id': 's1', 'messages': const []},
@@ -64,6 +66,7 @@ void main() {
   testWidgets('ctrlEnter 模式：输入框放开为多行（maxLines == null）', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = FakeChatApi();
     api.sessionResult = {
@@ -80,6 +83,7 @@ void main() {
   testWidgets('ctrlEnter 模式：Ctrl+Enter 发送并清空输入框', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = FakeChatApi();
     api.sessionResult = {
@@ -103,6 +107,7 @@ void main() {
   testWidgets('ctrlEnter 模式：单独 Enter 不发送，保留输入内容', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = FakeChatApi();
     api.sessionResult = {
@@ -127,6 +132,7 @@ void main() {
   testWidgets('流式/发送中阶段 Ctrl+Enter 不发送（边界）', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = FakeChatApi();
     api.sessionResult = {
@@ -159,6 +165,7 @@ void main() {
   testWidgets('SendMessageIntent 已映射到 Actions，可直接 invoke 发送', (tester) async {
     SharedPreferences.setMockInitialValues({
       ChatSendShortcutController.keySendMode: 'ctrlEnter',
+      ComposerTwoPaneController.keyTwoPane: false,
     });
     final api = FakeChatApi();
     api.sessionResult = {

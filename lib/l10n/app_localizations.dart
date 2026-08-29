@@ -999,6 +999,13 @@ class AppLocalizations {
   String get composerTwoPaneDesc => isEnglish
       ? 'Multi-line text area with a separate tool row below'
       : '多行文本区与独立工具行的输入栏布局（关闭为经典单行）';
+  String get perfMonitor => isEnglish ? 'Performance Monitor' : '性能监控';
+  String get perfMonitorDesc => isEnglish
+      ? 'Show CPU & memory in the tool row (two-pane only)'
+      : '在工具行显示 CPU/内存占用（仅两段式可见）';
+  String get perfMonitorCpu => isEnglish ? 'CPU' : 'CPU';
+  String get perfMonitorMem => isEnglish ? 'MEM' : 'MEM';
+  String get perfMonitorDisk => isEnglish ? 'DISK' : 'DISK';
   String get groupToolsByTurnDesc => isEnglish
       ? 'On: all tools of a turn collapse into one card. Off: only adjacent tools merge; text/thinking breaks them apart'
       : '开启：整轮工具合成一张折叠卡；关闭：仅相邻工具合并，被文本/思考打断则分离';

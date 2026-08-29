@@ -62,8 +62,9 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  group('ChatInputBar 布局开关（默认单行 / 设置开启两段式）', () {
-    testWidgets('默认关闭：经典单行布局（min1，无独立工具行），回车即发送', (tester) async {
+  group('ChatInputBar 布局开关（两段式默认启用 / 显式关闭回退经典）', () {
+    testWidgets('显式关闭时：经典单行布局（min1，无独立工具行），回车即发送', (tester) async {
+      SharedPreferences.setMockInitialValues({kComposerTwoPaneKey: false});
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -367,6 +368,7 @@ void main() {
 
   group('ChatInputBar 上下文窗口指示器位置与排列顺序（todo #1）', () {
     testWidgets('经典单行布局：[＋] [书签] [上下文圆环] [输入框] [发送] 水平从左到右排列', (tester) async {
+      SharedPreferences.setMockInitialValues({ComposerTwoPaneController.keyTwoPane: false});
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},

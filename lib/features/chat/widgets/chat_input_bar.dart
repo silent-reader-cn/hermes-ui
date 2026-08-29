@@ -29,6 +29,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
 import '../../settings/chat_send_shortcut_settings.dart';
 import '../../settings/composer_settings.dart';
+import '../../chat/widgets/perf_monitor_panel.dart';
 import '../../desktop/desktop_settings.dart';
 import '../../../core/models/context_window_snapshot.dart';
 
@@ -974,7 +975,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 onTap: _showContextPopover,
               ),
             ),
-            const Spacer(),
+            // 性能监控面板：仅两段式且开关开启时占位，否则不占空间（避免 Expanded 空白）。
+            const Flexible(child: PerfMonitorPanel()),
             ..._buildTrailingControls(
               l10n,
               isStreaming,

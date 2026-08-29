@@ -13,6 +13,8 @@ import 'package:hermes_ui/core/utils/accessibility.dart';
 import 'package:hermes_ui/core/utils/file_picker.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/settings/perf_monitor_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -49,9 +51,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言 uploadFile 真实请求被发出且参数正确
-      expect(adapter.requests.length, 1);
-      final req = adapter.requests.first;
+      // 断言 uploadFile 真实请求被发出且参数正确（过滤掉性能监控的 systemHealth 轮询）
+      final uploadReqs = adapter.requests.where((r) => r.uri.path == '/api/upload').toList();
+      expect(uploadReqs.length, 1);
+      final req = uploadReqs.first;
       expect(req.uri.path, '/api/upload');
       final bodyStr = utf8.decode(req.data as Uint8List, allowMalformed: true);
       expect(bodyStr, contains('name="session_id"\r\n\r\ns1'));
@@ -115,8 +118,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言未调用 uploadFile，也未发送聊天消息
-      expect(adapter.requests, isEmpty);
+      // 断言未调用 uploadFile，也未发送聊天消息（过滤 systemHealth）
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(chatApi.startChatCalls, 0);
 
       // 断言无任何弹窗出现
@@ -152,7 +155,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // 断言请求发出但 chat 未发送本地消息
-      expect(adapter.requests.length, 1);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').length, 1);
       expect(chatApi.startChatCalls, 0);
 
       // 断言失败对话框展示，且内容文字为 statusRedText 的解析色（已 resolve，深浅色均达标）
@@ -195,8 +198,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言未调用 uploadFile，也未发送消息
-      expect(adapter.requests, isEmpty);
+      // 断言未调用 uploadFile，也未发送消息（过滤 systemHealth）
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(chatApi.startChatCalls, 0);
 
       // 断言选择失败对话框展示（解析色已 resolve）
@@ -226,6 +229,7 @@ Future<void> _pumpPage(
   required FilePickerService filePicker,
   required ApiClient apiClient,
 }) async {
+  SharedPreferences.setMockInitialValues({kShowPerfMonitorKey: false});
   await tester.pumpWidget(
     ProviderScope(
       overrides: [

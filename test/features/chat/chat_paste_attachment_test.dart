@@ -15,6 +15,8 @@ import 'package:hermes_ui/core/utils/clipboard_paste.dart';
 import 'package:hermes_ui/core/utils/file_picker.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/settings/perf_monitor_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_input_bar.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 
@@ -131,8 +133,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // 断言 uploadFile 请求发出且参数正确
-      expect(adapter.requests.length, 1);
-      final req = adapter.requests.first;
+      final uploadReqs = adapter.requests.where((r) => r.uri.path == '/api/upload').toList();
+      expect(uploadReqs.length, 1);
+      final req = uploadReqs.first;
       expect(req.uri.path, '/api/upload');
       final bodyStr = utf8.decode(req.data as Uint8List, allowMalformed: true);
       expect(bodyStr, contains('name="session_id"\r\n\r\ns1'));
@@ -223,7 +226,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(adapter.requests.length, 1);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList().length, 1);
       expect(chatApi.startChatCalls, 0);
       expect(find.text('上传成功'), findsNothing);
 
@@ -294,7 +297,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // 断言没有调用 uploadFile
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(chatApi.startChatCalls, 0);
 
       // 断言输入框内文本为剪贴板文本
@@ -339,7 +342,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(adapter.requests.length, 1);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList().length, 1);
       expect(chatApi.startChatCalls, 0);
 
       // 断言失败弹窗
@@ -390,7 +393,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(chatApi.startChatCalls, 0);
 
       await _unmount(tester);
@@ -440,7 +443,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // 断言没有发起上传，不弹错误弹窗
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(find.text('上传失败'), findsNothing);
       expect(find.text('选择文件失败'), findsNothing);
 
@@ -492,7 +495,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(find.text('上传失败'), findsNothing);
 
       final textField = tester.widget<CupertinoTextField>(inputFinder);
@@ -596,7 +599,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests.where((r) => r.uri.path == '/api/upload').toList(), isEmpty);
       expect(find.text('上传失败'), findsNothing);
       expect(find.text('选择文件失败'), findsNothing);
 
@@ -614,6 +617,7 @@ Future<void> _pumpPage(
   required ClipboardPasteService pasteService,
   required ApiClient apiClient,
 }) async {
+  SharedPreferences.setMockInitialValues({kShowPerfMonitorKey: false});
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
