@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-/// 自定义页面路由：push 从右滑入（对齐 Cupertino），pop 时当前页向左滑出。
+/// 自定义页面路由：push 从右滑入（对齐 Cupertino），pop 时当前页向右滑出。
 ///
-/// 与 [CupertinoPageRoute] 默认转场的差异（todo #17「详情页返回动画」）：
+/// 与 [CupertinoPageRoute] 默认转场的差异（todo #22「返回动画方向」，
+/// 修正 #17 已合入行为）：
 /// - push 进入：新页从右滑入（x: +width → 0），保持 Cupertino 观感不变；
-/// - pop 返回：当前页向左滑出（x: 0 → -width），底层页保持静止、当前页叠轻微淡出；
+/// - pop 返回：当前页向右滑出（x: 0 → +width，iOS 标准，「前页从左挪到右
+///   露出底层」），底层页保持静止、当前页叠轻微淡出；
 /// - 时长 400ms、缓动 `Curves.easeOut`，对齐 Cupertino 风格。
 ///
 /// 生成路由复用的 `HermesPage` 供 go_router `pageBuilder` 使用，
@@ -67,17 +69,19 @@ class _HermesPageTransition extends StatelessWidget {
       curve: Curves.easeOut,
       reverseCurve: Curves.easeOut,
     );
-    // 全屏宽位移：Cupertino 默认转场从右缘滑入/向左滑出，用屏幕宽做 offset。
+    // 全屏宽位移：Cupertino 默认转场从右缘滑入；pop 按 iOS 标准向右滑出，
+    // 用屏幕宽做 offset。
     // 直接用 MediaQuery 拿尺寸（与 CupertinoPageTransition 行为一致），
     // 勿写死 Offset(±1,0) —— 那只是 1 像素，动画几乎不可见。
     final Size size = MediaQuery.maybeSizeOf(context) ?? const Size(800, 600);
     // 正向（push，t 0→1）：x +width→0 从右滑入；
-    // 反向（pop，t 1→0）：x 0→-width 向左滑出。方向推导：动画 t=1 时页面
-    // 在原位（dx 0）、t=0 时完全滑出（dx -width），故反向 Tween 必须
-    // begin=(-width,0)、end=zero（begin 对应 t=0，end 对应 t=1）。
+    // 反向（pop，t 1→0）：x 0→+width 向右滑出（iOS 标准）。方向推导：动画
+    // t=1 时页面在原位（dx 0）、t=0 时完全滑出（dx +width），pop 是反向播放
+    // （value 从 1 递减到 0），故反向 Tween 必须 begin=(+width,0)、end=zero
+    // （begin 对应 t=0 完全滑出、end 对应 t=1 原位）。
     final Animation<Offset> position = isReverse
         ? Tween<Offset>(
-            begin: Offset(-size.width, 0),
+            begin: Offset(size.width, 0),
             end: Offset.zero,
           ).animate(curved)
         : Tween<Offset>(

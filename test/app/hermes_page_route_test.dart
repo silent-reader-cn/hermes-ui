@@ -4,12 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/widgets/hermes_page_route.dart';
 
-/// HermesPageRoute 转场方向测试（todo #17 验收）：
+/// HermesPageRoute 转场方向测试（todo #22 验收，修正 #17 行为）：
 /// - push 进入：新页从右滑入（x: +width → 0），与 Cupertino 一致；
-/// - pop 返回：当前页向左滑出（x: 0 → -width），**方向不反**（中间帧 dx < 0）；
+/// - pop 返回：当前页向右滑出（x: 0 → +width，iOS 标准），**方向不反**
+///   （中间帧 dx > 0）；
 /// - 底层页全程静止（偏移量用 push 前记录的基准比对）；
 /// - pop 滑出时叠轻微淡出；
-/// - go_router pageBuilder + HermesPage 的 push 转场方向一致。
+/// - go_router pageBuilder + HermesPage 的 push/pop 转场方向一致。
 ///
 /// 注意（实测坑）：
 /// - go_router 下 home/detail 都走 HermesPage → 页面树中 slideKey 出现 2 个，
@@ -98,7 +99,7 @@ void main() {
     expect(find.text('detail'), findsOneWidget);
   });
 
-  testWidgets('pop 返回：当前页向左滑出（x: 0 → -width），底层页静止', (tester) async {
+  testWidgets('pop 返回：当前页向右滑出（x: 0 → +width），底层页静止', (tester) async {
     await _pumpApp(tester);
     // push 前记录底层基准（push 完成后底层会 offstage，无法再取）。
     final bottomX = tester.getTopLeft(find.byKey(_bottomKey)).dx;
@@ -107,19 +108,19 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator)).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
-    // 中帧：正在向左滑出（-800 < dx < 0）。
+    // 中帧：正在向右滑出（0 < dx < 800）。
     final earlyDx = _slideDx(tester);
-    expect(earlyDx, lessThan(0));
-    expect(earlyDx, greaterThan(-800));
+    expect(earlyDx, greaterThan(0));
+    expect(earlyDx, lessThan(800));
 
     await tester.pump(const Duration(milliseconds: 200));
     final midDx = _slideDx(tester);
-    expect(midDx, lessThan(0));
-    expect(midDx, greaterThan(-800));
+    expect(midDx, greaterThan(0));
+    expect(midDx, lessThan(800));
 
     await tester.pump(const Duration(milliseconds: 100));
-    // 深帧（累计 360ms，接近 400ms 动画尾声但 route 未移除）：dx 明显为负。
-    expect(_slideDx(tester), lessThan(-400));
+    // 深帧（累计 360ms，接近 400ms 动画尾声但 route 未移除）：dx 明显为正。
+    expect(_slideDx(tester), greaterThan(400));
 
     await tester.pumpAndSettle();
     expect(find.text('detail'), findsNothing);
@@ -130,7 +131,7 @@ void main() {
     expect(bottomAfter.dx, bottomX);
   });
 
-  testWidgets('pop 方向不反：中间帧位移为负（向左），非正（向右）', (tester) async {
+  testWidgets('pop 方向不反：中间帧位移为正（向右），非负（向左）', (tester) async {
     await _pumpApp(tester);
     await _pushDetail(tester);
 
@@ -138,7 +139,7 @@ void main() {
     await tester.pump();
     for (var i = 0; i < 3; i++) {
       await tester.pump(const Duration(milliseconds: 80));
-      expect(_slideDx(tester), lessThan(0), reason: '第 $i 帧 pop 方向应为向左');
+      expect(_slideDx(tester), greaterThan(0), reason: '第 $i 帧 pop 方向应为向右');
     }
   });
 
@@ -162,7 +163,7 @@ void main() {
     expect(fade.opacity.value, greaterThan(0.5));
   });
 
-  testWidgets('go_router pageBuilder + HermesPage：push 从右滑入、pop 向左滑出', (
+  testWidgets('go_router pageBuilder + HermesPage：push 从右滑入、pop 向右滑出', (
     tester,
   ) async {
     final router = GoRouter(
@@ -199,8 +200,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     await tester.pump(const Duration(milliseconds: 200));
-    // 中帧：向左滑出。
-    expect(_slideDx(tester), lessThan(0));
+    // 中帧：向右滑出。
+    expect(_slideDx(tester), greaterThan(0));
     await tester.pumpAndSettle();
     expect(find.text('detail'), findsNothing);
   });
