@@ -42,6 +42,13 @@ import 'widgets/hermes_page_route.dart';
 /// `/onboarding`；已有激活连接 → `/onboarding` 重定向 `/`（配置完成后自动
 /// 进入 SessionList）。激活连接变化（首次加载完成 / 切换 / 清除）经
 /// 全局根导航 Key。
+///
+/// ShellRoute 内全部顶层路由统一 `pageBuilder + HermesPage`（todo #22
+/// 补充，2026-08-29 实机反馈）：此前 `/` `/chat/:id` `/settings` `/tasks`
+/// 等用 `builder` 走 go_router 默认 MaterialPage 转场——pop 时底层页被
+/// 驱动（视觉「底层从右滑入」），且顶层滑出方向与 iOS 标准不一致；
+/// 改用 HermesPage 后 push 从右滑入、pop 当前页向右滑出、底层静止，
+/// 与 `/workspace/:id` `/git/:id` 详情页一致。
 final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNavigator');
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -75,44 +82,63 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/',
-            builder: (context, state) => const SessionListPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('home'),
+              builder: (_) => const SessionListPage(),
+            ),
           ),
           GoRoute(
             path: '/chat',
-            builder: (context, state) => const ChatPage(sessionId: ''),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('chat-new'),
+              builder: (_) => const ChatPage(sessionId: ''),
+            ),
           ),
           GoRoute(
             path: '/chat/:sessionId',
-            builder: (context, state) => ChatPage(
-              sessionId: state.pathParameters['sessionId'] ?? '',
-              searchQuery: state.uri.queryParameters['q'],
-              matchType: state.uri.queryParameters['match'],
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: ValueKey('chat-${state.pathParameters['sessionId']}'),
+              builder: (_) => ChatPage(
+                sessionId: state.pathParameters['sessionId'] ?? '',
+                searchQuery: state.uri.queryParameters['q'],
+                matchType: state.uri.queryParameters['match'],
+              ),
             ),
           ),
           GoRoute(
             path: '/settings',
-            builder: (context, state) => const SettingsPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('settings'),
+              builder: (_) => const SettingsPage(),
+            ),
           ),
           GoRoute(
             path: '/tasks',
-            builder: (context, state) => const TasksPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('tasks'),
+              builder: (_) => const TasksPage(),
+            ),
           ),
           GoRoute(
             path: '/skills',
-            builder: (context, state) => const SkillsPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('skills'),
+              builder: (_) => const SkillsPage(),
+            ),
           ),
           GoRoute(
             path: '/memory',
-            builder: (context, state) => const MemoryPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('memory'),
+              builder: (_) => const MemoryPage(),
+            ),
           ),
           GoRoute(
             path: '/workspace/:sessionId',
             // pageBuilder + HermesPage：context.push 进入/返回统一走 Hermes
-            // 转场（push 从右滑入、pop 当前页向左滑出，与详情页一致）。
+            // 转场（push 从右滑入、pop 当前页向右滑出、底层静止）。
             pageBuilder: (context, state) => HermesPage<void>(
-              key: ValueKey(
-                'workspace-${state.pathParameters['sessionId']}',
-              ),
+              key: ValueKey('workspace-${state.pathParameters['sessionId']}'),
               builder: (_) => WorkspacePage(
                 sessionId: state.pathParameters['sessionId'] ?? '',
                 filePicker: () async {
@@ -129,26 +155,34 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/workspaces',
-            builder: (context, state) => const WorkspaceManagerPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('workspaces'),
+              builder: (_) => const WorkspaceManagerPage(),
+            ),
           ),
           GoRoute(
             path: '/kanban',
-            builder: (context, state) => const KanbanPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('kanban'),
+              builder: (_) => const KanbanPage(),
+            ),
           ),
           GoRoute(
             path: '/git/:sessionId',
             // pageBuilder + HermesPage：context.push 进入/返回统一走 Hermes
-            // 转场（push 从右滑入、pop 当前页向左滑出，与详情页一致）。
+            // 转场（push 从右滑入、pop 当前页向右滑出、底层静止）。
             pageBuilder: (context, state) => HermesPage<void>(
               key: ValueKey('git-${state.pathParameters['sessionId']}'),
-              builder: (_) => GitPage(
-                sessionId: state.pathParameters['sessionId'] ?? '',
-              ),
+              builder: (_) =>
+                  GitPage(sessionId: state.pathParameters['sessionId'] ?? ''),
             ),
           ),
           GoRoute(
             path: '/insights',
-            builder: (context, state) => const InsightsPage(),
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('insights'),
+              builder: (_) => const InsightsPage(),
+            ),
           ),
         ],
       ),
