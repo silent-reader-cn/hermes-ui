@@ -39,6 +39,9 @@ abstract interface class SettingsApi {
   /// GET /api/models → 缓存模型目录（groups / default_model / active_provider）。
   Future<ModelsResponse> models();
 
+  /// POST /api/models/refresh {provider} → 刷新指定 provider（或当前 provider）的模型缓存。
+  Future<ModelsRefreshResponse> refreshModels({String? provider});
+
   /// POST /api/default-model {model}。
   Future<DefaultModelResponse> saveDefaultModel(String model);
 
@@ -131,6 +134,10 @@ class SettingsApiClient implements SettingsApi {
 
   @override
   Future<ModelsResponse> models() => _client.models();
+
+  @override
+  Future<ModelsRefreshResponse> refreshModels({String? provider}) =>
+      _client.refreshModels(provider: provider);
 
   @override
   Future<DefaultModelResponse> saveDefaultModel(String model) =>
@@ -243,6 +250,8 @@ class SettingsState {
     this.supportedEfforts = const [],
     this.supportsReasoningEffort = false,
     this.actionError,
+    this.isRefreshingModels = false,
+    this.refreshError,
   });
 
   /// 模型目录分组（来自 GET /api/models 的 groups，按 provider 分组）。
@@ -267,15 +276,25 @@ class SettingsState {
   /// [SettingsController.clearActionError] 清除）。
   final String? actionError;
 
-  /// 全部模型选项（展平各分组 models + extraModels，去重保序）。
+  /// 刷新中状态（防重入 + UI 加载指示器）。
+  final bool isRefreshingModels;
+
+  /// 最近一次模型刷新错误提示（UI 展示后清除）。
+  final String? refreshError;
+
+  /// 全部模型选项（展平各分组 models + extraModels，大小写归一去重保序）。
   List<ModelCatalogOption> get allModels {
     final result = <ModelCatalogOption>[];
     final seen = <String>{};
     for (final group in modelGroups) {
       for (final model in [...group.models, ...group.extraModels]) {
+        final normId = model.id
+            .toLowerCase()
+            .replaceAll(' ', '-')
+            .replaceAll('_', '-');
         final key = model.providerID == null
-            ? model.id
-            : '${model.providerID}/${model.id}';
+            ? normId
+            : '${model.providerID!.toLowerCase()}/$normId';
         if (seen.add(key)) result.add(model);
       }
     }
@@ -300,6 +319,8 @@ class SettingsState {
     List<String>? supportedEfforts,
     bool? supportsReasoningEffort,
     String? Function()? actionError,
+    bool? isRefreshingModels,
+    String? Function()? refreshError,
   }) {
     return SettingsState(
       modelGroups: modelGroups ?? this.modelGroups,
@@ -314,13 +335,15 @@ class SettingsState {
       supportsReasoningEffort:
           supportsReasoningEffort ?? this.supportsReasoningEffort,
       actionError: actionError != null ? actionError() : this.actionError,
+      isRefreshingModels: isRefreshingModels ?? this.isRefreshingModels,
+      refreshError: refreshError != null ? refreshError() : this.refreshError,
     );
   }
 
   @override
   String toString() =>
       'SettingsState(models: ${modelGroups.length}, defaultModel: $defaultModel, '
-      'reasoningEffort: $reasoningEffort)';
+      'reasoningEffort: $reasoningEffort, isRefreshingModels: $isRefreshingModels)';
 }
 
 /// 设置页控制器：加载模型目录 / 默认模型 / 推理强度，保存默认模型与推理强度。
@@ -376,6 +399,64 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     } on Exception catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
     }
+  }
+
+  /// 刷新模型目录（防重入 + 对接 POST /api/models/refresh + 错误提示不破坏既有数据状态）。
+  Future<bool> refreshModels({String? provider}) async {
+    final current = state.valueOrNull;
+    if (current == null) return false;
+    if (current.isRefreshingModels) return false;
+
+    state = AsyncData(
+      current.copyWith(
+        isRefreshingModels: true,
+        refreshError: () => null,
+      ),
+    );
+
+    try {
+      final targetProvider = provider ?? current.activeProvider;
+      if (targetProvider != null && targetProvider.isNotEmpty) {
+        await _api.refreshModels(provider: targetProvider);
+      }
+      final modelsResponse = await _api.models();
+      final latest = state.valueOrNull ?? current;
+      state = AsyncData(
+        latest.copyWith(
+          modelGroups: modelsResponse.catalogGroups,
+          defaultModel: () => modelsResponse.defaultModel,
+          activeProvider: () => modelsResponse.activeProvider,
+          isRefreshingModels: false,
+          refreshError: () => null,
+        ),
+      );
+      return true;
+    } on ApiException catch (error) {
+      final latest = state.valueOrNull ?? current;
+      state = AsyncData(
+        latest.copyWith(
+          isRefreshingModels: false,
+          refreshError: () => error.message,
+        ),
+      );
+      return false;
+    } catch (error) {
+      final latest = state.valueOrNull ?? current;
+      state = AsyncData(
+        latest.copyWith(
+          isRefreshingModels: false,
+          refreshError: () => error.toString(),
+        ),
+      );
+      return false;
+    }
+  }
+
+  /// 清除模型刷新错误标记。
+  void clearRefreshError() {
+    final current = state.valueOrNull;
+    if (current == null || current.refreshError == null) return;
+    state = AsyncData(current.copyWith(refreshError: () => null));
   }
 
   /// 保存默认模型；成功后用服务器回显（缺失时回退请求值）更新状态。

@@ -45,6 +45,8 @@ void main() {
       expect(l10n.description, '描述');
       expect(l10n.noDescription, '暂无描述');
       expect(l10n.copiedToClipboard, '已复制到剪贴板');
+      expect(l10n.refreshModels, '刷新模型列表');
+      expect(l10n.refreshFailed, '刷新失败');
     });
 
     test('Onboarding strings return Chinese values', () {
@@ -590,6 +592,8 @@ void main() {
       expect(l10n.description, 'Description');
       expect(l10n.noDescription, 'No description');
       expect(l10n.copiedToClipboard, 'Copied to clipboard');
+      expect(l10n.refreshModels, 'Refresh Models');
+      expect(l10n.refreshFailed, 'Refresh Failed');
     });
 
     test('Parameterized methods work in English', () {

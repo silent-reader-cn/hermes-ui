@@ -64,7 +64,7 @@
 | POST | `/api/model/set` | ❌ 未对接 | 14337 |
 | GET | `/api/models` | ✅ 已对接 | 12257 |
 | GET | `/api/models/live` | ✅ 已对接 | 12278 |
-| POST | `/api/models/refresh` | ❌ 未对接 | 14386 |
+| POST | `/api/models/refresh` | ✅ 已对接 | 14386 |
 | GET | `/api/provider/cost-history` | ❌ 未对接 | 12331 |
 | GET | `/api/provider/quota` | ❌ 未对接 | 12317 |
 | GET | `/api/providers` | ⚠️ Client 已定义 | 12304 |

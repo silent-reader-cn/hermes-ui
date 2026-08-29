@@ -183,6 +183,20 @@ void main() {
           const ModelFavoriteKey(modelID: 'gpt-4o', providerID: 'openai'));
       expect(ModelsResponse.fromJson(const {}).groups, isNull);
     });
+
+    test('ModelsRefreshResponse 正常解析 + equality', () {
+      final res1 = ModelsRefreshResponse.fromJson({'ok': true, 'provider': 'custom:cpa'});
+      final res2 = ModelsRefreshResponse.fromJson({'ok': true, 'provider': 'custom:cpa'});
+      expect(res1.ok, true);
+      expect(res1.provider, 'custom:cpa');
+      expect(res1, equals(res2));
+      expect(res1.hashCode, equals(res2.hashCode));
+      expect(res1.toString(), contains('ModelsRefreshResponse(ok: true, provider: custom:cpa)'));
+
+      final empty = ModelsRefreshResponse.fromJson(const {});
+      expect(empty.ok, false);
+      expect(empty.provider, isNull);
+    });
   });
 
   group('设置 / 更新 / 推理 / 人格 / 档案', () {
@@ -382,6 +396,27 @@ void main() {
       expect(options, hasLength(1));
       expect(options.single.id, 'a');
       expect(options.single.providerID, isNull);
+    });
+
+    test('parseOptions：大小写与分隔符归一去重（保留首项）', () {
+      final options = ModelCatalogParser.parseOptions([
+        const JsonObject({
+          'id': JsonString('gpt-5.6-luna'),
+          'name': JsonString('GPT 5.6 Luna Lower'),
+        }),
+        const JsonObject({
+          'id': JsonString('GPT-5.6 Luna'),
+          'name': JsonString('GPT 5.6 Luna Upper'),
+        }),
+        const JsonObject({
+          'id': JsonString('deepseek-v4-flash'),
+          'name': JsonString('DeepSeek V4 Flash'),
+        }),
+      ]);
+      expect(options, hasLength(2));
+      expect(options[0].id, 'gpt-5.6-luna');
+      expect(options[0].displayName, 'GPT 5.6 Luna Lower');
+      expect(options[1].id, 'deepseek-v4-flash');
     });
   });
 

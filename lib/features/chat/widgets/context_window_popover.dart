@@ -348,9 +348,13 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       final liveOptions = response.liveOptions;
       if (!mounted) return;
       final modelIds = <String>[];
+      final seen = <String>{};
       for (final opt in liveOptions) {
         final id = opt.id.trim();
-        if (id.isNotEmpty && !modelIds.contains(id)) {
+        if (id.isEmpty) continue;
+        final normKey =
+            id.toLowerCase().replaceAll(' ', '-').replaceAll('_', '-');
+        if (seen.add(normKey)) {
           modelIds.add(id);
         }
       }

@@ -116,7 +116,7 @@ void main() {
         'ok': true,
         'stream_id': 'stream-send',
       };
-      api.statusResponse = const ChatStreamStatusResponse(active: true);
+      api.statusResponse = const ChatStreamStatusResponse(active: false);
 
       await tester.pumpWidget(
         ProviderScope(
@@ -136,6 +136,8 @@ void main() {
       await tester.drag(scrollable, const Offset(0, 600));
       await tester.pumpAndSettle();
       expect(pos.maxScrollExtent - pos.pixels, greaterThan(120));
+
+      api.statusResponse = const ChatStreamStatusResponse(active: true);
 
       // 用户发送新消息触发 phase -> sending
       final container = ProviderScope.containerOf(
@@ -163,7 +165,7 @@ void main() {
       );
     });
 
-    testWidgets('120px 阈值：滑入 120px 范围内重新粘底', (tester) async {
+    testWidgets('流式中用户上滑暂停跟随，出现回底按钮，点击按钮恢复粘底', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -182,8 +184,8 @@ void main() {
 
       api.sessionResult = {
         'session': {
-          'session_id': 's-120px',
-          'active_stream_id': 'stream-120',
+          'session_id': 's-unpin',
+          'active_stream_id': 'stream-unpin',
           'messages': messages,
           'message_count': 40,
         },
@@ -193,7 +195,7 @@ void main() {
         ProviderScope(
           overrides: [chatApiProvider.overrideWithValue(api)],
           child: const CupertinoApp(
-            home: ChatPage(sessionId: 's-120px'),
+            home: ChatPage(sessionId: 's-unpin'),
           ),
         ),
       );
@@ -203,12 +205,47 @@ void main() {
       final scrollable = find.byType(Scrollable).first;
       final pos = positionOf(tester);
 
-      // 上滑 80px（仍保持在 <120px 阈值内）
+      // 上滑 80px
       await tester.drag(scrollable, const Offset(0, 80));
+      await tester.pumpAndSettle();
+
+      final readingPixels = pos.pixels;
+      expect(pos.maxScrollExtent - readingPixels, greaterThan(50));
+
+      // 注入 token，因粘滞离底状态，不应被拽回底部
+      api.emit(const TokenSseEvent('token append token append token append'));
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 48));
       await tester.pump();
 
-      // 注入 token，应自动粘底 jump 回底
-      api.emit(const TokenSseEvent('token append token append token append'));
+      expect(
+        (pos.pixels - readingPixels).abs(),
+        lessThan(5.0),
+        reason: '流式中上滑后新 token 不得将视口拽回底部',
+      );
+
+      // 悬浮回底按钮应出现
+      final scrollToBottomFinder = find.byKey(
+        const ValueKey('chat-scroll-to-bottom-button'),
+      );
+      expect(scrollToBottomFinder, findsOneWidget);
+
+      // 点击悬浮按钮，应平滑回到底部并恢复跟随
+      await tester.tap(scrollToBottomFinder);
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump();
+
+      expect(
+        pos.pixels,
+        closeTo(pos.maxScrollExtent, 1.0),
+        reason: '点击回底按钮后应恢复贴底',
+      );
+
+      // 再次注入 token，恢复自动跟随
+      api.emit(const TokenSseEvent('more tokens'));
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 48));
       await tester.pump();
@@ -216,7 +253,7 @@ void main() {
       expect(
         pos.pixels,
         closeTo(pos.maxScrollExtent, 1.0),
-        reason: '在 120px 粘底阈值内新 token 应保持自动粘底',
+        reason: '恢复跟随状态后新 token 应继续粘底',
       );
     });
   });

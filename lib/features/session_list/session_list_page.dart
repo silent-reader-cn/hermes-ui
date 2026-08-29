@@ -427,18 +427,62 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final l10n = AppLocalizations.of(context);
     return [
       for (final section in sections)
-        if (section.sessions.isNotEmpty)
+        if (section.sessions.isNotEmpty) ...[
           SliverToBoxAdapter(
-            child: CupertinoListSection.insetGrouped(
-              hasLeading: false,
-              header: Text(_sectionTitle(context, section.title)),
-              // #28 分割线全宽：divider 起点 = dividerMargin + additionalDividerMargin，
-              // 置 0 使分割线从容器（children group）左缘起笔、全长贯穿。
-              dividerMargin: 0,
-              additionalDividerMargin: 0,
-              children: [
-                for (final session in section.sessions)
-                  _SessionRow(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(
+                  20.0,
+                  16.0,
+                  20.0,
+                  6.0,
+                ),
+                child: DefaultTextStyle(
+                  style: CupertinoTheme.of(context).textTheme.textStyle.merge(
+                    const TextStyle(
+                      fontSize: 20.0,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  child: Text(_sectionTitle(context, section.title)),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+              20.0,
+              0.0,
+              20.0,
+              10.0,
+            ),
+            sliver: DecoratedSliver(
+              decoration: ShapeDecoration(
+                color: CupertinoColors.secondarySystemGroupedBackground
+                    .resolveFrom(context),
+                shape: const RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10.0)),
+                ),
+              ),
+              sliver: SliverList.separated(
+                itemCount: section.sessions.length,
+                findItemIndexCallback: (Key key) {
+                  if (key is ValueKey<String>) {
+                    final value = key.value;
+                    if (value.startsWith('session-row-')) {
+                      final id = value.substring('session-row-'.length);
+                      final index = section.sessions.indexWhere(
+                        (s) => (s.sessionId ?? s.id) == id,
+                      );
+                      return index >= 0 ? index : null;
+                    }
+                  }
+                  return null;
+                },
+                itemBuilder: (context, index) {
+                  final session = section.sessions[index];
+                  return _SessionRow(
                     key: ValueKey(
                       'session-row-${session.sessionId ?? session.id}',
                     ),
@@ -464,10 +508,17 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         ? null
                         : (anchorKey) =>
                               _showRowActions(context, session, anchorKey),
-                  ),
-              ],
+                  );
+                },
+                // #28 分割线全宽：dividerMargin 0，全长贯穿
+                separatorBuilder: (context, index) => Container(
+                  color: CupertinoColors.separator.resolveFrom(context),
+                  height: 1.0 / MediaQuery.devicePixelRatioOf(context),
+                ),
+              ),
             ),
           ),
+        ],
       if (state.hasMore)
         const SliverToBoxAdapter(
           child: Padding(

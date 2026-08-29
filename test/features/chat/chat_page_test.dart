@@ -268,6 +268,7 @@ void main() {
       expect(find.byKey(const ValueKey('chat-action-branch')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-export')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-delete')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-settings')), findsNothing);
 
       // 关闭菜单
       await tester.tap(find.byKey(const ValueKey('chat-action-cancel')));

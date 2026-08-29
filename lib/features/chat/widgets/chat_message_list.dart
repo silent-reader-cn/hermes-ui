@@ -123,6 +123,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   _ReadingAnchor? _readingAnchor;
   double? _lastBottomInset;
 
+  /// 贴底判定阈值（收紧至 80px，既保障平滑跟随又防止向上轻扫被拽回）。
+  static const double _nearBottomThreshold = 80.0;
+
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -130,6 +133,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _initialPositioning = false;
   bool _restoringOlderPosition = false;
   bool _userHasScrolled = false;
+  bool _isUserInteracting = false;
+  int _pinnedTranscriptCount = 0;
+  String? _lastSentUserMessageId;
   int _layoutGeneration = 0;
   bool _initialPositionScheduled = false;
   String? _highlightTargetRenderId;
@@ -159,7 +165,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           .select((s) => s.streamingScrollTrigger),
       (_, _) {
         if (!mounted) return;
-        if (_nearBottom) _scrollToBottom(animated: false);
+        if (_nearBottom && !_userHasScrolled && !_isUserInteracting) {
+          _scrollToBottom(animated: false);
+        }
       },
     );
     _phaseSub = ref.listenManual<ChatPhase>(
@@ -172,24 +180,27 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           _userHasScrolled = false;
           _nearBottom = true;
           _readingAnchor = null;
+          _pinnedTranscriptCount = 0;
         } else if (next == ChatPhase.streaming) {
-          final transcript = ref.read(
-            transcriptMessagesProvider(widget.sessionId),
-          );
-          final isUserLast =
-              transcript.isNotEmpty && transcript.last.message.role == 'user';
           if (_justSent ||
-              _nearBottom ||
-              previous == ChatPhase.sending ||
-              isUserLast) {
+              (_nearBottom && !_userHasScrolled) ||
+              previous == ChatPhase.sending) {
             _justSent = true;
             _userHasScrolled = false;
             _nearBottom = true;
             _readingAnchor = null;
+            _pinnedTranscriptCount = 0;
           }
         }
       },
     );
+    final initialTranscript =
+        ref.read(transcriptMessagesProvider(widget.sessionId));
+    final initialLastUser =
+        initialTranscript.where((m) => m.message.role == 'user').lastOrNull;
+    _lastSentUserMessageId =
+        initialLastUser?.message.messageId ?? initialLastUser?.message.id;
+
     // 初次 highlight 解析（transcript 尚未加载时会返回 false，下次 build 重试）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -208,6 +219,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositionScheduled = false;
       _restoringOlderPosition = false;
       _userHasScrolled = false;
+      _isUserInteracting = false;
+      _pinnedTranscriptCount = 0;
       _highlightTargetRenderId = null;
       _highlightSettled = false;
       _highlightPositioned = false;
@@ -225,7 +238,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             .select((s) => s.streamingScrollTrigger),
         (_, _) {
           if (!mounted) return;
-          if (_nearBottom) _scrollToBottom(animated: false);
+          if (_nearBottom && !_userHasScrolled && !_isUserInteracting) {
+            _scrollToBottom(animated: false);
+          }
         },
       );
       _phaseSub = ref.listenManual<ChatPhase>(
@@ -237,24 +252,26 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             _userHasScrolled = false;
             _nearBottom = true;
             _readingAnchor = null;
+            _pinnedTranscriptCount = 0;
           } else if (next == ChatPhase.streaming) {
-            final transcript = ref.read(
-              transcriptMessagesProvider(widget.sessionId),
-            );
-            final isUserLast =
-                transcript.isNotEmpty && transcript.last.message.role == 'user';
             if (_justSent ||
-                _nearBottom ||
-                previous == ChatPhase.sending ||
-                isUserLast) {
+                (_nearBottom && !_userHasScrolled) ||
+                previous == ChatPhase.sending) {
               _justSent = true;
               _userHasScrolled = false;
               _nearBottom = true;
               _readingAnchor = null;
+              _pinnedTranscriptCount = 0;
             }
           }
         },
       );
+      final initialTranscript =
+          ref.read(transcriptMessagesProvider(widget.sessionId));
+      final initialLastUser =
+          initialTranscript.where((m) => m.message.role == 'user').lastOrNull;
+      _lastSentUserMessageId =
+          initialLastUser?.message.messageId ?? initialLastUser?.message.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _maybeResolveHighlightAndScroll();
@@ -289,22 +306,35 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   void _onScroll() {
     if (!_controller.hasClients) return;
     final position = _controller.position;
-    final nearBottom = position.maxScrollExtent - position.pixels < 120;
+    final distFromBottom = position.maxScrollExtent - position.pixels;
+    final nearBottom = distFromBottom < _nearBottomThreshold;
     // 用户在初始定位收敛完成前的一切位置变化（含 jumpTo 自身触发）都不
     // 算用户滚动，避免估算偏差把「初始定位未到底」误判为「用户已上滚」。
     if (!_restoringOlderPosition &&
         _initialPositioned &&
-        !_initialPositioning) {
+        !_initialPositioning &&
+        !_isAnimatingToBottom) {
       if (nearBottom) {
-        _userHasScrolled = false;
-        _readingAnchor = null;
-      } else {
-        if (_userHasScrolled) {
-          _updateReadingAnchor();
+        if (!_isUserInteracting || distFromBottom <= 1.0) {
+          final wasScrolled = _userHasScrolled;
+          final wasNotNear = !_nearBottom;
+          _userHasScrolled = false;
+          _readingAnchor = null;
+          _pinnedTranscriptCount = 0;
+          _nearBottom = true;
+          if ((wasScrolled || wasNotNear) && mounted) {
+            setState(() {});
+          }
         }
-      }
-      if (nearBottom != _nearBottom && !_isAnimatingToBottom) {
-        if (mounted) setState(() => _nearBottom = nearBottom);
+      } else {
+        final wasNotScrolled = !_userHasScrolled;
+        final wasNear = _nearBottom;
+        _userHasScrolled = true;
+        _readingAnchor = null;
+        _nearBottom = false;
+        if ((wasNotScrolled || wasNear) && mounted) {
+          setState(() {});
+        }
       }
     }
     if (position.pixels <= 80 &&
@@ -316,7 +346,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   /// 记录视口顶部第一条可见条目 + 偏移（候选锚点优先级：renderId → liveRenderKey → toolGroupId → messageId，todo.md #14）。
   void _updateReadingAnchor() {
-    if (!_controller.hasClients || _nearBottom || !mounted) return;
+    if (!_controller.hasClients || (_nearBottom && !_userHasScrolled) || !mounted) return;
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) return;
 
@@ -356,7 +386,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       }
     }
 
-    // 2. 其次扫描 liveTimeline 段落
+    // 2. 其次扫描 live 时间线段落
     if (candidate == null && liveTimeline != null) {
       for (final entry in liveTimeline) {
         final key = _itemKeys[entry.renderKey];
@@ -389,15 +419,20 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   void _maybeRestoreReadingAnchor() {
     if (!mounted ||
         !_controller.hasClients ||
-        _nearBottom ||
-        !_userHasScrolled ||
+        _isUserInteracting ||
+        _isAnimatingToBottom ||
+        _justSent ||
+        (!_userHasScrolled && _nearBottom) ||
         !_initialPositioned ||
         _positioningActive ||
         _restoringOlderPosition) {
       return;
     }
-    final anchor = _readingAnchor;
-    if (anchor == null) return;
+    if (_readingAnchor == null) {
+      _updateReadingAnchor();
+      return;
+    }
+    final anchor = _readingAnchor!;
 
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) return;
@@ -434,6 +469,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         _controller.jumpTo(newPixels);
       }
     }
+    _updateReadingAnchor();
   }
 
   Future<void> _loadOlderMessages() async {
@@ -499,7 +535,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _restoringOlderPosition = false;
       _nearBottom =
           _controller.position.maxScrollExtent - _controller.position.pixels <
-          120;
+          _nearBottomThreshold;
     });
   }
 
@@ -561,7 +597,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       _nearBottom =
           _controller.hasClients &&
           _controller.position.maxScrollExtent - _controller.position.pixels <
-              120;
+              _nearBottomThreshold;
       return;
     }
     final target = _controller.position.maxScrollExtent;
@@ -619,13 +655,11 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   void _scrollToBottom({bool animated = true}) {
     if (!mounted || !_controller.hasClients) return;
-    // 初始定位在途期间的滚动由 _settleToBottom 收敛循环负责（jumpTo 链）；
-    // 若此时允许 animateTo 或额外 jump，会与收敛链竞争，并在估算 extent 上
-    // 越界后被 ClampingScrollPhysics 弹簧拉回 → 视觉「撞击反弹」。
     if (_positioningActive) return;
     final target = _controller.position.maxScrollExtent;
     if (target <= 0) return;
     if (animated) {
+      if (_isAnimatingToBottom) return;
       _isAnimatingToBottom = true;
       unawaited(
         _controller
@@ -637,16 +671,16 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             .whenComplete(() {
               if (mounted) {
                 _isAnimatingToBottom = false;
-                // 动画期间 extent 可能继续变化（新气泡入场/懒加载估算修正），
-                // 落点未必是真实底部：用轻量收敛链复核，避免停在半途（#23）。
+                _nearBottom = true;
+                _userHasScrolled = false;
+                _readingAnchor = null;
+                _pinnedTranscriptCount = 0;
                 _settleJumpToBottom(attempts: 0);
               }
             }),
       );
     } else {
       if (_isAnimatingToBottom) return;
-      // 非动画单跳改为轻量收敛链：post-frame 读真实 extent + 单帧复核，
-      // 根治「jumpTo 落点与真实底部不一致 → 越界 → Spring 拉回」回弹（#23）。
       _settleJumpToBottom(attempts: 0);
     }
   }
@@ -668,13 +702,17 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 收敛条件 = 跳后一帧 extent 不再增长（pixels 已贴住 maxScrollExtent）。
   void _settleJumpToBottom({required int attempts}) {
     if (_jumpSettling || !mounted || !_controller.hasClients) return;
+    if (_userHasScrolled || !_nearBottom || _isUserInteracting) return;
     _jumpSettling = true;
     final generation = _layoutGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !_controller.hasClients ||
           generation != _layoutGeneration ||
-          _isAnimatingToBottom) {
+          _isAnimatingToBottom ||
+          _userHasScrolled ||
+          !_nearBottom ||
+          _isUserInteracting) {
         _jumpSettling = false;
         return;
       }
@@ -687,9 +725,6 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       }
       // 落点恒为当帧 maxScrollExtent（界内）：goBallistic(0) 不会起弹簧。
       // 若前帧 extent 收缩导致像素越界，此跳亦完成精准拉回（直跳非弹簧）。
-      // 注意：链内不做 _userHasScrolled 拦截——「粘底阈值内 token 重新贴底」
-      // 是既有语义（调用点已按 _nearBottom 门控），链内再加拦截会破坏它在
-      // 用户上滑 120px 内的自动粘底行为（#14 回归测试覆盖）。
       _controller.jumpTo(max);
       if (attempts >= _maxJumpResettle) {
         _jumpSettling = false;
@@ -700,7 +735,10 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         if (!mounted ||
             !_controller.hasClients ||
             generation != _layoutGeneration ||
-            _isAnimatingToBottom) {
+            _isAnimatingToBottom ||
+            _userHasScrolled ||
+            !_nearBottom ||
+            _isUserInteracting) {
           _jumpSettling = false;
           return;
         }
@@ -890,6 +928,24 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       });
     }
 
+    final lastUserMsg =
+        transcript.where((m) => m.message.role == 'user').lastOrNull;
+    final lastUserMsgId =
+        lastUserMsg?.message.messageId ?? lastUserMsg?.message.id;
+    final hasNewUserMessage = lastUserMsgId != null &&
+        _lastSentUserMessageId != null &&
+        lastUserMsgId != _lastSentUserMessageId;
+    if (_lastSentUserMessageId == null && lastUserMsgId != null) {
+      _lastSentUserMessageId = lastUserMsgId;
+    } else if (hasNewUserMessage) {
+      _lastSentUserMessageId = lastUserMsgId;
+      _justSent = true;
+      _userHasScrolled = false;
+      _nearBottom = true;
+      _readingAnchor = null;
+      _pinnedTranscriptCount = 0;
+    }
+
     final phaseChanged = _lastPhase != phase;
     _lastPhase = phase;
 
@@ -918,27 +974,34 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 消息刷新与内容变化：若 _nearBottom 则无动画 jump 回底（#13）；若离底阅读则保持锚点不拉底（#14）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.hasClients) return;
-      final isUserLast =
-          transcript.isNotEmpty && transcript.last.message.role == 'user';
       if (_justSent ||
           (phaseChanged &&
+              !_userHasScrolled &&
               (phase == ChatPhase.sending ||
-                  isUserLast ||
                   (phase == ChatPhase.streaming && _nearBottom)))) {
         // 用户刚发送或阶段切换（sending/streaming 开始）保持 200ms animateTo 平滑动画（#13/#14）
         _justSent = false;
         _scrollToBottom(animated: true);
       } else if (_nearBottom &&
+          !_userHasScrolled &&
+          !_isUserInteracting &&
           _initialPositioned &&
           !_positioningActive &&
           !_restoringOlderPosition) {
         // 消息刷新与增量更新无动画 jump 回底（#13）
         _scrollToBottom(animated: false);
-      } else if (!_nearBottom &&
-          _userHasScrolled &&
+      } else if (_userHasScrolled &&
+          !_nearBottom &&
           !_justSent &&
+          !_isAnimatingToBottom &&
           _initialPositioned) {
-        _maybeRestoreReadingAnchor();
+        if (_readingAnchor == null) {
+          if (!_isUserInteracting) {
+            _updateReadingAnchor();
+          }
+        } else {
+          _maybeRestoreReadingAnchor();
+        }
       }
     });
 
@@ -993,31 +1056,102 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (needFallback) itemCount++;
     if (showRecovering) itemCount++;
 
+    final isEnglish = AppLocalizations.of(context).isEnglish;
+    final unreadCount = (_pinnedTranscriptCount > 0 &&
+            transcript.length > _pinnedTranscriptCount)
+        ? transcript.length - _pinnedTranscriptCount
+        : 0;
+    final buttonLabel = unreadCount > 0
+        ? (isEnglish ? '$unreadCount new messages' : '$unreadCount 条新消息')
+        : (isEnglish ? 'Scroll to bottom' : '回到底部');
+    final distFromBottom = _controller.hasClients
+        ? _controller.position.maxScrollExtent - _controller.position.pixels
+        : 0.0;
+    final showScrollToBottomButton = _initialPositioned &&
+        _controller.hasClients &&
+        (_userHasScrolled || !_nearBottom) &&
+        distFromBottom >= 20.0;
+
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification is UserScrollNotification) {
-          if (notification.direction != ScrollDirection.idle) {
+        if (notification is ScrollStartNotification) {
+          if (notification.dragDetails != null) {
+            _isUserInteracting = true;
+          }
+        } else if (notification is UserScrollNotification) {
+          if (notification.direction == ScrollDirection.idle) {
+            _isUserInteracting = false;
+          } else {
+            _isUserInteracting = true;
             if (_initialPositioned &&
                 !_initialPositioning &&
                 !_restoringOlderPosition) {
-              _userHasScrolled = true;
+              if (notification.direction == ScrollDirection.forward) {
+                final wasNotScrolled = !_userHasScrolled;
+                if (!_userHasScrolled) {
+                  _pinnedTranscriptCount = ref
+                      .read(transcriptMessagesProvider(widget.sessionId))
+                      .length;
+                }
+                _userHasScrolled = true;
+                _nearBottom = false;
+                if (wasNotScrolled && mounted) {
+                  setState(() {});
+                }
+              }
             }
           }
         } else if (notification is ScrollUpdateNotification) {
           if (notification.dragDetails != null) {
+            _isUserInteracting = true;
             if (_initialPositioned &&
                 !_initialPositioning &&
                 !_restoringOlderPosition) {
+              if (notification.dragDetails!.delta.dy > 0 ||
+                  (notification.scrollDelta != null &&
+                      notification.scrollDelta! < 0)) {
+                final wasNotScrolled = !_userHasScrolled;
+                if (!_userHasScrolled) {
+                  _pinnedTranscriptCount = ref
+                      .read(transcriptMessagesProvider(widget.sessionId))
+                      .length;
+                }
+                _userHasScrolled = true;
+                _nearBottom = false;
+                if (wasNotScrolled && mounted) {
+                  setState(() {});
+                }
+              }
+            }
+          } else if (notification.scrollDelta != null &&
+              notification.scrollDelta! < -1.0) {
+            if (_initialPositioned &&
+                !_initialPositioning &&
+                !_restoringOlderPosition) {
+              final wasNotScrolled = !_userHasScrolled;
+              if (!_userHasScrolled) {
+                _pinnedTranscriptCount = ref
+                    .read(transcriptMessagesProvider(widget.sessionId))
+                    .length;
+              }
               _userHasScrolled = true;
+              _nearBottom = false;
+              if (wasNotScrolled && mounted) {
+                setState(() {});
+              }
             }
           }
+        } else if (notification is ScrollEndNotification) {
+          _isUserInteracting = false;
         }
         return false;
       },
-      child: ListView.builder(
-        controller: _controller,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: itemCount,
+      child: Stack(
+        children: [
+          ListView.builder(
+            controller: _controller,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: itemCount,
         itemBuilder: (context, index) {
           // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
           if (index < transcript.length) {
@@ -1137,6 +1271,91 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
           return const SizedBox.shrink();
         },
+      ),
+      if (showScrollToBottomButton)
+        Positioned(
+          right: 16,
+          bottom: 12,
+          child: _ScrollToBottomButton(
+            label: buttonLabel,
+            onPressed: () {
+              if (!mounted) return;
+              setState(() {
+                _userHasScrolled = false;
+                _nearBottom = true;
+                _readingAnchor = null;
+                _pinnedTranscriptCount = 0;
+              });
+              _scrollToBottom(animated: true);
+            },
+          ),
+        ),
+    ],
+  ),
+);
+  }
+}
+
+/// 悬浮回底按钮（Cupertino 悬浮 pill 样式，#2 规格）。
+class _ScrollToBottomButton extends StatelessWidget {
+  const _ScrollToBottomButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = CupertinoTheme.of(context).primaryColor;
+    final backgroundColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemGroupedBackground,
+      context,
+    );
+    final borderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.separator,
+      context,
+    ).withValues(alpha: 0.6);
+
+    return CupertinoButton(
+      key: const ValueKey('chat-scroll-to-bottom-button'),
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: 0.5),
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.black.withValues(alpha: 0.12),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.arrow_down,
+              size: 13,
+              color: primaryColor,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: primaryColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

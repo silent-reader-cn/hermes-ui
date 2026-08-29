@@ -422,6 +422,7 @@ class Endpoint {
 
   static const models = Endpoint('/api/models');
   static const modelsLive = Endpoint('/api/models/live');
+  static const modelsRefresh = Endpoint('/api/models/refresh');
   static const commands = Endpoint('/api/commands');
   static const defaultModel = Endpoint('/api/default-model');
 

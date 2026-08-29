@@ -297,5 +297,109 @@ void main() {
       await container.read(settingsControllerProvider.future);
       expect(api.modelsCount, 2);
     });
+
+    test('allModels 大小写与分隔符归一去重（保留首项）', () async {
+      final api = FakeSettingsApi();
+      api.modelsResponse = buildModelsResponse(
+        defaultModel: 'gpt-5.6-luna',
+        activeProvider: 'custom:cpa',
+        groups: [
+          {
+            'provider_id': 'custom:cpa',
+            'name': 'CPA',
+            'models': [
+              {'id': 'gpt-5.6-luna', 'name': 'GPT 5.6 Luna Lower'},
+              {'id': 'GPT-5.6 Luna', 'name': 'GPT 5.6 Luna Upper'},
+              {'id': 'deepseek-v4-flash', 'name': 'DeepSeek V4 Flash'},
+            ],
+            'extra_models': [
+              {'id': 'GPT_5.6_LUNA', 'name': 'GPT 5.6 Luna Extra'},
+              {'id': 'mimo-v2.5', 'name': 'Mimo V2.5'},
+            ],
+          },
+        ],
+      );
+      final container = makeContainer(api);
+      await container.read(settingsControllerProvider.future);
+      final state = container.read(settingsControllerProvider).valueOrNull!;
+
+      final all = state.allModels;
+      expect(all, hasLength(3));
+      expect(all[0].id, 'gpt-5.6-luna');
+      expect(all[0].displayName, 'GPT 5.6 Luna Lower');
+      expect(all[1].id, 'deepseek-v4-flash');
+      expect(all[2].id, 'mimo-v2.5');
+    });
+
+    test('refreshModels 成功：触发 refreshModels + models 重新拉取，更新状态并防重入', () async {
+      final api = FakeSettingsApi();
+      api.modelsResponse = buildModelsResponse(
+        defaultModel: 'gpt-4o',
+        activeProvider: 'custom:cpa',
+        groups: sampleGroups,
+      );
+      final container = makeContainer(api);
+      await container.read(settingsControllerProvider.future);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      expect(api.modelsCount, 1);
+      expect(api.refreshModelsCount, 0);
+
+      // 准备刷新后的新响应
+      api.modelsResponse = buildModelsResponse(
+        defaultModel: 'deepseek-v4-flash',
+        activeProvider: 'custom:cpa',
+        groups: [
+          {
+            'provider_id': 'custom:cpa',
+            'name': 'CPA',
+            'models': [
+              {'id': 'deepseek-v4-flash', 'name': 'DeepSeek V4 Flash'},
+              {'id': 'gpt-5.6-terra', 'name': 'GPT 5.6 Terra'},
+            ],
+          },
+        ],
+      );
+
+      final ok = await controller.refreshModels();
+      expect(ok, isTrue);
+      expect(api.refreshModelsCount, 1);
+      expect(api.refreshModelsCalls, ['custom:cpa']);
+      expect(api.modelsCount, 2);
+
+      final state = container.read(settingsControllerProvider).valueOrNull!;
+      expect(state.isRefreshingModels, isFalse);
+      expect(state.refreshError, isNull);
+      expect(state.defaultModel, 'deepseek-v4-flash');
+      expect(state.modelGroups, hasLength(1));
+      expect(state.modelGroups.single.models, hasLength(2));
+    });
+
+    test('refreshModels 失败：保留既有状态 + 设置 refreshError；clearRefreshError 清除', () async {
+      final api = FakeSettingsApi();
+      api.modelsResponse = buildModelsResponse(
+        defaultModel: 'gpt-4o',
+        activeProvider: 'custom:cpa',
+        groups: sampleGroups,
+      );
+      final container = makeContainer(api);
+      await container.read(settingsControllerProvider.future);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      api.refreshModelsError = HttpException(503, null, message: '服务不可用');
+
+      final ok = await controller.refreshModels();
+      expect(ok, isFalse);
+
+      final state = container.read(settingsControllerProvider).valueOrNull!;
+      expect(state.isRefreshingModels, isFalse);
+      expect(state.refreshError, contains('服务不可用'));
+      expect(state.defaultModel, 'gpt-4o'); // 既有状态完整保留
+      expect(state.modelGroups, hasLength(2));
+
+      controller.clearRefreshError();
+      final cleared = container.read(settingsControllerProvider).valueOrNull!;
+      expect(cleared.refreshError, isNull);
+    });
   });
 }

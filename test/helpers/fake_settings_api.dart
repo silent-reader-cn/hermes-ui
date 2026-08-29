@@ -21,22 +21,34 @@ class FakeSettingsApi implements SettingsApi {
   /// `reasoning()` 返回的推理状态。
   ReasoningStatusResponse reasoningResponse = const ReasoningStatusResponse();
 
+  /// `refreshModels()` 返回的响应。
+  ModelsRefreshResponse refreshModelsResponse =
+      const ModelsRefreshResponse(ok: true);
+
   /// 各方法抛出的异常（非 null 时优先于对应响应）。
   Object? modelsError;
   Object? reasoningError;
+  Object? refreshModelsError;
   Object? saveDefaultModelError;
   Object? saveReasoningEffortError;
 
   /// 非 null 时 `models()` 挂起等待该 gate（测试加载态用）。
   Completer<void>? modelsGate;
 
+  /// 非 null 时 `refreshModels()` 挂起等待该 gate（测试加载态用）。
+  Completer<void>? refreshModelsGate;
+
   /// 非 null 时 `reasoning()` 挂起等待该 gate（测试加载态用）。
   Completer<void>? reasoningGate;
 
   int modelsCount = 0;
+  int refreshModelsCount = 0;
   int reasoningCount = 0;
   int saveDefaultModelCount = 0;
   int saveReasoningEffortCount = 0;
+
+  /// `refreshModels` 已收到的 provider（按调用顺序）。
+  final List<String?> refreshModelsCalls = [];
 
   /// `saveDefaultModel` 已收到的模型 id（按调用顺序）。
   final List<String> defaultModelCalls = [];
@@ -146,6 +158,17 @@ class FakeSettingsApi implements SettingsApi {
     final gate = modelsGate;
     if (gate != null) await gate.future;
     return modelsResponse;
+  }
+
+  @override
+  Future<ModelsRefreshResponse> refreshModels({String? provider}) async {
+    refreshModelsCount++;
+    refreshModelsCalls.add(provider);
+    final error = refreshModelsError;
+    if (error != null) throw error;
+    final gate = refreshModelsGate;
+    if (gate != null) await gate.future;
+    return refreshModelsResponse;
   }
 
   @override

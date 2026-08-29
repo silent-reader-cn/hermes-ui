@@ -1081,18 +1081,109 @@ class _ModelPickerPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final groups = state.modelGroups;
+    final currentState =
+        ref.watch(settingsControllerProvider).valueOrNull ?? state;
+    final groups = currentState.modelGroups;
+    final isRefreshing = currentState.isRefreshingModels;
+
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: const _PopBackButton(),
         middle: Text(l10n.defaultModel),
+        trailing: CupertinoButton(
+          key: const ValueKey('model-picker-refresh-button'),
+          padding: EdgeInsets.zero,
+          onPressed: isRefreshing
+              ? null
+              : () => unawaited(
+                    ref
+                        .read(settingsControllerProvider.notifier)
+                        .refreshModels(),
+                  ),
+          child: isRefreshing
+              ? const CupertinoActivityIndicator(radius: 8)
+              : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+        ),
       ),
-      child: groups.isEmpty
-          ? Center(child: Text(l10n.noAvailableModels))
-          : ListView(
-              children: [
-                for (final group in groups)
-                  CupertinoListSection(
+      child: SafeArea(
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            CupertinoSliverRefreshControl(
+              onRefresh: () => ref
+                  .read(settingsControllerProvider.notifier)
+                  .refreshModels(),
+            ),
+            if (currentState.refreshError != null)
+              SliverToBoxAdapter(
+                child: Container(
+                  key: const ValueKey('model-picker-refresh-error'),
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.destructiveRed.withValues(
+                      alpha: 0.12,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: CupertinoColors.destructiveRed.withValues(
+                        alpha: 0.3,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        CupertinoIcons.exclamationmark_circle_fill,
+                        size: 16,
+                        color: CupertinoColors.destructiveRed,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          currentState.refreshError!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.destructiveRed,
+                          ),
+                        ),
+                      ),
+                      CupertinoButton(
+                        key: const ValueKey('model-picker-clear-refresh-error'),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(20, 20),
+                        onPressed: () => ref
+                            .read(settingsControllerProvider.notifier)
+                            .clearRefreshError(),
+                        child: const Icon(
+                          CupertinoIcons.clear_circled_solid,
+                          size: 16,
+                          color: CupertinoColors.destructiveRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (groups.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    l10n.noAvailableModels,
+                    style: const TextStyle(
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                ),
+              )
+            else
+              for (final group in groups)
+                SliverToBoxAdapter(
+                  child: CupertinoListSection(
                     header: Text(group.name),
                     children: [
                       for (final model in [
@@ -1102,7 +1193,7 @@ class _ModelPickerPage extends ConsumerWidget {
                         CupertinoListTile(
                           key: ValueKey('model-option-${model.id}'),
                           title: Text(model.displayName),
-                          trailing: model.id == state.defaultModel
+                          trailing: model.id == currentState.defaultModel
                               ? const Icon(CupertinoIcons.checkmark)
                               : null,
                           onTap: () {
@@ -1116,8 +1207,10 @@ class _ModelPickerPage extends ConsumerWidget {
                         ),
                     ],
                   ),
-              ],
-            ),
+                ),
+          ],
+        ),
+      ),
     );
   }
 }

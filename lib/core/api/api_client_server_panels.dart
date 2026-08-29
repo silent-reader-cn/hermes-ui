@@ -23,6 +23,18 @@ extension ApiClientServerPanels on ApiClient {
     return ModelsLiveResponse.fromJson(_asMap(json));
   }
 
+  /// POST /api/models/refresh {provider}。
+  Future<ModelsRefreshResponse> refreshModels({String? provider}) async {
+    final json = await sendJson(
+      Endpoint.modelsRefresh,
+      method: 'POST',
+      body: {
+        if (provider != null && provider.isNotEmpty) 'provider': provider,
+      },
+    );
+    return ModelsRefreshResponse.fromJson(_asMap(json));
+  }
+
   /// GET /api/commands。
   Future<CommandsResponse> commands() async {
     final json = await sendJson(Endpoint.commands);

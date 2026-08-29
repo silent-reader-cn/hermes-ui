@@ -1070,6 +1070,8 @@ class AppLocalizations {
   String get loadingModels => isEnglish ? 'Loading models…' : '正在加载模型…';
   String get modelsLoadFailed => isEnglish ? 'Failed to load models' : '模型加载失败';
   String get defaultModel => isEnglish ? 'Default Model' : '默认模型';
+  String get refreshModels => isEnglish ? 'Refresh Models' : '刷新模型列表';
+  String get refreshFailed => isEnglish ? 'Refresh Failed' : '刷新失败';
   String get notSet => isEnglish ? 'Not set' : '未设置';
   String get reasoningEffort => isEnglish ? 'Reasoning Effort' : '推理强度';
   String get noAvailableModels => isEnglish ? 'No models available' : '暂无可用模型';

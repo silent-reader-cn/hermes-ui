@@ -470,6 +470,35 @@ class ModelsResponse {
   String toString() => 'ModelsResponse(defaultModel: $defaultModel)';
 }
 
+/// 模型刷新响应（POST /api/models/refresh）。
+class ModelsRefreshResponse {
+  const ModelsRefreshResponse({this.ok = false, this.provider});
+
+  factory ModelsRefreshResponse.fromJson(Map<String, Object?> json) {
+    return ModelsRefreshResponse(
+      ok: lossyBool(json, 'ok') ?? false,
+      provider: lossyString(json, 'provider'),
+    );
+  }
+
+  final bool ok;
+  final String? provider;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ModelsRefreshResponse &&
+        other.ok == ok &&
+        other.provider == provider;
+  }
+
+  @override
+  int get hashCode => Object.hash(ok, provider);
+
+  @override
+  String toString() =>
+      'ModelsRefreshResponse(ok: $ok, provider: $provider)';
+}
+
 /// 提供商列表响应（Swift: ProvidersResponse）。
 class ProvidersResponse {
   const ProvidersResponse({this.providers, this.activeProvider});
@@ -1438,10 +1467,14 @@ class ModelCatalogParser {
   }) {
     if (raw is! JsonArray) return const [];
     final result = <ModelCatalogOption>[];
+    final seen = <String>{};
     for (final item in raw.value) {
       if (item is! JsonObject) continue;
       final id = _trimmed(item.value['id']?.stringValue);
       if (id == null) continue;
+      final normKey =
+          id.toLowerCase().replaceAll(' ', '-').replaceAll('_', '-');
+      if (!seen.add(normKey)) continue;
       final displayName = _trimmed(item.value['name']?.stringValue) ??
           _trimmed(item.value['label']?.stringValue) ??
           id;

@@ -88,6 +88,38 @@ void main() {
     });
   });
 
+  group('SettingsApiClient.refreshModels()', () {
+    test('POST /api/models/refresh {provider} → 正确发送 provider 并在响应中解析',
+        () async {
+      final (client, adapter) =
+          buildClient(jsonEncode({'ok': true, 'provider': 'custom:cpa'}));
+      final api = SettingsApiClient(client);
+
+      final response = await api.refreshModels(provider: 'custom:cpa');
+
+      final request = adapter.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.toString(), '$base/api/models/refresh');
+      expect(_bodyOf(request)['provider'], 'custom:cpa');
+      expect(response.ok, isTrue);
+      expect(response.provider, 'custom:cpa');
+    });
+
+    test('POST /api/models/refresh without provider → 发送空 body', () async {
+      final (client, adapter) =
+          buildClient(jsonEncode({'ok': true, 'provider': 'all'}));
+      final api = SettingsApiClient(client);
+
+      final response = await api.refreshModels();
+
+      final request = adapter.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.toString(), '$base/api/models/refresh');
+      expect(response.ok, isTrue);
+      expect(response.provider, 'all');
+    });
+  });
+
   group('SettingsApiClient.saveDefaultModel()', () {
     test('POST /api/default-model {model} → 响应 model 字段保留', () async {
       final (client, adapter) =

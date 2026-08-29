@@ -337,12 +337,6 @@ Future<void> _showSessionActions(
         onPressed: () => unawaited(controller.retryLastTurn()),
       ),
       AdaptiveMenuItem(
-        key: const ValueKey('chat-action-settings'),
-        label: l10n.sessionSettings,
-        onPressed: () =>
-            unawaited(_sessionSettings(context, controller, state)),
-      ),
-      AdaptiveMenuItem(
         key: const ValueKey('chat-action-yolo'),
         label: state.yoloEnabled ? l10n.disableYolo : l10n.enableYolo,
         onPressed: () => unawaited(controller.toggleYolo(!state.yoloEnabled)),
@@ -513,65 +507,6 @@ Future<bool> _confirmSessionUndo(BuildContext context) async {
     ),
   );
   return result == true;
-}
-
-/// 会话设置：workspace + 模型名（文本输入，可留空）；保存后控制器乐观更新。
-Future<void> _sessionSettings(
-  BuildContext context,
-  ChatController controller,
-  ChatState state,
-) async {
-  final l10n = AppLocalizations.of(context);
-  final workspaceInput = TextEditingController(text: state.workspace ?? '');
-  final modelInput = TextEditingController(text: state.model ?? '');
-  final result = await showCupertinoDialog<({String workspace, String model})>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.sessionSettings),
-      content: Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CupertinoTextField(
-              key: const ValueKey('chat-settings-workspace'),
-              controller: workspaceInput,
-              placeholder: l10n.workspaceOptionalPlaceholder,
-            ),
-            const SizedBox(height: 8),
-            CupertinoTextField(
-              key: const ValueKey('chat-settings-model'),
-              controller: modelInput,
-              placeholder: l10n.modelNameOptionalPlaceholder,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        CupertinoDialogAction(
-          key: const ValueKey('chat-settings-cancel'),
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          key: const ValueKey('chat-settings-save'),
-          onPressed: () => Navigator.pop(dialogContext, (
-            workspace: workspaceInput.text,
-            model: modelInput.text,
-          )),
-          child: Text(l10n.save),
-        ),
-      ],
-    ),
-  );
-  workspaceInput.dispose();
-  modelInput.dispose();
-  if (result != null) {
-    await controller.updateSessionSettings(
-      workspace: result.workspace,
-      model: result.model,
-    );
-  }
 }
 
 Future<void> _exportSession(
