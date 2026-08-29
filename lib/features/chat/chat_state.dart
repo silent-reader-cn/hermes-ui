@@ -329,12 +329,13 @@ class ChatState {
     this.completedReasoningGroups = const [],
     this.queuedSlashMessages = const [],
     this.pinnedLocalNotices = const [],
-    this.lastSteerHint,
+    this.steerHints = const [],
     this.stream = const ChatStreamState(),
     this.pendingAction = const ChatPendingActionState(),
     this.contextWindowSnapshot,
     this.responseCompletionNeedsTranscriptRefresh = false,
     this.streamingScrollTrigger = 0,
+    this.isRevealQueueEmpty = true,
   });
 
   /// 初始状态（会话参数经 family key 传入）。
@@ -429,8 +430,11 @@ class ChatState {
   /// 流进行中产生的本地 notice（流结束后 flush 进 transcript）。
   final List<String> pinnedLocalNotices;
 
-  /// 最近一次 steer 提示文本（ephemeral，不进 transcript；流结束后自动清除）。
-  final String? lastSteerHint;
+  /// 活跃的 steer 提示列表（按到达时间先后追加；多条堆叠展示，流结束后自动清空）。
+  final List<String> steerHints;
+
+  /// 最近一次 steer 提示文本（便捷 getter；空则为 null）。
+  String? get lastSteerHint => steerHints.isEmpty ? null : steerHints.last;
 
   /// 流状态（activeStreamId 等）。
   final ChatStreamState stream;
@@ -446,6 +450,9 @@ class ChatState {
 
   /// 流式内容 flush 计数（视图滚动跟随触发）。
   final int streamingScrollTrigger;
+
+  /// reveal 队列是否为空（追上积压后渲染层据此展示闪烁光标）。
+  final bool isRevealQueueEmpty;
 
   /// isStartingChat（sending 相位）。
   bool get isStartingChat => phase == ChatPhase.sending;
@@ -492,14 +499,15 @@ class ChatState {
     List<ReasoningGroup>? completedReasoningGroups,
     List<String>? queuedSlashMessages,
     List<String>? pinnedLocalNotices,
-    String? lastSteerHint,
-    bool clearLastSteerHint = false,
+    List<String>? steerHints,
+    bool clearSteerHints = false,
     ChatStreamState? stream,
     ChatPendingActionState? pendingAction,
     ContextWindowSnapshot? contextWindowSnapshot,
     bool clearContextWindowSnapshot = false,
     bool? responseCompletionNeedsTranscriptRefresh,
     int? streamingScrollTrigger,
+    bool? isRevealQueueEmpty,
   }) {
     return ChatState(
       sessionId: sessionId ?? this.sessionId,
@@ -548,9 +556,9 @@ class ChatState {
           completedReasoningGroups ?? this.completedReasoningGroups,
       queuedSlashMessages: queuedSlashMessages ?? this.queuedSlashMessages,
       pinnedLocalNotices: pinnedLocalNotices ?? this.pinnedLocalNotices,
-      lastSteerHint: clearLastSteerHint
-          ? null
-          : (lastSteerHint ?? this.lastSteerHint),
+      steerHints: clearSteerHints
+          ? const []
+          : (steerHints ?? this.steerHints),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
       contextWindowSnapshot: clearContextWindowSnapshot
@@ -561,6 +569,7 @@ class ChatState {
           this.responseCompletionNeedsTranscriptRefresh,
       streamingScrollTrigger:
           streamingScrollTrigger ?? this.streamingScrollTrigger,
+      isRevealQueueEmpty: isRevealQueueEmpty ?? this.isRevealQueueEmpty,
     );
   }
 

@@ -1,10 +1,14 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
+import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/core/models/tool_call.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/steer_banner.dart';
+import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -210,14 +214,14 @@ void main() {
       expect(deco.borderRadius, BorderRadius.circular(10));
       expect(deco.border, isNotNull);
 
-      // 13 次要色
+      // 12 字体
       final text = tester.widget<Text>(find.text('已复制到剪贴板'));
-      expect(text.style?.fontSize, 13);
+      expect(text.style?.fontSize, 12);
 
       await _unmount(tester);
     });
 
-    testWidgets('Toast 内边距纵向为 6，文字固定单行 ellipsis', (tester) async {
+    testWidgets('Toast 内边距纵向为 10，文字固定单行 ellipsis', (tester) async {
       final api = _FakeChatApi();
       api.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -235,8 +239,8 @@ void main() {
         find.byKey(const ValueKey('chat-notice-toast')),
       );
       final padding = toastContainer.padding as EdgeInsets?;
-      expect(padding?.top, 6);
-      expect(padding?.bottom, 6);
+      expect(padding?.top, 10);
+      expect(padding?.bottom, 10);
 
       final text = tester.widget<Text>(find.text('已复制到剪贴板这是一段很长的提示'));
       expect(text.maxLines, 1);
@@ -245,7 +249,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('SteerNoticeToast 内边距纵向为 6，文字固定单行 ellipsis', (tester) async {
+    testWidgets('SteerNoticeToast 内边距纵向为 10，文字固定单行 ellipsis', (tester) async {
       final api = _FakeChatApi();
       api.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -263,17 +267,125 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byKey(const ValueKey('chat-steer-notice')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-steer-notice-0')), findsOneWidget);
       final steerContainer = tester.widget<Container>(
-        find.byKey(const ValueKey('chat-steer-notice')),
+        find.descendant(
+          of: find.byKey(const ValueKey('chat-steer-notice-0')),
+          matching: find.byType(Container),
+        ).first,
       );
       final padding = steerContainer.padding as EdgeInsets?;
-      expect(padding?.top, 6);
-      expect(padding?.bottom, 6);
+      expect(padding?.top, 10);
+      expect(padding?.bottom, 10);
 
       final text = tester.widget<Text>(find.text('这是一段很长很长的 steer 提示文案用来测试单行'));
       expect(text.maxLines, 1);
       expect(text.overflow, TextOverflow.ellipsis);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('连续 steer 3 次 → 出现 3 条独立 toast 垂直堆叠，各自 × 可单独关闭，关闭一条不影响其余；live 会话结束全清', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+      final container = _containerOf(tester);
+
+      await container.read(chatControllerProvider('s1').notifier).send('hello');
+      await tester.pump();
+      await tester.pump();
+
+      // 连续 3 次 steer
+      await container.read(chatControllerProvider('s1').notifier).send('steer 提示 1');
+      await tester.pump();
+      await container.read(chatControllerProvider('s1').notifier).send('steer 提示 2');
+      await tester.pump();
+      await container.read(chatControllerProvider('s1').notifier).send('steer 提示 3');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 3 条 toast 独立堆叠
+      expect(find.byKey(const ValueKey('chat-steer-notice-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-steer-notice-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-steer-notice-2')), findsOneWidget);
+      expect(find.text('steer 提示 1'), findsOneWidget);
+      expect(find.text('steer 提示 2'), findsOneWidget);
+      expect(find.text('steer 提示 3'), findsOneWidget);
+
+      // 单独关闭中间那条（index 1: steer 提示 2）
+      await tester.tap(find.byKey(const ValueKey('chat-steer-notice-close-1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 提示 2 消失，提示 1 与 提示 3 仍在
+      expect(find.text('steer 提示 2'), findsNothing);
+      expect(find.text('steer 提示 1'), findsOneWidget);
+      expect(find.text('steer 提示 3'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-steer-notice-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-steer-notice-1')), findsOneWidget);
+
+      // live 会话结束（done）→ 全清
+      api.emit(
+        const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('steer 提示 1'), findsNothing);
+      expect(find.text('steer 提示 3'), findsNothing);
+      expect(find.byKey(const ValueKey('chat-steer-notice-0')), findsNothing);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('长按任一条 steer 文本 → 剪贴板内容等于该条 hint 文本，顶部出现 已复制到剪贴板 轻提示', (tester) async {
+      String? clipboardText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.setData') {
+            clipboardText = (methodCall.arguments as Map)['text'] as String?;
+            return null;
+          }
+          if (methodCall.method == 'Clipboard.getData') {
+            return {'text': clipboardText};
+          }
+          return null;
+        },
+      );
+
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+      final container = _containerOf(tester);
+
+      await container.read(chatControllerProvider('s1').notifier).send('hello');
+      await tester.pump();
+      await tester.pump();
+
+      await container.read(chatControllerProvider('s1').notifier).send('长按复制测试文本');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('长按复制测试文本'), findsOneWidget);
+
+      // 长按 steer 文本
+      await tester.longPress(find.text('长按复制测试文本'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 验证剪贴板内容
+      expect(clipboardText, '长按复制测试文本');
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(data?.text, '长按复制测试文本');
+
+      // 验证顶部出现 '已复制到剪贴板' toast
+      expect(find.byKey(const ValueKey('chat-notice-toast')), findsOneWidget);
+      expect(find.text('已复制到剪贴板'), findsOneWidget);
 
       await _unmount(tester);
     });
@@ -342,6 +454,96 @@ void main() {
       expect(texts[0].overflow, TextOverflow.ellipsis);
       expect(texts[1].maxLines, 1);
       expect(texts[1].overflow, TextOverflow.ellipsis);
+    });
+  });
+
+  group('同区横幅高度归一测试（与 ToolCallGroupCard 高度差 ≤2px）', () {
+    testWidgets('深浅色模式下，同区横幅视觉高度与 ToolCallGroupCard 差值 ≤ 2px', (tester) async {
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        final group = ToolCallGroup(
+          id: 'grp-1',
+          toolCalls: [
+            ToolCall(
+              id: 'call-1',
+              name: 'read_file',
+              isCompleted: true,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          CupertinoApp(
+            theme: CupertinoThemeData(brightness: brightness),
+            home: CupertinoPageScaffold(
+              child: Column(
+                children: [
+                  ToolCallGroupCard(
+                    key: const ValueKey('tool-call-group-card'),
+                    group: group,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final toolCardBox = tester.renderObject<RenderBox>(
+          find.byKey(const ValueKey('tool-call-group-card')),
+        );
+        final toolCardHeight = toolCardBox.size.height;
+        expect(toolCardHeight, inInclusiveRange(34.0, 38.0));
+
+        final api = _FakeChatApi();
+        api.sessionResult = {
+          'session': {'session_id': 's1', 'messages': const []},
+        };
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [chatApiProvider.overrideWithValue(api)],
+            child: CupertinoApp(
+              theme: CupertinoThemeData(brightness: brightness),
+              home: const ChatPage(sessionId: 's1'),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final container = _containerOf(tester);
+        final notifier = container.read(chatControllerProvider('s1').notifier);
+
+        // 1. Notice Toast
+        notifier.setNotice('轻提示测试');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final toastBox = tester.renderObject<RenderBox>(
+          find.descendant(
+            of: find.byKey(const ValueKey('chat-notice-toast')),
+            matching: find.byType(DecoratedBox),
+          ).first,
+        );
+        expect((toastBox.size.height - toolCardHeight).abs(), lessThanOrEqualTo(2.0));
+
+        // 2. Steer Toast
+        await notifier.send('hello');
+        await tester.pump();
+        await notifier.send('steer 提示');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final steerBox = tester.renderObject<RenderBox>(
+          find.descendant(
+            of: find.byKey(const ValueKey('chat-steer-notice-0')),
+            matching: find.byType(DecoratedBox),
+          ).first,
+        );
+        expect((steerBox.size.height - toolCardHeight).abs(), lessThanOrEqualTo(2.0));
+
+        await _unmount(tester);
+      }
     });
   });
 }

@@ -27,6 +27,7 @@ import 'cron_visibility_settings.dart';
 import 'injected_notice_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
+import 'smooth_streaming_settings.dart';
 import 'tool_group_settings.dart';
 import '../../app/widgets/hermes_page_route.dart';
 
@@ -166,6 +167,7 @@ class _ChatSection extends ConsumerWidget {
     final hideReasoning = ref.watch(hideReasoningProvider);
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     final composerTwoPane = ref.watch(composerTwoPaneProvider);
+    final smoothStreaming = ref.watch(smoothStreamingProvider);
     return CupertinoListSection(
       header: Text(l10n.chatSection),
       children: [
@@ -195,6 +197,22 @@ class _ChatSection extends ConsumerWidget {
                 },
               ),
             ),
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-smooth-streaming'),
+          title: Text(l10n.smoothStreaming),
+          subtitle: Text(l10n.smoothStreamingDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-smooth-streaming'),
+            value: smoothStreaming,
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(smoothStreamingProvider.notifier)
+                    .setSmoothStreaming(value),
+              );
+            },
           ),
         ),
         CupertinoListTile(

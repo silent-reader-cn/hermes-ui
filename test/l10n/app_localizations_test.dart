@@ -548,6 +548,8 @@ void main() {
       expect(l10n.renameProject, '重命名项目');
       expect(l10n.deleteProject, '删除项目');
       expect(l10n.deleteProjectWarning, '删除后项目内会话不会被删除，仅解除归类。');
+      expect(l10n.smoothStreaming, '平滑输出');
+      expect(l10n.smoothStreamingDesc, '逐字平滑输出，积压时自适应加速');
     });
   });
 
@@ -594,6 +596,11 @@ void main() {
       expect(l10n.copiedToClipboard, 'Copied to clipboard');
       expect(l10n.refreshModels, 'Refresh Models');
       expect(l10n.refreshFailed, 'Refresh Failed');
+      expect(l10n.smoothStreaming, 'Smooth Streaming');
+      expect(
+        l10n.smoothStreamingDesc,
+        'Smooth typewriter output with adaptive speed during backlog',
+      );
     });
 
     test('Parameterized methods work in English', () {

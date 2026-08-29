@@ -59,3 +59,4 @@ TODO.md
 # TODO 任务清单（本地文件，不入库）
 /.todo/
 /TODO.md
+test/golden/failures/

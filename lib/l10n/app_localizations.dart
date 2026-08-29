@@ -991,6 +991,10 @@ class AppLocalizations {
   String get themeDark => isEnglish ? 'Dark' : '深色';
   String get chatSection => isEnglish ? 'Chat' : '对话';
   String get groupToolsByTurn => isEnglish ? 'Group tools by turn' : '工具按回合聚合';
+  String get smoothStreaming => isEnglish ? 'Smooth Streaming' : '平滑输出';
+  String get smoothStreamingDesc => isEnglish
+      ? 'Smooth typewriter output with adaptive speed during backlog'
+      : '逐字平滑输出，积压时自适应加速';
   String get composerTwoPane => isEnglish ? 'Two-pane input bar' : '两段式输入栏';
   String get composerTwoPaneDesc => isEnglish
       ? 'Multi-line text area with a separate tool row below'

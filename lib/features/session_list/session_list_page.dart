@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
+import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -65,6 +67,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
 
+  // FAB 悬浮加号长按工作区滑选状态与弹层
+  OverlayEntry? _fabWorkspaceOverlayEntry;
+  Timer? _fabLongPressTimer;
+  int? _hoveredWorkspaceIndex;
+  List<WorkspaceRoot> _fabRankedWorkspaces = const [];
+  bool _fabMenuOpen = false;
+  bool _suppressNextTap = false;
+  final GlobalKey _fabKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +84,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   @override
   void dispose() {
+    _fabLongPressTimer?.cancel();
+    _hideFabWorkspaceOverlay();
     _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
@@ -175,14 +188,33 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               Positioned(
                 right: 20,
                 bottom: state?.isSelectionMode == true ? 76 : 24,
-                child: AccessibleButton.filled(
-                  key: const ValueKey('session-list-new'),
-                  label: l10n.newSession,
-                  onPressed: () => unawaited(_onNewSession(context)),
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(56, 56),
-                  borderRadius: BorderRadius.circular(28),
-                  child: const Icon(CupertinoIcons.add, size: 26),
+                child: Listener(
+                  onPointerDown: (event) => _onFabPointerDown(event, state),
+                  onPointerMove: _onFabPointerMove,
+                  onPointerUp: _onFabPointerUp,
+                  onPointerCancel: _onFabPointerCancel,
+                  child: AccessibleButton.filled(
+                    key: const ValueKey('session-list-new'),
+                    label: l10n.newSession,
+                    onPressed: () {
+                      if (_suppressNextTap) {
+                        _suppressNextTap = false;
+                        return;
+                      }
+                      unawaited(_onNewSession(context));
+                    },
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(56, 56),
+                    borderRadius: BorderRadius.circular(28),
+                    child: SizedBox(
+                      key: _fabKey,
+                      width: 56,
+                      height: 56,
+                      child: const Center(
+                        child: Icon(CupertinoIcons.add, size: 26),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -661,13 +693,188 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     });
   }
 
-  Future<void> _onNewSession(BuildContext context) async {
+  Future<void> _onNewSession(BuildContext context, {String? workspace}) async {
     final controller = ref.read(sessionListControllerProvider.notifier);
-    final id = await controller.createSession();
+    final id = await controller.createSession(workspace: workspace);
     if (!context.mounted) return;
     if (id != null) {
       context.go('/chat/$id');
     }
+  }
+
+  Offset? _getFabCenter() {
+    final renderBox = _fabKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return null;
+    final pos = renderBox.localToGlobal(Offset.zero);
+    return pos + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+  }
+
+  Future<void> _openFabWorkspaceMenu() async {
+    if (!mounted) return;
+    final state = ref.read(sessionListControllerProvider).valueOrNull;
+    if (state?.isSelectionMode == true) return;
+
+    List<WorkspaceRoot> available = const [];
+    try {
+      final api = ref.read(sessionListApiFactoryProvider)(
+        ref.read(apiClientProvider),
+      );
+      available = await api.fetchWorkspaces();
+    } catch (_) {
+      available = const [];
+    }
+
+    if (!mounted) return;
+    final sessions = state?.sessions ?? const [];
+    final ranked = rankWorkspaces(
+      registered: available,
+      sessions: sessions,
+      maxItems: 6,
+    );
+
+    // 空态：GET /api/workspaces 空/失败 → 不弹菜单，松开直接走原 createSession()
+    if (ranked.isEmpty) {
+      _fabRankedWorkspaces = const [];
+      _fabMenuOpen = false;
+      return;
+    }
+
+    _fabRankedWorkspaces = ranked;
+    _fabMenuOpen = true;
+    _hoveredWorkspaceIndex = null;
+
+    unawaited(HapticFeedback.mediumImpact());
+    _showFabWorkspaceOverlay();
+  }
+
+  void _showFabWorkspaceOverlay() {
+    _hideFabWorkspaceOverlay();
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    _fabWorkspaceOverlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        final fabCenter = _getFabCenter() ?? Offset.zero;
+        final brightness =
+            CupertinoTheme.of(context).brightness ?? Brightness.light;
+        return Positioned.fill(
+          child: IgnorePointer(
+            child: _FabWorkspaceArcMenu(
+              key: const ValueKey('fab-workspace-menu'),
+              workspaces: _fabRankedWorkspaces,
+              hoveredIndex: _hoveredWorkspaceIndex,
+              fabCenter: fabCenter,
+              brightness: brightness,
+            ),
+          ),
+        );
+      },
+    );
+    overlayState.insert(_fabWorkspaceOverlayEntry!);
+  }
+
+  void _hideFabWorkspaceOverlay() {
+    _fabWorkspaceOverlayEntry?.remove();
+    _fabWorkspaceOverlayEntry = null;
+  }
+
+  void _onFabPointerDown(PointerDownEvent event, SessionListState? state) {
+    if (state?.isSelectionMode == true) return;
+    _hoveredWorkspaceIndex = null;
+    _fabMenuOpen = false;
+    _suppressNextTap = false;
+    _fabLongPressTimer?.cancel();
+    _fabLongPressTimer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_openFabWorkspaceMenu());
+    });
+  }
+
+  void _onFabPointerMove(PointerMoveEvent event) {
+    if (!_fabMenuOpen || _fabWorkspaceOverlayEntry == null) return;
+    final fabCenter = _getFabCenter();
+    if (fabCenter == null) return;
+
+    final newHovered = _hitTestWorkspace(
+      pointerPos: event.position,
+      fabCenter: fabCenter,
+      workspaces: _fabRankedWorkspaces,
+    );
+
+    if (newHovered != _hoveredWorkspaceIndex) {
+      _hoveredWorkspaceIndex = newHovered;
+      if (newHovered != null) {
+        unawaited(HapticFeedback.selectionClick());
+      }
+      _fabWorkspaceOverlayEntry?.markNeedsBuild();
+    }
+  }
+
+  void _onFabPointerUp(PointerUpEvent event) {
+    _fabLongPressTimer?.cancel();
+    _fabLongPressTimer = null;
+
+    if (_fabMenuOpen) {
+      _suppressNextTap = true;
+      final selected = _hoveredWorkspaceIndex;
+      final workspaces = _fabRankedWorkspaces;
+      _hideFabWorkspaceOverlay();
+      _fabMenuOpen = false;
+
+      if (selected != null && selected >= 0 && selected < workspaces.length) {
+        final target = workspaces[selected];
+        unawaited(HapticFeedback.lightImpact());
+        unawaited(_onNewSession(context, workspace: target.path));
+      } else {
+        unawaited(HapticFeedback.heavyImpact());
+      }
+    }
+  }
+
+  void _onFabPointerCancel(PointerCancelEvent event) {
+    _fabLongPressTimer?.cancel();
+    _fabLongPressTimer = null;
+    if (_fabMenuOpen) {
+      _hideFabWorkspaceOverlay();
+      _fabMenuOpen = false;
+    }
+  }
+
+  int? _hitTestWorkspace({
+    required Offset pointerPos,
+    required Offset fabCenter,
+    required List<WorkspaceRoot> workspaces,
+    double radius = 100.0,
+  }) {
+    final d = (pointerPos - fabCenter).distance;
+    if (d < 36.0 || d > 165.0) return null;
+
+    final n = workspaces.length;
+    if (n == 0) return null;
+
+    int? bestIndex;
+    double minDistance = double.infinity;
+
+    for (var i = 0; i < n; i++) {
+      final double angle;
+      if (n == 1) {
+        angle = -135.0;
+      } else {
+        const startAngle = -195.0;
+        const endAngle = -75.0;
+        angle = startAngle + i * (endAngle - startAngle) / (n - 1);
+      }
+      final rad = angle * pi / 180.0;
+      final itemCenter =
+          fabCenter + Offset(radius * cos(rad), radius * sin(rad));
+      final dist = (pointerPos - itemCenter).distance;
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestIndex = i;
+      }
+    }
+
+    if (minDistance <= 48.0) {
+      return bestIndex;
+    }
+    return null;
   }
 
   void _openSession(BuildContext context, SessionSummary session) {
@@ -976,7 +1183,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
         title: Text(l10n.actionFailed),
-        content: Text(message),
+        content: Text(
+          message,
+          style: TextStyle(color: statusRedText.resolveFrom(context)),
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
@@ -1626,3 +1836,195 @@ class _SheetOptionRow extends StatelessWidget {
     );
   }
 }
+
+/// FAB 悬浮加号长按滑选工作区弧形菜单。
+///
+/// 视觉与交互：
+/// - 向左上 135° 弧形扇出（半径 ~100px），最多展示 6 个按使用频率排序的工作区；
+/// - 毛玻璃背景 + 阴影；
+/// - 选中项放大高亮（Hermex 蓝底 + 浮动名称 badge）；未选中项显示毛玻璃圆底 + 小副标。
+class _FabWorkspaceArcMenu extends StatelessWidget {
+  const _FabWorkspaceArcMenu({
+    super.key,
+    required this.workspaces,
+    required this.hoveredIndex,
+    required this.fabCenter,
+    required this.brightness,
+  });
+
+  final List<WorkspaceRoot> workspaces;
+  final int? hoveredIndex;
+  final Offset fabCenter;
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = brightness == Brightness.dark;
+    final n = workspaces.length;
+    const double radius = 100.0;
+
+    return Stack(
+      children: [
+        for (var i = 0; i < n; i++) ..._buildItem(i, n, radius, isDark),
+      ],
+    );
+  }
+
+  List<Widget> _buildItem(
+    int index,
+    int total,
+    double radius,
+    bool isDark,
+  ) {
+    final workspace = workspaces[index];
+    final isHovered = hoveredIndex == index;
+    final displayName = _workspaceDisplayName(workspace);
+
+    final double angle;
+    if (total == 1) {
+      angle = -135.0;
+    } else {
+      const startAngle = -195.0;
+      const endAngle = -75.0;
+      angle = startAngle + index * (endAngle - startAngle) / (total - 1);
+    }
+    final rad = angle * pi / 180.0;
+    final cx = fabCenter.dx + radius * cos(rad);
+    final cy = fabCenter.dy + radius * sin(rad);
+
+    return [
+      // 气泡按钮
+      Positioned(
+        left: cx - 24,
+        top: cy - 24,
+        width: 48,
+        height: 48,
+        child: AnimatedScale(
+          scale: isHovered ? 1.18 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            key: ValueKey('fab-workspace-item-${workspace.path}'),
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isHovered
+                  ? const Color(0xFF007AFF)
+                  : (isDark
+                      ? const Color(0xCC2C2C2E)
+                      : const Color(0xEEFFFFFF)),
+              border: Border.all(
+                color: isHovered
+                    ? CupertinoColors.white.withValues(alpha: 0.8)
+                    : (isDark
+                        ? const Color(0x33FFFFFF)
+                        : const Color(0x1F000000)),
+                width: isHovered ? 1.5 : 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isHovered
+                      ? const Color(0x55007AFF)
+                      : const Color(0x1F000000),
+                  blurRadius: isHovered ? 12 : 6,
+                  spreadRadius: isHovered ? 1 : 0,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Icon(
+                isHovered
+                    ? CupertinoIcons.folder_fill
+                    : CupertinoIcons.folder,
+                size: 22,
+                color: isHovered
+                    ? CupertinoColors.white
+                    : (isDark
+                        ? CupertinoColors.white
+                        : CupertinoColors.black),
+              ),
+            ),
+          ),
+        ),
+      ),
+      // 选中时浮动完整标题 badge，未选中时展示小副标
+      if (isHovered)
+        Positioned(
+          left: cx - 60,
+          top: cy - 50,
+          width: 120,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xEE1C1C1E)
+                    : const Color(0xEE000000),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0x33FFFFFF),
+                  width: 0.5,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.white,
+                ),
+              ),
+            ),
+          ),
+        )
+      else
+        Positioned(
+          left: cx - 36,
+          top: cy + 26,
+          width: 72,
+          child: Center(
+            child: Text(
+              displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: isDark
+                    ? const Color(0xCCFFFFFF)
+                    : const Color(0x99000000),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  static String _workspaceDisplayName(WorkspaceRoot workspace) {
+    if (workspace.name != null && workspace.name!.trim().isNotEmpty) {
+      return workspace.name!.trim();
+    }
+    final path = workspace.path;
+    if (path == null || path.isEmpty) return '';
+    final normalized = path.replaceAll('\\', '/');
+    final trimmed = normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
+    final idx = trimmed.lastIndexOf('/');
+    if (idx < 0 || idx == trimmed.length - 1) return trimmed;
+    return trimmed.substring(idx + 1);
+  }
+}
+

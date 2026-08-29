@@ -21,6 +21,7 @@ import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 import '../notifications/notification_providers.dart';
 import '../session_list/session_list_providers.dart';
+import '../settings/smooth_streaming_settings.dart';
 import '../settings/tool_group_settings.dart';
 import 'chat_diff_merge.dart';
 import 'chat_models.dart';
@@ -115,6 +116,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   bool get _coalesceTools => ref.read(toolGroupCoalesceProvider);
 
+  bool get _smoothStreaming => ref.read(smoothStreamingProvider);
+
   List<PersistedToolCall>? _lastPersistedToolCalls;
 
   double _nowSeconds() => _now().millisecondsSinceEpoch / 1000;
@@ -140,6 +143,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     ref.listen(toolGroupCoalesceProvider, (prev, next) {
       if (prev != next) {
         _recomputeToolGroups(next);
+      }
+    });
+    ref.listen(smoothStreamingProvider, (prev, next) {
+      if (prev != next && !next) {
+        _flushPendingRevealToFullText();
       }
     });
     if (sessionId.isNotEmpty) {
@@ -1051,7 +1059,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (_disposed || gen != _generation) return false;
       if (response.accepted == true) {
         _markProgress();
-        state = state.copyWith(phase: ChatPhase.steered, lastSteerHint: text);
+        state = state.copyWith(
+          phase: ChatPhase.steered,
+          steerHints: [...state.steerHints, text],
+        );
         return true;
       }
       _queueSteerFailure(text);
@@ -1351,8 +1362,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final text = _revealQueue.join() + state.pendingAssistantTokenChunks.join();
     _revealQueue.clear();
     _revealQueueStart = null;
+    state = state.copyWith(
+      pendingAssistantTokenChunks: const [],
+      isRevealQueueEmpty: true,
+    );
     if (text.isNotEmpty) {
-      state = state.copyWith(pendingAssistantTokenChunks: const []);
       _appendToStreamingMessage(text);
     }
   }
@@ -1369,22 +1383,40 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final chunks = state.pendingAssistantTokenChunks;
     if (chunks.isNotEmpty) {
       final text = chunks.join();
-      state = state.copyWith(pendingAssistantTokenChunks: const []);
-      final units = splitIntoWordUnits(text);
-      _revealQueue.addAll(units);
-      if (_revealQueue.length > maxRevealQueueUnits) {
-        // 修复②队列硬上限：积压超过阈值直接落全文（一次铺完不再逐词），
-        // 防止后台/锁屏期间无上限积压导致解锁后爆吐 + 卡死。
-        final overflow = _revealQueue.join();
-        _revealQueue.clear();
-        _revealQueueStart = null;
-        if (overflow.isNotEmpty) {
-          _appendToStreamingMessage(overflow);
+      if (!_smoothStreaming) {
+        state = state.copyWith(
+          pendingAssistantTokenChunks: const [],
+          isRevealQueueEmpty: true,
+        );
+        if (text.isNotEmpty) {
+          _appendToStreamingMessage(text);
           _markProgress();
         }
       } else {
-        _revealQueueStart ??= _now();
-        _startRevealTimerIfNeeded();
+        final units = splitIntoWordUnits(text);
+        _revealQueue.addAll(units);
+        if (_revealQueue.length > maxRevealQueueUnits) {
+          // 修复②队列硬上限：积压超过阈值直接落全文（一次铺完不再逐词），
+          // 防止后台/锁屏期间无上限积压导致解锁后爆吐 + 卡死。
+          final overflow = _revealQueue.join();
+          _revealQueue.clear();
+          _revealQueueStart = null;
+          state = state.copyWith(
+            pendingAssistantTokenChunks: const [],
+            isRevealQueueEmpty: true,
+          );
+          if (overflow.isNotEmpty) {
+            _appendToStreamingMessage(overflow);
+            _markProgress();
+          }
+        } else {
+          _revealQueueStart ??= _now();
+          state = state.copyWith(
+            pendingAssistantTokenChunks: const [],
+            isRevealQueueEmpty: _revealQueue.isEmpty,
+          );
+          _startRevealTimerIfNeeded();
+        }
       }
     }
     // 同一 tick 内 token 先、reasoning 后。
@@ -1397,20 +1429,38 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer = Timer.periodic(revealInterval, (_) => _drainReveal());
   }
 
+  /// 根据积压量自适应每 tick reveal 词单元数（探针：tick count 与 backlog=_revealQueue.length 正相关）。
+  @visibleForTesting
+  static int adaptiveWordUnitsPerTick(int backlog) {
+    if (backlog <= 0) return 0;
+    if (backlog < 5) return backlog;
+    if (backlog <= 8) return 5;
+    // backlog >= 9 时平滑递增，积压越多消耗越快，上限 32
+    return (5 + (backlog - 8) ~/ 12).clamp(5, 32);
+  }
+
   void _drainReveal() {
     if (_appPaused) return; // 后台/锁屏暂停逐词消费（resumed 统一铺全文）
+    if (!_smoothStreaming) {
+      _flushPendingRevealToFullText();
+      return;
+    }
     if (_revealQueue.isEmpty) {
       _revealTimer?.cancel();
       _revealTimer = null;
       _revealQueueStart = null;
+      if (!state.isRevealQueueEmpty) {
+        state = state.copyWith(isRevealQueueEmpty: true);
+      }
       return;
     }
-    final count = _revealQueue.length < maxWordUnitsPerTick
-        ? _revealQueue.length
-        : maxWordUnitsPerTick;
-    final units = _revealQueue.sublist(0, count);
-    _revealQueue.removeRange(0, count);
-    _appendToStreamingMessage(units.join());
+    final count = adaptiveWordUnitsPerTick(_revealQueue.length);
+    final effectiveCount = count < _revealQueue.length
+        ? count
+        : _revealQueue.length;
+    final units = _revealQueue.sublist(0, effectiveCount);
+    _revealQueue.removeRange(0, effectiveCount);
+    _appendToStreamingMessage(units.join(), isRevealQueueEmpty: _revealQueue.isEmpty);
     _markProgress();
     // 最大滞后 1s：积压超过时限一次性排空。
     final start = _revealQueueStart;
@@ -1420,7 +1470,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final rest = _revealQueue.join();
       _revealQueue.clear();
       _revealQueueStart = null;
-      _appendToStreamingMessage(rest);
+      _appendToStreamingMessage(rest, isRevealQueueEmpty: true);
       _markProgress();
     }
   }
@@ -1435,8 +1485,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealQueue.clear();
     _revealQueueStart = null;
     if (text.isNotEmpty) {
-      state = state.copyWith(pendingAssistantTokenChunks: const []);
+      state = state.copyWith(
+        pendingAssistantTokenChunks: const [],
+        isRevealQueueEmpty: true,
+      );
       _appendToStreamingMessage(text);
+    } else {
+      state = state.copyWith(
+        isRevealQueueEmpty: true,
+      );
     }
     _flushReasoningChunks();
   }
@@ -1526,7 +1583,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   /// 以 messageId == streamingAssistantMessageId 定位，原地替换（content 追加）。
-  void _appendToStreamingMessage(String text) {
+  void _appendToStreamingMessage(String text, {bool? isRevealQueueEmpty}) {
     if (text.isEmpty) return;
     _ensureStreamingAssistantMessage();
     final id = state.stream.streamingAssistantMessageId!;
@@ -1541,6 +1598,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(
       messages: next,
       streamingScrollTrigger: state.streamingScrollTrigger + 1,
+      isRevealQueueEmpty: isRevealQueueEmpty ?? state.isRevealQueueEmpty,
     );
   }
 
@@ -2241,7 +2299,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       liveToolCalls: const [],
       liveReasoningText: '',
       liveTimelinePoints: const [],
-      clearLastSteerHint: true,
+      clearSteerHints: true,
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
         clearLastEventId: true,
@@ -2385,7 +2443,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       phase: endPhase,
       messages: messages,
       pinnedLocalNotices: const [],
-      clearLastSteerHint: true,
+      clearSteerHints: true,
       liveTimelinePoints: const [],
       pendingAction: const ChatPendingActionState(),
       stream: state.stream.copyWith(
@@ -2951,9 +3009,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     state = state.copyWith(clearNoticeMessage: true);
   }
 
-  /// 手动关闭 steer 提示（常驻 toast 的 x 按钮）。
-  void clearSteerHint() {
-    state = state.copyWith(clearLastSteerHint: true);
+  ///
+  /// 若指定 [index]，仅移除该位置的单条 steer 提示；若未指定（或越界），清空全部 steer 提示。
+  void clearSteerHint({int? index}) {
+    if (index == null) {
+      state = state.copyWith(clearSteerHints: true);
+      return;
+    }
+    if (index < 0 || index >= state.steerHints.length) return;
+    final updated = List<String>.from(state.steerHints)..removeAt(index);
+    state = state.copyWith(steerHints: updated);
   }
 
   /// 清除重试回填预填值（输入栏已消费后调用）。

@@ -6,15 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_sessions.dart';
+import '../../core/api/api_client_workspace.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/custom_header.dart';
 import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
+import '../../core/models/workspace.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../settings/cron_visibility_settings.dart';
 
-/// 会话列表所需的最小服务器 API 面（sessions 域 18 个端点中的 9 个）。
+/// 会话列表所需的最小服务器 API 面（sessions 域 18 个端点中的 9 个 + workspace 域）。
 ///
 /// 生产实现 [SessionListApiClient] 包 [ApiClient]（模型在客户端解码）；
 /// 测试注入纯 Dart fake，彻底绕开网络/事件循环（对齐 onboarding 的
@@ -29,8 +31,11 @@ abstract interface class SessionListApi {
   /// GET /api/sessions/search?q=…（标题 + 内容搜索）。
   Future<SessionSearchResponse> searchSessions({required String query});
 
-  /// POST /api/session/new → 新会话摘要。
-  Future<SessionSummary> createSession();
+  /// POST /api/session/new {workspace?} → 新会话摘要。
+  Future<SessionSummary> createSession({String? workspace});
+
+  /// GET /api/workspaces → 全部已注册工作区。
+  Future<List<WorkspaceRoot>> fetchWorkspaces();
 
   /// POST /api/session/pin {session_id, pinned}。
   Future<SessionMutationResponse> pinSession({
@@ -80,15 +85,21 @@ class SessionListApiClient implements SessionListApi {
   }
 
   @override
-  Future<SessionSummary> createSession() async {
+  Future<SessionSummary> createSession({String? workspace}) async {
     // ⚠️ 2026-08：_client.createSession() 已返回 typed SessionResponse，
     // 这里直接取 session 字段；曾把 raw 经 _asMap 二次解析（raw 非 Map →
     // 空 map）导致下方容错链全部落空，恒返回空 SessionSummary。
-    final response = await _client.createSession();
+    final response = await _client.createSession(workspace: workspace);
     final detail = response.session;
     return detail == null
         ? const SessionSummary()
         : SessionSummary.fromDetail(detail);
+  }
+
+  @override
+  Future<List<WorkspaceRoot>> fetchWorkspaces() async {
+    final response = await _client.workspaces();
+    return response.workspaces ?? const [];
   }
 
   @override
@@ -1005,9 +1016,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }
 
   /// 新建会话（POST /api/session/new）；成功返回新会话 ID（UI 跳转 /chat/:id）。
-  Future<String?> createSession() async {
+  Future<String?> createSession({String? workspace}) async {
     try {
-      final session = await _api.createSession();
+      final session = await _api.createSession(workspace: workspace);
       final id = session.sessionId;
       if (id == null || id.isEmpty) {
         await _setActionError('服务器未返回会话 ID');
@@ -1329,3 +1340,56 @@ double _sortTimestamp(SessionSummary session) => _timestamp(session) ?? 0;
 
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// 工作区最近使用频率排序与截断。
+///
+/// 规则：
+/// 1. 剔除 path 为空串或 null 的项；
+/// 2. 统计各工作区在 [sessions] 中的使用次数（frequency）；
+/// 3. 获取各工作区在 [sessions] 中最近使用的时间戳（recency：max of lastMessageAt / updatedAt / createdAt）；
+/// 4. 排序：使用次数多的排前；次数相同时最近使用时间新的排前；均相同则保持在 [registered] 中的原始顺序；
+/// 5. 取前 [maxItems] 个（默认 6）。
+List<WorkspaceRoot> rankWorkspaces({
+  required List<WorkspaceRoot> registered,
+  required List<SessionSummary> sessions,
+  int maxItems = 6,
+}) {
+  final valid = registered
+      .where((w) => w.path != null && w.path!.trim().isNotEmpty)
+      .toList();
+  if (valid.isEmpty) return const [];
+
+  final freqMap = <String, int>{};
+  final recencyMap = <String, double>{};
+
+  for (final s in sessions) {
+    final ws = s.workspace?.trim();
+    if (ws == null || ws.isEmpty) continue;
+    freqMap[ws] = (freqMap[ws] ?? 0) + 1;
+    final time = s.lastMessageAt ?? s.updatedAt ?? s.createdAt ?? 0.0;
+    final existing = recencyMap[ws] ?? 0.0;
+    if (time > existing) {
+      recencyMap[ws] = time;
+    }
+  }
+
+  final ranked = List<WorkspaceRoot>.from(valid);
+  ranked.sort((a, b) {
+    final pathA = a.path!.trim();
+    final pathB = b.path!.trim();
+    final freqA = freqMap[pathA] ?? 0;
+    final freqB = freqMap[pathB] ?? 0;
+    if (freqA != freqB) {
+      return freqB.compareTo(freqA);
+    }
+    final recA = recencyMap[pathA] ?? 0.0;
+    final recB = recencyMap[pathB] ?? 0.0;
+    if (recA != recB) {
+      return recB.compareTo(recA);
+    }
+    return 0;
+  });
+
+  return ranked.take(maxItems).toList();
+}
+

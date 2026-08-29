@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 /// 可配置的 [SessionListApi] fake（测试注入，彻底绕开网络）。
@@ -39,6 +40,17 @@ class FakeSessionListApi implements SessionListApi {
     sessionId: 'new-1',
     title: '新会话',
   );
+
+  /// 最近一次 `createSession` 调用的 workspace 参数。
+  String? lastCreatedWorkspace;
+
+  /// `fetchWorkspaces` 返回的工作区列表。
+  List<WorkspaceRoot> workspaces = const [];
+
+  /// `fetchWorkspaces` 抛出的异常。
+  Object? workspacesError;
+
+  int fetchWorkspacesCount = 0;
 
   /// `branchSession` 返回的结果（sessionId 为空 → 模拟失败）。
   SessionBranchResponse branchResponse = const SessionBranchResponse(
@@ -109,11 +121,29 @@ class FakeSessionListApi implements SessionListApi {
   }
 
   @override
-  Future<SessionSummary> createSession() async {
+  Future<SessionSummary> createSession({String? workspace}) async {
     createCount++;
+    lastCreatedWorkspace = workspace;
     final error = createError;
     if (error != null) throw error;
+    if (workspace != null) {
+      return SessionSummary(
+        sessionId: createdSession.sessionId,
+        title: createdSession.title,
+        workspace: workspace,
+        pinned: createdSession.pinned,
+        lastMessageAt: createdSession.lastMessageAt,
+      );
+    }
     return createdSession;
+  }
+
+  @override
+  Future<List<WorkspaceRoot>> fetchWorkspaces() async {
+    fetchWorkspacesCount++;
+    final error = workspacesError;
+    if (error != null) throw error;
+    return workspaces;
   }
 
   @override

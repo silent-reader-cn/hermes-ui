@@ -8,6 +8,7 @@ import 'package:hermes_ui/core/api/sse_client.dart';
 import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
+import 'package:hermes_ui/features/settings/smooth_streaming_settings.dart';
 import 'package:hermes_ui/features/settings/tool_group_settings.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -133,6 +134,98 @@ void main() {
     });
   });
 
+  group('平滑打字机与积压自适应（smoothStreaming）', () {
+    test('adaptiveWordUnitsPerTick 自适应速率算法：探针断言 tick count 与 backlog 正相关', () {
+      expect(ChatController.adaptiveWordUnitsPerTick(0), 0);
+      expect(ChatController.adaptiveWordUnitsPerTick(2), 2);
+      expect(ChatController.adaptiveWordUnitsPerTick(4), 4);
+      expect(ChatController.adaptiveWordUnitsPerTick(5), 5);
+      expect(ChatController.adaptiveWordUnitsPerTick(6), 5);
+      expect(ChatController.adaptiveWordUnitsPerTick(8), 5);
+      expect(ChatController.adaptiveWordUnitsPerTick(20), 6);
+      expect(ChatController.adaptiveWordUnitsPerTick(44), 8);
+      expect(ChatController.adaptiveWordUnitsPerTick(68), 10);
+      expect(ChatController.adaptiveWordUnitsPerTick(128), 15);
+      expect(ChatController.adaptiveWordUnitsPerTick(200), 21);
+      expect(ChatController.adaptiveWordUnitsPerTick(500), 32);
+
+      // 单调递增检验（正相关）
+      int lastCount = 0;
+      for (final b in [1, 3, 5, 10, 25, 50, 100, 200, 400]) {
+        final c = ChatController.adaptiveWordUnitsPerTick(b);
+        expect(c, greaterThanOrEqualTo(lastCount), reason: 'backlog=$b 时 count=$c 应 >= $lastCount');
+        lastCount = c;
+      }
+    });
+
+    test('批量注入 2k 字（未超 2000 单元）→ 逐 tick 自适应平滑吐出，isRevealQueueEmpty 正确翻转', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // 注入 50 个词单元（每词一个 'word '）
+        final text = 'word ' * 50;
+        api.emit(TokenSseEvent(text));
+
+        // 16ms 合并后进入 reveal 队列
+        async.elapse(const Duration(milliseconds: 16));
+        var state = container.read(chatControllerProvider(''));
+        expect(state.isRevealQueueEmpty, isFalse);
+
+        final streamId = state.stream.streamingAssistantMessageId;
+
+        // 48ms tick 1: backlog = 50 -> count = 5 + (50-8)~/12 = 8 词单元
+        async.elapse(const Duration(milliseconds: 48));
+        state = container.read(chatControllerProvider(''));
+        final contentAfterTick1 = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        expect(contentAfterTick1, 'word ' * 8);
+        expect(state.isRevealQueueEmpty, isFalse);
+
+        // 48ms tick 2: backlog = 42 -> count = 5 + (42-8)~/12 = 7 词单元
+        async.elapse(const Duration(milliseconds: 48));
+        state = container.read(chatControllerProvider(''));
+        final contentAfterTick2 = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        expect(contentAfterTick2, 'word ' * 15);
+        expect(state.isRevealQueueEmpty, isFalse);
+
+        // 推进直至队列排空
+        async.elapse(const Duration(milliseconds: 500));
+        state = container.read(chatControllerProvider(''));
+        final finalContent = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        expect(finalContent, text);
+        expect(state.isRevealQueueEmpty, isTrue);
+      });
+    });
+
+    test('smoothStreaming 关闭时：16ms merge 直接落全文，不经过 reveal 延迟', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        // 关闭平滑输出
+        unawaited(container.read(smoothStreamingProvider.notifier).setSmoothStreaming(false));
+        async.flushMicrotasks();
+
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        api.emit(const TokenSseEvent('Hello World from fast stream! '));
+        var state = container.read(chatControllerProvider(''));
+        expect(state.pendingAssistantTokenChunks, ['Hello World from fast stream! ']);
+
+        // 16ms 合并后直接落地全文，无 48ms reveal 队列延迟
+        async.elapse(const Duration(milliseconds: 16));
+        state = container.read(chatControllerProvider(''));
+        final streamId = state.stream.streamingAssistantMessageId;
+        final content = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        expect(content, 'Hello World from fast stream! ');
+        expect(state.isRevealQueueEmpty, isTrue);
+      });
+    });
+  });
   group('token 三段式缓冲（§3.1）', () {
     test('16ms 合并 + 48ms 词级 reveal，收尾全量 flush', () {
       fakeAsync((async) {
@@ -876,6 +969,8 @@ void main() {
         expect(api.steerCalls, 1);
         var state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.steered);
+        expect(state.steerHints, ['更详细一点']);
+        expect(state.lastSteerHint, '更详细一点');
         // steer 不追加 user 气泡（仅乐观 user + 空流式气泡）
         expect(state.messages, hasLength(2));
 
@@ -883,6 +978,56 @@ void main() {
         async.elapse(const Duration(milliseconds: 64));
         state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.streaming);
+      });
+    });
+
+    test('连续 steer 多次 → steerHints 列表追加堆叠，支持单条与全量关闭，流结束全清', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // 连续 steer 3 次
+        unawaited(controller.send('提示一'));
+        async.flushMicrotasks();
+        unawaited(controller.send('提示二'));
+        async.flushMicrotasks();
+        unawaited(controller.send('提示三'));
+        async.flushMicrotasks();
+
+        expect(api.steerCalls, 3);
+        var state = container.read(chatControllerProvider(''));
+        expect(state.steerHints, ['提示一', '提示二', '提示三']);
+        expect(state.lastSteerHint, '提示三');
+
+        // 单条移除 index 1（提示二）
+        controller.clearSteerHint(index: 1);
+        state = container.read(chatControllerProvider(''));
+        expect(state.steerHints, ['提示一', '提示三']);
+
+        // 越界 index 不崩溃不影响
+        controller.clearSteerHint(index: 99);
+        state = container.read(chatControllerProvider(''));
+        expect(state.steerHints, ['提示一', '提示三']);
+
+        // 全清
+        controller.clearSteerHint();
+        state = container.read(chatControllerProvider(''));
+        expect(state.steerHints, isEmpty);
+        expect(state.lastSteerHint, isNull);
+
+        // 再次 steer 并通过 done 结束流 → steerHints 自动清空
+        unawaited(controller.send('新提示'));
+        async.flushMicrotasks();
+        expect(container.read(chatControllerProvider('')).steerHints, ['新提示']);
+
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': ''})),
+        );
+        async.flushMicrotasks();
+        expect(container.read(chatControllerProvider('')).steerHints, isEmpty);
       });
     });
 

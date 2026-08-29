@@ -236,12 +236,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     .read(chatControllerProvider(widget.sessionId).notifier)
                     .dismissNotice(),
               ),
-            if (state.lastSteerHint?.trim().isNotEmpty == true)
+            for (var i = 0; i < state.steerHints.length; i++)
               _SteerNoticeToast(
-                message: state.lastSteerHint!,
+                key: ValueKey('chat-steer-notice-$i'),
+                index: i,
+                message: state.steerHints[i],
                 onClose: () => ref
                     .read(chatControllerProvider(widget.sessionId).notifier)
-                    .clearSteerHint(),
+                    .clearSteerHint(index: i),
+                onLongPress: () {
+                  ref
+                      .read(chatControllerProvider(widget.sessionId).notifier)
+                      .setNotice(
+                        AppLocalizations.of(context).copiedToClipboardNotice,
+                      );
+                },
               ),
             ChatInputBar(
               sessionId: widget.sessionId,
@@ -912,17 +921,21 @@ class _OfflineCacheBanner extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Container(
       key: const ValueKey('chat-offline-cache-banner'),
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.systemBlue.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
       ),
       child: Row(
         children: [
           const Icon(
             CupertinoIcons.archivebox,
-            size: 16,
+            size: 14,
             color: CupertinoColors.systemBlue,
           ),
           const SizedBox(width: 8),
@@ -932,7 +945,7 @@ class _OfflineCacheBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: CupertinoColors.systemBlue,
               ),
             ),
@@ -955,10 +968,11 @@ class _OfflineCacheBanner extends StatelessWidget {
           AccessibleButton(
             key: const ValueKey('chat-offline-cache-dismiss'),
             label: l10n.dismissOfflineBanner,
+            minimumSize: const Size(0, 0),
             onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
-              size: 16,
+              size: 14,
               color: CupertinoColors.systemGrey,
             ),
           ),
@@ -979,17 +993,21 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: CupertinoColors.systemRed.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.systemRed.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
       ),
       child: Row(
         children: [
           const Icon(
             CupertinoIcons.exclamationmark_circle,
-            size: 16,
+            size: 14,
             color: CupertinoColors.systemRed,
           ),
           const SizedBox(width: 8),
@@ -999,17 +1017,18 @@ class _ErrorBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
           ),
           AccessibleButton(
             label: l10n.dismissError,
+            minimumSize: const Size(0, 0),
             onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
-              size: 16,
+              size: 14,
               color: CupertinoColors.systemRed,
             ),
           ),
@@ -1029,11 +1048,15 @@ class _QueuedBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: CupertinoColors.systemYellow.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.systemYellow.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
       ),
       child: Text(
         l10n.queuedBannerMessage(count),
@@ -1062,17 +1085,21 @@ class _NoticeBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: CupertinoColors.systemGreen.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: CupertinoColors.systemGreen.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
       ),
       child: Row(
         children: [
           const Icon(
             CupertinoIcons.checkmark_circle,
-            size: 16,
+            size: 14,
             color: CupertinoColors.systemGreen,
           ),
           const SizedBox(width: 8),
@@ -1082,17 +1109,18 @@ class _NoticeBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: statusGreenText.resolveFrom(context),
               ),
             ),
           ),
           AccessibleButton(
             label: l10n.dismissNotice,
+            minimumSize: const Size(0, 0),
             onPressed: onDismiss,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
-              size: 16,
+              size: 14,
               color: CupertinoColors.systemGrey,
             ),
           ),
@@ -1106,7 +1134,7 @@ class _NoticeBanner extends StatelessWidget {
 ///
 /// - 2800ms 后自动 [onDismiss]（`Timer` 在 `State` 内持有，`dispose` 取消）。
 /// - 200ms `AnimatedOpacity` 淡入淡出；新 `message` 到达时旧定时被取消（`Key` 以 message 区分，同一时刻仅一条）。
-/// - 距输入栏 8px（`margin bottom 8`），不遮输入框；轻量视觉：白/绿8%轻底 + label 500 + 18px 绿勾、圆角 10 + 细阴影。
+/// - 距输入栏 8px（`margin bottom 8`），不遮输入框；轻量视觉：白/绿8%轻底 + label 500 + 14px 绿勾、圆角 10 + 细阴影。
 /// - 暗色 #2C2C2E/白92%字；与 [_ErrorBanner] 分型：错误横幅（`statusRedText`）仍常驻，仅 toast 自动消失。
 class _TransientNoticeToast extends StatefulWidget {
   const _TransientNoticeToast({
@@ -1176,7 +1204,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
     final l10n = AppLocalizations.of(context);
     final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
     // 要求：白/绿8%轻底（浅色 white + systemGreen 8%）、深色 #2C2C2E
-    // 文字用 label 主色 500、18px 绿勾、圆角10+细阴影
+    // 文字用 label 主色 500、14px 绿勾、圆角10+细阴影
     // 浅色：Color(0xFFF0FAF2) ≈ 白 92% + 绿 8% 轻底效果
     final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0FAF2);
     final textColor = isDark
@@ -1189,7 +1217,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
       child: Container(
         key: const ValueKey('chat-notice-toast'),
         margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
@@ -1215,7 +1243,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
           children: [
             const Icon(
               CupertinoIcons.checkmark_circle_fill,
-              size: 18,
+              size: 14,
               color: CupertinoColors.systemGreen,
             ),
             const SizedBox(width: 8),
@@ -1225,7 +1253,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: textColor,
                 ),
@@ -1234,10 +1262,11 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
             AccessibleButton(
               key: const ValueKey('chat-notice-toast-dismiss'),
               label: l10n.dismissNotice,
+              minimumSize: const Size(0, 0),
               onPressed: _dismissNow,
               child: const Icon(
                 CupertinoIcons.xmark_circle_fill,
-                size: 16,
+                size: 14,
                 color: CupertinoColors.systemGrey,
               ),
             ),
@@ -1250,13 +1279,21 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
 
 /// 常驻 steer 提示（左侧图标用 steer 转向语义，区别于「已复制到剪贴板」的成功勾）。
 ///
-/// 差异：不自动消失；新 steer 直接覆盖文本；无新 steer 则一直显示，
-/// 直到 live 会话结束（finishStream 清 lastSteerHint）或用户手动关闭。
+/// 差异：不自动消失；多条 steer 垂直堆叠；支持长按复制；
+/// 直到 live 会话结束（finishStream 清 steerHints）或用户手动点 × 关闭。
 class _SteerNoticeToast extends StatelessWidget {
-  const _SteerNoticeToast({required this.message, required this.onClose});
+  const _SteerNoticeToast({
+    super.key,
+    required this.message,
+    required this.onClose,
+    this.onLongPress,
+    this.index,
+  });
 
   final String message;
   final VoidCallback onClose;
+  final VoidCallback? onLongPress;
+  final int? index;
 
   @override
   Widget build(BuildContext context) {
@@ -1267,9 +1304,8 @@ class _SteerNoticeToast extends StatelessWidget {
         ? CupertinoColors.white.withValues(alpha: 0.92)
         : CupertinoColors.label.resolveFrom(context);
     return Container(
-      key: const ValueKey('chat-steer-notice'),
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
@@ -1295,29 +1331,39 @@ class _SteerNoticeToast extends StatelessWidget {
         children: [
           const Icon(
             CupertinoIcons.arrow_turn_up_right,
-            size: 18,
+            size: 14,
             color: CupertinoColors.systemGreen,
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              message,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: textColor,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPress: () {
+                unawaited(Clipboard.setData(ClipboardData(text: message)));
+                onLongPress?.call();
+              },
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                ),
               ),
             ),
           ),
           AccessibleButton(
-            key: const ValueKey('chat-steer-notice-close'),
+            key: index != null
+                ? ValueKey('chat-steer-notice-close-$index')
+                : const ValueKey('chat-steer-notice-close'),
             label: l10n.dismissNotice,
+            minimumSize: const Size(0, 0),
             onPressed: onClose,
             child: const Icon(
               CupertinoIcons.xmark_circle_fill,
-              size: 16,
+              size: 14,
               color: CupertinoColors.systemGrey,
             ),
           ),

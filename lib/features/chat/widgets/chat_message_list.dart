@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,6 +56,8 @@ class _SafeMarkdownBody extends StatelessWidget {
     required this.builders,
     required this.imageBuilder,
     this.selectable = true,
+    // ignore: unused_element_parameter
+    this.inlineSyntaxes,
   });
 
   final String data;
@@ -62,6 +65,7 @@ class _SafeMarkdownBody extends StatelessWidget {
   final Map<String, MarkdownElementBuilder> builders;
   final Widget Function(Uri, String?, String?) imageBuilder;
   final bool selectable;
+  final List<md.InlineSyntax>? inlineSyntaxes;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +75,7 @@ class _SafeMarkdownBody extends StatelessWidget {
         selectable: selectable,
         styleSheet: styleSheet,
         builders: builders,
+        inlineSyntaxes: inlineSyntaxes,
         // ignore: deprecated_member_use
         imageBuilder: imageBuilder,
       );
@@ -1219,6 +1224,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
             if (tail == 0) {
               return _StreamingBubble(
+                sessionId: sessionId,
                 message: streaming,
                 toolGroups: streamingTools,
                 hideThinking: hideThinking,
@@ -1243,6 +1249,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
                 return KeyedSubtree(
                   key: liveKey,
                   child: _LiveTimelineItem(
+                    sessionId: sessionId,
                     entry: liveEntry,
                     streamingMessage: streaming,
                     hideThinking: hideThinking,
@@ -1362,26 +1369,53 @@ class _ScrollToBottomButton extends StatelessWidget {
 }
 
 /// 流式气泡（独立渲染层：思考中指示器 + 流式文本 + 实时工具卡片）。
-class _StreamingBubble extends StatelessWidget {
+class _StreamingBubble extends ConsumerWidget {
   const _StreamingBubble({
+    required this.sessionId,
     required this.message,
     required this.toolGroups,
     required this.hideThinking,
   });
 
+  final String sessionId;
   final ChatMessage message;
   final List<ToolCallGroup> toolGroups;
   final bool hideThinking;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasContent = (message.content ?? '').isNotEmpty;
     final isEmpty = !hasContent && toolGroups.isEmpty;
     if (!isEmpty) {
-      return ChatMessageBubble(
-        message: message,
-        toolGroups: toolGroups,
-        hideThinking: hideThinking,
+      final phase = ref.watch(chatPhaseProvider(sessionId));
+      final isRevealQueueEmpty = ref.watch(
+        chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
+      );
+      final pendingTokens = ref.watch(
+        chatControllerProvider(
+          sessionId,
+        ).select((s) => s.pendingAssistantTokenChunks),
+      );
+      final showCursor = phase == ChatPhase.streaming &&
+          isRevealQueueEmpty &&
+          pendingTokens.isEmpty &&
+          hasContent;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ChatMessageBubble(
+            message: message,
+            toolGroups: toolGroups,
+            hideThinking: hideThinking,
+          ),
+          if (showCursor)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              child: _StreamingCursor(),
+            ),
+        ],
       );
     }
     // 空流式气泡 → 思考中指示器。
@@ -1452,14 +1486,19 @@ class _ReconnectingIndicator extends StatelessWidget {
 /// live 时间线条目渲染（think/text/tools 按事件先后穿插的独立列表项）。
 class _LiveTimelineItem extends StatelessWidget {
   const _LiveTimelineItem({
+    required this.sessionId,
     required this.entry,
     required this.streamingMessage,
     required this.hideThinking,
+    // ignore: unused_element_parameter
+    this.isLastText = false,
   });
 
+  final String sessionId;
   final LiveTimelineEntry entry;
   final ChatMessage streamingMessage;
   final bool hideThinking;
+  final bool isLastText;
 
   @override
   Widget build(BuildContext context) {
@@ -1470,8 +1509,10 @@ class _LiveTimelineItem extends StatelessWidget {
         // 为防御（旧数据/异常路径），不渲染任何内容。
         LiveSegmentKind.thinking => const SizedBox.shrink(),
         LiveSegmentKind.text => _LiveTextBlock(
+          sessionId: sessionId,
           slice: entry.textSlice,
           streamingMessage: streamingMessage,
+          isLastText: isLastText,
         ),
         LiveSegmentKind.tools => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -1486,14 +1527,22 @@ class _LiveTimelineItem extends StatelessWidget {
 }
 
 /// 流式文本段（Markdown 渲染，增量解析 try/catch 兜底，镜像历史 assistant 气泡的 content 处理管线）。
-class _LiveTextBlock extends StatelessWidget {
-  const _LiveTextBlock({required this.slice, required this.streamingMessage});
+class _LiveTextBlock extends ConsumerWidget {
+  const _LiveTextBlock({
+    required this.sessionId,
+    required this.slice,
+    required this.streamingMessage,
+    // ignore: unused_element_parameter
+    this.isLastText = false,
+  });
 
+  final String sessionId;
   final String slice;
   final ChatMessage streamingMessage;
+  final bool isLastText;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     SelectedContextParse selected;
     try {
       selected = SelectedContextParser.parse(slice);
@@ -1535,11 +1584,33 @@ class _LiveTextBlock extends StatelessWidget {
         ),
       );
     }
+    if (isLastText) {
+      final phase = ref.watch(chatPhaseProvider(sessionId));
+      final isRevealQueueEmpty = ref.watch(
+        chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
+      );
+      final pendingTokens = ref.watch(
+        chatControllerProvider(
+          sessionId,
+        ).select((s) => s.pendingAssistantTokenChunks),
+      );
+      final hasContent = (streamingMessage.content ?? '').isNotEmpty;
+      final showCursor = phase == ChatPhase.streaming &&
+          isRevealQueueEmpty &&
+          pendingTokens.isEmpty &&
+          hasContent;
+      if (showCursor) {
+        sections.add(const _StreamingCursor());
+      }
+    }
     if (sections.isEmpty) return const SizedBox.shrink();
     final children = <Widget>[];
     for (var i = 0; i < sections.length; i++) {
-      if (i > 0) children.add(const SizedBox(height: kMessageSectionGap));
-      children.add(sections[i]);
+      final section = sections[i];
+      if (i > 0 && section is! _StreamingCursor) {
+        children.add(const SizedBox(height: kMessageSectionGap));
+      }
+      children.add(section);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -1557,6 +1628,104 @@ class _LiveTextBlock extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// 流式打字机闪烁光标（追上积压后闪烁提示，非流式/done 立即消失）。
+class _StreamingCursor extends StatefulWidget {
+  const _StreamingCursor();
+
+  @override
+  State<_StreamingCursor> createState() => _StreamingCursorState();
+}
+
+class _StreamingCursorState extends State<_StreamingCursor> {
+  Timer? _blinkTimer;
+  bool _visible = true;
+  int _blinkCount = 0;
+  static const int _maxBlinks = 12; // 约 6.7 秒后定格常亮，防眩晕并允许测试 pumpAndSettle 收敛
+
+  @override
+  void initState() {
+    super.initState();
+    _startBlinkTimer();
+  }
+
+  void _startBlinkTimer() {
+    _blinkTimer?.cancel();
+    _blinkCount = 0;
+    _visible = true;
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 560), (_) {
+      if (!mounted) return;
+      _blinkCount++;
+      if (_blinkCount >= _maxBlinks) {
+        _blinkTimer?.cancel();
+        _blinkTimer = null;
+        if (!_visible) {
+          setState(() {
+            _visible = true;
+          });
+        }
+        return;
+      }
+      setState(() {
+        _visible = !_visible;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _blinkTimer?.cancel();
+    _blinkTimer = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final color = CupertinoDynamicColor.resolve(
+      CupertinoColors.label,
+      context,
+    ).withValues(alpha: 0.6);
+
+    final cursor = Text(
+      '▎',
+      style: TextStyle(
+        fontSize: 15,
+        height: 1.0,
+        color: color,
+        shadows: [
+          Shadow(
+            color: color.withValues(alpha: 0.25),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+    );
+
+    final content = disableAnimations
+        ? cursor
+        : AnimatedOpacity(
+            opacity: _visible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 560),
+            curve: Curves.easeInOut,
+            child: cursor,
+          );
+
+    return SizedBox(
+      height: 0,
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        maxHeight: 20,
+        child: Padding(
+          key: const ValueKey('streaming-cursor'),
+          padding: const EdgeInsets.only(left: 2),
+          child: content,
+        ),
+      ),
+    );
   }
 }
 
