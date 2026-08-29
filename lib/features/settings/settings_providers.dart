@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_extensions.dart';
@@ -12,8 +13,22 @@ import '../../core/models/extensions.dart';
 import '../../core/models/mcp.dart';
 import '../../core/models/server_catalog.dart';
 
-/// 应用版本号（与 pubspec.yaml `version` 保持同步）。
-const String appVersion = '1.0.0+1';
+/// 版本号平台通道异常/测试环境时的回退值（历史常量，避免空显示）。
+const String appVersionFallback = '1.0.0+1';
+
+/// 应用版本号（动态读取：package_info_plus 从系统取 pubspec `version`
+/// 生成的 versionName + versionCode，如 `0.1.2+4`；平台通道不可用时
+/// 回退 [appVersionFallback]）。
+final appVersionProvider = FutureProvider<String>((ref) async {
+  try {
+    final info = await PackageInfo.fromPlatform();
+    final version = info.version;
+    final build = info.buildNumber;
+    return (build.isEmpty || build == '0') ? version : '$version+$build';
+  } catch (_) {
+    return appVersionFallback;
+  }
+});
 
 /// 设置页所需的最小服务器 API 面。
 ///
@@ -125,8 +140,7 @@ class SettingsApiClient implements SettingsApi {
   Future<ReasoningStatusResponse> reasoning({
     String? model,
     String? provider,
-  }) =>
-      _client.reasoning(model: model, provider: provider);
+  }) => _client.reasoning(model: model, provider: provider);
 
   @override
   Future<ReasoningStatusResponse> saveReasoningEffort(String effort) =>
@@ -149,12 +163,11 @@ class SettingsApiClient implements SettingsApi {
     required String id,
     required String downloadUrl,
     required String sha256,
-  }) =>
-      _client.installExtension(
-        id: id,
-        downloadUrl: downloadUrl,
-        sha256: sha256,
-      );
+  }) => _client.installExtension(
+    id: id,
+    downloadUrl: downloadUrl,
+    sha256: sha256,
+  );
 
   @override
   Future<ExtensionUninstallResponse> uninstallExtension(String id) =>
@@ -164,8 +177,7 @@ class SettingsApiClient implements SettingsApi {
   Future<ExtensionConsentResponse> setExtensionSidecarConsent(
     String id,
     bool approved,
-  ) =>
-      _client.setExtensionSidecarConsent(id, approved);
+  ) => _client.setExtensionSidecarConsent(id, approved);
 
   @override
   Future<McpServersResponse> mcpServers() => _client.mcpServers();
@@ -180,14 +192,13 @@ class SettingsApiClient implements SettingsApi {
     required List<String> args,
     Map<String, String>? env,
     bool enabled = true,
-  }) =>
-      _client.saveMcpServer(
-        name,
-        command: command,
-        args: args,
-        env: env,
-        enabled: enabled,
-      );
+  }) => _client.saveMcpServer(
+    name,
+    command: command,
+    args: args,
+    env: env,
+    enabled: enabled,
+  );
 
   @override
   Future<McpServerToggleResponse> toggleMcpServer(String name, bool enabled) =>
@@ -207,13 +218,12 @@ class SettingsApiClient implements SettingsApi {
     required String provider,
     required String model,
     Map<String, dynamic>? advanced,
-  }) =>
-      _client.setAuxiliaryModel(
-        task: task,
-        provider: provider,
-        model: model,
-        advanced: advanced,
-      );
+  }) => _client.setAuxiliaryModel(
+    task: task,
+    provider: provider,
+    model: model,
+    advanced: advanced,
+  );
 }
 
 /// 构建 [SettingsApi] 的工厂（测试可 override 注入 fake）。
@@ -294,10 +304,12 @@ class SettingsState {
     return SettingsState(
       modelGroups: modelGroups ?? this.modelGroups,
       defaultModel: defaultModel != null ? defaultModel() : this.defaultModel,
-      activeProvider:
-          activeProvider != null ? activeProvider() : this.activeProvider,
-      reasoningEffort:
-          reasoningEffort != null ? reasoningEffort() : this.reasoningEffort,
+      activeProvider: activeProvider != null
+          ? activeProvider()
+          : this.activeProvider,
+      reasoningEffort: reasoningEffort != null
+          ? reasoningEffort()
+          : this.reasoningEffort,
       supportedEfforts: supportedEfforts ?? this.supportedEfforts,
       supportsReasoningEffort:
           supportsReasoningEffort ?? this.supportsReasoningEffort,
@@ -318,8 +330,8 @@ class SettingsState {
 /// 设置项）；保存失败不改变主体状态，只设置 [SettingsState.actionError]。
 final settingsControllerProvider =
     AsyncNotifierProvider<SettingsController, SettingsState>(
-  SettingsController.new,
-);
+      SettingsController.new,
+    );
 
 class SettingsController extends AsyncNotifier<SettingsState> {
   SettingsApi get _api =>
@@ -392,13 +404,13 @@ class SettingsController extends AsyncNotifier<SettingsState> {
       final saved = response.effectiveEffort;
       state = AsyncData(
         current.copyWith(
-          reasoningEffort: () => saved == null || saved.isEmpty
-              ? effort
-              : saved,
+          reasoningEffort: () =>
+              saved == null || saved.isEmpty ? effort : saved,
           supportedEfforts: response.normalizedSupportedEfforts.isEmpty
               ? current.supportedEfforts
               : response.normalizedSupportedEfforts,
-          supportsReasoningEffort: response.supportsReasoningEffort ??
+          supportsReasoningEffort:
+              response.supportsReasoningEffort ??
               current.supportsReasoningEffort,
         ),
       );
@@ -472,8 +484,8 @@ class ExtensionsState {
 /// 扩展控制器 Provider。
 final extensionsControllerProvider =
     AsyncNotifierProvider<ExtensionsController, ExtensionsState>(
-  ExtensionsController.new,
-);
+      ExtensionsController.new,
+    );
 
 class ExtensionsController extends AsyncNotifier<ExtensionsState> {
   SettingsApi get _api =>
@@ -626,8 +638,7 @@ class McpState {
 }
 
 /// MCP 控制器 Provider。
-final mcpControllerProvider =
-    AsyncNotifierProvider<McpController, McpState>(
+final mcpControllerProvider = AsyncNotifierProvider<McpController, McpState>(
   McpController.new,
 );
 
@@ -646,10 +657,7 @@ class McpController extends AsyncNotifier<McpState> {
   Future<McpState> _load(SettingsApi api) async {
     final serversResponse = await api.mcpServers();
     final tools = await _tryLoadTools(api);
-    return McpState(
-      servers: serversResponse.servers,
-      tools: tools ?? const [],
-    );
+    return McpState(servers: serversResponse.servers, tools: tools ?? const []);
   }
 
   Future<List<McpTool>?> _tryLoadTools(SettingsApi api) async {
@@ -773,8 +781,8 @@ class AuxiliaryModelsState {
 /// 辅助模型控制器 Provider。
 final auxiliaryModelsControllerProvider =
     AsyncNotifierProvider<AuxiliaryModelsController, AuxiliaryModelsState>(
-  AuxiliaryModelsController.new,
-);
+      AuxiliaryModelsController.new,
+    );
 
 class AuxiliaryModelsController extends AsyncNotifier<AuxiliaryModelsState> {
   SettingsApi get _api =>
@@ -790,10 +798,7 @@ class AuxiliaryModelsController extends AsyncNotifier<AuxiliaryModelsState> {
 
   Future<AuxiliaryModelsState> _load(SettingsApi api) async {
     final response = await api.auxiliaryModels();
-    return AuxiliaryModelsState(
-      tasks: response.tasks,
-      main: response.main,
-    );
+    return AuxiliaryModelsState(tasks: response.tasks, main: response.main);
   }
 
   /// 刷新辅助模型配置。
@@ -864,8 +869,7 @@ typedef ServerEditorApiClientFactory = ApiClient Function(
 
 final serverEditorApiClientFactoryProvider =
     Provider<ServerEditorApiClientFactory>(
-  (ref) => (baseUrl, headers) =>
-      ApiClient(baseUrl: baseUrl, initialHeaders: headers),
-);
-
-
+      (ref) =>
+          (baseUrl, headers) =>
+              ApiClient(baseUrl: baseUrl, initialHeaders: headers),
+    );

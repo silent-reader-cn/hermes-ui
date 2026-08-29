@@ -267,9 +267,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const AuxiliaryModelsPage(),
-            ),
+            HermesPageRoute<void>(builder: (_) => const AuxiliaryModelsPage()),
           ),
         ),
         CupertinoListTile(
@@ -280,8 +278,9 @@ class _AdvancedSettingsSection extends StatelessWidget {
             size: 18,
             color: CupertinoColors.systemGrey,
           ),
-          onTap: () => Navigator.of(context)
-              .push(HermesPageRoute<void>(builder: (_) => const McpPage())),
+          onTap: () =>
+              Navigator.of(context)
+                  .push(HermesPageRoute<void>(builder: (_) => const McpPage())),
         ),
         CupertinoListTile(
           key: const ValueKey('settings-entry-extensions'),
@@ -291,9 +290,9 @@ class _AdvancedSettingsSection extends StatelessWidget {
             size: 18,
             color: CupertinoColors.systemGrey,
           ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(builder: (_) => const ExtensionsPage()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(HermesPageRoute<void>(builder: (_) => const ExtensionsPage())),
         ),
         CupertinoListTile(
           key: const ValueKey('settings-entry-session-list-entries'),
@@ -332,9 +331,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const DesktopSettingsPage(),
-            ),
+            HermesPageRoute<void>(builder: (_) => const DesktopSettingsPage()),
           ),
         ),
         CupertinoListTile(
@@ -346,9 +343,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
             color: CupertinoColors.systemGrey,
           ),
           onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const DiagnosticsPage(),
-            ),
+            HermesPageRoute<void>(builder: (_) => const DiagnosticsPage()),
           ),
         ),
       ],
@@ -1145,12 +1140,15 @@ class _PopBackButton extends StatelessWidget {
 }
 
 /// 关于分组：应用名 + 版本号。
-class _AboutSection extends StatelessWidget {
+class _AboutSection extends ConsumerWidget {
   const _AboutSection();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    // 动态版本号：平台通道就绪后显示 pubspec version（如 0.1.2+4），
+    // 未就绪/异常回退常量（settings_providers.dart appVersionProvider）。
+    final version = ref.watch(appVersionProvider).value ?? appVersionFallback;
     return CupertinoListSection(
       header: Text(l10n.aboutSection),
       children: [
@@ -1161,7 +1159,7 @@ class _AboutSection extends StatelessWidget {
         CupertinoListTile(
           title: Text(l10n.version),
           trailing: Text(
-            appVersion,
+            version,
             style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
         ),
