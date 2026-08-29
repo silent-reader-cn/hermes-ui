@@ -1,15 +1,17 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/widgets/adaptive_popover.dart';
+import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_server_panels.dart';
 import '../../../core/connections/connection_providers.dart';
-import '../../../features/settings/perf_monitor_settings.dart';
-import '../../../features/settings/composer_settings.dart';
-import '../../../l10n/app_localizations.dart';
 import '../../../core/models/system_health.dart';
+import '../../../features/settings/composer_settings.dart';
+import '../../../features/settings/perf_monitor_settings.dart';
+import '../../../l10n/app_localizations.dart';
 
 // ---------------------------------------------------------------------------
 // 折线图 CustomPainter
@@ -58,10 +60,10 @@ class _LinePainter extends CustomPainter {
 // PerfMonitorPanel
 // ---------------------------------------------------------------------------
 
-/// 性能监控面板，置于两段式 composer 工具行中央（Expanded 自适应宽度）。
+/// 性能监控面板，置于两段式 composer 底部工具行左侧（紧跟左簇控件，Flexible 自适应）。
 ///
-/// - 紧凑态：`CPU xx% · MEM xx%`，点击展开。
-/// - 展开态：CPU/MEM 折线图 + DISK 数字行，再点收起。
+/// - 紧凑态：`CPU xx% · MEM xx%`，点击以气泡形式向上弹出悬浮卡片（不撑高输入栏文档流）。
+/// - 悬浮卡片：CPU/MEM 折线图 + DISK 数字行，点击监控或外部收起。
 /// - 后台暂停轮询（[AppLifecycleState] 监听）。
 /// - 接口不可用或无数据时静默隐藏，不报错。
 class PerfMonitorPanel extends ConsumerStatefulWidget {
@@ -76,10 +78,13 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
   static const int _maxPoints = 25;
   static const Duration _pollInterval = Duration(seconds: 12);
 
+  final GlobalKey _anchorKey = GlobalKey();
+  final ValueNotifier<int> _dataVersion = ValueNotifier<int>(0);
+
   Timer? _timer;
   SystemHealthResponse? _lastData;
-  bool _expanded = false;
   bool _paused = false;
+  VoidCallback? _popoverCloser;
 
   /// CPU 历史点（0-100）。
   final List<double> _cpuPoints = [];
@@ -99,6 +104,9 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _popoverCloser?.call();
+    _popoverCloser = null;
+    _dataVersion.dispose();
     _timer?.cancel();
     super.dispose();
   }
@@ -151,12 +159,52 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
           _memPoints.add(data.memory.percent);
           if (_memPoints.length > _maxPoints) _memPoints.removeAt(0);
         });
+        _dataVersion.value++;
       }
     } catch (e) {
       // 接口不可用时静默处理，不弹错
       developer.log('PerfMonitorPanel: systemHealth failed: $e');
       // 保持 _lastData == null → 面板隐藏
     }
+  }
+
+  void _togglePopover() {
+    if (_popoverCloser != null) {
+      _popoverCloser!();
+      _popoverCloser = null;
+      return;
+    }
+    if (_lastData == null) return;
+    _showPopover();
+  }
+
+  void _showPopover() {
+    unawaited(
+      showCupertinoPopover(
+        context: context,
+        anchorKey: _anchorKey,
+        preferredWidth: 220,
+        preferredHeight: 85,
+        maxHeight: 130,
+        placement: PopoverPlacement.top,
+        align: PopoverAlign.start,
+        builder: (popoverContext, close) {
+          _popoverCloser = () {
+            close();
+            _popoverCloser = null;
+          };
+          return _PerfMonitorPopoverContent(
+            dataVersion: _dataVersion,
+            getData: () => _lastData,
+            cpuPoints: _cpuPoints,
+            memPoints: _memPoints,
+            onClose: () {
+              _popoverCloser = null;
+            },
+          );
+        },
+      ),
+    );
   }
 
   /// 格式化字节数为人性化 GB 或 MB。
@@ -192,10 +240,13 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
         CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return GestureDetector(
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: _expanded
-          ? _buildExpanded(context, data, l10n, secondaryColor)
-          : _buildCompact(context, data, l10n, secondaryColor),
+      key: const ValueKey('perf-monitor-panel'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _togglePopover,
+      child: Container(
+        key: _anchorKey,
+        child: _buildCompact(context, data, l10n, secondaryColor),
+      ),
     );
   }
 
@@ -210,6 +261,7 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     final memColor = _thresholdColor(data.memory.percent, context);
     return FittedBox(
       fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Text.rich(
@@ -245,71 +297,7 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     );
   }
 
-  /// 展开态：CPU/MEM 折线图 + DISK 数字行。
-  Widget _buildExpanded(
-    BuildContext context,
-    SystemHealthResponse data,
-    AppLocalizations l10n,
-    Color secondaryColor,
-  ) {
-    final cpuColor = _thresholdColor(data.cpu.percent, context);
-    final memColor = _thresholdColor(data.memory.percent, context);
-    final diskColor = _thresholdColor(data.disk.percent, context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemFill.resolveFrom(context),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // CPU 折线 + 标签
-          _buildChartRow(
-            label: l10n.perfMonitorCpu,
-            percent: data.cpu.percent,
-            points: _cpuPoints,
-            lineColor: cpuColor,
-            valueColor: cpuColor,
-            secondaryColor: secondaryColor,
-          ),
-          const SizedBox(height: 2),
-          // MEM 折线 + 标签
-          _buildChartRow(
-            label: l10n.perfMonitorMem,
-            percent: data.memory.percent,
-            points: _memPoints,
-            lineColor: memColor,
-            valueColor: memColor,
-            secondaryColor: secondaryColor,
-          ),
-          const SizedBox(height: 2),
-          // DISK 仅数字，不画折线
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${l10n.perfMonitorDisk} ',
-                style: TextStyle(fontSize: 10, color: secondaryColor),
-              ),
-              Text(
-                '${data.disk.percent.toStringAsFixed(0)}%',
-                style: TextStyle(fontSize: 10, color: diskColor),
-              ),
-              Text(
-                ' ${_formatBytes(data.disk.usedBytes)}/${_formatBytes(data.disk.totalBytes)}',
-                style: TextStyle(fontSize: 10, color: secondaryColor),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChartRow({
+  static Widget _buildChartRow({
     required String label,
     required double percent,
     required List<double> points,
@@ -317,31 +305,135 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     required Color valueColor,
     required Color secondaryColor,
   }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label ',
-          style: TextStyle(fontSize: 10, color: secondaryColor),
-        ),
-        Text(
-          '${percent.toStringAsFixed(0)}%',
-          style: TextStyle(fontSize: 10, color: valueColor),
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 60,
-          height: 18,
-          child: points.length >= 2
-              ? CustomPaint(
-                  painter: _LinePainter(
-                    points: List<double>.from(points),
-                    color: lineColor,
-                  ),
-                )
-              : const SizedBox.shrink(),
-        ),
-      ],
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label ',
+            style: TextStyle(fontSize: 10, color: secondaryColor),
+          ),
+          Text(
+            '${percent.toStringAsFixed(0)}%',
+            style: TextStyle(fontSize: 10, color: valueColor),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 60,
+            height: 18,
+            child: points.length >= 2
+                ? CustomPaint(
+                    painter: _LinePainter(
+                      points: List<double>.from(points),
+                      color: lineColor,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 悬浮卡片内容
+// ---------------------------------------------------------------------------
+
+class _PerfMonitorPopoverContent extends StatelessWidget {
+  const _PerfMonitorPopoverContent({
+    required this.dataVersion,
+    required this.getData,
+    required this.cpuPoints,
+    required this.memPoints,
+    this.onClose,
+  });
+
+  final ValueNotifier<int> dataVersion;
+  final SystemHealthResponse? Function() getData;
+  final List<double> cpuPoints;
+  final List<double> memPoints;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: dataVersion,
+      builder: (context, _) {
+        final data = getData();
+        if (data == null) return const SizedBox.shrink();
+
+        final l10n = AppLocalizations.of(context);
+        final secondaryColor =
+            CupertinoColors.secondaryLabel.resolveFrom(context);
+        final cpuColor = _PerfMonitorPanelState._thresholdColor(
+          data.cpu.percent,
+          context,
+        );
+        final memColor = _PerfMonitorPanelState._thresholdColor(
+          data.memory.percent,
+          context,
+        );
+        final diskColor = _PerfMonitorPanelState._thresholdColor(
+          data.disk.percent,
+          context,
+        );
+
+        return Padding(
+          key: const ValueKey('perf-monitor-popover-card'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // CPU 折线 + 标签
+              _PerfMonitorPanelState._buildChartRow(
+                label: l10n.perfMonitorCpu,
+                percent: data.cpu.percent,
+                points: cpuPoints,
+                lineColor: cpuColor,
+                valueColor: cpuColor,
+                secondaryColor: secondaryColor,
+              ),
+              const SizedBox(height: 4),
+              // MEM 折线 + 标签
+              _PerfMonitorPanelState._buildChartRow(
+                label: l10n.perfMonitorMem,
+                percent: data.memory.percent,
+                points: memPoints,
+                lineColor: memColor,
+                valueColor: memColor,
+                secondaryColor: secondaryColor,
+              ),
+              const SizedBox(height: 4),
+              // DISK 仅数字，不画折线（FittedBox 自适应）
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${l10n.perfMonitorDisk} ',
+                      style: TextStyle(fontSize: 10, color: secondaryColor),
+                    ),
+                    Text(
+                      '${data.disk.percent.toStringAsFixed(0)}%',
+                      style: TextStyle(fontSize: 10, color: diskColor),
+                    ),
+                    Text(
+                      ' ${_PerfMonitorPanelState._formatBytes(data.disk.usedBytes)}/${_PerfMonitorPanelState._formatBytes(data.disk.totalBytes)}',
+                      style: TextStyle(fontSize: 10, color: secondaryColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

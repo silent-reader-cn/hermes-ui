@@ -23,7 +23,9 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        kCollapseCompletedProcessKey: false,
+      });
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -93,7 +95,9 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        kCollapseCompletedProcessKey: false,
+      });
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -142,7 +146,9 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        kCollapseCompletedProcessKey: false,
+      });
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -215,6 +221,7 @@ void main() {
 
         SharedPreferences.setMockInitialValues({
           kToolGroupCoalesceKey: coalesce,
+          kCollapseCompletedProcessKey: false,
         });
         final api = FakeChatApi()
           ..statusResponse = const ChatStreamStatusResponse(active: true);

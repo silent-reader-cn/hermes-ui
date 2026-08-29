@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +17,7 @@ import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/prompts/prompts_providers.dart';
 import 'package:hermes_ui/features/settings/composer_settings.dart';
+import 'package:hermes_ui/features/settings/perf_monitor_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -29,9 +33,10 @@ Future<void> _pumpComposer(
   required FakeChatApi chatApi,
   FakePromptsApi? promptsApi,
   String sessionId = 's1',
+  ApiClient? apiClient,
 }) async {
   final prompts = promptsApi ?? FakePromptsApi(initialPrompts: const []);
-  final client = ApiClient(baseUrl: 'http://test.local:30002');
+  final client = apiClient ?? ApiClient(baseUrl: 'http://test.local:30002');
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -455,4 +460,415 @@ void main() {
       await _unmount(tester);
     });
   });
+
+  group('两段式底栏性能监控布局与悬浮卡片', () {
+    testWidgets('两段式开启+监控开启+有数据：左三贴左，监控在左侧紧跟左三，Spacer 推发送按钮贴最右', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient(cpu: 45.0, mem: 60.0);
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final attachX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-attach-button')))
+          .dx;
+      final bookmarkX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-saved-prompts-button')))
+          .dx;
+      final indicatorX = tester
+          .getTopLeft(
+            find.byKey(const ValueKey('chat-context-indicator-button')),
+          )
+          .dx;
+      final perfX = tester
+          .getTopLeft(find.byKey(const ValueKey('perf-monitor-panel')))
+          .dx;
+      final sendX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-send-button')))
+          .dx;
+
+      // 左三贴左，监控紧随其后如状态后缀（统一左靠，不居中）
+      expect(attachX, lessThan(bookmarkX));
+      expect(bookmarkX, lessThan(indicatorX));
+      expect(indicatorX, lessThan(perfX));
+      expect(perfX, lessThan(160)); // 左靠剩余空间，紧跟左簇
+
+      // Spacer 把右簇推至最右边缘（800 视口下 sendX 为 748）
+      expect(sendX, greaterThan(740));
+
+      // 紧凑态文本展示 CPU/MEM 百分比
+      expect(find.textContaining('CPU 45%'), findsOneWidget);
+      expect(find.textContaining('MEM 60%'), findsOneWidget);
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('流式状态下：steer 与 stop 整组贴最右，监控仍居左', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient();
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+      await tester.enterText(inputFinder, '测试问题');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      final perfX = tester
+          .getTopLeft(find.byKey(const ValueKey('perf-monitor-panel')))
+          .dx;
+      final steerX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-steer-button')))
+          .dx;
+      final stopX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-stop-button')))
+          .dx;
+
+      expect(perfX, lessThan(160));
+      expect(steerX, greaterThan(700));
+      expect(stopX, greaterThan(steerX));
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('窄屏（320px）自适应：监控缩放省略，两端按钮均可见可交互', (tester) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient();
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(
+        find.byKey(const ValueKey('chat-attach-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('perf-monitor-panel')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('chat-send-button')), findsOneWidget);
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('点击紧凑态以监控文本为锚点向上弹出悬浮卡片，输入栏工具行高度不变', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient(cpu: 45.0, mem: 60.0, disk: 70.0);
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final attachButton = find.byKey(const ValueKey('chat-attach-button'));
+      final attachTopBefore = tester.getTopLeft(attachButton).dy;
+
+      // 点击紧凑态展开悬浮卡片
+      await tester.tap(find.byKey(const ValueKey('perf-monitor-panel')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 悬浮卡片出现
+      final popoverCard = find.byKey(
+        const ValueKey('perf-monitor-popover-card'),
+      );
+      expect(popoverCard, findsOneWidget);
+
+      // 输入栏底栏行高度前后一致，不撑高文档流
+      final attachTopAfter = tester.getTopLeft(attachButton).dy;
+      expect(attachTopAfter, equals(attachTopBefore));
+
+      // 悬浮卡片包含 CPU / MEM / DISK 内容
+      expect(find.textContaining('CPU '), findsWidgets);
+      expect(find.textContaining('MEM '), findsWidgets);
+      expect(find.textContaining('DISK '), findsOneWidget);
+      expect(find.textContaining('70%'), findsOneWidget);
+
+      // 点击外部遮罩收起
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(
+        find.byKey(const ValueKey('perf-monitor-popover-card')),
+        findsNothing,
+      );
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('再次点击紧凑态手势收起悬浮卡片', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient();
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 首次点击展开
+      await tester.tap(find.byKey(const ValueKey('perf-monitor-panel')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        find.byKey(const ValueKey('perf-monitor-popover-card')),
+        findsOneWidget,
+      );
+
+      // 再次点击监控文本所在区域（由屏障拦截响应）手势收起
+      await tester.tap(
+        find.byKey(const ValueKey('perf-monitor-panel')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        find.byKey(const ValueKey('perf-monitor-popover-card')),
+        findsNothing,
+      );
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('经典单行模式、perfMonitor=false、无数据时静默隐藏不占位', (tester) async {
+      // 1. 经典单行模式
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: false,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient();
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('perf-monitor-panel')), findsNothing);
+      await _unmount(tester);
+
+      // 2. perfMonitor=false
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: false,
+      });
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('perf-monitor-panel')), findsNothing);
+      await _unmount(tester);
+
+      // 3. 无数据时（未请求或出错）
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final failingDio = Dio(
+        BaseOptions(validateStatus: (_) => true, followRedirects: false),
+      );
+      failingDio.httpClientAdapter = _HealthAdapter(
+        responder: (_) => ResponseBody.fromString('Internal Error', 500),
+      );
+      final failingClient = ApiClient(
+        baseUrl: 'http://test.local:30002',
+        dio: failingDio,
+      );
+      await _pumpComposer(
+        tester,
+        chatApi: chatApi,
+        apiClient: failingClient,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('perf-monitor-panel')), findsNothing);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('宽屏（1200px）下统一左靠（紧跟左簇），右簇贴最右', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      final client = _buildHealthClient();
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final attachX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-attach-button')))
+          .dx;
+      final indicatorX = tester
+          .getTopLeft(
+            find.byKey(const ValueKey('chat-context-indicator-button')),
+          )
+          .dx;
+      final perfX = tester
+          .getTopLeft(find.byKey(const ValueKey('perf-monitor-panel')))
+          .dx;
+      final sendX = tester
+          .getTopLeft(find.byKey(const ValueKey('chat-send-button')))
+          .dx;
+
+      expect(attachX, lessThan(indicatorX));
+      expect(indicatorX, lessThan(perfX));
+      expect(perfX, lessThan(160)); // 宽屏下依然紧随左三，统一左靠
+      expect(sendX, greaterThan(1140)); // 右簇贴最右边缘
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('阈值着色：≥85% 红色，≥75% 橙色，正常 secondaryLabel', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+        kShowPerfMonitorKey: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      // CPU: 90% (>=85 红), MEM: 80% (>=75 橙), DISK: 50% (<75 secondary)
+      final client = _buildHealthClient(cpu: 90.0, mem: 80.0, disk: 50.0);
+
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 验证紧凑态下 CPU 90% 与 MEM 80% 渲染
+      expect(find.textContaining('CPU 90%'), findsOneWidget);
+      expect(find.textContaining('MEM 80%'), findsOneWidget);
+
+      // 展开悬浮卡片
+      await tester.tap(find.byKey(const ValueKey('perf-monitor-panel')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(
+        find.byKey(const ValueKey('perf-monitor-popover-card')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('90%'), findsWidgets);
+      expect(find.textContaining('80%'), findsWidgets);
+      expect(find.textContaining('50%'), findsOneWidget);
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+  });
+}
+
+class _HealthAdapter implements HttpClientAdapter {
+  _HealthAdapter({required this.responder});
+
+  final ResponseBody Function(RequestOptions options) responder;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return responder(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ApiClient _buildHealthClient({
+  double cpu = 45.0,
+  double mem = 60.0,
+  double disk = 70.0,
+  int usedBytes = 140000000000,
+  int totalBytes = 200000000000,
+}) {
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
+  dio.httpClientAdapter = _HealthAdapter(
+    responder: (options) {
+      if (options.uri.path == '/api/system/health') {
+        return ResponseBody.fromString(
+          jsonEncode({
+            'status': 'ok',
+            'available': true,
+            'checked_at': '2026-08-30T00:00:00Z',
+            'cpu': {'percent': cpu},
+            'memory': {
+              'percent': mem,
+              'used_bytes': usedBytes,
+              'total_bytes': totalBytes,
+            },
+            'disk': {
+              'percent': disk,
+              'used_bytes': usedBytes,
+              'total_bytes': totalBytes,
+            },
+            'errors': [],
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      }
+      return ResponseBody.fromString('{}', 200);
+    },
+  );
+  return ApiClient(
+    baseUrl: 'http://test.local:30002',
+    dio: dio,
+  );
 }

@@ -7,6 +7,7 @@ import 'package:hermes_ui/core/models/tool_call.dart';
 import 'package:hermes_ui/features/chat/chat_models.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/collapsible_process_capsule.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
 
@@ -205,24 +206,31 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 1) 初始：正文可见，工具卡默认收起（思考行/工具行为展开态内容，不在树）。
+      // 1) 初始：正文可见，过程胶囊默认收起（标题可见，子卡片未展开）。
       expect(find.text('这是最终回答内容。'), findsOneWidget);
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
+      expect(find.text('思考 · 1 工具'), findsOneWidget);
+      expect(find.byType(ToolCallGroupCard), findsNothing);
       expect(find.text('思考'), findsNothing);
       expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 展开工具卡 → think 行与工具行都在（行序 = 时间线）。
+      // 2) 展开过程胶囊 → ToolCallGroupCard 出现
+      await tester.tap(find.byType(CollapsibleProcessCapsule));
+      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+
+      // 3) 展开工具卡 → think 行与工具行都在（行序 = 时间线）。
       await tester.tap(find.byType(ToolCallGroupCard));
       await tester.pumpAndSettle();
       expect(find.text('思考'), findsOneWidget);
       expect(find.byType(ToolCallCard), findsOneWidget);
 
-      // 3) 点击 think 行展开完整思考文本。
+      // 4) 点击 think 行展开完整思考文本。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsOneWidget); // 展开成功
 
-      // 4) 再次点击 think 行折叠。
+      // 5) 再次点击 think 行折叠。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsNothing); // 折叠成功
@@ -267,11 +275,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 历史消息正文、工具卡片已渲染（思考已融合为工具卡子卡行）。
+      // 历史消息正文可见，过程胶囊默认折叠。
       expect(find.text('帮我分析代码'), findsOneWidget);
       expect(find.text('分析完毕，无任何错误。'), findsOneWidget);
-      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
+      expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
+      expect(find.text('思考 · 1 工具'), findsOneWidget);
+      expect(find.byType(ToolCallGroupCard), findsNothing);
+
+      // 展开过程胶囊 → 工具卡片出现
+      await tester.tap(find.byType(CollapsibleProcessCapsule));
+      await tester.pumpAndSettle();
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
       expect(find.text(fullThinking), findsNothing);
 
       // 展开工具卡 → think 行出现

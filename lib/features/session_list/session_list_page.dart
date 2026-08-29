@@ -841,10 +841,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     required Offset pointerPos,
     required Offset fabCenter,
     required List<WorkspaceRoot> workspaces,
-    double radius = 100.0,
   }) {
     final d = (pointerPos - fabCenter).distance;
-    if (d < 36.0 || d > 165.0) return null;
+    if (d < 36.0 || d > 195.0) return null;
 
     final n = workspaces.length;
     if (n == 0) return null;
@@ -853,18 +852,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     double minDistance = double.infinity;
 
     for (var i = 0; i < n; i++) {
-      final double angle;
-      if (n == 1) {
-        angle = -135.0;
-      } else {
-        const startAngle = -195.0;
-        const endAngle = -75.0;
-        angle = startAngle + i * (endAngle - startAngle) / (n - 1);
-      }
-      final rad = angle * pi / 180.0;
-      final itemCenter =
-          fabCenter + Offset(radius * cos(rad), radius * sin(rad));
-      final dist = (pointerPos - itemCenter).distance;
+      final geom = getFabWorkspaceItemGeometry(i, n, fabCenter);
+      final dist = (pointerPos - geom.center).distance;
       if (dist < minDistance) {
         minDistance = dist;
         bestIndex = i;
@@ -1838,11 +1827,80 @@ class _SheetOptionRow extends StatelessWidget {
 }
 
 /// FAB 悬浮加号长按滑选工作区弧形菜单。
+/// FAB 悬浮加号长按工作区项几何位置。
+@visibleForTesting
+class FabWorkspaceItemGeometry {
+  const FabWorkspaceItemGeometry({
+    required this.center,
+    required this.angleDeg,
+    required this.radius,
+  });
+
+  final Offset center;
+  final double angleDeg;
+  final double radius;
+}
+
+/// 计算指定工作区项在 FAB 扇出弧中的中心坐标与几何属性。
+///
+/// 几何排布规则（解决多项堆叠重叠难辨）：
+/// - 1-4 项：单弧扇出（R=110~130），相邻弦距保持 > 56px；
+/// - 5-6 项：双级交错扇形（内圈 R=96，外圈 R=146~148，角度交错步进），
+///   相邻项弦距保持在 > 59px，外接圆无交叉、微胶囊标签与相邻项互不重叠。
+@visibleForTesting
+FabWorkspaceItemGeometry getFabWorkspaceItemGeometry(
+  int index,
+  int total,
+  Offset fabCenter,
+) {
+  final double angleDeg;
+  final double radius;
+
+  if (total <= 1) {
+    angleDeg = -135.0;
+    radius = 110.0;
+  } else if (total == 2) {
+    const startAngle = -160.0;
+    const endAngle = -110.0;
+    angleDeg = startAngle + index * (endAngle - startAngle);
+    radius = 118.0;
+  } else if (total == 3) {
+    const startAngle = -170.0;
+    const endAngle = -100.0;
+    angleDeg = startAngle + index * (endAngle - startAngle) / 2;
+    radius = 124.0;
+  } else if (total == 4) {
+    const startAngle = -175.0;
+    const endAngle = -95.0;
+    angleDeg = startAngle + index * (endAngle - startAngle) / 3;
+    radius = 130.0;
+  } else if (total == 5) {
+    const startAngle = -175.0;
+    const endAngle = -95.0;
+    angleDeg = startAngle + index * (endAngle - startAngle) / 4;
+    radius = index.isEven ? 146.0 : 96.0;
+  } else {
+    const startAngle = -175.0;
+    const endAngle = -85.0;
+    angleDeg = startAngle + index * (endAngle - startAngle) / (total - 1);
+    radius = index.isEven ? 148.0 : 96.0;
+  }
+
+  final rad = angleDeg * pi / 180.0;
+  final center = fabCenter + Offset(radius * cos(rad), radius * sin(rad));
+  return FabWorkspaceItemGeometry(
+    center: center,
+    angleDeg: angleDeg,
+    radius: radius,
+  );
+}
+
+/// FAB 悬浮加号长按滑选工作区弧形菜单。
 ///
 /// 视觉与交互：
-/// - 向左上 135° 弧形扇出（半径 ~100px），最多展示 6 个按使用频率排序的工作区；
-/// - 毛玻璃背景 + 阴影；
-/// - 选中项放大高亮（Hermex 蓝底 + 浮动名称 badge）；未选中项显示毛玻璃圆底 + 小副标。
+/// - 向左上弧形扇出（单弧 / 双级交错扇形，半径 96~148px），最多展示 6 个按使用频率排序的工作区；
+/// - 毛玻璃/半透明圆底气泡 + 细边框与投影；
+/// - 选中项放大高亮（Hermex 蓝底 + 浮动名称 badge）；未选中项显示圆底图标 + 独立微胶囊副标。
 class _FabWorkspaceArcMenu extends StatelessWidget {
   const _FabWorkspaceArcMenu({
     super.key,
@@ -1861,11 +1919,10 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = brightness == Brightness.dark;
     final n = workspaces.length;
-    const double radius = 100.0;
 
     return Stack(
       children: [
-        for (var i = 0; i < n; i++) ..._buildItem(i, n, radius, isDark),
+        for (var i = 0; i < n; i++) ..._buildItem(i, n, isDark),
       ],
     );
   }
@@ -1873,40 +1930,31 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
   List<Widget> _buildItem(
     int index,
     int total,
-    double radius,
     bool isDark,
   ) {
     final workspace = workspaces[index];
     final isHovered = hoveredIndex == index;
     final displayName = _workspaceDisplayName(workspace);
 
-    final double angle;
-    if (total == 1) {
-      angle = -135.0;
-    } else {
-      const startAngle = -195.0;
-      const endAngle = -75.0;
-      angle = startAngle + index * (endAngle - startAngle) / (total - 1);
-    }
-    final rad = angle * pi / 180.0;
-    final cx = fabCenter.dx + radius * cos(rad);
-    final cy = fabCenter.dy + radius * sin(rad);
+    final geom = getFabWorkspaceItemGeometry(index, total, fabCenter);
+    final cx = geom.center.dx;
+    final cy = geom.center.dy;
 
     return [
-      // 气泡按钮
+      // 气泡按钮（直径 44px）
       Positioned(
-        left: cx - 24,
-        top: cy - 24,
-        width: 48,
-        height: 48,
+        left: cx - 22,
+        top: cy - 22,
+        width: 44,
+        height: 44,
         child: AnimatedScale(
           scale: isHovered ? 1.18 : 1.0,
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOutCubic,
           child: Container(
             key: ValueKey('fab-workspace-item-${workspace.path}'),
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isHovered
@@ -1916,7 +1964,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                       : const Color(0xEEFFFFFF)),
               border: Border.all(
                 color: isHovered
-                    ? CupertinoColors.white.withValues(alpha: 0.8)
+                    ? CupertinoColors.white.withValues(alpha: 0.85)
                     : (isDark
                         ? const Color(0x33FFFFFF)
                         : const Color(0x1F000000)),
@@ -1938,7 +1986,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                 isHovered
                     ? CupertinoIcons.folder_fill
                     : CupertinoIcons.folder,
-                size: 22,
+                size: 21,
                 color: isHovered
                     ? CupertinoColors.white
                     : (isDark
@@ -1949,19 +1997,19 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
           ),
         ),
       ),
-      // 选中时浮动完整标题 badge，未选中时展示小副标
+      // 选中时浮动完整标题 badge，未选中时展示小微胶囊副标
       if (isHovered)
         Positioned(
-          left: cx - 60,
-          top: cy - 50,
-          width: 120,
+          left: cx - 55,
+          top: cy - 46,
+          width: 110,
           child: Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: isDark
                     ? const Color(0xEE1C1C1E)
-                    : const Color(0xEE000000),
+                    : const Color(0xF0000000),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: const Color(0x33FFFFFF),
@@ -1979,6 +2027,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                 displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -1990,21 +2039,36 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
         )
       else
         Positioned(
-          left: cx - 36,
-          top: cy + 26,
-          width: 72,
+          left: cx - 35,
+          top: cy + 24,
+          width: 70,
           child: Center(
-            child: Text(
-              displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
                 color: isDark
-                    ? const Color(0xCCFFFFFF)
-                    : const Color(0x99000000),
+                    ? const Color(0x99000000)
+                    : const Color(0xB3FFFFFF),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0x26FFFFFF)
+                      : const Color(0x1F000000),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(
+                displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? CupertinoColors.white
+                      : CupertinoColors.black,
+                ),
               ),
             ),
           ),

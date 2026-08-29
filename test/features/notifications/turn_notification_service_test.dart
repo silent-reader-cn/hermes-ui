@@ -1,7 +1,10 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
+import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockPlugin extends Mock implements FlutterLocalNotificationsPlugin {}
 
@@ -15,6 +18,7 @@ void main() {
     ));
     registerFallbackValue(const NotificationDetails());
     registerFallbackValue(const NotificationAppLaunchDetails(false));
+    registerFallbackValue(const AndroidNotificationChannel('id', 'name'));
   });
 
   group('LocalNotificationsTurnNotificationService', () {
@@ -230,6 +234,72 @@ void main() {
       });
     });
 
+    group('Android 三渠道预创建与时序', () {
+      test('冷启动/首次初始化显式批量预创建三通知渠道（turns/clarify/errors）', () async {
+        final android = _MockAndroidPlugin();
+        when(
+          () => plugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>(),
+        ).thenReturn(android);
+        when(() => android.createNotificationChannel(any()))
+            .thenAnswer((_) async {});
+        when(() => android.requestNotificationsPermission())
+            .thenAnswer((_) async => true);
+
+        await service.requestPermission();
+
+        // 验证三渠道预创建
+        final captured = verify(
+          () => android.createNotificationChannel(captureAny()),
+        ).captured;
+        expect(captured, hasLength(3));
+
+        final channels = captured.cast<AndroidNotificationChannel>();
+        expect(channels[0].id, 'turns');
+        expect(channels[0].name, '回合完成');
+        expect(channels[0].description, 'Agent 回合完成时推送系统通知');
+        expect(channels[0].importance, Importance.high);
+
+        expect(channels[1].id, 'clarify');
+        expect(channels[1].name, '需要澄清');
+        expect(channels[1].description, 'Agent 需要用户澄清时推送系统通知');
+        expect(channels[1].importance, Importance.high);
+
+        expect(channels[2].id, 'errors');
+        expect(channels[2].name, '异常中断');
+        expect(channels[2].description, '会话异常中断或出错时推送系统通知');
+        expect(channels[2].importance, Importance.high);
+      });
+
+      test('notifyTurnCompleted 前若未初始化，先 initialize 并创建三渠道再 show', () async {
+        final android = _MockAndroidPlugin();
+        when(
+          () => plugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>(),
+        ).thenReturn(android);
+        when(() => android.createNotificationChannel(any()))
+            .thenAnswer((_) async {});
+
+        await service.notifyTurnCompleted('s-test', '标题', '正文');
+
+        verifyInOrder([
+          () => plugin.initialize(
+                settings: any(named: 'settings'),
+                onDidReceiveNotificationResponse:
+                    any(named: 'onDidReceiveNotificationResponse'),
+              ),
+          () => android.createNotificationChannel(any()),
+          () => plugin.show(
+                id: 1001,
+                title: '标题',
+                body: '正文',
+                notificationDetails: any(named: 'notificationDetails'),
+                payload: 's-test',
+              ),
+        ]);
+      });
+    });
+
     group('requestPermission / getLaunchSessionId', () {
       test('无 Android 实现（桌面/测试环境）→ 视为已授权', () async {
         // mock 的 resolvePlatformSpecificImplementation 默认返回 null
@@ -242,6 +312,8 @@ void main() {
           () => plugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>(),
         ).thenReturn(android);
+        when(() => android.createNotificationChannel(any()))
+            .thenAnswer((_) async {});
         when(() => android.requestNotificationsPermission())
             .thenAnswer((_) async => true);
 
@@ -280,6 +352,69 @@ void main() {
           () => plugin.getNotificationAppLaunchDetails(),
         ).thenAnswer((_) async => const NotificationAppLaunchDetails(false));
         expect(await service.getLaunchSessionId(), isNull);
+      });
+    });
+
+    group('DiagnosticsService 诊断日志采集', () {
+      setUp(() async {
+        SharedPreferences.setMockInitialValues({
+          kDiagnosticsEnabledKey: true,
+        });
+        await DiagnosticsService.instance.init();
+        await DiagnosticsService.instance.clear();
+      });
+
+      test('成功通知、权限请求与渠道预创建均记录 notifications tag 日志', () async {
+        final android = _MockAndroidPlugin();
+        when(
+          () => plugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>(),
+        ).thenReturn(android);
+        when(() => android.createNotificationChannel(any()))
+            .thenAnswer((_) async {});
+        when(() => android.requestNotificationsPermission())
+            .thenAnswer((_) async => true);
+
+        await service.requestPermission();
+        await service.notifyTurnCompleted('s1', '标题1', '正文1');
+        await service.notifyClarificationNeeded('s2', '澄清问题');
+        await service.notifySessionError('s3', '错误标题', '错误正文');
+        await service.clearAll();
+
+        final logs = DiagnosticsService.instance.logs
+            .where((l) => l.tag == 'notifications')
+            .toList();
+        expect(logs, isNotEmpty);
+
+        final messages = logs.map((l) => l.message).toList();
+        expect(messages, contains('预创建 Android 通知渠道成功'));
+        expect(messages, contains('请求通知权限结果: true'));
+        expect(messages, contains('发送回合完成通知'));
+        expect(messages, contains('发送需要澄清通知'));
+        expect(messages, contains('发送异常中断通知'));
+        expect(messages, contains('清除全部通知'));
+      });
+
+      test('异常吞没时记录 DiagnosticsLogLevel.error', () async {
+        when(
+          () => plugin.show(
+            id: any(named: 'id'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        ).thenThrow(Exception('系统通知通道失效'));
+
+        await service.notifyTurnCompleted('s1', '标题', '正文');
+
+        final errorLogs = DiagnosticsService.instance.logs
+            .where((l) =>
+                l.tag == 'notifications' && l.level == DiagnosticsLogLevel.error)
+            .toList();
+        expect(errorLogs, hasLength(1));
+        expect(errorLogs.single.message, '回合完成通知发送失败');
+        expect(errorLogs.single.errorKind, contains('系统通知通道失效'));
       });
     });
   });

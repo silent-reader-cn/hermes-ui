@@ -431,4 +431,159 @@ void main() {
       expect(find.text('chat-ws-two-id'), findsOneWidget);
     });
   });
+
+  group('FabWorkspaceItemGeometry 弧形几何与项间距无重叠验证', () {
+    test('2~6 项时相邻项弦距 > 56px (48+8)，外接圆与放大 1.18 均无交叉', () {
+      const fabCenter = Offset(342.0, 792.0); // 常见移动端 FAB 中心 (390x844 竖屏)
+
+      for (var total = 2; total <= 6; total++) {
+        final geoms = List.generate(
+          total,
+          (i) => getFabWorkspaceItemGeometry(i, total, fabCenter),
+        );
+
+        // 验证相邻项中心距
+        for (var i = 0; i < total - 1; i++) {
+          final p1 = geoms[i].center;
+          final p2 = geoms[i + 1].center;
+          final dist = (p1 - p2).distance;
+
+          // 需求验收指标：相邻弦距 > 48 + 8 = 56.0
+          expect(
+            dist,
+            greaterThan(56.0),
+            reason:
+                'total=$total, adjacent items ($i, ${i + 1}) dist=$dist <= 56.0',
+          );
+
+          // 外接圆无交集（基础半径 22px，放大 1.18 后单项半径 25.96px）
+          const rNormal = 22.0;
+          const rHovered = 22.0 * 1.18;
+          final clearance = dist - (rHovered + rNormal);
+          expect(
+            clearance,
+            greaterThan(8.0),
+            reason:
+                'total=$total, items ($i, ${i + 1}) hover clearance=$clearance <= 8.0',
+          );
+        }
+
+        // 验证任意两项中心距（全排列无重叠）
+        for (var i = 0; i < total; i++) {
+          for (var j = i + 1; j < total; j++) {
+            final dist = (geoms[i].center - geoms[j].center).distance;
+            expect(
+              dist,
+              greaterThan(56.0),
+              reason: 'total=$total, items ($i, $j) dist=$dist <= 56.0',
+            );
+          }
+        }
+      }
+    });
+
+    test('角度范围限制在 [-175°, -85°]，完全位于左上象限且在屏幕边界内', () {
+      const fabCenter = Offset(342.0, 792.0);
+      for (var total = 1; total <= 6; total++) {
+        for (var i = 0; i < total; i++) {
+          final geom = getFabWorkspaceItemGeometry(i, total, fabCenter);
+          expect(geom.angleDeg, greaterThanOrEqualTo(-175.0));
+          expect(geom.angleDeg, lessThanOrEqualTo(-85.0));
+
+          // 验证图标边界不溢出常见屏幕 (390 x 844)
+          final cx = geom.center.dx;
+          final cy = geom.center.dy;
+          const iconR = 26.0; // 放大后半径
+          expect(cx - iconR, greaterThan(0.0));
+          expect(cx + iconR, lessThan(390.0));
+          expect(cy - iconR, greaterThan(0.0));
+          expect(cy + iconR, lessThan(844.0));
+        }
+      }
+    });
+  });
+
+  group('SessionListPage FAB 6 项完整弧形菜单渲染与交互', () {
+    testWidgets('长按 FAB 扇出 6 项工作区，全部可见且外接矩形互不重叠', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          _buildSession('s1', 'A', workspace: '/ws/1'),
+        ],
+      );
+      api.createdSession =
+          const SessionSummary(sessionId: 'ws-6-sess', title: 'WS 6');
+      api.workspaces = [
+        const WorkspaceRoot(path: '/ws/1', name: 'Alpha'),
+        const WorkspaceRoot(path: '/ws/2', name: 'Beta'),
+        const WorkspaceRoot(path: '/ws/3', name: 'Gamma'),
+        const WorkspaceRoot(path: '/ws/4', name: 'Delta'),
+        const WorkspaceRoot(path: '/ws/5', name: 'Epsilon'),
+        const WorkspaceRoot(path: '/ws/6', name: 'Zeta'),
+      ];
+
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const SessionListPage()),
+          GoRoute(
+            path: '/chat/:sessionId',
+            builder: (_, state) =>
+                _ChatStub(sessionId: state.pathParameters['sessionId'] ?? ''),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
+          ],
+          child: CupertinoApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final fabFinder = find.byKey(const ValueKey('session-list-new'));
+      final fabCenter = tester.getCenter(fabFinder);
+
+      final gesture = await tester.startGesture(fabCenter);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+
+      // 6 个工作区项均正确渲染
+      final itemFinders = <Finder>[];
+      for (var i = 1; i <= 6; i++) {
+        final f = find.byKey(ValueKey('fab-workspace-item-/ws/$i'));
+        expect(f, findsOneWidget);
+        itemFinders.add(f);
+      }
+
+      // 检查任意两项中心距离与外接圆间距
+      for (var i = 0; i < 6; i++) {
+        for (var j = i + 1; j < 6; j++) {
+          final c1 = tester.getCenter(itemFinders[i]);
+          final c2 = tester.getCenter(itemFinders[j]);
+          final dist = (c1 - c2).distance;
+          expect(dist, greaterThan(56.0));
+        }
+      }
+
+      // 依次滑动经过各工作区项，最终选中 /ws/6 并释放
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveTo(tester.getCenter(itemFinders[i]));
+        await tester.pump(const Duration(milliseconds: 80));
+      }
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(api.createCount, 1);
+      expect(api.lastCreatedWorkspace, '/ws/6');
+      expect(find.text('chat-ws-6-sess'), findsOneWidget);
+    });
+  });
 }

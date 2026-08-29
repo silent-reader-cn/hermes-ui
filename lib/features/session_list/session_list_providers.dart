@@ -60,6 +60,9 @@ abstract interface class SessionListApi {
     required String sessionId,
     String? projectId,
   });
+
+  /// GET /api/session/status?session_id=… → 单会话状态校验与流式状态。
+  Future<SessionStatusResponse> fetchSessionStatus(String sessionId);
 }
 
 /// [SessionListApi] 的生产实现：包 [ApiClient]，把 `Object?` JSON 解码为模型。
@@ -134,6 +137,11 @@ class SessionListApiClient implements SessionListApi {
     String? projectId,
   }) async {
     return _client.moveSession(sessionId: sessionId, projectId: projectId);
+  }
+
+  @override
+  Future<SessionStatusResponse> fetchSessionStatus(String sessionId) async {
+    return _client.sessionStatus(sessionId);
   }
 }
 
@@ -406,6 +414,26 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 用户是否已手动切换过 subagent 开关（防后台偏好加载覆盖即时操作）。
   bool _showSubagentCustomized = false;
 
+  /// 本地记录的活跃流式会话映射（sessionId -> activeStreamId）。
+  ///
+  /// 用于本地乐观置位与跨全量刷新保持流式指示，流结束或后台纠偏后移除。
+  final Map<String, String?> _streamingSessions = {};
+
+  /// 将本地活跃流式状态覆盖到会话列表上（避免全量拉取响应时因服务端延迟抖动丢失流式状态）。
+  List<SessionSummary> _overlayStreaming(List<SessionSummary> list) {
+    if (_streamingSessions.isEmpty) return list;
+    return [
+      for (final s in list)
+        if (s.sessionId != null && _streamingSessions.containsKey(s.sessionId))
+          s.withStreaming(
+            isStreaming: true,
+            activeStreamId: _streamingSessions[s.sessionId],
+          )
+        else
+          s,
+    ];
+  }
+
   /// Provider 侧的单测用单次调度与获焦 debounce（真正的 30s 周期在
   /// Observer 的 State 侧 `Timer.periodic`）。
   Timer? _autoRefreshTimer;
@@ -522,7 +550,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }) async {
     try {
       final response = await api.fetchSessions();
-      final sessions = response.sessions ?? const <SessionSummary>[];
+      final rawSessions = response.sessions ?? const <SessionSummary>[];
+      final sessions = _overlayStreaming(rawSessions);
       try {
         await ref.read(cacheServiceProvider).writeSessions(sessions);
       } on Exception {
@@ -555,9 +584,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
           // 缓存不可用时继续抛出原网络错误。
         }
         if (cached.isNotEmpty) {
+          final sessions = _overlayStreaming(cached);
           return SessionListState(
-            sessions: cached,
-            visibleCount: min(pageSize, cached.length),
+            sessions: sessions,
+            visibleCount: min(pageSize, sessions.length),
             actionError: '离线缓存：当前显示最近缓存的会话',
             showSubagent: showSubagent,
           );
@@ -691,7 +721,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     );
     try {
       final response = await _api.searchSessions(query: trimmed);
-      final results = response.sessions ?? const <SessionSummary>[];
+      final rawResults = response.sessions ?? const <SessionSummary>[];
+      final results = _overlayStreaming(rawResults);
       state = AsyncData(
         current.copyWith(
           searchQuery: () => trimmed,
@@ -762,7 +793,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (current == null) return;
     try {
       final response = await _api.fetchSessions(includeArchived: true);
-      final archived = response.sessions ?? const <SessionSummary>[];
+      final rawArchived = response.sessions ?? const <SessionSummary>[];
+      final archived = _overlayStreaming(rawArchived);
       state = AsyncData(
         current.copyWith(
           archivedSessions: archived,
@@ -1054,6 +1086,97 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     });
   }
 
+  /// 标记指定会话的流式状态（本地乐观置位 + 可选后台单会话校验）。
+  ///
+  /// [isStreaming] 为 true 时置位 `isStreaming` 与 `activeStreamId`；
+  /// 为 false 时清空流式状态。
+  /// 若 [verifyInBackground] 为 true 且处于流式状态，会异步调用
+  /// `GET /api/session/status?session_id=` 单点校验/纠偏，
+  /// 避免全量 `GET /api/sessions` 造成的分页窗口抖动与网络浪费。
+  void markStreaming(
+    String sessionId,
+    bool isStreaming, {
+    String? activeStreamId,
+    bool verifyInBackground = false,
+  }) {
+    if (sessionId.isEmpty) return;
+    if (isStreaming) {
+      _streamingSessions[sessionId] = activeStreamId;
+    } else {
+      _streamingSessions.remove(sessionId);
+    }
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final updatedSessions = [
+      for (final s in current.sessions)
+        s.sessionId == sessionId
+            ? s.withStreaming(
+                isStreaming: isStreaming,
+                activeStreamId: activeStreamId,
+              )
+            : s,
+    ];
+    final updatedSearch = current.searchResults == null
+        ? null
+        : () => [
+            for (final s in current.searchResults!)
+              s.sessionId == sessionId
+                  ? s.withStreaming(
+                      isStreaming: isStreaming,
+                      activeStreamId: activeStreamId,
+                    )
+                  : s,
+          ];
+    final updatedArchived = [
+      for (final s in current.archivedSessions)
+        s.sessionId == sessionId
+            ? s.withStreaming(
+                isStreaming: isStreaming,
+                activeStreamId: activeStreamId,
+              )
+            : s,
+    ];
+
+    state = AsyncData(
+      current.copyWith(
+        sessions: updatedSessions,
+        searchResults: updatedSearch,
+        archivedSessions: updatedArchived,
+      ),
+    );
+
+    if (verifyInBackground && isStreaming) {
+      unawaited(_verifySessionStatus(sessionId));
+    }
+  }
+
+  /// 后台单会话状态校验与纠偏（GET /api/session/status?session_id=）。
+  Future<void> _verifySessionStatus(String sessionId) async {
+    try {
+      final status = await _api.fetchSessionStatus(sessionId);
+      final serverIsStreaming =
+          status.isStreaming == true ||
+          (status.activeStreamId != null && status.activeStreamId!.isNotEmpty);
+
+      // 如果服务端已确认非流式且未指定 activeStreamId，则纠偏清空
+      if (!serverIsStreaming) {
+        markStreaming(sessionId, false);
+      } else if (status.activeStreamId != null &&
+          status.activeStreamId!.isNotEmpty &&
+          _streamingSessions[sessionId] != status.activeStreamId) {
+        markStreaming(
+          sessionId,
+          true,
+          activeStreamId: status.activeStreamId,
+          verifyInBackground: false,
+        );
+      }
+    } catch (_) {
+      // 网络波动或测试桩未注入 status 时静默，保留本地乐观状态
+    }
+  }
+
   // -------------------------------------------------------------------------
   // 本地状态更新原语
   // -------------------------------------------------------------------------
@@ -1085,6 +1208,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }
 
   Future<void> _removeSession(String id) async {
+    _streamingSessions.remove(id);
     final current = state.valueOrNull;
     if (current == null) return;
     state = AsyncData(
@@ -1172,9 +1296,16 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     // 否则新会话落入「更早」分区最底部（排序 0），列表里看不到，
     // 要等手动下拉刷新（服务端带真时间戳）才出现在「今天」顶部。
     final now = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
-    final withStamp = session.createdAt == null
+    var withStamp = session.createdAt == null
         ? session.copyWith(createdAt: now)
         : session;
+    if (withStamp.sessionId != null &&
+        _streamingSessions.containsKey(withStamp.sessionId)) {
+      withStamp = withStamp.withStreaming(
+        isStreaming: true,
+        activeStreamId: _streamingSessions[withStamp.sessionId],
+      );
+    }
     state = AsyncData(
       current.copyWith(
         sessions: [withStamp, ...current.sessions],

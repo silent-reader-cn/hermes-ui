@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -331,6 +332,104 @@ void main() {
 
       final image = tester.widget<Image>(find.byType(Image));
       expect(image.image, isA<FileImage>());
+    });
+
+    testWidgets('ChatInlineMediaWidget 外层包裹 AnimatedSize 平滑过渡容器', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _testApp(
+          const ChatInlineMediaWidget(
+            rawUri: _k1x1Png,
+            alt: 'preview.png',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final animatedSizeFinder = find.descendant(
+        of: find.byType(ChatInlineMediaWidget),
+        matching: find.byType(AnimatedSize),
+      );
+      expect(animatedSizeFinder, findsOneWidget);
+
+      final animatedSize = tester.widget<AnimatedSize>(animatedSizeFinder);
+      expect(animatedSize.duration, const Duration(milliseconds: 180));
+      expect(animatedSize.curve, Curves.easeOut);
+    });
+
+    testWidgets('网络图片 loading 期间渲染指定尺寸 loadingBox 与加载指示器', (tester) async {
+      final completer = Completer<File>();
+      // 构造一个处于 loading 状态的 FutureProvider
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaFileProvider.overrideWith(
+              (ref, url) => completer.future,
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatInlineMediaWidget(
+                rawUri: 'https://example.com/assets/loading_photo.png',
+                alt: 'loading_photo.png',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+
+      final containerFinder = find.descendant(
+        of: find.byType(ChatInlineMediaWidget),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.constraints?.maxWidth == 160 &&
+              w.constraints?.maxHeight == 120,
+        ),
+      );
+      expect(containerFinder, findsOneWidget);
+    });
+
+    testWidgets('网络图片 URL 包含宽高参数时，自适应预设占位尺寸', (tester) async {
+      final completer = Completer<File>();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaFileProvider.overrideWith(
+              (ref, url) => completer.future,
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatInlineMediaWidget(
+                rawUri: 'https://example.com/assets/banner.png?w=600&h=300',
+                alt: 'banner.png',
+                maxWidth: 360,
+                maxHeight: 320,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+
+      // 600x300 在 maxWidth 360, maxHeight 320 contain 缩放后应为 360x180
+      final containerFinder = find.descendant(
+        of: find.byType(ChatInlineMediaWidget),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.constraints?.maxWidth == 360 &&
+              w.constraints?.maxHeight == 180,
+        ),
+      );
+      expect(containerFinder, findsOneWidget);
     });
   });
 }

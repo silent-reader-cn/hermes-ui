@@ -3,7 +3,6 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -20,6 +19,7 @@ import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'collapsible_process_capsule.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
@@ -134,6 +134,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
   _ReadingAnchor? _readingAnchor;
   double? _lastBottomInset;
+  double? _lastLayoutHeight;
 
   /// 贴底判定阈值（收紧至 80px，既保障平滑跟随又防止向上轻扫被拽回）。
   static const double _nearBottomThreshold = 80.0;
@@ -154,11 +155,27 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _highlightPositioned = false;
   bool _highlightSettled = false;
 
+  @visibleForTesting
+  bool get nearBottom => _nearBottom;
+
+  @visibleForTesting
+  bool get userHasScrolled => _userHasScrolled;
+
+  @visibleForTesting
+  bool get initialPositioned => _initialPositioned;
+
+  @visibleForTesting
+  int get pinnedTranscriptCount => _pinnedTranscriptCount;
+
+  @visibleForTesting
+  bool get hasReadingAnchor => _readingAnchor != null;
+
   late ProviderSubscription<int> _scrollTriggerSub;
   late ProviderSubscription<ChatPhase> _phaseSub;
   ChatPhase? _lastPhase;
   bool _justSent = false;
   bool _isAnimatingToBottom = false;
+  bool _isOutlineJumping = false;
 
   /// 非动画跳底收敛链（`_settleJumpToBottom`）复核次数上限（#23）。
   /// 发送/流式路径只需追平「新气泡未布局完」的增长窗口，几帧内即收敛，
@@ -240,6 +257,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _itemKeys.clear();
       _readingAnchor = null;
       _lastBottomInset = null;
+      _lastLayoutHeight = null;
       _lastPhase = null;
       _justSent = false;
       _isAnimatingToBottom = false;
@@ -325,7 +343,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!_restoringOlderPosition &&
         _initialPositioned &&
         !_initialPositioning &&
-        !_isAnimatingToBottom) {
+        !_isAnimatingToBottom &&
+        !_isOutlineJumping) {
       if (nearBottom) {
         if (!_isUserInteracting || distFromBottom <= 1.0) {
           final wasScrolled = _userHasScrolled;
@@ -339,13 +358,17 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
         }
       } else {
-        final wasNotScrolled = !_userHasScrolled;
-        final wasNear = _nearBottom;
-        _userHasScrolled = true;
-        _readingAnchor = null;
-        _nearBottom = false;
-        if ((wasNotScrolled || wasNear) && mounted) {
-          setState(() {});
+        // 只有在用户主动交互或已进入离底状态时才确认为用户上滚离底；
+        // 避免键盘/输入栏高度挤压或新气泡入场瞬间将「跟随态」误判为「用户已上滚」。
+        if (_isUserInteracting || _userHasScrolled) {
+          final wasNotScrolled = !_userHasScrolled;
+          final wasNear = _nearBottom;
+          _userHasScrolled = true;
+          _readingAnchor = null;
+          _nearBottom = false;
+          if ((wasNotScrolled || wasNear) && mounted) {
+            setState(() {});
+          }
         }
       }
     }
@@ -601,15 +624,22 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           _controller.hasClients &&
           !_userHasScrolled &&
           generation == _layoutGeneration) {
-        final target = _controller.position.maxScrollExtent;
-        if (target > 0) _controller.jumpTo(target);
+        final max = _controller.position.maxScrollExtent;
+        final target = max.clamp(0.0, max);
+        if (target > 0) {
+          _controller.jumpTo(target);
+          if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+            _controller.jumpTo(_controller.position.maxScrollExtent);
+          }
+        }
       }
       _initialPositioning = false;
       _initialPositioned = true;
-      _nearBottom =
-          _controller.hasClients &&
-          _controller.position.maxScrollExtent - _controller.position.pixels <
-              _nearBottomThreshold;
+      _nearBottom = true;
+      _userHasScrolled = false;
+      _readingAnchor = null;
+      _pinnedTranscriptCount = 0;
+      if (mounted) setState(() {});
       return;
     }
     final target = _controller.position.maxScrollExtent;
@@ -634,7 +664,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositioning = false;
       return;
     }
-    if (target > 0) _controller.jumpTo(target);
+    final clampedTarget = target.clamp(0.0, target);
+    if (clampedTarget > 0) {
+      _controller.jumpTo(clampedTarget);
+      if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+        _controller.jumpTo(_controller.position.maxScrollExtent);
+      }
+    }
     // 下一帧复核真实 extent 是否与跳转目标仍有出入。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
@@ -656,13 +692,26 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 收敛收官：以当前真实 maxScrollExtent 精准跳一次并标记定位完成。
   /// （收官值恒等于 extent 本身，无越界 clamp，无回弹。）
   void _finishSettleWithTarget(int generation) {
-    if (mounted && _controller.hasClients && generation == _layoutGeneration) {
-      final target = _controller.position.maxScrollExtent;
-      if (target > 0) _controller.jumpTo(target);
+    if (mounted &&
+        _controller.hasClients &&
+        !_userHasScrolled &&
+        generation == _layoutGeneration) {
+      final max = _controller.position.maxScrollExtent;
+      final target = max.clamp(0.0, max);
+      if (target > 0) {
+        _controller.jumpTo(target);
+        if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+          _controller.jumpTo(_controller.position.maxScrollExtent);
+        }
+      }
     }
     _initialPositioning = false;
     _initialPositioned = true;
     _nearBottom = true;
+    _userHasScrolled = false;
+    _readingAnchor = null;
+    _pinnedTranscriptCount = 0;
+    if (mounted) setState(() {});
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -738,6 +787,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       // 落点恒为当帧 maxScrollExtent（界内）：goBallistic(0) 不会起弹簧。
       // 若前帧 extent 收缩导致像素越界，此跳亦完成精准拉回（直跳非弹簧）。
       _controller.jumpTo(max);
+      if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+        _controller.jumpTo(_controller.position.maxScrollExtent);
+      }
       if (attempts >= _maxJumpResettle) {
         _jumpSettling = false;
         return;
@@ -842,93 +894,203 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   /// 大纲跳转：将指定 renderId 的用户气泡顶部贴至视口顶部（alignment 0.0）。
   ///
-  /// 策略与 [_scrollToHighlight] 双步法一致（chat_message_list.dart:766-789）：
-  /// 1. 若目标已在 DOM 中构建（[_itemKeys] 已包含 renderId），直接
-  ///    `Scrollable.ensureVisible(alignment: 0.0, padding: navBarHeight)` 精跳；
-  /// 2. 否则按 `loadedIndex / transcriptLength * maxExtent` 比率粗跳，
-  ///    下一帧目标多已入视口，再 `ensureVisible` 精定。
-  ///
-  /// `alignment: 0.0` + `alignmentPolicy: preferLeading` 令目标贴视口顶部；
-  /// `scrollOffset` 校准导航栏高度（44）+ 安全区 top，避免被遮挡。
-  void outlineJumpTo(String renderId, int loadedIndex) {
+  /// 大纲跳转属于主动阅读行为（active.md 大纲点击跳转跑飞规格）：
+  /// 1. 入口立即进入离底阅读态（`_userHasScrolled = true`, `_nearBottom = false`,
+  ///    `_readingAnchor = null`），暂停跟随，流式生成中亦不拽回底部；
+  /// 2. 若目标已在 DOM 中构建，直接 `Scrollable.ensureVisible` + 导航栏补偿；
+  /// 3. 否则基于已构建条目的实际像素位置与锚点比例进行粗跳（避免 `maxExtent * ratio`
+  ///    因虚拟化估算落底误入跟随），下一帧目标入视口后再 `ensureVisible` 精定；
+  /// 4. 完成后更新阅读锚点 `_readingAnchor`，右下角展示回底按钮。
+  void outlineJumpTo(String renderId, int loadedIndex, {int retryCount = 0}) {
     if (!mounted || !_controller.hasClients) return;
     const kNavBarHeight = 44.0;
     final topPadding = MediaQuery.of(context).padding.top + kNavBarHeight;
+
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+    _userHasScrolled = true;
+    _nearBottom = false;
+    _isUserInteracting = false;
+    _justSent = false;
+    _readingAnchor = null;
+    _pinnedTranscriptCount = transcript.length;
+    _isOutlineJumping = true;
+    setState(() {});
 
     // 1. 尝试精跳（目标已构建）
     final key = _itemKeys[renderId];
     final ctx = key?.currentContext;
     if (ctx != null) {
       final renderObject = ctx.findRenderObject();
-      if (renderObject != null && renderObject.attached) {
-        if (ctx is! Element || ctx.mounted) {
+      if (renderObject != null &&
+          renderObject.attached &&
+          (ctx is! Element || ctx.mounted)) {
+        unawaited(
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.0,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          ).then((_) {
+            _finishOutlineJump(topPadding);
+          }),
+        );
+        return;
+      }
+    }
+
+    // 2. 粗跳估算（基于已构建条目的真实位置插值，避免虚拟化 maxExtent 估算偏底）
+    final coarse = _estimateCoarseJumpOffset(loadedIndex, transcript);
+    _controller.jumpTo(
+      coarse.clamp(
+        _controller.position.minScrollExtent,
+        _controller.position.maxScrollExtent,
+      ),
+    );
+
+    // 下一帧再精定（目标多已入视口构建）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) {
+        _isOutlineJumping = false;
+        return;
+      }
+      final retryKey = _itemKeys[renderId];
+      final retryCtx = retryKey?.currentContext;
+      if (retryCtx != null) {
+        final renderObject = retryCtx.findRenderObject();
+        if (renderObject != null &&
+            renderObject.attached &&
+            (retryCtx is! Element || retryCtx.mounted)) {
           unawaited(
             Scrollable.ensureVisible(
-              ctx,
+              retryCtx,
               alignment: 0.0,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
             ).then((_) {
-              // 校准：额外补偿导航栏高度（ensureVisible 不知道导航栏存在）
-              if (!mounted || !_controller.hasClients) return;
-              final current = _controller.position.pixels;
-              final adjusted = math.max(0.0, current - topPadding);
-              if ((adjusted - current).abs() > 1) {
-                _controller.animateTo(
-                  adjusted,
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOut,
-                );
-              }
+              _finishOutlineJump(topPadding);
             }),
           );
           return;
         }
       }
+
+      // 若单次粗跳后目标仍未入视口（极长/长短极端混合），最多重试 2 轮收敛
+      if (retryCount < 2) {
+        outlineJumpTo(renderId, loadedIndex, retryCount: retryCount + 1);
+      } else {
+        _finishOutlineJump(topPadding);
+      }
+    });
+  }
+
+  /// 基于已构建条目的实际渲染位置估算未构建目标索引的像素偏移。
+  double _estimateCoarseJumpOffset(
+    int loadedIndex,
+    List<TranscriptMessage> transcript,
+  ) {
+    if (loadedIndex <= 0 || transcript.isEmpty) return 0.0;
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) {
+      return (loadedIndex * 120.0).clamp(
+        0.0,
+        _controller.position.maxScrollExtent,
+      );
     }
 
-    // 2. 粗跳后再精定（目标未构建，懒加载场景）
-    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
-    if (!mounted || !_controller.hasClients) return;
-    final ratio = transcript.isEmpty
-        ? 0.0
-        : loadedIndex / transcript.length;
-    final coarse = _controller.position.maxScrollExtent * ratio;
-    _controller.jumpTo(coarse.clamp(
-      _controller.position.minScrollExtent,
-      _controller.position.maxScrollExtent,
-    ));
-    // 下一帧再精确对准（目标多已入视口构建）
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_controller.hasClients) return;
-      final retryKey = _itemKeys[renderId];
-      final retryCtx = retryKey?.currentContext;
-      if (retryCtx == null) return;
-      final renderObject = retryCtx.findRenderObject();
-      if (renderObject == null || !renderObject.attached) return;
-      if (retryCtx is Element && !retryCtx.mounted) return;
+    int? minRenderedIndex;
+    double? minRenderedOffset;
+    int? maxRenderedIndex;
+    double? maxRenderedOffset;
+
+    for (var i = 0; i < transcript.length; i++) {
+      final entry = transcript[i];
+      final itemKey = _itemKeys[entry.renderId];
+      final itemCtx = itemKey?.currentContext;
+      if (itemCtx == null) continue;
+      final box = itemCtx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final localOffset = box.localToGlobal(
+        Offset.zero,
+        ancestor: scrollableBox,
+      );
+      final itemScrollOffset = _controller.position.pixels + localOffset.dy;
+      if (minRenderedIndex == null || i < minRenderedIndex) {
+        minRenderedIndex = i;
+        minRenderedOffset = itemScrollOffset;
+      }
+      if (maxRenderedIndex == null || i > maxRenderedIndex) {
+        maxRenderedIndex = i;
+        maxRenderedOffset = itemScrollOffset;
+      }
+    }
+
+    final maxExtent = _controller.position.maxScrollExtent;
+
+    if (minRenderedIndex != null && minRenderedOffset != null) {
+      if (loadedIndex < minRenderedIndex) {
+        if (minRenderedIndex <= 0) return 0.0;
+        final ratio = loadedIndex / minRenderedIndex;
+        return (minRenderedOffset * ratio).clamp(0.0, maxExtent);
+      } else if (maxRenderedIndex != null &&
+          maxRenderedOffset != null &&
+          loadedIndex > maxRenderedIndex) {
+        final remaining = transcript.length - 1 - maxRenderedIndex;
+        if (remaining <= 0) return maxExtent;
+        final ratio = (loadedIndex - maxRenderedIndex) / remaining;
+        final distToMax = math.max(0.0, maxExtent - maxRenderedOffset);
+        return (maxRenderedOffset + distToMax * ratio).clamp(0.0, maxExtent);
+      } else if (minRenderedIndex != maxRenderedIndex &&
+          maxRenderedIndex != null &&
+          maxRenderedOffset != null) {
+        final ratio =
+            (loadedIndex - minRenderedIndex) /
+            (maxRenderedIndex - minRenderedIndex);
+        return (minRenderedOffset +
+                (maxRenderedOffset - minRenderedOffset) * ratio)
+            .clamp(0.0, maxExtent);
+      }
+    }
+
+    // 无构建条目参考时按保守平均高度估算
+    return (loadedIndex * 120.0).clamp(0.0, maxExtent);
+  }
+
+  /// 完成大纲跳转的导航栏高度补偿与阅读状态锁定。
+  void _finishOutlineJump(double topPadding) {
+    if (!mounted || !_controller.hasClients) {
+      _isOutlineJumping = false;
+      return;
+    }
+    final current = _controller.position.pixels;
+    final adjusted = math.max(0.0, current - topPadding);
+    if ((adjusted - current).abs() > 1) {
       unawaited(
-        Scrollable.ensureVisible(
-          retryCtx,
-          alignment: 0.0,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        ).then((_) {
-          if (!mounted || !_controller.hasClients) return;
-          final current = _controller.position.pixels;
-          final adjusted = math.max(0.0, current - topPadding);
-          if ((adjusted - current).abs() > 1) {
-            _controller.animateTo(
+        _controller
+            .animateTo(
               adjusted,
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOut,
-            );
-          }
-        }),
+            )
+            .then((_) {
+              if (!mounted) return;
+              _isOutlineJumping = false;
+              _userHasScrolled = true;
+              _nearBottom = false;
+              _readingAnchor = null;
+              _updateReadingAnchor();
+              if (mounted) setState(() {});
+            }),
       );
-    });
+    } else {
+      _isOutlineJumping = false;
+      _userHasScrolled = true;
+      _nearBottom = false;
+      _readingAnchor = null;
+      _updateReadingAnchor();
+      if (mounted) setState(() {});
+    }
   }
 
   /// 长按/右键消息弹操作菜单并执行动作。
@@ -979,6 +1141,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final collapseEnabled = ref.watch(
       injectedNoticeSettingsProvider.select((s) => s.collapseInjectedNotices),
     );
+    final collapseCompletedProcess =
+        ref.watch(collapseCompletedProcessProvider);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final transcript = ref.watch(transcriptMessagesProvider(sessionId));
     final streaming = ref.watch(streamingMessageProvider(sessionId));
@@ -1052,26 +1216,26 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final phaseChanged = _lastPhase != phase;
     _lastPhase = phase;
 
-    // Android 输入法软键盘监听（仅 defaultTargetPlatform == android 生效，todo.md #13）
-    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    // 全平台软键盘监听（viewInsets.bottom 变化驱动，todo.md #13）
     final currentBottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    if (isAndroid) {
-      if (_lastBottomInset != null && _lastBottomInset != currentBottomInset) {
+    final bottomInsetChange =
+        _lastBottomInset != null && _lastBottomInset != currentBottomInset;
+    _lastBottomInset = currentBottomInset;
+    if (bottomInsetChange &&
+        _nearBottom &&
+        !_userHasScrolled &&
+        _initialPositioned &&
+        !_positioningActive &&
+        !_restoringOlderPosition) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_controller.hasClients) return;
         if (_nearBottom &&
-            _initialPositioned &&
+            !_userHasScrolled &&
             !_positioningActive &&
             !_restoringOlderPosition) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || !_controller.hasClients) return;
-            if (_nearBottom &&
-                !_positioningActive &&
-                !_restoringOlderPosition) {
-              _scrollToBottom(animated: false);
-            }
-          });
+          _scrollToBottom(animated: false);
         }
-      }
-      _lastBottomInset = currentBottomInset;
+      });
     }
 
     // 消息刷新与内容变化：若 _nearBottom 则无动画 jump 回底（#13）；若离底阅读则保持锚点不拉底（#14）
@@ -1175,229 +1339,258 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         (_userHasScrolled || !_nearBottom) &&
         distFromBottom >= 20.0;
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollStartNotification) {
-          if (notification.dragDetails != null) {
-            _isUserInteracting = true;
-          }
-        } else if (notification is UserScrollNotification) {
-          if (notification.direction == ScrollDirection.idle) {
-            _isUserInteracting = false;
-          } else {
-            _isUserInteracting = true;
-            if (_initialPositioned &&
-                !_initialPositioning &&
-                !_restoringOlderPosition) {
-              if (notification.direction == ScrollDirection.forward) {
-                final wasNotScrolled = !_userHasScrolled;
-                if (!_userHasScrolled) {
-                  _pinnedTranscriptCount = ref
-                      .read(transcriptMessagesProvider(widget.sessionId))
-                      .length;
-                }
-                _userHasScrolled = true;
-                _nearBottom = false;
-                if (wasNotScrolled && mounted) {
-                  setState(() {});
-                }
-              }
-            }
-          }
-        } else if (notification is ScrollUpdateNotification) {
-          if (notification.dragDetails != null) {
-            _isUserInteracting = true;
-            if (_initialPositioned &&
-                !_initialPositioning &&
-                !_restoringOlderPosition) {
-              if (notification.dragDetails!.delta.dy > 0 ||
-                  (notification.scrollDelta != null &&
-                      notification.scrollDelta! < 0)) {
-                final wasNotScrolled = !_userHasScrolled;
-                if (!_userHasScrolled) {
-                  _pinnedTranscriptCount = ref
-                      .read(transcriptMessagesProvider(widget.sessionId))
-                      .length;
-                }
-                _userHasScrolled = true;
-                _nearBottom = false;
-                if (wasNotScrolled && mounted) {
-                  setState(() {});
-                }
-              }
-            }
-          } else if (notification.scrollDelta != null &&
-              notification.scrollDelta! < -1.0) {
-            if (_initialPositioned &&
-                !_initialPositioning &&
-                !_restoringOlderPosition) {
-              final wasNotScrolled = !_userHasScrolled;
-              if (!_userHasScrolled) {
-                _pinnedTranscriptCount = ref
-                    .read(transcriptMessagesProvider(widget.sessionId))
-                    .length;
-              }
-              _userHasScrolled = true;
-              _nearBottom = false;
-              if (wasNotScrolled && mounted) {
-                setState(() {});
-              }
-            }
-          }
-        } else if (notification is ScrollEndNotification) {
-          _isUserInteracting = false;
-        }
-        return false;
-      },
-      child: Stack(
-        children: [
-          ListView.builder(
-            controller: _controller,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: itemCount,
-        itemBuilder: (context, index) {
-          // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-          if (index < transcript.length) {
-            final entry = transcript[index];
-            final groups =
-                entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
-            final noticeId = entry.message.id;
-            final expanded = _expandedNoticeIds.contains(noticeId);
-            final isHighlightTarget =
-                _highlightTargetRenderId != null &&
-                entry.renderId == _highlightTargetRenderId;
-            final entryKey = _itemKeys.putIfAbsent(
-              entry.renderId,
-              () => GlobalKey(),
-            );
-            if (entry.message.messageId != null &&
-                entry.message.messageId!.isNotEmpty) {
-              _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
-            }
-            for (final g in groups) {
-              _itemKeys.putIfAbsent(g.id, () => entryKey);
-            }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final currentHeight = constraints.maxHeight;
+        final heightChange = _lastLayoutHeight != null &&
+            (_lastLayoutHeight! - currentHeight).abs() > 0.5;
+        _lastLayoutHeight = currentHeight;
 
-            return KeyedSubtree(
-              key: isHighlightTarget ? _highlightKey : entryKey,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onLongPress: () => _showMessageActions(entry.message),
-                onSecondaryTapDown: (_) => _showMessageActions(entry.message),
-                child: SearchMessageHighlight(
-                  highlight: isHighlightTarget,
-                  child: ChatMessageBubble(
-                    key: ValueKey(entry.renderId),
-                    message: entry.message,
-                    toolGroups: groups,
-                    hideThinking: hideThinking,
-                    collapseInjectedEnabled: collapseEnabled,
-                    injectedExpanded: expanded,
-                    onToggleInjected: () {
+        if (heightChange &&
+            _nearBottom &&
+            !_userHasScrolled &&
+            _initialPositioned &&
+            !_positioningActive &&
+            !_restoringOlderPosition) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_controller.hasClients) return;
+            if (_nearBottom &&
+                !_userHasScrolled &&
+                !_positioningActive &&
+                !_restoringOlderPosition) {
+              _scrollToBottom(animated: false);
+            }
+          });
+        }
+
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollStartNotification) {
+              if (notification.dragDetails != null) {
+                _isUserInteracting = true;
+              }
+            } else if (notification is UserScrollNotification) {
+              if (notification.direction == ScrollDirection.idle) {
+                _isUserInteracting = false;
+              } else {
+                _isUserInteracting = true;
+                if (_initialPositioned &&
+                    !_initialPositioning &&
+                    !_restoringOlderPosition) {
+                  if (notification.direction == ScrollDirection.forward) {
+                    final wasNotScrolled = !_userHasScrolled;
+                    if (!_userHasScrolled) {
+                      _pinnedTranscriptCount = ref
+                          .read(transcriptMessagesProvider(widget.sessionId))
+                          .length;
+                    }
+                    _userHasScrolled = true;
+                    _nearBottom = false;
+                    if (wasNotScrolled && mounted) {
+                      setState(() {});
+                    }
+                  }
+                }
+              }
+            } else if (notification is ScrollUpdateNotification) {
+              if (notification.dragDetails != null) {
+                _isUserInteracting = true;
+                if (_initialPositioned &&
+                    !_initialPositioning &&
+                    !_restoringOlderPosition) {
+                  if (notification.dragDetails!.delta.dy > 0 ||
+                      (notification.scrollDelta != null &&
+                          notification.scrollDelta! < 0)) {
+                    final wasNotScrolled = !_userHasScrolled;
+                    if (!_userHasScrolled) {
+                      _pinnedTranscriptCount = ref
+                          .read(transcriptMessagesProvider(widget.sessionId))
+                          .length;
+                    }
+                    _userHasScrolled = true;
+                    _nearBottom = false;
+                    if (wasNotScrolled && mounted) {
+                      setState(() {});
+                    }
+                  }
+                }
+              } else if (notification.scrollDelta != null &&
+                  notification.scrollDelta! < -1.0) {
+                if (_initialPositioned &&
+                    !_initialPositioning &&
+                    !_restoringOlderPosition) {
+                  final wasNotScrolled = !_userHasScrolled;
+                  if (!_userHasScrolled) {
+                    _pinnedTranscriptCount = ref
+                        .read(transcriptMessagesProvider(widget.sessionId))
+                        .length;
+                  }
+                  _userHasScrolled = true;
+                  _nearBottom = false;
+                  if (wasNotScrolled && mounted) {
+                    setState(() {});
+                  }
+                }
+              }
+            } else if (notification is ScrollEndNotification) {
+              _isUserInteracting = false;
+            }
+            return false;
+          },
+          child: Stack(
+            children: [
+              ListView.builder(
+                controller: _controller,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: itemCount,
+                itemBuilder: (context, index) {
+                  // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
+                  if (index < transcript.length) {
+                    final entry = transcript[index];
+                    final groups =
+                        entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+                    final noticeId = entry.message.id;
+                    final expanded = _expandedNoticeIds.contains(noticeId);
+                    final isHighlightTarget =
+                        _highlightTargetRenderId != null &&
+                        entry.renderId == _highlightTargetRenderId;
+                    final entryKey = _itemKeys.putIfAbsent(
+                      entry.renderId,
+                      () => GlobalKey(),
+                    );
+                    if (entry.message.messageId != null &&
+                        entry.message.messageId!.isNotEmpty) {
+                      _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
+                    }
+                    for (final g in groups) {
+                      _itemKeys.putIfAbsent(g.id, () => entryKey);
+                    }
+
+                    return KeyedSubtree(
+                      key: isHighlightTarget ? _highlightKey : entryKey,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: () => _showMessageActions(entry.message),
+                        onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+                        child: SearchMessageHighlight(
+                          highlight: isHighlightTarget,
+                          child: ChatMessageBubble(
+                            key: ValueKey(entry.renderId),
+                            message: entry.message,
+                            toolGroups: groups,
+                            hideThinking: hideThinking,
+                            collapseInjectedEnabled: collapseEnabled,
+                            collapseCompletedProcess: collapseCompletedProcess,
+                            isStreaming: false,
+                            injectedExpanded: expanded,
+                            onToggleInjected: () {
+                              if (!mounted) return;
+                              setState(() {
+                                if (_expandedNoticeIds.contains(noticeId)) {
+                                  _expandedNoticeIds.remove(noticeId);
+                                } else {
+                                  _expandedNoticeIds.add(noticeId);
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  var tail = index - transcript.length;
+                  if (showQueuedBanner) {
+                    if (tail == 0) {
+                      return QueuedBanner(
+                        count: queuedMessages.length,
+                        preview: queuedMessages.first,
+                      );
+                    }
+                    tail--;
+                  }
+                  if (streaming != null && !timelineActive) {
+                    // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
+                    if (tail == 0) {
+                      return _StreamingBubble(
+                        sessionId: sessionId,
+                        message: streaming,
+                        toolGroups: streamingTools,
+                        hideThinking: hideThinking,
+                      );
+                    }
+                    tail--;
+                  }
+                  if (streaming != null && timelineActive) {
+                    if (liveTimeline.isEmpty) {
+                      if (tail == 0) return const _StreamingThinkingIndicator();
+                      tail--;
+                    } else {
+                      if (tail < liveTimeline.length) {
+                        final liveEntry = liveTimeline[tail];
+                        final liveKey = _itemKeys.putIfAbsent(
+                          liveEntry.renderKey,
+                          () => GlobalKey(),
+                        );
+                        if (liveEntry.toolGroup != null) {
+                          _itemKeys.putIfAbsent(liveEntry.toolGroup!.id, () => liveKey);
+                        }
+                        return KeyedSubtree(
+                          key: liveKey,
+                          child: _LiveTimelineItem(
+                            sessionId: sessionId,
+                            entry: liveEntry,
+                            streamingMessage: streaming,
+                            hideThinking: hideThinking,
+                          ),
+                        );
+                      }
+                      tail -= liveTimeline.length;
+                    }
+                  }
+                  if (showRecovering) {
+                    if (tail == 0) return const _ReconnectingIndicator();
+                    tail--;
+                  }
+                  if (phase == ChatPhase.sending) {
+                    if (tail == 0) return const _SendingIndicator();
+                    tail--;
+                  }
+                  if (needFallback) {
+                    if (tail == 0) {
+                      return _FallbackToolReasoningCards(
+                        toolGroups: toolGroups,
+                        hideThinking: hideThinking,
+                        collapseCompletedProcess: collapseCompletedProcess,
+                      );
+                    }
+                    tail--;
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+              if (showScrollToBottomButton)
+                Positioned(
+                  right: 16,
+                  bottom: 12,
+                  child: _ScrollToBottomButton(
+                    label: buttonLabel,
+                    onPressed: () {
                       if (!mounted) return;
                       setState(() {
-                        if (_expandedNoticeIds.contains(noticeId)) {
-                          _expandedNoticeIds.remove(noticeId);
-                        } else {
-                          _expandedNoticeIds.add(noticeId);
-                        }
+                        _userHasScrolled = false;
+                        _nearBottom = true;
+                        _readingAnchor = null;
+                        _pinnedTranscriptCount = 0;
                       });
+                      _scrollToBottom(animated: true);
                     },
                   ),
                 ),
-              ),
-            );
-          }
-          var tail = index - transcript.length;
-          if (showQueuedBanner) {
-            if (tail == 0) {
-              return QueuedBanner(
-                count: queuedMessages.length,
-                preview: queuedMessages.first,
-              );
-            }
-            tail--;
-          }
-          if (streaming != null && !timelineActive) {
-            // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
-            if (tail == 0) {
-              return _StreamingBubble(
-                sessionId: sessionId,
-                message: streaming,
-                toolGroups: streamingTools,
-                hideThinking: hideThinking,
-              );
-            }
-            tail--;
-          }
-          if (streaming != null && timelineActive) {
-            if (liveTimeline.isEmpty) {
-              if (tail == 0) return const _StreamingThinkingIndicator();
-              tail--;
-            } else {
-              if (tail < liveTimeline.length) {
-                final liveEntry = liveTimeline[tail];
-                final liveKey = _itemKeys.putIfAbsent(
-                  liveEntry.renderKey,
-                  () => GlobalKey(),
-                );
-                if (liveEntry.toolGroup != null) {
-                  _itemKeys.putIfAbsent(liveEntry.toolGroup!.id, () => liveKey);
-                }
-                return KeyedSubtree(
-                  key: liveKey,
-                  child: _LiveTimelineItem(
-                    sessionId: sessionId,
-                    entry: liveEntry,
-                    streamingMessage: streaming,
-                    hideThinking: hideThinking,
-                  ),
-                );
-              }
-              tail -= liveTimeline.length;
-            }
-          }
-          if (showRecovering) {
-            if (tail == 0) return const _ReconnectingIndicator();
-            tail--;
-          }
-          if (phase == ChatPhase.sending) {
-            if (tail == 0) return const _SendingIndicator();
-            tail--;
-          }
-          if (needFallback) {
-            if (tail == 0) {
-              return _FallbackToolReasoningCards(
-                toolGroups: toolGroups,
-                hideThinking: hideThinking,
-              );
-            }
-            tail--;
-          }
-          return const SizedBox.shrink();
-        },
-      ),
-      if (showScrollToBottomButton)
-        Positioned(
-          right: 16,
-          bottom: 12,
-          child: _ScrollToBottomButton(
-            label: buttonLabel,
-            onPressed: () {
-              if (!mounted) return;
-              setState(() {
-                _userHasScrolled = false;
-                _nearBottom = true;
-                _readingAnchor = null;
-                _pinnedTranscriptCount = 0;
-              });
-              _scrollToBottom(animated: true);
-            },
+            ],
           ),
-        ),
-    ],
-  ),
-);
+        );
+      },
+    );
   }
 }
 
@@ -1865,25 +2058,35 @@ class _FallbackToolReasoningCards extends StatelessWidget {
   const _FallbackToolReasoningCards({
     required this.toolGroups,
     required this.hideThinking,
+    this.collapseCompletedProcess = true,
   });
 
   final List<ToolCallGroup> toolGroups;
   final bool hideThinking;
+  final bool collapseCompletedProcess;
 
   @override
   Widget build(BuildContext context) {
+    final toolCards = <Widget>[
+      for (final group in toolGroups) ...[
+        ToolCallGroupCard(group: group, hideThinking: hideThinking),
+        if (group != toolGroups.last) const SizedBox(height: 8),
+      ],
+    ];
+
     // 复用与 assistant 气泡相同的 horizontal 12 外边距；区块间统一固定间距
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final group in toolGroups) ...[
-            ToolCallGroupCard(group: group, hideThinking: hideThinking),
-            if (group != toolGroups.last) const SizedBox(height: 8),
-          ],
-        ],
-      ),
+      child: collapseCompletedProcess
+          ? CollapsibleProcessCapsule(
+              toolGroups: toolGroups,
+              hideThinking: hideThinking,
+              children: toolCards,
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: toolCards,
+            ),
     );
   }
 }

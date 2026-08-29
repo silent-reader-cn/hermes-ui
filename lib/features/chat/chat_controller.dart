@@ -78,10 +78,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// reveal 队列开始积压的时刻（最大滞后判定）。
   DateTime? _revealQueueStart;
 
-  /// 最近一次内容新增（看门狗 5s 阈值）。
+  /// 最近一次内容新增（看门狗 3s 阈值）。
   DateTime? _lastProgress;
 
-  /// 最近一次传输活动（看门狗 12s/18s/25s 阈值）。
+  /// 最近一次传输活动（看门狗 3s/8s 阈值）。
   DateTime? _lastTransportActivity;
 
   /// status 轮询冷却截止。
@@ -860,6 +860,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         phase: ChatPhase.streaming,
         stream: state.stream.copyWith(activeStreamId: activeStreamId),
       );
+      _syncSessionStreaming(
+        state.sessionId,
+        true,
+        activeStreamId: activeStreamId,
+      );
       unawaited(_reconnectIfNeeded());
     }
   }
@@ -1141,6 +1146,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       message:
           'Stream started (phase: streaming, streamId: $streamId, session: ${state.sessionId})',
     );
+    _syncSessionStreaming(
+      state.sessionId,
+      true,
+      activeStreamId: streamId,
+      verifyInBackground: true,
+    );
     _connectStream(streamId);
     _markProgress();
     _recordTransportActivity();
@@ -1334,7 +1345,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastTransportActivity = _now();
     _statusCheckCooldownUntil = null;
     // #29：空窗 ≥ 传输停滞阈值 → 立即主动查 stream status（不等 watchdog
-    // 12-18s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
+    // 3-8s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
     // （watchdog/transportError 接管），不重复触发；死流/超时立即重连或补差，
     // 健康流 loadMessages 顺带把后台期间新内容落地——「切回立即呈现最新状态」。
     final stream = state.stream;
@@ -2290,6 +2301,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     String? completedStreamId,
   }) {
     _api?.stopStream();
+    _syncSessionStreaming(state.sessionId, false);
     final nextToolGroups = _archiveLiveToolCallsToGroups();
     final nextReasoningGroups = _archiveLiveReasoningToGroups();
     state = state.copyWith(
@@ -2390,6 +2402,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   void _handleCancelled() {
+    _syncSessionStreaming(state.sessionId, false);
     if (!state.stream.hasCompletedResponse) {
       _completeCurrentResponse(
         needsTranscriptRefresh: false,
@@ -2401,6 +2414,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   void _handleErrorEvent(String message) {
+    _syncSessionStreaming(state.sessionId, false);
     if (!state.stream.hasCompletedResponse) {
       state = state.copyWith(sendErrorMessage: message);
       _completeCurrentResponse(
@@ -2424,6 +2438,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       message:
           'Stream finished (endPhase: ${endPhase.name}, session: ${state.sessionId})',
     );
+    _syncSessionStreaming(state.sessionId, false);
     flushPendingStreamingContent();
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
@@ -2566,6 +2581,31 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } catch (_) {}
   }
 
+  /// 实时同步单个会话流式状态到会话列表（乐观置位 / 清除 + 后台纠偏）。
+  void _syncSessionStreaming(
+    String sessionId,
+    bool isStreaming, {
+    String? activeStreamId,
+    bool verifyInBackground = false,
+  }) {
+    if (sessionId.isEmpty || _disposed) return;
+    try {
+      final active = ref.read(activeConnectionProvider);
+      if (active == null) return;
+    } catch (_) {
+      return;
+    }
+    try {
+      final notifier = ref.read(sessionListControllerProvider.notifier);
+      notifier.markStreaming(
+        sessionId,
+        isStreaming,
+        activeStreamId: activeStreamId,
+        verifyInBackground: verifyInBackground,
+      );
+    } catch (_) {}
+  }
+
   // -------------------------------------------------------------------------
   // transportError 断线恢复（chat_spec.md §5.3）
   // -------------------------------------------------------------------------
@@ -2574,6 +2614,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final stream = state.stream;
     if (stream.activeStreamId == null || stream.hasCompletedResponse) {
       // 无连接可恢复：显示错误 + finishStream。
+      _syncSessionStreaming(state.sessionId, false);
       state = state.copyWith(sendErrorMessage: message);
       _finishStream(endPhase: ChatPhase.error);
       return;
@@ -2742,7 +2783,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   // -------------------------------------------------------------------------
-  // 看门狗（前台 1s 心跳；5s/12s/18s/25s 阈值；冷却 ≥4s）
+  // 看门狗（前台 1s 心跳；3s/8s 阈值；冷却 ≥3s）
   // -------------------------------------------------------------------------
 
   void _startWatchdog() {
@@ -3060,6 +3101,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         hasCompletedResponse: false,
         isSuspended: false,
       ),
+    );
+    _syncSessionStreaming(
+      state.sessionId,
+      true,
+      activeStreamId: activeStreamId,
+      verifyInBackground: true,
     );
     _markProgress();
   }

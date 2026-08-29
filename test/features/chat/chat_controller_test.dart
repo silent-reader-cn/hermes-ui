@@ -1209,7 +1209,7 @@ void main() {
       });
     });
 
-    test('看门狗：5s 无进度 + 12s 无传输 → status 检查', () {
+    test('看门狗：3s 无进度 + 3s 无传输 → status 检查', () {
       fakeAsync((async) {
         final api = _FakeChatApi();
         api.statusResult = {'active': true, 'replay_available': false};
@@ -1222,8 +1222,8 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
 
-        clock.advance(const Duration(seconds: 13));
-        async.elapse(const Duration(seconds: 13));
+        clock.advance(const Duration(seconds: 4));
+        async.elapse(const Duration(seconds: 4));
         async.flushMicrotasks();
         expect(api.statusCalls, greaterThan(0));
         final state = container.read(chatControllerProvider(''));

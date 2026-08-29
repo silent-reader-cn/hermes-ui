@@ -48,12 +48,34 @@ abstract interface class TurnNotificationService {
   Future<String?> getLaunchSessionId();
 }
 
+/// HyperOS 3 / Android 后台联网与保活策略说明：
+///
+/// 1. **HyperOS 3 / MIUI 后台冻结机制**：
+///    - 小米 HyperOS 3 对后台应用的电池和网络管控极其严格。App 切入后台或锁屏后，
+///      系统可能在数秒到数分钟内冻结网络套接字（WebSocket / SSE）并暂停 Isolate 定时器。
+///    - 导致现象：后台期间无法实时接收服务端 SSE 结束事件；切回前台时才触发重连与同步。
+///
+/// 2. **用户端可复现引导与配置**：
+///    - 自启动管理：系统设置 → 应用设置 → 应用管理 → Hermes → 开启「自启动」与「关联启动」；
+///    - 省电策略：系统设置 → 应用设置 → Hermes → 省电策略 → 设为「无限制」；
+///    - 后台联网：系统设置 → 应用设置 → Hermes → 联网控制 → 确保 WLAN 和移动数据全开；
+///    - 通知权限与锁屏：允许「通知」以及「悬浮通知」、「锁屏通知」；
+///    - 任务卡片锁定：在多任务界面下拉 Hermes 卡片加锁，防止被一键清理。
+///
+/// 3. **长期保活与降级架构方案**：
+///    - 方案 A（Foreground Service 前台服务）：在后台流式生成进行期间启动前台服务，
+///      展示进行中通知（"Hermes 正在生成..."）并持有 CPU WakeLock，防止网络冻结；生成完成后
+///      自动关闭前台服务并弹出回合完成高优先级通知（ID: 1001）；
+///    - 方案 B（WorkManager / 周期探活）：当流式断开或未收到完成通知时，通过 WorkManager
+///      后台拉取 `GET /api/sessions/:id/status` 纠偏，触发补发通知；
+///    - 方案 C（FCM / 统一推送通道）：服务端生成完成时直接下发推送通知唤醒 App。
+///
 /// flutter_local_notifications 生产实现（Android 3 通道 + Windows Toast）。
 ///
 /// 行为对齐契约：
-/// 1. Android 分区 1001(turns)/1101(clarify)/1201(errors)；
+/// 1. Android 分区 1001(turns)/1101(clarify)/1201(errors)，冷启动即批量预创建通道；
 /// 2. Windows Toast 初始化 (Hermes UI + AUMID com.hermes.ui)；
-/// 3. 点击回到对应会话，回到 app 自动清除。所有平台调用均吞异常并记日志。
+/// 3. 点击回到对应会话，回到 app 自动清除。所有平台调用均吞异常并记日志与诊断。
 class LocalNotificationsTurnNotificationService
     implements TurnNotificationService {
   LocalNotificationsTurnNotificationService({
@@ -78,6 +100,28 @@ class LocalNotificationsTurnNotificationService
   static const channelErrorsName = '异常中断';
   static const channelErrorsDescription = '会话异常中断或出错时推送系统通知';
   static const notificationErrorsId = 1201;
+
+  /// Android 通知渠道配置列表（启动时批量预创建）。
+  static const androidChannels = <AndroidNotificationChannel>[
+    AndroidNotificationChannel(
+      channelTurnsId,
+      channelTurnsName,
+      description: channelTurnsDescription,
+      importance: Importance.high,
+    ),
+    AndroidNotificationChannel(
+      channelClarifyId,
+      channelClarifyName,
+      description: channelClarifyDescription,
+      importance: Importance.high,
+    ),
+    AndroidNotificationChannel(
+      channelErrorsId,
+      channelErrorsName,
+      description: channelErrorsDescription,
+      importance: Importance.high,
+    ),
+  ];
 
   /// 兼容历史 channel 常量。
   static const channelId = channelTurnsId;
@@ -115,10 +159,33 @@ class LocalNotificationsTurnNotificationService
         },
       );
       _initialized = true;
+
+      // 显式批量预创建 Android 通知三渠道（覆盖安装冷启动后立即补齐三通道）：
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        for (final channel in androidChannels) {
+          await android.createNotificationChannel(channel);
+        }
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.info,
+          tag: 'notifications',
+          message: '预创建 Android 通知渠道成功',
+          details: {
+            'channels': androidChannels.map((c) => c.id).toList(),
+          },
+        );
+      }
     } on Object catch (error) {
       // 平台插件未注册（如测试环境 / 桌面端）或初始化失败：
       // 通知是增强功能，绝不影响聊天主流程。
       developer.log('通知服务初始化失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '通知服务初始化失败',
+        errorKind: error.toString(),
+      );
     }
   }
 
@@ -131,6 +198,18 @@ class LocalNotificationsTurnNotificationService
     if (sessionId.isEmpty) return;
     await _ensureInitialized();
     try {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '发送回合完成通知',
+        details: {
+          'sessionId': sessionId,
+          'title': title,
+          'previewLength': preview.length,
+          'channel': channelTurnsId,
+          'notificationId': notificationTurnsId,
+        },
+      );
       await _plugin.show(
         id: notificationTurnsId,
         title: title,
@@ -149,6 +228,13 @@ class LocalNotificationsTurnNotificationService
       );
     } on Object catch (error) {
       developer.log('回合完成通知发送失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '回合完成通知发送失败',
+        details: {'sessionId': sessionId, 'title': title},
+        errorKind: error.toString(),
+      );
     }
   }
 
@@ -160,6 +246,17 @@ class LocalNotificationsTurnNotificationService
     if (sessionId.isEmpty) return;
     await _ensureInitialized();
     try {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '发送需要澄清通知',
+        details: {
+          'sessionId': sessionId,
+          'questionLength': question.length,
+          'channel': channelClarifyId,
+          'notificationId': notificationClarifyId,
+        },
+      );
       await _plugin.show(
         id: notificationClarifyId,
         title: '需要澄清',
@@ -178,6 +275,13 @@ class LocalNotificationsTurnNotificationService
       );
     } on Object catch (error) {
       developer.log('澄清请求通知发送失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '澄清请求通知发送失败',
+        details: {'sessionId': sessionId},
+        errorKind: error.toString(),
+      );
     }
   }
 
@@ -191,6 +295,18 @@ class LocalNotificationsTurnNotificationService
     await _ensureInitialized();
     final heading = title.trim().isNotEmpty ? title.trim() : '会话异常';
     try {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '发送异常中断通知',
+        details: {
+          'sessionId': sessionId,
+          'title': heading,
+          'previewLength': preview.length,
+          'channel': channelErrorsId,
+          'notificationId': notificationErrorsId,
+        },
+      );
       await _plugin.show(
         id: notificationErrorsId,
         title: heading,
@@ -209,6 +325,13 @@ class LocalNotificationsTurnNotificationService
       );
     } on Object catch (error) {
       developer.log('异常中断通知发送失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '异常中断通知发送失败',
+        details: {'sessionId': sessionId, 'title': heading},
+        errorKind: error.toString(),
+      );
     }
   }
 
@@ -216,8 +339,19 @@ class LocalNotificationsTurnNotificationService
   Future<void> clearAll() async {
     try {
       await _plugin.cancelAll();
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'notifications',
+        message: '清除全部通知',
+      );
     } on Object catch (error) {
       developer.log('清除通知失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '清除通知失败',
+        errorKind: error.toString(),
+      );
     }
   }
 
@@ -236,6 +370,7 @@ class LocalNotificationsTurnNotificationService
         level: DiagnosticsLogLevel.info,
         tag: 'notifications',
         message: '请求通知权限结果: $result',
+        details: {'granted': result},
       );
       return result;
     } on Object catch (error) {

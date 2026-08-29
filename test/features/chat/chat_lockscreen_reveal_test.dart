@@ -27,7 +27,7 @@ import '../../helpers/in_memory_secure_storage.dart';
 /// 对应任务书要求的「handleAppLifecycleStateChanged 模拟 paused/resumed」。
 ///
 /// #29 扩展：后台空窗 ≥ 传输停滞阈值时，resumed 立即主动查 stream status
-/// （不等 watchdog 12-18s 重探测），死流立即重连/补差，健康流 loadMessages
+/// （不等 watchdog 3-8s 重探测），死流立即重连/补差，健康流 loadMessages
 /// 落地最新 transcript；空窗不足阈值不打扰，watchdog 重新计时接管。paused
 /// 期间 watchdog 豁免（#20）语义不变。
 void main() {
@@ -288,7 +288,7 @@ void main() {
         async.flushMicrotasks();
         expect(api.statusCalls, 1); // 立即探测
         // 服务端无 transcript：finalize 立即收尾（本地空 assistant 骨架不算
-        // 新内容，直接完成回合）——不挂死等 watchdog 的 18s 强连。
+        // 新内容，直接完成回合）——不挂死等 watchdog 的 8s 强连。
         final settled = container.read(chatControllerProvider(''));
         expect(settled.stream.activeStreamId, isNull);
         expect(settled.phase, ChatPhase.idle);

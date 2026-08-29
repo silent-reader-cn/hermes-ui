@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
+import 'package:hermes_ui/features/desktop/window_title_service.dart';
 import 'package:hermes_ui/features/notifications/notification_lifecycle_observer.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
@@ -413,19 +414,88 @@ void main() {
       expect(service.notifyCalls, isEmpty);
     });
 
-    test('前台不同会话触发 → 推送至 inAppNotificationProvider', () {
+    test('默认设置：三类通知开关默认均为 true', () {
+      final settings = container.read(notificationSettingsProvider);
+      expect(settings.notifyTurnsEnabled, isTrue);
+      expect(settings.notifyClarifyEnabled, isTrue);
+      expect(settings.notifyErrorsEnabled, isTrue);
+    });
+
+    test('多后台生命周期状态（detached / hidden）均能触发系统通知', () {
+      final turnHook = container.read(turnNotificationHookProvider);
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      final errorHook = container.read(sessionErrorNotificationHookProvider);
+
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.detached);
+      turnHook('sess-detached', '标题', '内容');
+      expect(service.notifyCalls, [('sess-detached', '标题', '内容')]);
+
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.hidden);
+      clarifyHook('sess-hidden', '澄清问题');
+      expect(service.clarifyCalls, [('sess-hidden', '澄清问题')]);
+
+      errorHook('sess-hidden', '异常标题', '异常内容');
+      expect(service.errorCalls, [('sess-hidden', '异常标题', '异常内容')]);
+    });
+
+    test('前台不同会话触发 → 分别推送对应类型的 inAppNotificationProvider', () {
       container
           .read(appLifecycleStateProvider.notifier)
           .setState(AppLifecycleState.resumed);
-      final hook = container.read(clarificationNotificationHookProvider);
 
-      hook('sess-other', '请澄清');
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-other-1', '请澄清');
+      final inAppClarify = container.read(inAppNotificationProvider);
+      expect(inAppClarify, isNotNull);
+      expect(inAppClarify?.sessionId, 'sess-other-1');
+      expect(inAppClarify?.type, InAppNotificationType.clarificationNeeded);
 
-      final inApp = container.read(inAppNotificationProvider);
-      expect(inApp, isNotNull);
-      expect(inApp!.sessionId, 'sess-other');
-      expect(inApp.message, '请澄清');
-      expect(inApp.type, InAppNotificationType.clarificationNeeded);
+      final errorHook = container.read(sessionErrorNotificationHookProvider);
+      errorHook('sess-other-2', '异常标题', '异常内容');
+      final inAppError = container.read(inAppNotificationProvider);
+      expect(inAppError, isNotNull);
+      expect(inAppError?.sessionId, 'sess-other-2');
+      expect(inAppError?.type, InAppNotificationType.sessionError);
+
+      final turnHook = container.read(turnNotificationHookProvider);
+      turnHook('sess-other-3', '回合标题', '回合内容');
+      final inAppTurn = container.read(inAppNotificationProvider);
+      expect(inAppTurn, isNotNull);
+      expect(inAppTurn?.sessionId, 'sess-other-3');
+      expect(inAppTurn?.type, InAppNotificationType.turnCompleted);
+    });
+
+    test('前台且为当前激活会话 → 不弹 inApp 悬浮条目', () {
+      final activeContainer = ProviderContainer(
+        overrides: [
+          turnNotificationServiceProvider.overrideWithValue(service),
+          activeSessionIdProvider.overrideWith((ref) => 'sess-active'),
+        ],
+      );
+      addTearDown(activeContainer.dispose);
+
+      activeContainer
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.resumed);
+
+      final clarifyHook =
+          activeContainer.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-active', '请澄清');
+      expect(activeContainer.read(inAppNotificationProvider), isNull);
+
+      final errorHook =
+          activeContainer.read(sessionErrorNotificationHookProvider);
+      errorHook('sess-active', '异常标题', '异常正文');
+      expect(activeContainer.read(inAppNotificationProvider), isNull);
+
+      final turnHook = activeContainer.read(turnNotificationHookProvider);
+      turnHook('sess-active', '回合标题', '回合正文');
+      expect(activeContainer.read(inAppNotificationProvider), isNull);
+      expect(service.clearAllCalls, 1);
     });
   });
 

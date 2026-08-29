@@ -68,6 +68,12 @@ class ChatInlineMediaWidget extends ConsumerWidget {
     final isNetworkUrl =
         resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://');
 
+    final placeholderSize = _calculatePlaceholderSize(
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+      url: resolvedUrl,
+    );
+
     Widget imageWidget;
     Uint8List? memoryBytes;
 
@@ -108,6 +114,18 @@ class ChatInlineMediaWidget extends ConsumerWidget {
         data: (file) => Image.file(
           file,
           fit: BoxFit.contain,
+          gaplessPlayback: true,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) {
+              return child;
+            }
+            return _loadingBox(
+              context,
+              borderRadius,
+              width: placeholderSize.width,
+              height: placeholderSize.height,
+            );
+          },
           errorBuilder: (context, error, stackTrace) {
             return _ImageErrorPlaceholder(
               altText: alt ?? title,
@@ -116,7 +134,12 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             );
           },
         ),
-        loading: () => _loadingBox(context, borderRadius),
+        loading: () => _loadingBox(
+          context,
+          borderRadius,
+          width: placeholderSize.width,
+          height: placeholderSize.height,
+        ),
         error: (error, stackTrace) => _ImageErrorPlaceholder(
           altText: alt ?? title,
           rawUri: rawUri,
@@ -127,6 +150,18 @@ class ChatInlineMediaWidget extends ConsumerWidget {
       imageWidget = Image.file(
         File(resolvedUrl),
         fit: BoxFit.contain,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          }
+          return _loadingBox(
+            context,
+            borderRadius,
+            width: placeholderSize.width,
+            height: placeholderSize.height,
+          );
+        },
         errorBuilder: (context, error, stackTrace) {
           return _ImageErrorPlaceholder(
             altText: alt ?? title,
@@ -153,16 +188,21 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           memoryBytes: memoryBytes,
           altText: alt ?? title,
         ),
-        child: Container(
-          constraints: BoxConstraints(
-            minWidth: 32,
-            minHeight: 32,
-            maxWidth: maxWidth,
-            maxHeight: maxHeight,
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          alignment: Alignment.topLeft,
+          child: Container(
+            constraints: BoxConstraints(
+              minWidth: 32,
+              minHeight: 32,
+              maxWidth: maxWidth,
+              maxHeight: maxHeight,
+            ),
+            decoration: BoxDecoration(borderRadius: borderRadius),
+            clipBehavior: Clip.antiAlias,
+            child: imageWidget,
           ),
-          decoration: BoxDecoration(borderRadius: borderRadius),
-          clipBehavior: Clip.antiAlias,
-          child: imageWidget,
         ),
       ),
     );
@@ -248,6 +288,13 @@ class _LightboxNetworkImage extends ConsumerWidget {
       data: (file) => Image.file(
         file,
         fit: BoxFit.contain,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          }
+          return const Center(child: CupertinoActivityIndicator());
+        },
         errorBuilder: (context, error, stackTrace) => const Icon(
           CupertinoIcons.photo,
           size: 64,
@@ -264,10 +311,60 @@ class _LightboxNetworkImage extends ConsumerWidget {
   }
 }
 
-Widget _loadingBox(BuildContext context, BorderRadius borderRadius) {
+/// 从 URL 查询参数中解析宽高提示（如 `?w=400&h=300` 或 `?width=400&height=300`）。
+(double, double)? _parseDimensionsFromUrl(String url) {
+  try {
+    final uri = Uri.parse(url);
+    final wStr = uri.queryParameters['w'] ?? uri.queryParameters['width'];
+    final hStr = uri.queryParameters['h'] ?? uri.queryParameters['height'];
+    if (wStr != null && hStr != null) {
+      final w = double.tryParse(wStr);
+      final h = double.tryParse(hStr);
+      if (w != null && h != null && w > 0 && h > 0) {
+        return (w, h);
+      }
+    }
+  } catch (_) {
+    // 忽略异常格式
+  }
+  return null;
+}
+
+/// 计算占位容器尺寸：若 URL 携带尺寸提示则按 contain 计算，否则回退默认 160×120。
+Size _calculatePlaceholderSize({
+  required double maxWidth,
+  required double maxHeight,
+  String? url,
+}) {
+  if (url != null) {
+    final dims = _parseDimensionsFromUrl(url);
+    if (dims != null) {
+      final fitted = applyBoxFit(
+        BoxFit.contain,
+        Size(dims.$1, dims.$2),
+        Size(maxWidth, maxHeight),
+      ).destination;
+      return Size(
+        fitted.width.clamp(32.0, maxWidth),
+        fitted.height.clamp(32.0, maxHeight),
+      );
+    }
+  }
+  return Size(
+    160.0.clamp(32.0, maxWidth),
+    120.0.clamp(32.0, maxHeight),
+  );
+}
+
+Widget _loadingBox(
+  BuildContext context,
+  BorderRadius borderRadius, {
+  double width = 160,
+  double height = 120,
+}) {
   return Container(
-    width: 160,
-    height: 120,
+    width: width,
+    height: height,
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: CupertinoColors.systemGrey5.resolveFrom(context),

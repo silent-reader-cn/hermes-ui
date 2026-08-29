@@ -11,6 +11,7 @@ import '../../chat/chat_models.dart';
 import '../../../core/utils/selected_context.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'collapsible_process_capsule.dart';
 import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
 import 'selected_context_card.dart';
@@ -40,6 +41,8 @@ class ChatMessageBubble extends StatelessWidget {
     this.onToggleInjected,
     this.collapseInjectedEnabled = true,
     this.hideThinking = false,
+    this.collapseCompletedProcess = true,
+    this.isStreaming = false,
   });
 
   final ChatMessage message;
@@ -70,6 +73,12 @@ class ChatMessageBubble extends StatelessWidget {
 
   /// 隐藏思考子卡行（设置「隐藏思考」开启时透传工具卡）。
   final bool hideThinking;
+
+  /// 是否在完成后自动折叠过程（思考/工具/通知）。
+  final bool collapseCompletedProcess;
+
+  /// 是否处于流式中（流式中过程不提前折叠）。
+  final bool isStreaming;
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +160,8 @@ class ChatMessageBubble extends StatelessWidget {
               toolGroups: toolGroups,
               reasoningGroups: reasoningGroups,
               hideThinking: hideThinking,
+              collapseCompletedProcess: collapseCompletedProcess,
+              isStreaming: isStreaming,
               baseUrl: effectiveBaseUrl,
               sessionId: sessionId,
               customHeaders: effectiveHeaders,
@@ -261,6 +272,8 @@ class _AssistantContent extends StatelessWidget {
     required this.toolGroups,
     required this.reasoningGroups,
     required this.hideThinking,
+    this.collapseCompletedProcess = true,
+    this.isStreaming = false,
     this.baseUrl,
     this.sessionId,
     this.customHeaders,
@@ -270,6 +283,8 @@ class _AssistantContent extends StatelessWidget {
   final List<ToolCallGroup> toolGroups;
   final List<ReasoningGroup> reasoningGroups;
   final bool hideThinking;
+  final bool collapseCompletedProcess;
+  final bool isStreaming;
   final String? baseUrl;
   final String? sessionId;
   final Map<String, String>? customHeaders;
@@ -298,8 +313,31 @@ class _AssistantContent extends StatelessWidget {
     // 真实时序对齐（Hermes 流序：思考 → 工具 → 文本）：工具卡
     // （含思考子卡行）渲染在正文文本上方——遇 think/tool 建卡吸收连续
     // think/tool，遇 text 打断为独立正文段。
-    for (final group in distinctTools) {
-      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
+    final hasVisibleTools = distinctTools.any((g) => g.toolCalls.any(
+        (c) => !c.isThinking || (!hideThinking && c.isThinking)));
+
+    if (hasVisibleTools) {
+      final toolCards = <Widget>[
+        for (var i = 0; i < distinctTools.length; i++) ...[
+          ToolCallGroupCard(
+            group: distinctTools[i],
+            hideThinking: hideThinking,
+          ),
+          if (i < distinctTools.length - 1) const SizedBox(height: 6),
+        ],
+      ];
+
+      if (collapseCompletedProcess && !isStreaming) {
+        sections.add(
+          CollapsibleProcessCapsule(
+            toolGroups: distinctTools,
+            hideThinking: hideThinking,
+            children: toolCards,
+          ),
+        );
+      } else {
+        sections.addAll(toolCards);
+      }
     }
     if (parsedContent.isNotEmpty) {
       sections.add(

@@ -194,4 +194,26 @@ class FakeSessionListApi implements SessionListApi {
     if (error != null) throw error;
     return branchResponse;
   }
+
+  /// 单会话状态预设返回（sessionId -> response）。
+  final Map<String, SessionStatusResponse> statusResponses = {};
+  Object? statusError;
+  final List<String> statusCalls = [];
+
+  @override
+  Future<SessionStatusResponse> fetchSessionStatus(String sessionId) async {
+    statusCalls.add(sessionId);
+    final error = statusError;
+    if (error != null) throw error;
+    final found = sessions.cast<SessionSummary?>().firstWhere(
+      (s) => s?.sessionId == sessionId,
+      orElse: () => null,
+    );
+    return statusResponses[sessionId] ??
+        SessionStatusResponse(
+          sessionId: sessionId,
+          isStreaming: found?.isStreaming,
+          activeStreamId: found?.activeStreamId,
+        );
+  }
 }

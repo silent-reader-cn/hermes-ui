@@ -18,8 +18,8 @@ class ChatOutlineSheet {
   /// 面板卡片宽度。
   static const double _menuWidth = 290;
 
-  /// 向下展开时顶部与锚点底部的间距（含导航栏 44 + 8）。
-  static const double _gapBelow = 8;
+  /// 向下展开时顶部与锚点底部的间距（留出小间距，避免贴/盖导航栏）。
+  static const double _gapBelow = 12;
 
   /// 面板最大高度。
   static const double _maxHeight = 340;

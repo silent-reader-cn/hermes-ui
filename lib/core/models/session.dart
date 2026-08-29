@@ -775,6 +775,50 @@ class SessionSummary {
     );
   }
 
+  /// 局部更新流式状态（[isStreaming] 与 [activeStreamId]）。
+  SessionSummary withStreaming({
+    required bool isStreaming,
+    String? activeStreamId,
+  }) {
+    return SessionSummary(
+      sessionId: sessionId,
+      title: title,
+      workspace: workspace,
+      model: model,
+      modelProvider: modelProvider,
+      messageCount: messageCount,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      lastMessageAt: lastMessageAt,
+      pinned: pinned,
+      archived: archived,
+      projectId: projectId,
+      profile: profile,
+      inputTokens: inputTokens,
+      outputTokens: outputTokens,
+      estimatedCost: estimatedCost,
+      activeStreamId: isStreaming
+          ? (activeStreamId ?? this.activeStreamId ?? 'active')
+          : null,
+      isStreaming: isStreaming,
+      isCliSession: isCliSession,
+      userMessageCount: userMessageCount,
+      hasPendingUserMessage: hasPendingUserMessage,
+      pendingStartedAt: pendingStartedAt,
+      worktreePath: worktreePath,
+      sourceTag: sourceTag,
+      rawSource: rawSource,
+      sessionSource: sessionSource,
+      sourceLabel: sourceLabel,
+      parentSessionId: parentSessionId,
+      relationshipType: relationshipType,
+      readOnly: readOnly,
+      isReadOnly: isReadOnly,
+      matchType: matchType,
+      matchPreview: matchPreview,
+    );
+  }
+
   /// sourceTag/rawSource/sessionSource/sourceLabel/title 任一 normalize 后
   /// 含 `subagent` 字样。
   ///
