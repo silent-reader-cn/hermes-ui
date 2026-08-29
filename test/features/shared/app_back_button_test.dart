@@ -77,7 +77,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Home'), findsOneWidget);
-    await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+    await tester.tap(find.byType(AppBackButton));
     await settleNavigation(tester);
 
     // 无堆栈可 pop → 跳 fallback 目标页，而不是原地不动或崩溃
@@ -96,7 +96,7 @@ void main() {
     expect(find.text('Stacked'), findsOneWidget);
 
     // 有堆栈可 pop → 返回上一页 home，而不是跳 fallback
-    await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+    await tester.tap(find.byType(AppBackButton));
     await settleNavigation(tester);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Stacked'), findsNothing);

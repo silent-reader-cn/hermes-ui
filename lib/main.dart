@@ -231,6 +231,15 @@ Future<void> main(List<String> args) async {
         chatTurnCompletedCallbackProvider.overrideWith(
           (ref) => ref.watch(turnNotificationHookProvider),
         ),
+        // 澄清请求 → 后台通知 hook（chat_controller 的 clarify 事件处调用；
+        // 默认 no-op，不 override 则澄清永不通知，见 #26 根因①）。
+        chatClarificationNeededCallbackProvider.overrideWith(
+          (ref) => ref.watch(clarificationNotificationHookProvider),
+        ),
+        // 会话异常 → 后台通知 hook（cancel / error / 重连失败处调用）。
+        chatSessionErrorCallbackProvider.overrideWith(
+          (ref) => ref.watch(sessionErrorNotificationHookProvider),
+        ),
         // 启用生产持久缓存数据库：会话列表 / 消息 /（未来）媒体的离线缓存
         // 真正落盘（默认 appDatabaseProvider 为内存库，重启即清空）。
         // 单例注入：全进程唯一实例，避免 drift 同名库双开。

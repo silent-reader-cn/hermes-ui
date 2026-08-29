@@ -5,6 +5,9 @@ import 'package:mocktail/mocktail.dart';
 
 class _MockPlugin extends Mock implements FlutterLocalNotificationsPlugin {}
 
+class _MockAndroidPlugin extends Mock
+    implements AndroidFlutterLocalNotificationsPlugin {}
+
 void main() {
   setUpAll(() {
     registerFallbackValue(const InitializationSettings(
@@ -231,6 +234,29 @@ void main() {
       test('无 Android 实现（桌面/测试环境）→ 视为已授权', () async {
         // mock 的 resolvePlatformSpecificImplementation 默认返回 null
         expect(await service.requestPermission(), isTrue);
+      });
+
+      test('根因②回归：先 initialize 再请求权限，授予结果原样返回', () async {
+        final android = _MockAndroidPlugin();
+        when(
+          () => plugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>(),
+        ).thenReturn(android);
+        when(() => android.requestNotificationsPermission())
+            .thenAnswer((_) async => true);
+
+        expect(await service.requestPermission(), isTrue);
+
+        // 权限通道 invoke 前插件必须已完成 initialize（旧实现直接 invoke
+        // 权限通道 → 异常被吞返回 false → 后台 show 全被系统丢弃）。
+        verifyInOrder([
+          () => plugin.initialize(
+            settings: any(named: 'settings'),
+            onDidReceiveNotificationResponse:
+                any(named: 'onDidReceiveNotificationResponse'),
+          ),
+          () => android.requestNotificationsPermission(),
+        ]);
       });
 
       test('通知点击冷启动 → 返回 payload sessionId', () async {

@@ -74,6 +74,7 @@ class AppLocalizations {
   String get haveApiKeySkipWizard =>
       isEnglish ? 'Have an API Key? Skip wizard' : '已有 API Key？跳过向导';
   String get checking => isEnglish ? 'Checking…' : '正在检查…';
+  String get connectionFailed => isEnglish ? 'Connection failed' : '连接失败';
   String get connectionSuccessful =>
       isEnglish ? 'Connection successful' : '连接成功';
   String get connectionSuccessfulWithCheck =>

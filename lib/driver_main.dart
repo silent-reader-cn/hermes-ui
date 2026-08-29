@@ -46,6 +46,14 @@ Future<void> main() async {
         chatTurnCompletedCallbackProvider.overrideWith(
           (ref) => ref.watch(turnNotificationHookProvider),
         ),
+        // 澄清请求/会话异常 → 后台通知 hook（与 turnCompleted 并列接线，
+        // 默认 no-op，不 override 则澄清/错误永不通知，见 #26 根因①）。
+        chatClarificationNeededCallbackProvider.overrideWith(
+          (ref) => ref.watch(clarificationNotificationHookProvider),
+        ),
+        chatSessionErrorCallbackProvider.overrideWith(
+          (ref) => ref.watch(sessionErrorNotificationHookProvider),
+        ),
       ],
       child: const HermesApp(),
     ),

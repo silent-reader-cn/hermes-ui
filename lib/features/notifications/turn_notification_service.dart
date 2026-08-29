@@ -2,6 +2,9 @@ import 'dart:developer' as developer;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../diagnostics/diagnostics_models.dart';
+import '../diagnostics/diagnostics_service.dart';
+
 /// 回合/澄清/错误三类通知服务（抽象接口，平台无关契约）。
 ///
 /// 生产实现 [LocalNotificationsTurnNotificationService] 基于
@@ -220,14 +223,29 @@ class LocalNotificationsTurnNotificationService
 
   @override
   Future<bool> requestPermission() async {
+    // 必须先初始化插件（根因②：此前未 initialize 直接 invoke 权限通道，
+    // 异常被 catch 吞 → false → 后台 show 全被系统丢弃）。
+    await _ensureInitialized();
     try {
       final android = _plugin
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       final granted = await android?.requestNotificationsPermission();
-      return granted ?? true;
+      final result = granted ?? true;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '请求通知权限结果: $result',
+      );
+      return result;
     } on Object catch (error) {
       developer.log('请求通知权限失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '请求通知权限失败',
+        errorKind: error.toString(),
+      );
       return false;
     }
   }
