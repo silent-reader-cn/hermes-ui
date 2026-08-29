@@ -844,6 +844,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     final liveTimeline = ref.watch(liveTimelineProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
+    final recovery = ref.watch(
+      chatControllerProvider(sessionId).select((s) => s.stream.recovery),
+    );
     final queuedMessages = ref.watch(
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
     );
@@ -975,6 +978,9 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
 
     // live 段落条目数：时间线模式 = 段数（空段列表 = 思考中指示器 1 条）；
     // legacy 模式 = 单个流式气泡。
+    // #29 断线恢复反馈：recovery 非 idle（checking/reconnecting）期间非静默提示。
+    final showRecovering = streaming != null &&
+        recovery != ActiveStreamRecoveryState.idle;
     final liveItemCount = streaming == null
         ? 0
         : liveTimeline == null
@@ -985,6 +991,7 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (phase == ChatPhase.sending) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
+    if (showRecovering) itemCount++;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -1111,6 +1118,10 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               tail -= liveTimeline.length;
             }
           }
+          if (showRecovering) {
+            if (tail == 0) return const _ReconnectingIndicator();
+            tail--;
+          }
           if (phase == ChatPhase.sending) {
             if (tail == 0) return const _SendingIndicator();
             tail--;
@@ -1184,6 +1195,33 @@ class _StreamingThinkingIndicator extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// #29 断线恢复提示（recovery=checking/reconnecting 期间的非静默反馈）。
+class _ReconnectingIndicator extends StatelessWidget {
+  const _ReconnectingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CupertinoActivityIndicator(radius: 7),
+          const SizedBox(width: 6),
+          Text(
+            l10n.reconnectingIndicator,
+            style: TextStyle(
+              fontSize: 13,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
             ),
           ),
         ],

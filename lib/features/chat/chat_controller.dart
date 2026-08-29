@@ -1308,6 +1308,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       tag: 'chat',
       message: 'App lifecycle resumed: flushing pending text + watchdog rebaseline',
     );
+    // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
+    // 时刻的传输停滞时长（SSE 后台静默断线无 onTransportError/onClosed 事件，
+    // 只能靠时间差识别，`_lastTransportActivity` 即断线状态快照）。
+    final lastActivity = _lastTransportActivity;
+    final transportGap = lastActivity == null
+        ? Duration.zero
+        : _now().difference(lastActivity);
     // 直接铺全文：先入队（queue）的文本在前、pending 在后，保持到达顺序。
     _flushPendingRevealToFullText();
     _startRevealTimerIfNeeded();
@@ -1315,6 +1322,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastProgress = _now();
     _lastTransportActivity = _now();
     _statusCheckCooldownUntil = null;
+    // #29：空窗 ≥ 传输停滞阈值 → 立即主动查 stream status（不等 watchdog
+    // 12-18s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
+    // （watchdog/transportError 接管），不重复触发；死流/超时立即重连或补差，
+    // 健康流 loadMessages 顺带把后台期间新内容落地——「切回立即呈现最新状态」。
+    final stream = state.stream;
+    if (stream.activeStreamId != null &&
+        !stream.hasCompletedResponse &&
+        !state.pendingAction.hasPendingPrompt &&
+        stream.recovery == ActiveStreamRecoveryState.idle &&
+        transportGap >= _watchdogConfig.transportStaleThreshold) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat_resume',
+        message:
+            'Resume active-probe triggered (transportGap: ${transportGap.inMilliseconds}ms, streamId: ${stream.activeStreamId})',
+      );
+      unawaited(_checkStatusAndReconnect());
+    }
   }
 
   /// 把 merge/reveal 积压一次性写入消息（保持时间顺序：queue 先、pending 后）。

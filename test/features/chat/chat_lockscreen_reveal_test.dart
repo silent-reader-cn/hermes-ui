@@ -25,6 +25,11 @@ import '../../helpers/in_memory_secure_storage.dart';
 /// （生产链路即 NotificationLifecycleObserver 把
 /// `WidgetsBinding.handleAppLifecycleStateChanged` 转发到该 provider），
 /// 对应任务书要求的「handleAppLifecycleStateChanged 模拟 paused/resumed」。
+///
+/// #29 扩展：后台空窗 ≥ 传输停滞阈值时，resumed 立即主动查 stream status
+/// （不等 watchdog 12-18s 重探测），死流立即重连/补差，健康流 loadMessages
+/// 落地最新 transcript；空窗不足阈值不打扰，watchdog 重新计时接管。paused
+/// 期间 watchdog 豁免（#20）语义不变。
 void main() {
   group('① 后台/锁屏暂停 reveal 消费 + resumed 直接铺全文', () {
     test('paused 期间 token 零消费（pending 保留），resumed 一次性铺全文', () {
@@ -161,8 +166,8 @@ void main() {
     });
   });
 
-  group('③ watchdog 后台豁免（paused 冻结计时器不误判断线）', () {
-    test('paused 期间超阈值零检测；resumed 后重新计时恢复检测', () {
+  group('③ watchdog 后台豁免 + #29 resumed 主动探测（先实证后改）', () {
+    test('#20: paused 期间超阈值零检测（后台豁免核心语义保留）；resumed 空窗超阈值立即查 status', () {
       fakeAsync((async) {
         final api = FakeChatApi();
         final clock = _FakeClock();
@@ -183,7 +188,7 @@ void main() {
         async.flushMicrotasks();
         expect(api.startStreamCalls, 1);
 
-        // 锁屏 10s：冻结计时器远超全部阈值，但后台豁免 → 零检测零重连。
+        // 锁屏 10s：冻结计时器远超全部阈值，但后台豁免（#20）→ 零检测零重连。
         _setLifecycle(container, AppLifecycleState.paused);
         clock.advance(const Duration(seconds: 10));
         async.elapse(const Duration(seconds: 10));
@@ -196,18 +201,97 @@ void main() {
           ChatPhase.streaming,
         );
 
-        // 解锁：基线重新校准（从当前时刻重新计时）。
+        // #29 解锁（resumed）：空窗 10s ≥ 传输停滞阈值 500ms → 立即主动查
+        // stream status（不等 watchdog 重探测）→ status active → loadMessages
+        // 落地 + fullReconnect 重建流，切回即呈现最新状态。
         api.statusResponse = const ChatStreamStatusResponse(active: true);
         _setLifecycle(container, AppLifecycleState.resumed);
-        expect(api.statusCalls, 0); // 校准后立即不触发
+        async.flushMicrotasks();
+        expect(api.statusCalls, 1);
+        expect(api.sessionCalls, 1); // loadMessages 补最新 transcript
+        expect(api.startStreamCalls, 2); // 重建 SSE
+        expect(
+          container.read(chatControllerProvider('')).stream.recovery,
+          ActiveStreamRecoveryState.idle,
+        );
+      });
+    });
+
+    test('#29: resumed 空窗低于阈值不主动探测；watchdog 重新计时后正常检测', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final clock = _FakeClock();
+        final container = _buildContainer(
+          api,
+          clock,
+          watchdogConfig: const ChatWatchdogConfig(
+            watchdogInterval: Duration(milliseconds: 100),
+            progressStaleThreshold: Duration(milliseconds: 500),
+            transportStaleThreshold: Duration(milliseconds: 500),
+            forceReconnectThreshold: Duration(seconds: 2),
+            forceReconnectWithRunningToolsThreshold: Duration(seconds: 2),
+            statusPollCooldown: Duration(milliseconds: 200),
+          ),
+        );
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
         expect(api.startStreamCalls, 1);
 
-        // 恢复前台检测：再次超过阈值后正常触发（status 检查 + 重连）。
+        // 快速切走 300ms（空窗 < 500ms 传输停滞阈值）：流仍认为新鲜。
+        _setLifecycle(container, AppLifecycleState.paused);
+        clock.advance(const Duration(milliseconds: 300));
+        async.elapse(const Duration(milliseconds: 300));
+        api.statusResponse = const ChatStreamStatusResponse(active: true);
+        _setLifecycle(container, AppLifecycleState.resumed);
+        async.flushMicrotasks();
+        expect(api.statusCalls, 0); // 空窗不足 → 不主动探测
+        expect(api.startStreamCalls, 1);
+
+        // 恢复前台检测：再次超过阈值后 watchdog 正常触发（status 检查 + 重连）。
         clock.advance(const Duration(seconds: 3));
         async.elapse(const Duration(seconds: 3));
         async.flushMicrotasks();
         expect(api.statusCalls, greaterThan(0));
         expect(api.startStreamCalls, greaterThan(1));
+      });
+    });
+
+    test('#29: resumed 空窗超阈值但服务端已无活动流（active=false）→ 立即收尾不挂死', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final clock = _FakeClock();
+        final container = _buildContainer(
+          api,
+          clock,
+          watchdogConfig: const ChatWatchdogConfig(
+            watchdogInterval: Duration(milliseconds: 100),
+            progressStaleThreshold: Duration(milliseconds: 500),
+            transportStaleThreshold: Duration(milliseconds: 500),
+            forceReconnectThreshold: Duration(seconds: 2),
+            forceReconnectWithRunningToolsThreshold: Duration(seconds: 2),
+            statusPollCooldown: Duration(milliseconds: 200),
+          ),
+        );
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        _setLifecycle(container, AppLifecycleState.paused);
+        clock.advance(const Duration(seconds: 10));
+        async.elapse(const Duration(seconds: 10));
+        expect(api.statusCalls, 0); // 后台豁免
+
+        // 后台期间回合实际已完成：默认 status（active=false, replay=false）。
+        _setLifecycle(container, AppLifecycleState.resumed);
+        async.flushMicrotasks();
+        expect(api.statusCalls, 1); // 立即探测
+        // 服务端无 transcript：finalize 立即收尾（本地空 assistant 骨架不算
+        // 新内容，直接完成回合）——不挂死等 watchdog 的 18s 强连。
+        final settled = container.read(chatControllerProvider(''));
+        expect(settled.stream.activeStreamId, isNull);
+        expect(settled.phase, ChatPhase.idle);
       });
     });
   });

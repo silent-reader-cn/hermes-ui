@@ -340,6 +340,10 @@ class AppLocalizations {
   String get thinkingIndicator => isEnglish ? 'Thinking…' : '思考中…';
   String get sending => isEnglish ? 'Sending…' : '发送中…';
   String get sendingIndicator => isEnglish ? 'Sending…' : '发送中…';
+  String get reconnecting =>
+      isEnglish ? 'Reconnecting…' : '正在恢复连接…';
+  String get reconnectingIndicator =>
+      isEnglish ? 'Reconnecting…' : '正在恢复连接…';
   String get messageActions => isEnglish ? 'Message Actions' : '消息操作';
   String get copyText => isEnglish ? 'Copy Text' : '复制文本';
   String get copyMarkdown => isEnglish ? 'Copy Markdown' : '复制 Markdown';
