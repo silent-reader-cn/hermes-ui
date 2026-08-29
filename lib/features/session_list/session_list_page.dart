@@ -432,6 +432,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             child: CupertinoListSection.insetGrouped(
               hasLeading: false,
               header: Text(_sectionTitle(context, section.title)),
+              // #28 分割线全宽：divider 起点 = dividerMargin + additionalDividerMargin，
+              // 置 0 使分割线从容器（children group）左缘起笔、全长贯穿。
+              dividerMargin: 0,
+              additionalDividerMargin: 0,
               children: [
                 for (final session in section.sessions)
                   _SessionRow(
@@ -1245,11 +1249,13 @@ Map<String, String> _projectNameMap(WidgetRef ref) {
   };
 }
 
-/// 筛选底部弹层：会话 / 渠道 / 项目 三段等宽 insetGrouped 列表。
+/// 筛选底部弹层：显示设置 / 会话 / 渠道 / 项目 四段等宽 insetGrouped 列表。
 ///
-/// 三段统一为 [CupertinoListSection.insetGrouped] 列表视觉（等宽、同边距），
-/// 渠道与项目不再用 Wrap/chip 居中，改为纵向 [_SheetOptionRow] 单选列表；
-/// 外层用 [ClipRRect]+[DecoratedBox] 紧凑布局，去掉底部白条与多余 padding。
+/// 视觉对齐标准 iOS 底部弹层（#27 症状 B）：遮罩/动画走
+/// [showCupertinoModalPopup] 默认（`_showFilterSheet` 打开），顶部圆角 12
+/// 对齐 CupertinoActionSheet 主表（SDK dialog.dart:1312）；四段 uniform
+/// [CupertinoListSection.insetGrouped]、分割线全宽（#28，divider 起点置 0）；
+/// 选中行为系统 checkmark（[_SheetOptionRow]），无自绘 pill。
 class _SessionFilterSheet extends ConsumerWidget {
   const _SessionFilterSheet({required this.state, required this.onSelect});
 
@@ -1271,7 +1277,9 @@ class _SessionFilterSheet extends ConsumerWidget {
       context,
     );
     final screenHeight = MediaQuery.sizeOf(context).height;
-    const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
+    // 圆角对齐系统（CupertinoActionSheet 主表圆角 12.0，SDK dialog.dart:1312）；
+    // 遮罩/动画由 showCupertinoModalPopup 提供，不再自绘 16 圆角。
+    const sheetRadius = BorderRadius.vertical(top: Radius.circular(12));
     final headerStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
@@ -1346,6 +1354,10 @@ class _SessionFilterSheet extends ConsumerWidget {
                             separatorColor: CupertinoColors.separator
                                 .resolveFrom(context),
                             margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            // #28 分割线全宽：divider 起点 = dividerMargin +
+                            // additionalDividerMargin，置 0 使分割线从容器左缘起笔。
+                            dividerMargin: 0,
+                            additionalDividerMargin: 0,
                             decoration: BoxDecoration(
                               color: CupertinoColors
                                   .secondarySystemGroupedBackground
@@ -1391,6 +1403,9 @@ class _SessionFilterSheet extends ConsumerWidget {
                             separatorColor: CupertinoColors.separator
                                 .resolveFrom(context),
                             margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                            // #28 分割线全宽
+                            dividerMargin: 0,
+                            additionalDividerMargin: 0,
                             decoration: BoxDecoration(
                               color: CupertinoColors
                                   .secondarySystemGroupedBackground
@@ -1438,6 +1453,9 @@ class _SessionFilterSheet extends ConsumerWidget {
                               separatorColor: CupertinoColors.separator
                                   .resolveFrom(context),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              // #28 分割线全宽
+                              dividerMargin: 0,
+                              additionalDividerMargin: 0,
                               decoration: BoxDecoration(
                                 color: CupertinoColors
                                     .secondarySystemGroupedBackground
@@ -1470,6 +1488,9 @@ class _SessionFilterSheet extends ConsumerWidget {
                               separatorColor: CupertinoColors.separator
                                   .resolveFrom(context),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              // #28 分割线全宽
+                              dividerMargin: 0,
+                              additionalDividerMargin: 0,
                               decoration: BoxDecoration(
                                 color: CupertinoColors
                                     .secondarySystemGroupedBackground
@@ -1513,8 +1534,9 @@ class _SessionFilterSheet extends ConsumerWidget {
 
 /// 筛选弹层中的单选行（会话 / 渠道 / 项目 共用）。
 ///
-/// 选中态：左侧 activeBlue 浅底 pill + 文字 activeBlue 加粗，右侧 checkmark；
-/// 未选中：常规 label 文字 + separator 0.5 分割。
+/// 选中态：右侧系统 checkmark（`CupertinoIcons.check_mark`，对齐
+/// CupertinoActionSheet/系统列表视觉），行背景与文字样式不变；去自绘
+/// activeBlue 浅底 pill 与加粗。未选中：常规 label 文字。
 class _SheetOptionRow extends StatelessWidget {
   const _SheetOptionRow({
     super.key,
@@ -1529,28 +1551,25 @@ class _SheetOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeBlue = CupertinoColors.activeBlue.resolveFrom(context);
     return CupertinoListTile(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      backgroundColor: selected
-          ? activeBlue.withValues(alpha: 0.10)
-          : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-              context,
-            ),
+      backgroundColor: CupertinoColors.secondarySystemGroupedBackground
+          .resolveFrom(context),
       title: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 15,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          color: selected
-              ? activeBlue
-              : CupertinoColors.label.resolveFrom(context),
+          color: CupertinoColors.label.resolveFrom(context),
         ),
       ),
       trailing: selected
-          ? Icon(CupertinoIcons.checkmark_alt, size: 18, color: activeBlue)
+          ? Icon(
+              CupertinoIcons.check_mark,
+              size: 18,
+              color: CupertinoColors.activeBlue.resolveFrom(context),
+            )
           : null,
       onTap: onTap,
     );

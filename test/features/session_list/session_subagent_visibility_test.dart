@@ -15,6 +15,9 @@ SessionSummary _session(
   bool archived = false,
   String? sourceLabel,
   String? projectId,
+  // #27 症状 A：服务端委派 subagent 子会话的 source 四字段不保证含
+  // 'subagent'（session_source 归一为 'other'），仅 title 带 Subagent 字样。
+  bool titleOnlySubagent = false,
 }) {
   return SessionSummary(
     sessionId: id,
@@ -23,7 +26,9 @@ SessionSummary _session(
     sourceLabel: sourceLabel,
     projectId: projectId,
     sourceTag: subagent ? 'subagent' : null,
-    rawSource: subagent ? 'subagent' : null,
+    rawSource: (subagent && !titleOnlySubagent) ? 'subagent' : null,
+    // 对齐服务端 normalize_agent_session_source：'subagent' → 'other'。
+    sessionSource: titleOnlySubagent ? 'other' : null,
     createdAt: DateTime.now().millisecondsSinceEpoch / 1000,
   );
 }
@@ -135,6 +140,68 @@ void main() {
         visibleCount: 50,
       ).copyWith(showSubagent: true);
       expect(shown.sourceLabels.toSet(), {'telegram', 'Subagent'});
+    });
+  });
+
+  group('症状 A：title-only subagent（source 字段无标记，仅标题含 Subagent）', () {
+    test('默认 showSubagent=false：标题含 Subagent 且 source 为 other/null 同样隐藏', () {
+      final state = SessionListState(
+        sessions: [
+          _session('s1', '普通会话'),
+          _session('sub1', 'Subagent Session', titleOnlySubagent: true),
+          _session('sub2', '数据备份 Subagent 任务', titleOnlySubagent: true),
+        ],
+        visibleCount: 50,
+      );
+      expect(state.displaySessions.map((s) => s.sessionId).toList(), ['s1']);
+    });
+
+    test('showSubagent=true：title-only subagent 会话恢复显示', () {
+      final state = SessionListState(
+        sessions: [
+          _session('s1', '普通会话'),
+          _session('sub1', 'Subagent Session', titleOnlySubagent: true),
+        ],
+        visibleCount: 50,
+      ).copyWith(showSubagent: true);
+      expect(state.displaySessions.map((s) => s.sessionId).toSet(), {
+        's1',
+        'sub1',
+      });
+    });
+
+    test('搜索命中：title-only subagent 会话同样被过滤', () {
+      final state = SessionListState(
+        sessions: [_session('s1', '普通会话')],
+        searchQuery: 'Subagent',
+        searchResults: [
+          _session('sub1', 'Subagent Session', titleOnlySubagent: true),
+          _session('s1', '普通会话'),
+        ],
+        visibleCount: 50,
+      );
+      expect(state.displaySessions.map((s) => s.sessionId).toList(), ['s1']);
+      expect(
+        state.displaySessions.map((s) => s.sessionId),
+        isNot(contains('sub1')),
+      );
+    });
+
+    test('归档模式：title-only subagent 归档会话同样隐藏', () {
+      final state = SessionListState(
+        archivedSessions: [
+          _session('a1', '普通归档', archived: true),
+          _session(
+            'a2',
+            'Subagent 归档任务',
+            titleOnlySubagent: true,
+            archived: true,
+          ),
+        ],
+        filterMode: SessionListFilterMode.archived,
+        visibleCount: 50,
+      );
+      expect(state.displaySessions.map((s) => s.sessionId).toList(), ['a1']);
     });
   });
 

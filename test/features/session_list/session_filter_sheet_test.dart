@@ -181,8 +181,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('sheet-filter-clear')), findsOneWidget);
-      // telegram 选中行应带 checkmark
-      expect(find.byIcon(CupertinoIcons.checkmark_alt), findsWidgets);
+      // telegram 选中行应带系统 checkmark（CupertinoIcons.check_mark）
+      expect(find.byIcon(CupertinoIcons.check_mark), findsWidgets);
     });
 
     testWidgets('去白条：弹层背景为 grouped 无底部白条残留', (tester) async {
@@ -204,7 +204,7 @@ void main() {
     });
 
     testWidgets(
-      '分割线边距：三段 filter section 均配置 hasLeading: false（无 leading 图标缩进）',
+      '分割线全宽：dividerMargin 与 additionalDividerMargin 均置 0（起点=容器左缘）',
       (tester) async {
         final api = FakeSessionListApi(
           sessions: [
@@ -234,12 +234,111 @@ void main() {
           find.byKey(const ValueKey('filter-section-projects')),
         );
 
-        // hasLeading: false 时 additionalDividerMargin 应为 14.0（而非默认 hasLeading: true 的 42.0）
-        expect(sessionsSection.additionalDividerMargin, equals(14.0));
-        expect(channelsSection.additionalDividerMargin, equals(14.0));
-        expect(projectsSection.additionalDividerMargin, equals(14.0));
+        // #28 分割线全宽：divider 起点 = dividerMargin + additionalDividerMargin
+        // → 两者均置 0，分割线从容器（children group）左缘起笔全长贯穿。
+        expect(sessionsSection.dividerMargin, equals(0.0));
+        expect(sessionsSection.additionalDividerMargin, equals(0.0));
+        expect(channelsSection.dividerMargin, equals(0.0));
+        expect(channelsSection.additionalDividerMargin, equals(0.0));
+        expect(projectsSection.dividerMargin, equals(0.0));
+        expect(projectsSection.additionalDividerMargin, equals(0.0));
       },
     );
+
+    testWidgets('分割线坐标探针：筛选弹层内分隔线起点 x == 容器左缘', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '会话一', sourceLabel: 'telegram'),
+          session('s2', '会话二', sourceLabel: 'qq'),
+        ],
+      );
+      await pumpList(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 渠道分区（telegram/qq 两行 → 中间有一条分隔线）
+      final section = find.byKey(const ValueKey('filter-section-channels'));
+      expect(section, findsOneWidget);
+      // 取分区内高度 ≤ 1 的分隔线 Container（SDK 以 constraints 承载高度）
+      final divider = find.descendant(
+        of: section,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.constraints != null &&
+              w.constraints!.maxHeight <= 1.0 &&
+              w.margin != null,
+        ),
+      );
+      expect(divider, findsWidgets);
+      final dividerRect = tester.getRect(divider.first);
+      // 容器左缘 = section 整体的 left + 16（insetGrouped margin.left）
+      final sectionRect = tester.getRect(section);
+      final containerLeft = sectionRect.left + 16;
+      expect(dividerRect.left, closeTo(containerLeft, 0.5));
+    });
+
+    testWidgets('深色模式：分割线颜色保持 CupertinoColors.separator 解析色', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '会话一', sourceLabel: 'telegram'),
+          session('s2', '会话二', sourceLabel: 'qq'),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _FakeProjectApi(),
+            ),
+          ],
+          child: CupertinoApp.router(
+            theme: const CupertinoThemeData(brightness: Brightness.dark),
+            routerConfig: GoRouter(
+              initialLocation: '/',
+              routes: [
+                GoRoute(path: '/', builder: (_, _) => const SessionListPage()),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      final section = find.byKey(const ValueKey('filter-section-channels'));
+      final expected = CupertinoColors.separator.resolveFrom(
+        tester.element(section),
+      );
+      final divider = find.descendant(
+        of: section,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.constraints != null &&
+              w.constraints!.maxHeight <= 1.0 &&
+              w.margin != null,
+        ),
+      );
+      expect(divider, findsWidgets);
+      for (final e in divider.evaluate().take(10)) {
+        final container = e.widget as Container;
+        if (container.constraints != null &&
+            container.constraints!.maxHeight <= 1.0) {
+          expect(container.color, equals(expected));
+        }
+      }
+    });
   });
 
   group('subagent 显示开关（默认关闭）', () {
@@ -250,6 +349,18 @@ void main() {
         sourceLabel: 'Subagent',
         sourceTag: 'subagent',
         rawSource: 'subagent',
+        createdAt: (DateTime.now().millisecondsSinceEpoch / 1000) - 1800,
+      );
+    }
+
+    // #27 症状 A 实证：服务端委派 subagent 子会话 source 四字段不保证含
+    // 'subagent'（session_source 归一为 'other'），仅 title 带 Subagent 字样
+    // → title-only fixture：source 无 subagent 标记，仅标题「Subagent Session」。
+    SessionSummary titleOnlySubagentSession(String id, String title) {
+      return SessionSummary(
+        sessionId: id,
+        title: title,
+        sessionSource: 'other',
         createdAt: (DateTime.now().millisecondsSinceEpoch / 1000) - 1800,
       );
     }
@@ -350,6 +461,64 @@ void main() {
         find.byKey(const ValueKey('filter-chip-Subagent')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('#27 title-only：关闭开关隐藏仅标题带 Subagent 的会话（含搜索命中）',
+        (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '普通会话', sourceLabel: 'telegram'),
+          titleOnlySubagentSession('sub1', 'Subagent Session'),
+        ],
+      );
+      await pumpList(tester, api);
+      // 默认关闭：列表不展示标题含 Subagent 的会话
+      expect(find.text('Subagent Session'), findsNothing);
+      expect(find.text('普通会话'), findsOneWidget);
+
+      // 打开开关 → 恢复显示
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('session-filter-subagent-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('session-filter-sheet-close')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Subagent Session'), findsOneWidget);
+
+      // 再关回 → 隐藏
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('session-filter-subagent-switch')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('session-filter-sheet-close')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Subagent Session'), findsNothing);
+
+      // 搜索命中同样被过滤（关闭状态下）
+      api.searchResults['Subagent'] = [
+        titleOnlySubagentSession('sub1', 'Subagent Session'),
+      ];
+      await tester.enterText(
+        find.byKey(const ValueKey('session-list-search')),
+        'Subagent',
+      );
+      // 防抖窗口 + 搜索完成
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Subagent Session'), findsNothing);
     });
   });
 }

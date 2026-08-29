@@ -47,6 +47,22 @@ final chatWatchdogConfigProvider = Provider<ChatWatchdogConfig>(
 /// 时钟 Provider（看门狗/时间戳用；测试可 override 注入可控假时钟）。
 final chatClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
+/// 回合完成 → 会话列表刷新的节流状态。
+///
+/// 挂在 Provider 上：同一 ProviderContainer 内所有 ChatController 实例
+/// （不同会话并发完成）共享节流窗口，合并为一次列表刷新；跨容器
+/// （测试）天然隔离，避免模块级状态泄漏。
+class SessionListRefreshThrottleState {
+  /// 最近一次回合完成触发的会话列表刷新时间。
+  DateTime? lastRefreshAt;
+}
+
+/// #30：回合完成 → 会话列表刷新节流状态 Provider。
+final sessionListRefreshThrottleProvider =
+    Provider<SessionListRefreshThrottleState>(
+      (ref) => SessionListRefreshThrottleState(),
+    );
+
 /// 聊天服务器 API（生产 [ChatApiClient] 包 ApiClient；测试可 override 注入 fake）。
 final chatApiProvider = Provider<ChatServerApi>((ref) {
   final client = ref.watch(apiClientProvider);

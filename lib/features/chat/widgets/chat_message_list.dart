@@ -142,6 +142,14 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _justSent = false;
   bool _isAnimatingToBottom = false;
 
+  /// 非动画跳底收敛链（`_settleJumpToBottom`）复核次数上限（#23）。
+  /// 发送/流式路径只需追平「新气泡未布局完」的增长窗口，几帧内即收敛，
+  /// 刻意远小于初始定位 `_settleToBottom` 的 24 轮上限。
+  static const int _maxJumpResettle = 3;
+
+  /// 非动画跳底收敛链是否在途：防止同帧多次触发叠出并行跳转链。
+  bool _jumpSettling = false;
+
   @override
   void initState() {
     super.initState();
@@ -165,9 +173,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
           _nearBottom = true;
           _readingAnchor = null;
         } else if (next == ChatPhase.streaming) {
-          final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
-          final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
-          if (_justSent || _nearBottom || previous == ChatPhase.sending || isUserLast) {
+          final transcript = ref.read(
+            transcriptMessagesProvider(widget.sessionId),
+          );
+          final isUserLast =
+              transcript.isNotEmpty && transcript.last.message.role == 'user';
+          if (_justSent ||
+              _nearBottom ||
+              previous == ChatPhase.sending ||
+              isUserLast) {
             _justSent = true;
             _userHasScrolled = false;
             _nearBottom = true;
@@ -224,9 +238,15 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
             _nearBottom = true;
             _readingAnchor = null;
           } else if (next == ChatPhase.streaming) {
-            final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
-            final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
-            if (_justSent || _nearBottom || previous == ChatPhase.sending || isUserLast) {
+            final transcript = ref.read(
+              transcriptMessagesProvider(widget.sessionId),
+            );
+            final isUserLast =
+                transcript.isNotEmpty && transcript.last.message.role == 'user';
+            if (_justSent ||
+                _nearBottom ||
+                previous == ChatPhase.sending ||
+                isUserLast) {
               _justSent = true;
               _userHasScrolled = false;
               _nearBottom = true;
@@ -312,7 +332,10 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
       if (key?.currentContext == null) continue;
       final box = key!.currentContext!.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
-      final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
+      final localOffset = box.localToGlobal(
+        Offset.zero,
+        ancestor: scrollableBox,
+      );
       final dy = localOffset.dy;
       if (dy + box.size.height > 0) {
         final group = toolGroups
@@ -340,7 +363,10 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
         if (key?.currentContext == null) continue;
         final box = key!.currentContext!.findRenderObject() as RenderBox?;
         if (box == null || !box.attached) continue;
-        final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
+        final localOffset = box.localToGlobal(
+          Offset.zero,
+          ancestor: scrollableBox,
+        );
         final dy = localOffset.dy;
         if (dy + box.size.height > 0) {
           candidate = _ReadingAnchor(
@@ -594,11 +620,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
   void _scrollToBottom({bool animated = true}) {
     if (!mounted || !_controller.hasClients) return;
     // 初始定位在途期间的滚动由 _settleToBottom 收敛循环负责（jumpTo 链）；
-    // 若此时允许 animateTo，会与 jumpTo 竞争，并在估算 extent 上越界
-    // 后被 ClampingScrollPhysics 拉回 → 视觉「撞击反弹」。
-    // 初始定位在途期间的滚动由 _settleToBottom 收敛循环负责（jumpTo 链）；
-    // 若此时允许 animateTo，会与 jumpTo 竞争，并在估算 extent 上越界
-    // 后被 ClampingScrollPhysics 拉回 → 视觉「撞击反弹」。
+    // 若此时允许 animateTo 或额外 jump，会与收敛链竞争，并在估算 extent 上
+    // 越界后被 ClampingScrollPhysics 弹簧拉回 → 视觉「撞击反弹」。
     if (_positioningActive) return;
     final target = _controller.position.maxScrollExtent;
     if (target <= 0) return;
@@ -612,13 +635,79 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
               curve: Curves.easeOut,
             )
             .whenComplete(() {
-              if (mounted) _isAnimatingToBottom = false;
+              if (mounted) {
+                _isAnimatingToBottom = false;
+                // 动画期间 extent 可能继续变化（新气泡入场/懒加载估算修正），
+                // 落点未必是真实底部：用轻量收敛链复核，避免停在半途（#23）。
+                _settleJumpToBottom(attempts: 0);
+              }
             }),
       );
     } else {
       if (_isAnimatingToBottom) return;
-      _controller.jumpTo(target);
+      // 非动画单跳改为轻量收敛链：post-frame 读真实 extent + 单帧复核，
+      // 根治「jumpTo 落点与真实底部不一致 → 越界 → Spring 拉回」回弹（#23）。
+      _settleJumpToBottom(attempts: 0);
     }
+  }
+
+  /// 非动画跳底的轻量收敛链（#23 发送/流式跟随路径）。
+  ///
+  /// 旧实现 `jumpTo(target)` 在调用时**同步**读取 `maxScrollExtent`：若此刻
+  /// 新气泡尚未布局完（extent 仍处增长/估算态，如 sending 指示器、流式气泡、
+  /// live 时间线条目刚入场），目标与真实底部不一致；`jumpTo` 又**不做任何
+  /// 边界修正**（`forcePixels` 直写），落点越界后其收尾的 `goBallistic(0)`
+  /// 被 ClampingScrollPhysics 判为 `outOfRange`，随即启动 ScrollSpringSimulation
+  /// 弹簧把像素拉回边界 → 肉眼「下拉拉超又弹回」。
+  ///
+  /// 本方法沿用 `_settleToBottom` 的「extent 收敛」思想但刻意轻量：
+  /// ① 每次跳转都在 **post-frame 读取 extent**——拿到的是「刚布局完」的
+  /// 真实底部，跳转目标恒等于当帧 `maxScrollExtent`，落点必在界内
+  /// （pixels == max ⇒ outOfRange 为 false，引擎不会起弹簧）；
+  /// ② 复核链最多 `_maxJumpResettle` 轮就收手（发送路径不跑 24 轮收敛），
+  /// 收敛条件 = 跳后一帧 extent 不再增长（pixels 已贴住 maxScrollExtent）。
+  void _settleJumpToBottom({required int attempts}) {
+    if (_jumpSettling || !mounted || !_controller.hasClients) return;
+    _jumpSettling = true;
+    final generation = _layoutGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_controller.hasClients ||
+          generation != _layoutGeneration ||
+          _isAnimatingToBottom) {
+        _jumpSettling = false;
+        return;
+      }
+      final position = _controller.position;
+      final max = position.maxScrollExtent;
+      // 已贴底（且未越界）：上一轮跳转已收敛，无需动作。
+      if ((max - position.pixels).abs() <= 0.5) {
+        _jumpSettling = false;
+        return;
+      }
+      // 落点恒为当帧 maxScrollExtent（界内）：goBallistic(0) 不会起弹簧。
+      // 若前帧 extent 收缩导致像素越界，此跳亦完成精准拉回（直跳非弹簧）。
+      // 注意：链内不做 _userHasScrolled 拦截——「粘底阈值内 token 重新贴底」
+      // 是既有语义（调用点已按 _nearBottom 门控），链内再加拦截会破坏它在
+      // 用户上滑 120px 内的自动粘底行为（#14 回归测试覆盖）。
+      _controller.jumpTo(max);
+      if (attempts >= _maxJumpResettle) {
+        _jumpSettling = false;
+        return;
+      }
+      // 下一帧复核：extent 若仍在增长（新气泡未布局完）则继续追底。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            !_controller.hasClients ||
+            generation != _layoutGeneration ||
+            _isAnimatingToBottom) {
+          _jumpSettling = false;
+          return;
+        }
+        _jumpSettling = false;
+        _settleJumpToBottom(attempts: attempts + 1);
+      });
+    });
   }
 
   /// 解析搜索定位目标（幂等）：在 transcript 里找第一条含关键词的消息，用 renderId。
@@ -826,7 +915,8 @@ class _ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 消息刷新与内容变化：若 _nearBottom 则无动画 jump 回底（#13）；若离底阅读则保持锚点不拉底（#14）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.hasClients) return;
-      final isUserLast = transcript.isNotEmpty && transcript.last.message.role == 'user';
+      final isUserLast =
+          transcript.isNotEmpty && transcript.last.message.role == 'user';
       if (_justSent ||
           (phaseChanged &&
               (phase == ChatPhase.sending ||

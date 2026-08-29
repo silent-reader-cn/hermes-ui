@@ -28,6 +28,14 @@ import 'chat_providers.dart';
 import 'chat_server_api.dart';
 import 'chat_state.dart';
 
+/// 回合完成 → 会话列表刷新的节流窗口。
+///
+/// 存量会话（非新建）回合完成也需刷新列表（#30）；窗口内多次完成
+/// （同会话重复完成 / 并发多会话完成）合并为一次刷新，防高频抖动。
+/// 不用 Timer 延迟触发（testWidgets/FakeAsync 下残留 Timer 会误报
+/// "Timer still pending"），采用「前沿冷却 + 窗口内合并」的时间戳方案。
+const Duration _sessionListRefreshThrottleWindow = Duration(milliseconds: 1500);
+
 /// 聊天主控制器（chat_spec.md §1/§2：九态状态机 + 消息组装 + 断线恢复）。
 ///
 /// 唯一写 `List<ChatMessage>` 的类；SSE 事件经 [_handleSseEvent] 同步串行
@@ -2439,8 +2447,30 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _triggerSessionListRefreshForCompleted(String sessionId) {
     if (sessionId.isEmpty) return;
-    if (!_pendingNewSessionIds.contains(sessionId)) return;
-    _pendingNewSessionIds.remove(sessionId);
+    final throttle = ref.read(sessionListRefreshThrottleProvider);
+    // 新建会话（pending）双次补拉语义：收尾时必须强制刷新一次，不参与
+    // 存量会话节流；其刷新时间戳同时作为容器级冷却，窗口内其他完成合并
+    // 跳过，避免重复拉取。
+    if (_pendingNewSessionIds.remove(sessionId)) {
+      throttle.lastRefreshAt = _now();
+      _fireSessionListRefresh();
+      return;
+    }
+    // 存量会话：回合完成同样刷新列表（#30）。节流窗口内（同会话重复 /
+    // 并发多会话）合并进先到的刷新，窗口外直接触发。
+    final now = _now();
+    final last = throttle.lastRefreshAt;
+    if (last != null &&
+        now.difference(last) < _sessionListRefreshThrottleWindow) {
+      return;
+    }
+    throttle.lastRefreshAt = now;
+    _fireSessionListRefresh();
+  }
+
+  /// 实际执行会话列表强制刷新（弱网/离线静默，不抛错）。
+  void _fireSessionListRefresh() {
+    if (_disposed) return;
     try {
       final active = ref.read(activeConnectionProvider);
       if (active == null) return;

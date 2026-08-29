@@ -227,6 +227,24 @@ void main() {
             .isDelegatedSubagentSession,
         true,
       );
+      // #27 症状 A：服务端下发的委派 subagent 子会话 source 四字段不保证含
+      // 'subagent'（session_source 归一为 'other'、sidecar 陈旧时 source_tag/
+      // raw_source 缺失），但通用标题恒为 'Subagent Session' → title 并入判定。
+      expect(
+        SessionSummary.fromJson({'title': 'Subagent Session'})
+            .isDelegatedSubagentSession,
+        true,
+      );
+      expect(
+        SessionSummary.fromJson({'title': '某任务 Subagent 执行记录'})
+            .isDelegatedSubagentSession,
+        true,
+      );
+      expect(
+        SessionSummary.fromJson({'title': '普通会话标题'})
+            .isDelegatedSubagentSession,
+        false,
+      );
       expect(
         SessionSummary.fromJson({'source_tag': 'claude_code'})
             .isClaudeCodeSession,
@@ -298,6 +316,15 @@ void main() {
       expect(
         visibility.shows(SessionSummary.fromJson({'source_tag': 'subagent'})),
         false,
+      );
+      // #27 症状 A：仅 title 含 Subagent（无 source 标记）同样被隐藏。
+      expect(
+        visibility.shows(SessionSummary.fromJson({'title': 'Subagent Session'})),
+        false,
+      );
+      expect(
+        visibility.shows(SessionSummary.fromJson({'title': '普通标题'})),
+        true,
       );
       expect(
         visibility.shows(SessionSummary.fromJson({'session_id': 'cron_1'})),

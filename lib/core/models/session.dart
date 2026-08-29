@@ -775,14 +775,28 @@ class SessionSummary {
     );
   }
 
-  /// sourceTag/rawSource/sessionSource/sourceLabel 任一 normalize 后含 `subagent`。
+  /// sourceTag/rawSource/sessionSource/sourceLabel/title 任一 normalize 后
+  /// 含 `subagent` 字样。
+  ///
+  /// 实证（2026-08-29，D:/hermes-webui 服务端源码 + 服务端测试 fixture）：
+  /// 委派 subagent 子会话在 state.db 中 `source='subagent'`，但服务端
+  /// `normalize_agent_session_source` 把 `raw='subagent'` 归一到
+  /// `session_source='other'`（agent_sessions.py:74-115，subagent 不在
+  /// 归一分支）；`_apply_sidebar_state_db_override_metadata`（models.py:
+  /// 5606-5614）只对 `state_db_source=='webui'` 覆盖四 source 字段，subagent
+  /// 子会话保留 stale sidecar 旧值（注释明言 sidebar row 由 stale sidecar
+  /// 构建）→ 客户端收到的 source 四字段不保证含 'subagent'。而通用标题
+  /// 恒为 `Subagent Session`（服务端 fixture test_5306 证实），故把 title
+  /// 并入判定（OR），保证「关闭 subagent 开关后按标题可辨识的会话必隐藏」。
   bool get isDelegatedSubagentSession {
-    return [
+    final markers = [
       sourceTag,
       rawSource,
       sessionSource,
       sourceLabel,
-    ].map(_normalizedSourceMarker).whereType<String>().contains('subagent');
+      title,
+    ].map(_normalizedSourceMarker).whereType<String>();
+    return markers.any((marker) => marker.contains('subagent'));
   }
 
   /// sourceTag/rawSource 含 `claude_code`。
