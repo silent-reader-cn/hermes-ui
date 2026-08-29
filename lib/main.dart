@@ -96,10 +96,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
     );
 
     if (Directionality.maybeOf(context) == null) {
-      card = Directionality(
-        textDirection: TextDirection.ltr,
-        child: card,
-      );
+      card = Directionality(textDirection: TextDirection.ltr, child: card);
     }
     return Center(child: card);
   }
@@ -149,9 +146,7 @@ Future<void> main(List<String> args) async {
       level: DiagnosticsLogLevel.error,
       tag: 'platform_error',
       message: error.toString(),
-      details: {
-        'stackTrace': stack.toString(),
-      },
+      details: {'stackTrace': stack.toString()},
       errorKind: error.runtimeType.toString(),
     );
     return true;
@@ -177,7 +172,8 @@ Future<void> main(List<String> args) async {
     return RecoverableErrorCard(details: details);
   };
 
-  unawaited(DiagnosticsService.instance.init());
+  // 注入唯一持久库后初始化诊断服务（drift 落库，避免双库；#33 存储迁移）。
+  unawaited(DiagnosticsService.instance.init(database: _productionDatabase));
 
   final silentStart = isSilentStart(
     args: args,

@@ -39,9 +39,12 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     });
   }
 
-  Future<void> _exportLogs(List<DiagnosticsLogEntry> logs) async {
+  /// 导出当前 drift 库内全部日志（以库为源，不受内存缓冲截断影响，#33）。
+  Future<void> _exportLogs() async {
     final l10n = AppLocalizations.of(context);
-    if (logs.isEmpty) return;
+    final service = ref.read(diagnosticsServiceProvider);
+    final logs = await service.exportAllLogs();
+    if (logs.isEmpty || !mounted) return;
     final exportText = DiagnosticsService.formatExportText(logs);
     await Clipboard.setData(ClipboardData(text: exportText));
     if (!mounted) return;
@@ -151,17 +154,17 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                 child: Text(l10n.diagnosticsExitSelectMode),
               )
             : (allLogs.isNotEmpty
-                ? CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    key: const ValueKey('diagnostics-enter-selection-btn'),
-                    onPressed: () {
-                      ref
-                          .read(diagnosticsIsSelectionModeProvider.notifier)
-                          .setMode(true);
-                    },
-                    child: Text(l10n.diagnosticsSelectMode),
-                  )
-                : null),
+                  ? CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      key: const ValueKey('diagnostics-enter-selection-btn'),
+                      onPressed: () {
+                        ref
+                            .read(diagnosticsIsSelectionModeProvider.notifier)
+                            .setMode(true);
+                      },
+                      child: Text(l10n.diagnosticsSelectMode),
+                    )
+                  : null),
       ),
       child: SafeArea(
         child: Column(
@@ -276,9 +279,9 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                         vertical: 4,
                       ),
                       key: const ValueKey('diagnostics-export-btn'),
-                      onPressed: filteredLogs.isEmpty
+                      onPressed: allLogs.isEmpty
                           ? null
-                          : () => unawaited(_exportLogs(filteredLogs)),
+                          : () => unawaited(_exportLogs()),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -384,8 +387,8 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       onPressed: selectedIds.isEmpty
                           ? null
                           : () => unawaited(
-                                _copySelectedLogs(filteredLogs, selectedIds),
-                              ),
+                              _copySelectedLogs(filteredLogs, selectedIds),
+                            ),
                       child: Text(
                         l10n.diagnosticsCopySelected,
                         style: const TextStyle(fontSize: 14),
@@ -659,7 +662,9 @@ class _DiagnosticsLogRow extends StatelessWidget {
                           vertical: 0.5,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5.resolveFrom(context),
+                          color: CupertinoColors.systemGrey5.resolveFrom(
+                            context,
+                          ),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(

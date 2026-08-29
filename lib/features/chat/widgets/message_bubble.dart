@@ -193,8 +193,20 @@ class _UserContent extends StatelessWidget {
     final parsedDisplay = hasMediaMarker
         ? ChatMediaParser.parseMediaMarkers(cleanText)
         : cleanText;
+    // 纯文本与块级内容两态（#34 气泡宽度自适应）：
+    // - 块级内容态（选中上下文卡片 / 内联媒体标记 / 附件芯片）保持
+    //   [CrossAxisAlignment.stretch]：卡片与媒体区横向撑满，排版不受误伤；
+    // - 纯文本态改 [CrossAxisAlignment.start]：Column 宽度由内容收缩决定
+    //   （外层 Container maxWidth = 0.78 槽宽封顶不变），不足一行的短消息
+    //   气泡收窄贴右（IM 惯例），长文本依旧在 0.78 内折行撑满。
+    final hasBlockContent =
+        blocks.isNotEmpty ||
+        hasMediaMarker ||
+        message.attachments?.isNotEmpty == true;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: hasBlockContent
+          ? CrossAxisAlignment.stretch
+          : CrossAxisAlignment.start,
       children: [
         if (blocks.isNotEmpty) SelectedContextCardGroup(blocks: blocks),
         if (blocks.isNotEmpty && parsedDisplay.isNotEmpty)

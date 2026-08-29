@@ -83,9 +83,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _contextIndicatorKey = GlobalKey(
       debugLabel: 'chat-context-${widget.sessionId}',
     );
-    // 挂载后恢复本会话草稿（postFrame 避开 build 期 setState）。
+    // 挂载后恢复本会话草稿（postFrame 避开 build 期 setState）；挂载时若已有
+    // 未消费的 prefill（切换会话等罕见遗留）一并消费。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final current = ref
+          .read(chatControllerProvider(widget.sessionId))
+          .composerPrefill;
+      if (current != null) _consumePrefill(current);
       _restoreDraft();
     });
   }
@@ -141,25 +146,44 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   /// 已消费的 composerPrefill 值（去重，避免重复写入输入框）。
   String? _appliedPrefill;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 重试上一轮：controller 写入 composerPrefill，这里同步到输入框并清除。
-    final prefill = ref
-        .watch(chatControllerProvider(widget.sessionId))
-        .composerPrefill;
-    if (prefill != null && prefill != _appliedPrefill) {
-      _appliedPrefill = prefill;
-      _textController.text = prefill;
-      _hasText = prefill.trim().isNotEmpty;
-      // prefill 视为一次性的草稿内容：同步写入本会话草稿存储，后续编辑覆盖。
-      ref.read(chatDraftProvider(widget.sessionId).notifier).update(prefill);
-      ref
-          .read(chatControllerProvider(widget.sessionId).notifier)
-          .clearComposerPrefill();
-    } else if (prefill == null) {
+  /// 监听 [sessionId] 会话的 composerPrefill 变化并消费。
+  ///
+  /// 必须在 `build()` 内调用：Riverpod 2.x 的 `ref.listen` 只能在 build 阶段
+  /// 注册（`debugDoingBuild` 断言），并在每次 build 时自动清理旧订阅，因此
+  /// 会话切换后下一次 build 自然切换到新会话的监听；回调里再以
+  /// `sessionId != widget.sessionId` 防御同一帧内的切换窗口残留通知。
+  void _bindPrefillListener(String sessionId) {
+    ref.listen<ChatState>(chatControllerProvider(sessionId), (previous, next) {
+      if (sessionId != widget.sessionId) return;
+      _consumePrefill(next.composerPrefill);
+    });
+  }
+
+  /// 消费 [prefill]：非 null 且未被消费过 → 写入输入框（光标置末尾）+ 同步
+  /// 草稿，再清除 provider 值；prefill 为 null（清除后）→ 复位 [_appliedPrefill]，
+  /// 保证第二次以相同文本 prefill 仍能生效（#25 验收：连点第二次仍回填）。
+  ///
+  /// 由 `build()` 内注册的 `ref.listen` 回调驱动：Riverpod
+  /// provider 值变化只会触发 listener，不会再次回调 didChangeDependencies。
+  void _consumePrefill(String? prefill) {
+    if (!mounted) return;
+    if (prefill == null) {
       _appliedPrefill = null;
+      return;
     }
+    if (prefill == _appliedPrefill) return;
+    _appliedPrefill = prefill;
+    _textController.text = prefill;
+    _textController.selection = TextSelection.fromPosition(
+      TextPosition(offset: prefill.length),
+    );
+    final hasText = prefill.trim().isNotEmpty;
+    if (hasText != _hasText) setState(() => _hasText = hasText);
+    // prefill 视为一次性的草稿内容：同步写入本会话草稿存储，后续编辑覆盖。
+    ref.read(chatDraftProvider(widget.sessionId).notifier).update(prefill);
+    ref
+        .read(chatControllerProvider(widget.sessionId).notifier)
+        .clearComposerPrefill();
   }
 
   @override
@@ -533,6 +557,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
+    // 消费 composerPrefill：必须挂 ref.listen 于 build（provider 值变化只触发
+    // listener / rebuild，不会再次回调 didChangeDependencies —— #25 实证：prefill
+    // 已写入 provider 但输入框永不回填，根因即消费逻辑挂错生命周期）。
+    _bindPrefillListener(widget.sessionId);
     final l10n = AppLocalizations.of(context);
     final phase = ref.watch(chatPhaseProvider(widget.sessionId));
     final isStreaming =

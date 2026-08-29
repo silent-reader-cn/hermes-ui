@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/core/models/message_attachment.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
+import 'package:hermes_ui/features/chat/widgets/selected_context_card.dart';
 
 /// 电脑端双栏气泡溢出回归：气泡 maxWidth 必须基于「实际槽位宽度」而非
 /// 全窗口 MediaQuery 宽（双栏下 chat 区 = 窗口宽 − 320 侧栏），
@@ -45,13 +47,14 @@ void main() {
   }
 
   double bubbleWidth(WidgetTester tester) => tester
-      .renderObject<RenderBox>(find.byKey(const ValueKey('chat-message-bubble')))
+      .renderObject<RenderBox>(
+        find.byKey(const ValueKey('chat-message-bubble')),
+      )
       .size
       .width;
 
   testWidgets('双栏窄槽位：用户长消息气泡不超出可用宽度（无 overflow）', (tester) async {
-    final longText =
-        List.filled(60, '这是一段很长的用户输入内容，用于模拟真实超长消息。').join();
+    final longText = List.filled(60, '这是一段很长的用户输入内容，用于模拟真实超长消息。').join();
     await pumpInSlot(
       tester,
       message: ChatMessage(role: 'user', content: longText),
@@ -65,7 +68,8 @@ void main() {
 
   testWidgets('双栏窄槽位：助手长 Markdown（含超长 URL 与代码块）不溢出', (tester) async {
     final longUrl = 'https://example.com/${'x' * 120}';
-    final content = '这是一段助手回复。\n\n这是一个很长的链接：$longUrl\n\n'
+    final content =
+        '这是一段助手回复。\n\n这是一个很长的链接：$longUrl\n\n'
         '```\n${'y' * 200}\n```\n\n- 列表项';
     await pumpInSlot(
       tester,
@@ -87,5 +91,65 @@ void main() {
     expect(tester.takeException(), isNull);
     // 390 × 0.78 = 304.2，气泡宽 ≤ 305
     expect(bubbleWidth(tester), lessThanOrEqualTo(390 * 0.78 + 1));
+  });
+
+  group('#34 用户气泡宽度自适应 min(内容宽, 0.78 封顶)', () {
+    // 槽位 960（1280 窗口 − 320 侧栏），0.78 封顶 = 748.8
+    const slot = 960.0;
+    const maxBubble = slot * 0.78;
+
+    testWidgets('单字符短消息「好」：气泡收窄贴近字宽 + padding，且贴右缘', (tester) async {
+      await pumpInSlot(
+        tester,
+        message: const ChatMessage(role: 'user', content: '好'),
+      );
+      expect(tester.takeException(), isNull);
+      // 修复前 stretch 把 Text 撑满 ≈ 748.8；修复后「好」15pt 字宽 ≈ 15px
+      // + 水平 padding 24 ≈ 40px，明显小于 0.78 槽宽
+      final w = bubbleWidth(tester);
+      expect(w, lessThan(maxBubble / 2));
+      expect(w, greaterThan(20));
+      // 右对齐语义保持：气泡右缘 = 槽位右缘 − 12 外 padding（窗口 1280）
+      final right = tester
+          .getTopRight(find.byKey(const ValueKey('chat-message-bubble')))
+          .dx;
+      expect(right, closeTo(1280 - 12, 0.5));
+    });
+
+    testWidgets('长文本仍封顶 ≈ 0.78 槽宽（不溢出、不破版）', (tester) async {
+      final longText = List.filled(60, '这是一段很长的用户输入内容，用于模拟真实超长消息。').join();
+      await pumpInSlot(
+        tester,
+        message: ChatMessage(role: 'user', content: longText),
+      );
+      expect(tester.takeException(), isNull);
+      expect(bubbleWidth(tester), closeTo(maxBubble, 1));
+    });
+
+    testWidgets('含选中上下文卡片：块级内容态保持 stretch，气泡仍撑满 0.78', (tester) async {
+      const raw =
+          '好\n\n'
+          '**Context 1:**\n'
+          '<!-- hermes-selected-context -->\n'
+          '> hello';
+      await pumpInSlot(
+        tester,
+        message: const ChatMessage(role: 'user', content: raw),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SelectedContextCardGroup), findsOneWidget);
+      expect(bubbleWidth(tester), closeTo(maxBubble, 1));
+    });
+
+    testWidgets('含附件芯片：块级内容态保持 stretch，气泡仍撑满 0.78', (tester) async {
+      const msg = ChatMessage(
+        role: 'user',
+        content: '看这张图',
+        attachments: [MessageAttachment(name: 'photo.png', path: 'photo.png')],
+      );
+      await pumpInSlot(tester, message: msg);
+      expect(tester.takeException(), isNull);
+      expect(bubbleWidth(tester), closeTo(maxBubble, 1));
+    });
   });
 }

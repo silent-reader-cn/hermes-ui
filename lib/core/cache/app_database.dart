@@ -47,10 +47,32 @@ class CachedMedia extends Table {
   Set<Column<Object>> get primaryKey => {cacheKey};
 }
 
+/// 诊断日志表（#33：SharedPreferences → drift 迁移）。
+///
+/// timestamp 存 epoch 毫秒（与缓存表 cachedAt 同约定）；level 存枚举 name
+/// 字符串；details 存脱敏后的 JSON 文本。按 timestamp 建索引以支持
+/// 30 天保留清理与最老优先淘汰的排序查询。
+@TableIndex(name: 'idx_diagnostics_logs_timestamp', columns: {#timestamp})
+class DiagnosticsLogs extends Table {
+  TextColumn get id => text()();
+  IntColumn get timestamp => integer()();
+  TextColumn get level => text()();
+  TextColumn get tag => text()();
+  TextColumn get message => text()();
+  TextColumn get details => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  TextColumn get errorKind => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 /// **单例约束**：生产代码不要直接多次 `AppDatabase.production()`。
 /// 请改为 `ref.watch(appDatabaseProvider)` 取得全进程唯一实例，避免
 /// 同名 `hermes_cache` 的 `QueryExecutor` 争用导致崩溃。
-@DriftDatabase(tables: [CachedSessions, CachedMessages, CachedMedia])
+@DriftDatabase(
+  tables: [CachedSessions, CachedMessages, CachedMedia, DiagnosticsLogs],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
@@ -62,16 +84,23 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.memory() => AppDatabase(openConnectionInMemory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
-  /// 迁移策略：新建库创建全部表；v1→v2 给已有生产库补建 `cached_media` 表
-  /// （drift 默认在 schema 升级时若未提供 onUpgrade 会直接抛异常）。
+  /// 迁移策略：新建库创建全部表；升级时按版本增量补建表（drift 默认在
+  /// schema 升级时若未提供 onUpgrade 会直接抛异常）。
+  /// - v1→v2：给已有生产库补建 `cached_media` 表；
+  /// - v2→v3：补建 `diagnostics_logs` 诊断日志表（#33 存储迁移）。
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(cachedMedia);
+      }
+      if (from < 3) {
+        await m.createTable(diagnosticsLogs);
+        // drift 的 createTable 不建索引，需显式补建（#33）。
+        await m.createIndex(idxDiagnosticsLogsTimestamp);
       }
     },
   );

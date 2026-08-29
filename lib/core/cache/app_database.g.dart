@@ -1156,12 +1156,532 @@ class CachedMediaCompanion extends UpdateCompanion<CachedMediaData> {
   }
 }
 
+class $DiagnosticsLogsTable extends DiagnosticsLogs
+    with TableInfo<$DiagnosticsLogsTable, DiagnosticsLog> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DiagnosticsLogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _timestampMeta = const VerificationMeta(
+    'timestamp',
+  );
+  @override
+  late final GeneratedColumn<int> timestamp = GeneratedColumn<int>(
+    'timestamp',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _levelMeta = const VerificationMeta('level');
+  @override
+  late final GeneratedColumn<String> level = GeneratedColumn<String>(
+    'level',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagMeta = const VerificationMeta('tag');
+  @override
+  late final GeneratedColumn<String> tag = GeneratedColumn<String>(
+    'tag',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _messageMeta = const VerificationMeta(
+    'message',
+  );
+  @override
+  late final GeneratedColumn<String> message = GeneratedColumn<String>(
+    'message',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detailsMeta = const VerificationMeta(
+    'details',
+  );
+  @override
+  late final GeneratedColumn<String> details = GeneratedColumn<String>(
+    'details',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _errorKindMeta = const VerificationMeta(
+    'errorKind',
+  );
+  @override
+  late final GeneratedColumn<String> errorKind = GeneratedColumn<String>(
+    'error_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    timestamp,
+    level,
+    tag,
+    message,
+    details,
+    durationMs,
+    errorKind,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'diagnostics_logs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DiagnosticsLog> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('timestamp')) {
+      context.handle(
+        _timestampMeta,
+        timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_timestampMeta);
+    }
+    if (data.containsKey('level')) {
+      context.handle(
+        _levelMeta,
+        level.isAcceptableOrUnknown(data['level']!, _levelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_levelMeta);
+    }
+    if (data.containsKey('tag')) {
+      context.handle(
+        _tagMeta,
+        tag.isAcceptableOrUnknown(data['tag']!, _tagMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagMeta);
+    }
+    if (data.containsKey('message')) {
+      context.handle(
+        _messageMeta,
+        message.isAcceptableOrUnknown(data['message']!, _messageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageMeta);
+    }
+    if (data.containsKey('details')) {
+      context.handle(
+        _detailsMeta,
+        details.isAcceptableOrUnknown(data['details']!, _detailsMeta),
+      );
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    }
+    if (data.containsKey('error_kind')) {
+      context.handle(
+        _errorKindMeta,
+        errorKind.isAcceptableOrUnknown(data['error_kind']!, _errorKindMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DiagnosticsLog map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DiagnosticsLog(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      timestamp: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}timestamp'],
+      )!,
+      level: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}level'],
+      )!,
+      tag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tag'],
+      )!,
+      message: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message'],
+      )!,
+      details: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}details'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      ),
+      errorKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_kind'],
+      ),
+    );
+  }
+
+  @override
+  $DiagnosticsLogsTable createAlias(String alias) {
+    return $DiagnosticsLogsTable(attachedDatabase, alias);
+  }
+}
+
+class DiagnosticsLog extends DataClass implements Insertable<DiagnosticsLog> {
+  final String id;
+  final int timestamp;
+  final String level;
+  final String tag;
+  final String message;
+  final String? details;
+  final int? durationMs;
+  final String? errorKind;
+  const DiagnosticsLog({
+    required this.id,
+    required this.timestamp,
+    required this.level,
+    required this.tag,
+    required this.message,
+    this.details,
+    this.durationMs,
+    this.errorKind,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['timestamp'] = Variable<int>(timestamp);
+    map['level'] = Variable<String>(level);
+    map['tag'] = Variable<String>(tag);
+    map['message'] = Variable<String>(message);
+    if (!nullToAbsent || details != null) {
+      map['details'] = Variable<String>(details);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['duration_ms'] = Variable<int>(durationMs);
+    }
+    if (!nullToAbsent || errorKind != null) {
+      map['error_kind'] = Variable<String>(errorKind);
+    }
+    return map;
+  }
+
+  DiagnosticsLogsCompanion toCompanion(bool nullToAbsent) {
+    return DiagnosticsLogsCompanion(
+      id: Value(id),
+      timestamp: Value(timestamp),
+      level: Value(level),
+      tag: Value(tag),
+      message: Value(message),
+      details: details == null && nullToAbsent
+          ? const Value.absent()
+          : Value(details),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+      errorKind: errorKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorKind),
+    );
+  }
+
+  factory DiagnosticsLog.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DiagnosticsLog(
+      id: serializer.fromJson<String>(json['id']),
+      timestamp: serializer.fromJson<int>(json['timestamp']),
+      level: serializer.fromJson<String>(json['level']),
+      tag: serializer.fromJson<String>(json['tag']),
+      message: serializer.fromJson<String>(json['message']),
+      details: serializer.fromJson<String?>(json['details']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+      errorKind: serializer.fromJson<String?>(json['errorKind']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'timestamp': serializer.toJson<int>(timestamp),
+      'level': serializer.toJson<String>(level),
+      'tag': serializer.toJson<String>(tag),
+      'message': serializer.toJson<String>(message),
+      'details': serializer.toJson<String?>(details),
+      'durationMs': serializer.toJson<int?>(durationMs),
+      'errorKind': serializer.toJson<String?>(errorKind),
+    };
+  }
+
+  DiagnosticsLog copyWith({
+    String? id,
+    int? timestamp,
+    String? level,
+    String? tag,
+    String? message,
+    Value<String?> details = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    Value<String?> errorKind = const Value.absent(),
+  }) => DiagnosticsLog(
+    id: id ?? this.id,
+    timestamp: timestamp ?? this.timestamp,
+    level: level ?? this.level,
+    tag: tag ?? this.tag,
+    message: message ?? this.message,
+    details: details.present ? details.value : this.details,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    errorKind: errorKind.present ? errorKind.value : this.errorKind,
+  );
+  DiagnosticsLog copyWithCompanion(DiagnosticsLogsCompanion data) {
+    return DiagnosticsLog(
+      id: data.id.present ? data.id.value : this.id,
+      timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      level: data.level.present ? data.level.value : this.level,
+      tag: data.tag.present ? data.tag.value : this.tag,
+      message: data.message.present ? data.message.value : this.message,
+      details: data.details.present ? data.details.value : this.details,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      errorKind: data.errorKind.present ? data.errorKind.value : this.errorKind,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DiagnosticsLog(')
+          ..write('id: $id, ')
+          ..write('timestamp: $timestamp, ')
+          ..write('level: $level, ')
+          ..write('tag: $tag, ')
+          ..write('message: $message, ')
+          ..write('details: $details, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('errorKind: $errorKind')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    timestamp,
+    level,
+    tag,
+    message,
+    details,
+    durationMs,
+    errorKind,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DiagnosticsLog &&
+          other.id == this.id &&
+          other.timestamp == this.timestamp &&
+          other.level == this.level &&
+          other.tag == this.tag &&
+          other.message == this.message &&
+          other.details == this.details &&
+          other.durationMs == this.durationMs &&
+          other.errorKind == this.errorKind);
+}
+
+class DiagnosticsLogsCompanion extends UpdateCompanion<DiagnosticsLog> {
+  final Value<String> id;
+  final Value<int> timestamp;
+  final Value<String> level;
+  final Value<String> tag;
+  final Value<String> message;
+  final Value<String?> details;
+  final Value<int?> durationMs;
+  final Value<String?> errorKind;
+  final Value<int> rowid;
+  const DiagnosticsLogsCompanion({
+    this.id = const Value.absent(),
+    this.timestamp = const Value.absent(),
+    this.level = const Value.absent(),
+    this.tag = const Value.absent(),
+    this.message = const Value.absent(),
+    this.details = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.errorKind = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DiagnosticsLogsCompanion.insert({
+    required String id,
+    required int timestamp,
+    required String level,
+    required String tag,
+    required String message,
+    this.details = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.errorKind = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       timestamp = Value(timestamp),
+       level = Value(level),
+       tag = Value(tag),
+       message = Value(message);
+  static Insertable<DiagnosticsLog> custom({
+    Expression<String>? id,
+    Expression<int>? timestamp,
+    Expression<String>? level,
+    Expression<String>? tag,
+    Expression<String>? message,
+    Expression<String>? details,
+    Expression<int>? durationMs,
+    Expression<String>? errorKind,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (timestamp != null) 'timestamp': timestamp,
+      if (level != null) 'level': level,
+      if (tag != null) 'tag': tag,
+      if (message != null) 'message': message,
+      if (details != null) 'details': details,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (errorKind != null) 'error_kind': errorKind,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DiagnosticsLogsCompanion copyWith({
+    Value<String>? id,
+    Value<int>? timestamp,
+    Value<String>? level,
+    Value<String>? tag,
+    Value<String>? message,
+    Value<String?>? details,
+    Value<int?>? durationMs,
+    Value<String?>? errorKind,
+    Value<int>? rowid,
+  }) {
+    return DiagnosticsLogsCompanion(
+      id: id ?? this.id,
+      timestamp: timestamp ?? this.timestamp,
+      level: level ?? this.level,
+      tag: tag ?? this.tag,
+      message: message ?? this.message,
+      details: details ?? this.details,
+      durationMs: durationMs ?? this.durationMs,
+      errorKind: errorKind ?? this.errorKind,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (timestamp.present) {
+      map['timestamp'] = Variable<int>(timestamp.value);
+    }
+    if (level.present) {
+      map['level'] = Variable<String>(level.value);
+    }
+    if (tag.present) {
+      map['tag'] = Variable<String>(tag.value);
+    }
+    if (message.present) {
+      map['message'] = Variable<String>(message.value);
+    }
+    if (details.present) {
+      map['details'] = Variable<String>(details.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (errorKind.present) {
+      map['error_kind'] = Variable<String>(errorKind.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DiagnosticsLogsCompanion(')
+          ..write('id: $id, ')
+          ..write('timestamp: $timestamp, ')
+          ..write('level: $level, ')
+          ..write('tag: $tag, ')
+          ..write('message: $message, ')
+          ..write('details: $details, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('errorKind: $errorKind, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CachedSessionsTable cachedSessions = $CachedSessionsTable(this);
   late final $CachedMessagesTable cachedMessages = $CachedMessagesTable(this);
   late final $CachedMediaTable cachedMedia = $CachedMediaTable(this);
+  late final $DiagnosticsLogsTable diagnosticsLogs = $DiagnosticsLogsTable(
+    this,
+  );
+  late final Index idxDiagnosticsLogsTimestamp = Index(
+    'idx_diagnostics_logs_timestamp',
+    'CREATE INDEX idx_diagnostics_logs_timestamp ON diagnostics_logs (timestamp)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1170,6 +1690,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cachedSessions,
     cachedMessages,
     cachedMedia,
+    diagnosticsLogs,
+    idxDiagnosticsLogsTimestamp,
   ];
 }
 
@@ -1798,6 +2320,271 @@ typedef $$CachedMediaTableProcessedTableManager =
       CachedMediaData,
       PrefetchHooks Function()
     >;
+typedef $$DiagnosticsLogsTableCreateCompanionBuilder =
+    DiagnosticsLogsCompanion Function({
+      required String id,
+      required int timestamp,
+      required String level,
+      required String tag,
+      required String message,
+      Value<String?> details,
+      Value<int?> durationMs,
+      Value<String?> errorKind,
+      Value<int> rowid,
+    });
+typedef $$DiagnosticsLogsTableUpdateCompanionBuilder =
+    DiagnosticsLogsCompanion Function({
+      Value<String> id,
+      Value<int> timestamp,
+      Value<String> level,
+      Value<String> tag,
+      Value<String> message,
+      Value<String?> details,
+      Value<int?> durationMs,
+      Value<String?> errorKind,
+      Value<int> rowid,
+    });
+
+class $$DiagnosticsLogsTableFilterComposer
+    extends Composer<_$AppDatabase, $DiagnosticsLogsTable> {
+  $$DiagnosticsLogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get level => $composableBuilder(
+    column: $table.level,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorKind => $composableBuilder(
+    column: $table.errorKind,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DiagnosticsLogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DiagnosticsLogsTable> {
+  $$DiagnosticsLogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get level => $composableBuilder(
+    column: $table.level,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get errorKind => $composableBuilder(
+    column: $table.errorKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DiagnosticsLogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DiagnosticsLogsTable> {
+  $$DiagnosticsLogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get timestamp =>
+      $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<String> get level =>
+      $composableBuilder(column: $table.level, builder: (column) => column);
+
+  GeneratedColumn<String> get tag =>
+      $composableBuilder(column: $table.tag, builder: (column) => column);
+
+  GeneratedColumn<String> get message =>
+      $composableBuilder(column: $table.message, builder: (column) => column);
+
+  GeneratedColumn<String> get details =>
+      $composableBuilder(column: $table.details, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorKind =>
+      $composableBuilder(column: $table.errorKind, builder: (column) => column);
+}
+
+class $$DiagnosticsLogsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DiagnosticsLogsTable,
+          DiagnosticsLog,
+          $$DiagnosticsLogsTableFilterComposer,
+          $$DiagnosticsLogsTableOrderingComposer,
+          $$DiagnosticsLogsTableAnnotationComposer,
+          $$DiagnosticsLogsTableCreateCompanionBuilder,
+          $$DiagnosticsLogsTableUpdateCompanionBuilder,
+          (
+            DiagnosticsLog,
+            BaseReferences<
+              _$AppDatabase,
+              $DiagnosticsLogsTable,
+              DiagnosticsLog
+            >,
+          ),
+          DiagnosticsLog,
+          PrefetchHooks Function()
+        > {
+  $$DiagnosticsLogsTableTableManager(
+    _$AppDatabase db,
+    $DiagnosticsLogsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DiagnosticsLogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DiagnosticsLogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DiagnosticsLogsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<int> timestamp = const Value.absent(),
+                Value<String> level = const Value.absent(),
+                Value<String> tag = const Value.absent(),
+                Value<String> message = const Value.absent(),
+                Value<String?> details = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String?> errorKind = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DiagnosticsLogsCompanion(
+                id: id,
+                timestamp: timestamp,
+                level: level,
+                tag: tag,
+                message: message,
+                details: details,
+                durationMs: durationMs,
+                errorKind: errorKind,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required int timestamp,
+                required String level,
+                required String tag,
+                required String message,
+                Value<String?> details = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String?> errorKind = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DiagnosticsLogsCompanion.insert(
+                id: id,
+                timestamp: timestamp,
+                level: level,
+                tag: tag,
+                message: message,
+                details: details,
+                durationMs: durationMs,
+                errorKind: errorKind,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DiagnosticsLogsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DiagnosticsLogsTable,
+      DiagnosticsLog,
+      $$DiagnosticsLogsTableFilterComposer,
+      $$DiagnosticsLogsTableOrderingComposer,
+      $$DiagnosticsLogsTableAnnotationComposer,
+      $$DiagnosticsLogsTableCreateCompanionBuilder,
+      $$DiagnosticsLogsTableUpdateCompanionBuilder,
+      (
+        DiagnosticsLog,
+        BaseReferences<_$AppDatabase, $DiagnosticsLogsTable, DiagnosticsLog>,
+      ),
+      DiagnosticsLog,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1808,4 +2595,6 @@ class $AppDatabaseManager {
       $$CachedMessagesTableTableManager(_db, _db.cachedMessages);
   $$CachedMediaTableTableManager get cachedMedia =>
       $$CachedMediaTableTableManager(_db, _db.cachedMedia);
+  $$DiagnosticsLogsTableTableManager get diagnosticsLogs =>
+      $$DiagnosticsLogsTableTableManager(_db, _db.diagnosticsLogs);
 }
