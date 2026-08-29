@@ -66,11 +66,15 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// 展开态大标题文字顶部距状态栏的间距（宽敞模式）。
   ///
   /// 对齐系统 `CupertinoSliverNavigationBar` 展开态大标题的视觉位置：
-  /// 窄屏（400×800，无状态栏 padding）实测系统组件的 34pt 大标题顶距屏幕
-  /// 54px（44pt 持久栏 + 10pt 内部偏移），本组件同场景实测 49px——修正为 54，
-  /// 保证与技能/工作区等使用系统导航栏的页面切换时标题顶部间距一致
-  /// （2026-08-26 窄屏探针实测）。仅手机端单栈使用；紧凑模式不受影响。
-  static const double _spaciousLargeTitleTopGap = 54.0;
+  /// - 2026-08-26 窄屏探针（Ahem 默认字体）实测系统 34pt 大标题顶距 = 54px，
+  ///   本组件 49px → 修正为 54（49→54）。
+  /// - 2026-08-29 真 MiSans + 应用主题探针（真机同度量，见
+  ///   `test/features/session_list/session_vs_tasks_title_gap_probe_test.dart`）
+  ///   实测：MiSans 34pt 行高 = 45px → 系统组件大标题顶 = 88 - 45 = 43px，
+  ///   会话页 54px 高出 11px（主人实机观测「会话页空白更高」方向吻合）
+  ///   → 反向修正 54→43（todo #24，主人确认后落地）。
+  /// 仅手机端单栈使用；紧凑模式不受影响。
+  static const double _spaciousLargeTitleTopGap = 43.0;
 
   /// 大标题文字行盒高度（MiSans 34pt 实测渲染高度，探针数据）。
   ///
