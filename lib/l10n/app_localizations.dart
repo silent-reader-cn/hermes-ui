@@ -260,6 +260,27 @@ class AppLocalizations {
   String get notifyErrorsTitle => isEnglish ? 'Error Notifications' : '异常中断通知';
   String get notifyErrorsSubtitle =>
       isEnglish ? 'Notify on session errors or interruption' : '会话异常中断或出错时推送通知';
+  String get pushTestTitle => isEnglish ? 'Push Notification Test' : '推送测试';
+  String get pushTestButton => isEnglish ? 'Push' : '推送';
+  String get pushTestTurns => isEnglish ? 'Turn Completed' : '回合完成';
+  String get pushTestClarify => isEnglish ? 'Clarification' : '需要澄清';
+  String get pushTestErrors => isEnglish ? 'Error Interrupted' : '异常中断';
+  String get pushTestTurnsNotificationTitle =>
+      isEnglish ? 'Test: Turn Completed' : '测试：回合完成';
+  String get pushTestClarifyNotificationTitle =>
+      isEnglish ? 'Test: Clarification Needed' : '测试：需要澄清';
+  String get pushTestErrorsNotificationTitle =>
+      isEnglish ? 'Test: Error Interrupted' : '测试：异常中断';
+  String pushTestBody(String timestamp) => isEnglish
+      ? 'Tap to return to test session ($timestamp)'
+      : '点击可回到测试会话（$timestamp）';
+  String pushTestSuccess(String type) =>
+      isEnglish ? 'Pushed: $type' : '已推送：$type';
+  String pushTestDisabledNotice(String type) => isEnglish
+      ? '$type notification is disabled, but test notification was sent (system channel is independent)'
+      : '该类型通知已关闭，仍已推送测试通知（系统通道独立）';
+  String get pushTestPermissionDenied =>
+      isEnglish ? 'Notification permission denied' : '通知权限已被拒绝';
   String get sessionErrorTitle => isEnglish ? 'Session Error' : '会话异常';
   String get sessionCancelledTitle =>
       isEnglish ? 'Response Cancelled' : '响应已取消';

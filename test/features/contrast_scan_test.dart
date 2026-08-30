@@ -339,6 +339,7 @@ final Set<String> allKnownIssues = <String>{
   'git|light|push', // 主按钮白字
   'kanban|light|主看板', // 主按钮白字
   'session_list_error|light|重试', // 错误态「重试」CupertinoButton.filled 白字（真背景是主题蓝）
+  'settings|light|推送', // 通知推送测试按钮白字（CupertinoButton.filled 蓝底）
   // ---- 模型误报：iOS 次要文字（label 浅色 #3C3C43 衬浅灰分组背景，设计规范既定）----
   'onboarding|light|https://hermes.examp', // 服务地址输入框 URL 文字
   'chat|light|发送消息…', // 输入框占位符（WCAG 豁免）

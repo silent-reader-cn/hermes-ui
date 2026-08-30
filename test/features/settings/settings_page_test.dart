@@ -16,6 +16,10 @@ import 'package:hermes_ui/core/models/auxiliary_model.dart';
 import 'package:hermes_ui/core/models/extensions.dart';
 import 'package:hermes_ui/core/models/mcp.dart';
 import 'package:hermes_ui/core/models/server_catalog.dart';
+import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
+import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
+import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/settings/settings_page.dart';
 import 'package:hermes_ui/features/settings/settings_providers.dart';
@@ -173,18 +177,69 @@ ApiClient buildMockApiClient({
   );
 }
 
+class _FakeTurnNotificationService implements TurnNotificationService {
+  final List<(String, String, String)> notifyCalls = [];
+  final List<(String, String)> clarifyCalls = [];
+  final List<(String, String, String)> errorCalls = [];
+  int clearAllCalls = 0;
+  int permissionRequests = 0;
+  bool permissionResult = true;
+  String? launchSessionId;
+
+  @override
+  Future<void> notifyTurnCompleted(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {
+    notifyCalls.add((sessionId, title, preview));
+  }
+
+  @override
+  Future<void> notifyClarificationNeeded(
+    String sessionId,
+    String question,
+  ) async {
+    clarifyCalls.add((sessionId, question));
+  }
+
+  @override
+  Future<void> notifySessionError(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {
+    errorCalls.add((sessionId, title, preview));
+  }
+
+  @override
+  Future<void> clearAll() async {
+    clearAllCalls++;
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    permissionRequests++;
+    return permissionResult;
+  }
+
+  @override
+  Future<String?> getLaunchSessionId() async => launchSessionId;
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  /// 组装容器：注入内存存储（预置连接）+ fake 设置 API + 占位 ApiClient。
+  /// 组装容器：注入内存存储（预置连接）+ fake 设置 API + 占位 ApiClient + 可选通知服务。
   Future<ProviderContainer> makeContainer({
     required FakeSettingsApi api,
     List<ServerConnection> connections = const [],
     String? activeId,
     FakeOnboardingLoginApi? loginApi,
     ApiClient? mockApiClient,
+    TurnNotificationService? notificationService,
   }) async {
     final storage = InMemorySecureStorage();
     final store = ConnectionStore(storage: storage);
@@ -207,6 +262,9 @@ void main() {
         serverEditorApiClientFactoryProvider.overrideWithValue(
           (baseUrl, headers) => client,
         ),
+        if (notificationService != null)
+          turnNotificationServiceProvider
+              .overrideWithValue(notificationService),
       ],
     );
     addTearDown(container.dispose);
@@ -217,7 +275,9 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester,
     ProviderContainer container, {
-    Size size = const Size(800, 1200),
+    Size size = const Size(800, 2000),
+    TextScaler textScaler = TextScaler.noScaling,
+    Brightness brightness = Brightness.light,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -225,7 +285,17 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const CupertinoApp(home: SettingsPage()),
+        child: MediaQuery(
+          data: MediaQueryData(
+            size: size,
+            textScaler: textScaler,
+            platformBrightness: brightness,
+          ),
+          child: CupertinoApp(
+            theme: CupertinoThemeData(brightness: brightness),
+            home: const SettingsPage(),
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -1332,6 +1402,214 @@ void main() {
         find.byKey(const ValueKey('settings-switch-notify-turns')),
       );
       expect(updatedSwitch.value, isFalse);
+    });
+
+    testWidgets('渲染推送测试行：左侧三选一默认回合完成，右侧按钮可点', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 推送测试行与组件
+      expect(find.byKey(const ValueKey('settings-notify-push-test')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-notify-push-test-type')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-notify-push-test-button')), findsOneWidget);
+
+      // 默认选择为回合完成
+      final segmented = tester.widget<CupertinoSlidingSegmentedControl<PushTestType>>(
+        find.byKey(const ValueKey('settings-notify-push-test-type')),
+      );
+      expect(segmented.groupValue, PushTestType.turns);
+
+      // 选项文本与按钮文本
+      expect(find.text('回合完成'), findsWidgets);
+      expect(find.text('需要澄清'), findsWidgets);
+      expect(find.text('异常中断'), findsWidgets);
+      expect(find.text('推送'), findsOneWidget);
+    });
+
+    testWidgets('默认选“回合完成”，点击推送 → 请求权限 + 触发 notifyTurnCompleted + 弹已推送轻提示', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 点击推送按钮
+      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.permissionRequests, 1);
+      expect(fakeService.notifyCalls, hasLength(1));
+      final (sessionId, title, preview) = fakeService.notifyCalls.single;
+      expect(sessionId, startsWith('test-push-turns-'));
+      expect(title, '测试：回合完成');
+      expect(preview, contains('点击可回到测试会话'));
+
+      // 验证轻提示弹窗
+      expect(find.text('已推送：回合完成'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+      expect(find.text('已推送：回合完成'), findsNothing);
+    });
+
+    testWidgets('切换为“需要澄清”，点击推送 → 触发 clarify 通道 mock + 弹已推送轻提示', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 切换选择器到“需要澄清”
+      await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('settings-notify-push-test-type')),
+        matching: find.text('需要澄清'),
+      ));
+      await tester.pumpAndSettle();
+
+      // 点击推送
+      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.permissionRequests, 1);
+      expect(fakeService.clarifyCalls, hasLength(1));
+      final (sessionId, question) = fakeService.clarifyCalls.single;
+      expect(sessionId, startsWith('test-push-clarify-'));
+      expect(question, contains('测试：需要澄清'));
+      expect(question, contains('点击可回到测试会话'));
+
+      // 验证轻提示
+      expect(find.text('已推送：需要澄清'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('切换为“异常中断”，点击推送 → 触发 errors 通道 mock + 弹已推送轻提示', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 切换选择器到“异常中断”
+      await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('settings-notify-push-test-type')),
+        matching: find.text('异常中断'),
+      ));
+      await tester.pumpAndSettle();
+
+      // 点击推送
+      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.permissionRequests, 1);
+      expect(fakeService.errorCalls, hasLength(1));
+      final (sessionId, title, preview) = fakeService.errorCalls.single;
+      expect(sessionId, startsWith('test-push-errors-'));
+      expect(title, '测试：异常中断');
+      expect(preview, contains('点击可回到测试会话'));
+
+      // 验证轻提示
+      expect(find.text('已推送：异常中断'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('对应类型通知开关关闭时，仍允许推送测试但提示开关已关闭', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 关闭 turns 开关
+      await tester.tap(find.byKey(const ValueKey('settings-switch-notify-turns')));
+      await tester.pumpAndSettle();
+
+      // 点击推送测试
+      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.notifyCalls, hasLength(1));
+      expect(find.text('该类型通知已关闭，仍已推送测试通知（系统通道独立）'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('权限被拒绝时，记录诊断日志并轻提示权限被拒绝', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeService = _FakeTurnNotificationService()..permissionResult = false;
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        notificationService: fakeService,
+      );
+      await pumpPage(tester, container);
+
+      // 启用诊断收集
+      await DiagnosticsService.instance.setEnabled(true);
+
+      // 点击推送测试
+      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.permissionRequests, 1);
+      expect(fakeService.notifyCalls, isEmpty);
+      expect(find.text('通知权限已被拒绝'), findsOneWidget);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+
+      // 验证诊断日志
+      final logs = DiagnosticsService.instance.logs;
+      expect(
+        logs.any((e) => e.tag == 'notifications' && e.level == DiagnosticsLogLevel.warn),
+        isTrue,
+      );
+    });
+
+    testWidgets('深色/浅色、文本缩放 1.5x、窄屏 320px 不溢出', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(
+        tester,
+        container,
+        size: const Size(320, 800),
+        textScaler: const TextScaler.linear(1.5),
+        brightness: Brightness.dark,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-notify-push-test')),
+        50,
+      );
+
+      expect(find.byKey(const ValueKey('settings-notify-push-test')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

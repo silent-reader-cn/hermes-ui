@@ -78,6 +78,7 @@ class ChatStreamState {
     this.matchedPrefixLength = 0,
     this.matchedReasoningLength = 0,
     this.replayToolMatchIndex = 0,
+    this.replayAfterSeq = 0,
   });
 
   /// activeStreamID != nil：流存在（streaming/steered/approvalPending/…）。
@@ -122,6 +123,9 @@ class ChatStreamState {
   /// 无 stableID 工具事件重放去重的顺序游标。
   final int replayToolMatchIndex;
 
+  /// 重连回放序号门槛（§5.4：重连时已消费的最大 seq；接收帧 seq <= 该值直接忽略防重复）。
+  final int replayAfterSeq;
+
   /// 是否有活跃流（streaming/steered/approvalPending/clarifyPending/recovering）。
   bool get hasActiveStream => activeStreamId != null;
 
@@ -146,6 +150,7 @@ class ChatStreamState {
     int? matchedPrefixLength,
     int? matchedReasoningLength,
     int? replayToolMatchIndex,
+    int? replayAfterSeq,
   }) {
     return ChatStreamState(
       activeStreamId: clearActiveStreamId
@@ -173,6 +178,7 @@ class ChatStreamState {
       matchedReasoningLength:
           matchedReasoningLength ?? this.matchedReasoningLength,
       replayToolMatchIndex: replayToolMatchIndex ?? this.replayToolMatchIndex,
+      replayAfterSeq: replayAfterSeq ?? this.replayAfterSeq,
     );
   }
 
@@ -192,7 +198,8 @@ class ChatStreamState {
         other.isReplayConnection == isReplayConnection &&
         other.matchedPrefixLength == matchedPrefixLength &&
         other.matchedReasoningLength == matchedReasoningLength &&
-        other.replayToolMatchIndex == replayToolMatchIndex;
+        other.replayToolMatchIndex == replayToolMatchIndex &&
+        other.replayAfterSeq == replayAfterSeq;
   }
 
   @override
@@ -212,13 +219,26 @@ class ChatStreamState {
       matchedPrefixLength,
       matchedReasoningLength,
       replayToolMatchIndex,
+      replayAfterSeq,
     );
   }
 
   @override
   String toString() =>
       'ChatStreamState(activeStreamId: $activeStreamId, '
-      'recovery: $recovery, hasCompletedResponse: $hasCompletedResponse)';
+      'isSuspended: $isSuspended, recovery: $recovery, '
+      'lastEventId: $lastEventId, '
+      'hasCompletedResponse: $hasCompletedResponse, '
+      'isCancelling: $isCancelling, '
+      'streamingAssistantMessageId: $streamingAssistantMessageId, '
+      'toolCallAnchorMessageId: $toolCallAnchorMessageId, '
+      'reasoningAnchorMessageId: $reasoningAnchorMessageId, '
+      'liveTokensPerSecond: $liveTokensPerSecond, '
+      'isReplayConnection: $isReplayConnection, '
+      'matchedPrefixLength: $matchedPrefixLength, '
+      'matchedReasoningLength: $matchedReasoningLength, '
+      'replayToolMatchIndex: $replayToolMatchIndex, '
+      'replayAfterSeq: $replayAfterSeq)';
 }
 
 /// 审批/澄清卡片状态（chat_spec.md §2.1 映射表）。

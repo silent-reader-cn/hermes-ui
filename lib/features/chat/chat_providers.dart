@@ -13,11 +13,11 @@ import 'chat_state.dart';
 class ChatWatchdogConfig {
   const ChatWatchdogConfig({
     this.watchdogInterval = const Duration(seconds: 1),
-    this.progressStaleThreshold = const Duration(seconds: 3),
-    this.transportStaleThreshold = const Duration(seconds: 3),
-    this.forceReconnectThreshold = const Duration(seconds: 8),
-    this.forceReconnectWithRunningToolsThreshold = const Duration(seconds: 8),
-    this.statusPollCooldown = const Duration(seconds: 3),
+    this.progressStaleThreshold = const Duration(seconds: 5),
+    this.transportStaleThreshold = const Duration(seconds: 12),
+    this.forceReconnectThreshold = const Duration(seconds: 18),
+    this.forceReconnectWithRunningToolsThreshold = const Duration(seconds: 25),
+    this.statusPollCooldown = const Duration(seconds: 4),
   });
 
   /// 前台看门狗心跳间隔。

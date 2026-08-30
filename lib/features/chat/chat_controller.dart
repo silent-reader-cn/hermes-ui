@@ -78,10 +78,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// reveal 队列开始积压的时刻（最大滞后判定）。
   DateTime? _revealQueueStart;
 
-  /// 最近一次内容新增（看门狗 3s 阈值）。
+  /// 最近一次内容新增（看门狗 5s 阈值）。
   DateTime? _lastProgress;
 
-  /// 最近一次传输活动（看门狗 3s/8s 阈值）。
+  /// 最近一次传输活动（看门狗 12s/18s/25s 阈值）。
   DateTime? _lastTransportActivity;
 
   /// status 轮询冷却截止。
@@ -1134,6 +1134,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         matchedPrefixLength: 0,
         matchedReasoningLength: 0,
         replayToolMatchIndex: 0,
+        replayAfterSeq: 0,
       ),
       pendingAction: const ChatPendingActionState(),
       responseCompletionNeedsTranscriptRefresh: false,
@@ -1167,15 +1168,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final api = _api;
     if (api == null) return;
     final useReplay = replayAfterSeq != null || fullReconnect;
-    final freshStart = replayAfterSeq == null && !fullReconnect;
+    final effectiveReplayAfterSeq = replayAfterSeq ??
+        (fullReconnect ? _replayAfterSeq(state.stream.lastEventId) : 0);
     state = state.copyWith(
       stream: state.stream.copyWith(
         isReplayConnection: useReplay,
         matchedPrefixLength: 0,
         matchedReasoningLength: 0,
         replayToolMatchIndex: 0,
-        lastEventId: freshStart ? null : state.stream.lastEventId,
-        clearLastEventId: freshStart,
+        replayAfterSeq: effectiveReplayAfterSeq,
+        clearLastEventId: true,
       ),
     );
     _streamConnected = true;
@@ -1211,6 +1213,26 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _handleSseEvent(SseEvent event) {
     if (_disposed) return;
     _recordTransportActivity();
+    final stream = state.stream;
+    if (stream.isReplayConnection && stream.replayAfterSeq > 0) {
+      final currentSeq = _replayAfterSeq(stream.lastEventId);
+      if (currentSeq > 0 && currentSeq <= stream.replayAfterSeq) {
+        // 重连回放帧：seq <= replayAfterSeq 说明断线前已处理过，
+        // 幂等忽略内容帧（token / interim / reasoning / tool / steer），
+        // 避免重复推流和 UI 闪动。心跳与终结事件仍正常分发。
+        switch (event) {
+          case TokenSseEvent() ||
+                InterimAssistantSseEvent() ||
+                ReasoningSseEvent() ||
+                ToolStartedSseEvent() ||
+                ToolCompletedSseEvent() ||
+                PendingSteerLeftoverSseEvent():
+            return;
+          default:
+            break;
+        }
+      }
+    }
     switch (event) {
       case TokenSseEvent(:final text):
         if (_appendAssistantToken(text)) _markProgress();
@@ -1345,7 +1367,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastTransportActivity = _now();
     _statusCheckCooldownUntil = null;
     // #29：空窗 ≥ 传输停滞阈值 → 立即主动查 stream status（不等 watchdog
-    // 3-8s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
+    // 12-18s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
     // （watchdog/transportError 接管），不重复触发；死流/超时立即重连或补差，
     // 健康流 loadMessages 顺带把后台期间新内容落地——「切回立即呈现最新状态」。
     final stream = state.stream;
@@ -1519,6 +1541,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  String _currentReasoningContent() {
+    var base = state.liveReasoningText;
+    if (state.pendingReasoningChunks.isNotEmpty) {
+      base += state.pendingReasoningChunks.join();
+    }
+    return base;
+  }
+
   /// reasoning：去重 → 入 pendingReasoningChunks → 合并 tick 整块 flush。
   bool _appendReasoning(String text) {
     if (text.isEmpty) return false;
@@ -1527,7 +1557,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (stream.isReplayConnection) {
       final deduped = deduplicatedReplayText(
         text: text,
-        existingContent: state.liveReasoningText,
+        existingContent: _currentReasoningContent(),
         matchedLength: stream.matchedReasoningLength,
       );
       remainder = deduped.remainder;
@@ -1542,9 +1572,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     // 与工具事件一致：reasoning 先到时也立即锚定空流式气泡（思考中指示器兜底）。
     _ensureStreamingAssistantMessage();
     // 时间线断点：事件到达时记录（对齐真实顺序）；start 含待 flush 块长度。
-    final start =
-        state.liveReasoningText.length +
-        state.pendingReasoningChunks.join().length;
+    final start = _currentReasoningContent().length;
     _ensureTimelinePoint(LiveSegmentKind.thinking, start);
     state = state.copyWith(
       pendingReasoningChunks: [...state.pendingReasoningChunks, remainder],
@@ -1623,6 +1651,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           break;
         }
       }
+    } else if (state.messages.isNotEmpty) {
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        final message = state.messages[i];
+        if (message.role == 'assistant') {
+          base = message.content ?? '';
+          break;
+        }
+      }
     }
     // 包含待合并与待揭示队列，避免重连去重时把待吐内容误作新内容
     if (state.pendingAssistantTokenChunks.isNotEmpty) {
@@ -1680,7 +1716,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (stream.isReplayConnection) {
       final stableId = evt.stableId;
       if (stableId != null) {
-        if (state.liveToolCalls.any((t) => t.id == stableId)) return;
+        if (state.liveToolCalls.any((t) => t.id == stableId) ||
+            state.completedToolCallGroups.any(
+              (g) => g.toolCalls.any((t) => t.id == stableId),
+            )) {
+          return;
+        }
       } else {
         var idx = stream.replayToolMatchIndex;
         while (idx < state.liveToolCalls.length) {
@@ -1749,12 +1790,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       state = state.copyWith(liveToolCalls: next);
     } else {
+      if (state.stream.isReplayConnection &&
+          stableId != null &&
+          state.completedToolCallGroups.any(
+            (g) => g.toolCalls.any((t) => t.id == stableId),
+          )) {
+        return;
+      }
       // 匹配不到 → append 已完成项（服务器只发了完成事件）。
       state = state.copyWith(
         liveToolCalls: [
           ...calls,
           ToolCall(
-            id: evt.stableId,
+            id: stableId,
             name: evt.name,
             preview: evt.preview,
             args: evt.jsonArgs ?? _argsToJsonValue(evt.args),
@@ -2326,6 +2374,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         matchedPrefixLength: 0,
         matchedReasoningLength: 0,
         replayToolMatchIndex: 0,
+        replayAfterSeq: 0,
       ),
       pendingAction: const ChatPendingActionState(),
       responseCompletionNeedsTranscriptRefresh: needsTranscriptRefresh,
@@ -2474,6 +2523,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         matchedPrefixLength: 0,
         matchedReasoningLength: 0,
         replayToolMatchIndex: 0,
+        replayAfterSeq: 0,
       ),
     );
     _api?.stopStream();
@@ -2661,10 +2711,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             recovery: ActiveStreamRecoveryState.reconnecting,
           ),
         );
-        _connectStream(
-          streamId,
-          replayAfterSeq: afterSeq == 0 ? null : afterSeq,
-        );
+        if (afterSeq > 0) {
+          _connectStream(streamId, replayAfterSeq: afterSeq);
+        } else {
+          _connectStream(streamId, fullReconnect: true);
+        }
         state = state.copyWith(
           stream: state.stream.copyWith(
             isSuspended: false,
@@ -2783,7 +2834,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   // -------------------------------------------------------------------------
-  // 看门狗（前台 1s 心跳；3s/8s 阈值；冷却 ≥3s）
+  // 看门狗（前台 1s 心跳；5s/12s/18s/25s 阈值；冷却 ≥4s）
   // -------------------------------------------------------------------------
 
   void _startWatchdog() {

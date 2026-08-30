@@ -16,7 +16,9 @@ import '../../core/models/server_catalog.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_page.dart';
+import '../diagnostics/diagnostics_service.dart';
 import '../notifications/notification_providers.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
@@ -452,12 +454,146 @@ class _CronSection extends ConsumerWidget {
 // 通知
 // ---------------------------------------------------------------------------
 
-/// 通知设置分组（回合完成 / 澄清请求 / 异常中断 三类开关）。
-class _NotificationSection extends ConsumerWidget {
+/// 通知推送测试类型。
+enum PushTestType {
+  turns,
+  clarify,
+  errors,
+}
+
+/// 通知设置分组（回合完成 / 澄清请求 / 异常中断 三类开关 + 推送测试）。
+class _NotificationSection extends ConsumerStatefulWidget {
   const _NotificationSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NotificationSection> createState() =>
+      _NotificationSectionState();
+}
+
+class _NotificationSectionState extends ConsumerState<_NotificationSection> {
+  PushTestType _selectedType = PushTestType.turns;
+  bool _isLoading = false;
+
+  Future<void> _handlePushTest() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final service = ref.read(turnNotificationServiceProvider);
+      final hasPermission = await service.requestPermission();
+      if (!mounted) return;
+
+      final l10n = AppLocalizations.of(context);
+      if (!hasPermission) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.warn,
+          tag: 'notifications',
+          message: '推送测试权限被拒绝',
+        );
+        _showNotice(
+          l10n.pushTestTitle,
+          l10n.pushTestPermissionDenied,
+        );
+        return;
+      }
+
+      final now = DateTime.now();
+      final nowStr =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      final sessionId =
+          'test-push-${_selectedType.name}-${now.millisecondsSinceEpoch}';
+      final preview = l10n.pushTestBody(nowStr);
+
+      final String typeLabel;
+      final bool isEnabled;
+      final settings = ref.read(notificationSettingsProvider);
+
+      switch (_selectedType) {
+        case PushTestType.turns:
+          typeLabel = l10n.pushTestTurns;
+          isEnabled = settings.notifyTurnsEnabled;
+          await service.notifyTurnCompleted(
+            sessionId,
+            l10n.pushTestTurnsNotificationTitle,
+            preview,
+          );
+        case PushTestType.clarify:
+          typeLabel = l10n.pushTestClarify;
+          isEnabled = settings.notifyClarifyEnabled;
+          await service.notifyClarificationNeeded(
+            sessionId,
+            '${l10n.pushTestClarifyNotificationTitle} - $preview',
+          );
+        case PushTestType.errors:
+          typeLabel = l10n.pushTestErrors;
+          isEnabled = settings.notifyErrorsEnabled;
+          await service.notifySessionError(
+            sessionId,
+            l10n.pushTestErrorsNotificationTitle,
+            preview,
+          );
+      }
+
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '推送测试通知成功: ${_selectedType.name}',
+        details: {
+          'type': _selectedType.name,
+          'sessionId': sessionId,
+          'enabledInSettings': isEnabled,
+        },
+      );
+
+      if (!mounted) return;
+
+      final message = isEnabled
+          ? l10n.pushTestSuccess(typeLabel)
+          : l10n.pushTestDisabledNotice(typeLabel);
+
+      _showNotice(l10n.pushTestTitle, message);
+    } on Object catch (error) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '推送测试通知失败: $error',
+        errorKind: error.toString(),
+      );
+      if (mounted) {
+        final l10n = AppLocalizations.of(context);
+        _showNotice(
+          l10n.pushTestTitle,
+          error.toString(),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showNotice(String title, String message) {
+    final l10n = AppLocalizations.of(context);
+    unawaited(
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(notificationSettingsProvider);
     final notifier = ref.read(notificationSettingsProvider.notifier);
@@ -499,6 +635,48 @@ class _NotificationSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(notifier.setNotifyErrorsEnabled(value));
             },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-notify-push-test'),
+          title: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: CupertinoSlidingSegmentedControl<PushTestType>(
+                key: const ValueKey('settings-notify-push-test-type'),
+                groupValue: _selectedType,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedType = value;
+                    });
+                  }
+                },
+                children: {
+                  PushTestType.turns: Text(l10n.pushTestTurns),
+                  PushTestType.clarify: Text(l10n.pushTestClarify),
+                  PushTestType.errors: Text(l10n.pushTestErrors),
+                },
+              ),
+            ),
+          ),
+          trailing: CupertinoButton.filled(
+            key: const ValueKey('settings-notify-push-test-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: const Size(0, 28),
+            onPressed: _isLoading ? null : _handlePushTest,
+            child: _isLoading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CupertinoActivityIndicator(radius: 7),
+                  )
+                : Text(
+                    l10n.pushTestButton,
+                    style: const TextStyle(fontSize: 14),
+                  ),
           ),
         ),
       ],
