@@ -143,7 +143,6 @@ class ProductionBackgroundKeepaliveService
       // 1. 初始化 WorkManager
       await _workmanager.initialize(
         workmanagerCallbackDispatcher,
-        isInDebugMode: false,
       );
 
       // 2. 注册周期性轮询（15min 系统最小周期，约束：联网）
@@ -155,7 +154,7 @@ class ProductionBackgroundKeepaliveService
         constraints: Constraints(
           networkType: NetworkType.connected,
         ),
-        existingWorkPolicy: ExistingWorkPolicy.keep,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
         backoffPolicy: BackoffPolicy.exponential,
         backoffPolicyDelay: const Duration(seconds: 30),
       );
@@ -323,7 +322,7 @@ class ProductionBackgroundKeepaliveService
         ),
         backoffPolicy: BackoffPolicy.exponential,
         backoffPolicyDelay: const Duration(seconds: 30),
-        outOfQuotaPolicy: OutOfQuotaPolicy.run_as_non_expedited_work_request,
+        outOfQuotaPolicy: OutOfQuotaPolicy.runAsNonExpeditedWorkRequest,
         inputData: {
           'sessionId': sessionId,
           'streamId': streamId ?? '',

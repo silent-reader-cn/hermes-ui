@@ -778,17 +778,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       ),
                       if (isStreaming) ...[
                         AccessibleButton(
-                          key: const ValueKey('chat-steer-button'),
-                          label: l10n.steerPrompt,
-                          onPressed: (interactive && _hasText) ? _submit : null,
-                          padding: EdgeInsets.zero,
-                          child: const Icon(
-                            CupertinoIcons.arrow_right_circle,
-                            size: 22,
-                            color: CupertinoColors.activeBlue,
-                          ),
-                        ),
-                        AccessibleButton(
                           key: const ValueKey('chat-stop-button'),
                           label: l10n.stopGenerating,
                           onPressed: _stop,
@@ -797,6 +786,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                             CupertinoIcons.stop_circle,
                             size: 22,
                             color: CupertinoColors.systemRed,
+                          ),
+                        ),
+                        AccessibleButton(
+                          key: const ValueKey('chat-steer-button'),
+                          label: l10n.steerPrompt,
+                          onPressed: (interactive && _hasText) ? _submit : null,
+                          padding: EdgeInsets.zero,
+                          child: const Icon(
+                            CupertinoIcons.arrow_right_circle,
+                            size: 22,
+                            color: CupertinoColors.activeBlue,
                           ),
                         ),
                       ] else if (!isSending)
@@ -996,7 +996,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
-  /// 右侧控件组：流式= steer+停止；空闲= 发送。
+  /// 右侧控件组：流式= 停止+steer（steer 在最右）；空闲= 发送。
   List<Widget> _buildTrailingControls(
     AppLocalizations l10n,
     bool isStreaming,
@@ -1007,17 +1007,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     return [
       if (isStreaming) ...[
         AccessibleButton(
-          key: const ValueKey('chat-steer-button'),
-          label: l10n.steerPrompt,
-          onPressed: (interactive && _hasText) ? _submit : null,
-          padding: EdgeInsets.zero,
-          child: const Icon(
-            CupertinoIcons.arrow_right_circle,
-            size: 22,
-            color: CupertinoColors.activeBlue,
-          ),
-        ),
-        AccessibleButton(
           key: const ValueKey('chat-stop-button'),
           label: l10n.stopGenerating,
           onPressed: _stop,
@@ -1026,6 +1015,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             CupertinoIcons.stop_circle,
             size: 22,
             color: CupertinoColors.systemRed,
+          ),
+        ),
+        AccessibleButton(
+          key: const ValueKey('chat-steer-button'),
+          label: l10n.steerPrompt,
+          onPressed: (interactive && _hasText) ? _submit : null,
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.arrow_right_circle,
+            size: 22,
+            color: CupertinoColors.activeBlue,
           ),
         ),
       ] else if (!isSending)

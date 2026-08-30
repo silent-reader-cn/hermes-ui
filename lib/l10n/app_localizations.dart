@@ -595,6 +595,10 @@ class AppLocalizations {
 
   String get imageLoadFailed => isEnglish ? 'Failed to load image' : '图片加载失败';
   String get mediaDownload => isEnglish ? 'Download' : '下载';
+  String get previewUnsupported => isEnglish ? 'Preview not supported' : '不支持预览';
+  String get downloadFailed => isEnglish ? 'Download failed' : '下载失败';
+  String get downloaded => isEnglish ? 'Downloaded' : '已下载';
+  String get downloading => isEnglish ? 'Downloading…' : '下载中…';
   String get mediaAudio => isEnglish ? 'Audio' : '音频';
   String get mediaVideo => isEnglish ? 'Video' : '视频';
   String get mediaDocument => isEnglish ? 'Document' : '文档';

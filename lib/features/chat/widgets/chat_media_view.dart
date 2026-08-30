@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../diagnostics/diagnostics_models.dart';
+import '../../diagnostics/diagnostics_service.dart';
 import 'chat_media_parser.dart';
 import '../../../app/widgets/hermes_page_route.dart';
 
@@ -214,61 +216,307 @@ class ChatInlineMediaWidget extends ConsumerWidget {
     Uint8List? memoryBytes,
     String? altText,
   }) {
-    Navigator.of(context).push(
-      HermesPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (dialogContext) {
-          Widget viewerContent;
-          if (memoryBytes != null) {
-            viewerContent = Image.memory(memoryBytes, fit: BoxFit.contain);
-          } else if (resolvedUrl.startsWith('http://') ||
-              resolvedUrl.startsWith('https://')) {
-            viewerContent = _LightboxNetworkImage(mediaUrl: resolvedUrl);
-          } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
-            viewerContent = Image.file(File(resolvedUrl), fit: BoxFit.contain);
-          } else {
-            viewerContent = const Icon(
-              CupertinoIcons.photo,
-              size: 64,
-              color: CupertinoColors.white,
-            );
-          }
+    showAttachmentPreview(
+      context,
+      resolvedUrl: resolvedUrl,
+      bytes: memoryBytes,
+      name: altText,
+      altText: altText,
+      isImage: true,
+    );
+  }
+}
 
-          return CupertinoPageScaffold(
-            backgroundColor: CupertinoColors.black,
-            navigationBar: CupertinoNavigationBar(
-              backgroundColor: CupertinoColors.black.withValues(alpha: 0.7),
-              leading: CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Icon(
-                  CupertinoIcons.clear_thick,
+/// 打开附件预览全屏弹窗（图片走 Lightbox 大图，非图展示文档信息与下载操作）。
+void showAttachmentPreview(
+  BuildContext context, {
+  Uint8List? bytes,
+  String? resolvedUrl,
+  String? name,
+  bool? isImage,
+  String? altText,
+}) {
+  final displayName = name ?? altText ?? '';
+  final hasExplicitImage = isImage != null;
+  final bool effectiveIsImage = hasExplicitImage
+      ? isImage
+      : ((bytes != null &&
+              (displayName.isEmpty ||
+                  MessageAttachment.isImageReference(displayName))) ||
+          (resolvedUrl != null &&
+              (resolvedUrl.startsWith('data:image/') ||
+                  MessageAttachment.isImageReference(resolvedUrl) ||
+                  (displayName.isNotEmpty &&
+                      MessageAttachment.isImageReference(displayName)))));
+
+  Navigator.of(context).push(
+    HermesPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (dialogContext) => AttachmentLightbox(
+        bytes: bytes,
+        resolvedUrl: resolvedUrl,
+        name: displayName.isNotEmpty ? displayName : null,
+        altText: altText,
+        isImage: effectiveIsImage,
+      ),
+    ),
+  );
+}
+
+/// 附件 Lightbox / 预览页面（图片缩放查看，非图文件详情与下载）。
+class AttachmentLightbox extends StatelessWidget {
+  const AttachmentLightbox({
+    super.key,
+    this.bytes,
+    this.resolvedUrl,
+    this.name,
+    this.altText,
+    this.isImage = true,
+  });
+
+  final Uint8List? bytes;
+  final String? resolvedUrl;
+  final String? name;
+  final String? altText;
+  final bool isImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final titleText = name ?? altText ?? '';
+
+    Widget body;
+    if (isImage) {
+      Widget viewerContent;
+      if (bytes != null) {
+        viewerContent = Image.memory(bytes!, fit: BoxFit.contain);
+      } else if (resolvedUrl != null &&
+          (resolvedUrl!.startsWith('http://') ||
+              resolvedUrl!.startsWith('https://'))) {
+        viewerContent = _LightboxNetworkImage(mediaUrl: resolvedUrl!);
+      } else if (resolvedUrl != null &&
+          resolvedUrl!.startsWith('data:image/')) {
+        Uint8List? decoded;
+        try {
+          final commaIdx = resolvedUrl!.indexOf(',');
+          if (commaIdx != -1) {
+            final payload = resolvedUrl!.substring(commaIdx + 1);
+            decoded = base64Decode(payload);
+          }
+        } catch (_) {}
+        viewerContent = decoded != null
+            ? Image.memory(decoded, fit: BoxFit.contain)
+            : const Icon(
+                CupertinoIcons.photo,
+                size: 64,
+                color: CupertinoColors.white,
+              );
+      } else if (resolvedUrl != null &&
+          !kIsWeb &&
+          File(resolvedUrl!).existsSync()) {
+        viewerContent = Image.file(File(resolvedUrl!), fit: BoxFit.contain);
+      } else {
+        viewerContent = const Icon(
+          CupertinoIcons.photo,
+          size: 64,
+          color: CupertinoColors.white,
+        );
+      }
+
+      body = Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: viewerContent,
+        ),
+      );
+    } else {
+      final kind = MessageAttachment.mediaKindForName(titleText);
+      IconData iconData;
+      switch (kind) {
+        case MessageMediaKind.image:
+          iconData = CupertinoIcons.photo;
+        case MessageMediaKind.audio:
+          iconData = CupertinoIcons.music_note;
+        case MessageMediaKind.video:
+          iconData = CupertinoIcons.film;
+        case MessageMediaKind.document:
+          iconData = CupertinoIcons.doc_text;
+        case MessageMediaKind.file:
+          iconData = CupertinoIcons.doc;
+      }
+
+      body = Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                iconData,
+                size: 64,
+                color: CupertinoColors.white,
+              ),
+              if (titleText.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  titleText,
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: CupertinoColors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                l10n.previewUnsupported,
+                style: const TextStyle(
+                  color: CupertinoColors.systemGrey,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _AttachmentDownloadButton(
+                resolvedUrl: resolvedUrl,
+                bytes: bytes,
+                filename: titleText,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.black,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: CupertinoColors.black.withValues(alpha: 0.7),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Icon(
+            CupertinoIcons.clear_thick,
+            color: CupertinoColors.white,
+            size: 20,
+          ),
+        ),
+        middle: titleText.isNotEmpty
+            ? Text(
+                titleText,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
                   color: CupertinoColors.white,
-                  size: 20,
+                  fontSize: 14,
                 ),
-              ),
-              middle: altText != null && altText.isNotEmpty
-                  ? Text(
-                      altText,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: CupertinoColors.white,
-                        fontSize: 14,
-                      ),
-                    )
-                  : null,
-            ),
-            child: SafeArea(
-              child: Center(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: viewerContent,
-                ),
-              ),
-            ),
-          );
-        },
+              )
+            : null,
+      ),
+      child: SafeArea(child: body),
+    );
+  }
+}
+
+class _AttachmentDownloadButton extends ConsumerStatefulWidget {
+  const _AttachmentDownloadButton({
+    this.resolvedUrl,
+    this.bytes,
+    this.filename,
+  });
+
+  final String? resolvedUrl;
+  final Uint8List? bytes;
+  final String? filename;
+
+  @override
+  ConsumerState<_AttachmentDownloadButton> createState() =>
+      _AttachmentDownloadButtonState();
+}
+
+class _AttachmentDownloadButtonState
+    extends ConsumerState<_AttachmentDownloadButton> {
+  bool _isDownloading = false;
+  bool _downloaded = false;
+
+  Future<void> _handleDownload() async {
+    final url = widget.resolvedUrl;
+    if (_downloaded || _isDownloading) return;
+
+    if (widget.bytes != null ||
+        (url != null && !kIsWeb && File(url).existsSync())) {
+      setState(() => _downloaded = true);
+      return;
+    }
+
+    if (url != null &&
+        (url.startsWith('http://') || url.startsWith('https://'))) {
+      setState(() => _isDownloading = true);
+      try {
+        await ref.read(mediaFileProvider(url).future);
+        if (mounted) {
+          setState(() {
+            _isDownloading = false;
+            _downloaded = true;
+          });
+        }
+      } catch (e) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'attachment',
+          message: 'Failed to download attachment: $e',
+        );
+        if (mounted) {
+          setState(() => _isDownloading = false);
+        }
+      }
+    } else {
+      setState(() => _downloaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    if (_isDownloading) {
+      return const CupertinoButton.filled(
+        key: ValueKey('attachment-download-button'),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        onPressed: null,
+        child: CupertinoActivityIndicator(color: CupertinoColors.white),
+      );
+    }
+
+    if (_downloaded) {
+      return CupertinoButton.filled(
+        key: const ValueKey('attachment-download-button'),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        onPressed: _handleDownload,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.check_mark, size: 16),
+            const SizedBox(width: 6),
+            Text(l10n.downloaded),
+          ],
+        ),
+      );
+    }
+
+    return CupertinoButton.filled(
+      key: const ValueKey('attachment-download-button'),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      onPressed: _handleDownload,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(CupertinoIcons.cloud_download, size: 16),
+          const SizedBox(width: 6),
+          Text(l10n.mediaDownload),
+        ],
       ),
     );
   }
@@ -501,6 +749,55 @@ class ChatAttachmentChipView extends StatelessWidget {
         (attachment.path!.contains('/') ||
             attachment.path!.contains(r'\\') ||
             attachment.path!.startsWith('data:'));
+    final resolvedUrl = pathOrName.isNotEmpty
+        ? ChatMediaResolver.resolveMediaUrl(
+            pathOrName,
+            baseUrl: baseUrl,
+            sessionId: sessionId,
+          )
+        : '';
+
+    final identityKey =
+        attachment.identityKey ?? attachment.name ?? attachment.path ?? 'chip';
+
+    final chipWidget = Container(
+      key: ValueKey('attachment-chip-preview-$identityKey'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconData, size: 13, color: iconColor),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: fgColor),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final interactiveChip = Semantics(
+      button: true,
+      label: 'Preview $name',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showAttachmentPreview(
+          context,
+          resolvedUrl: resolvedUrl.isNotEmpty ? resolvedUrl : null,
+          name: name,
+          altText: name,
+          isImage: isImage || kind == MessageMediaKind.image,
+        ),
+        child: chipWidget,
+      ),
+    );
 
     return Container(
       margin: const EdgeInsets.only(top: 4),
@@ -520,27 +817,7 @@ class ChatAttachmentChipView extends StatelessWidget {
               maxWidth: 240,
               maxHeight: 180,
             ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(iconData, size: 13, color: iconColor),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    name,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: fgColor),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          interactiveChip,
         ],
       ),
     );

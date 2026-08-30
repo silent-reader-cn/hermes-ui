@@ -545,8 +545,8 @@ void main() {
           .dx;
 
       expect(perfX, lessThan(160));
-      expect(steerX, greaterThan(700));
-      expect(stopX, greaterThan(steerX));
+      expect(steerX, greaterThan(stopX));
+      expect(stopX, greaterThan(700));
 
       await _unmount(tester);
       SharedPreferences.setMockInitialValues(<String, Object>{});

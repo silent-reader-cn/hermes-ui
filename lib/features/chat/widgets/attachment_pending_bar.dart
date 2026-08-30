@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/upload_response.dart';
 import '../../../l10n/app_localizations.dart';
 import '../pending_attachments_provider.dart';
+import 'chat_media_view.dart';
 
 /// 待发附件横条面板（需求：粘贴/上传不进流、不直接发送）。
 ///
@@ -78,66 +79,86 @@ class _AttachmentThumb extends StatelessWidget {
     final bg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
     final preview = attachment.thumbnailData;
 
-    return Semantics(
-      label: attachment.name,
-      child: Container(
-        width: 132,
-        decoration: BoxDecoration(
-          color: bg,
-          border: Border.all(color: separator),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            if (attachment.isImage && preview != null)
-              Padding(
-                padding: const EdgeInsets.all(5),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.memory(
-                    preview,
-                    width: 44,
-                    height: 44,
-                    fit: BoxFit.cover,
-                    cacheWidth: 132,
-                    gaplessPlayback: true,
-                  ),
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(left: 10, right: 6),
-                child: Icon(
-                  CupertinoIcons.doc,
-                  size: 22,
-                  color: CupertinoColors.systemGrey.resolveFrom(context),
-                ),
-              ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(
-                  attachment.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10.5, height: 1.3),
-                ),
-              ),
-            ),
-            Semantics(
+    return Container(
+      width: 132,
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: separator),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
               button: true,
-              label: 'Remove attachment: ${attachment.name}',
-              child: CupertinoButton(
-                key: ValueKey('attachment-remove-${attachment.id}'),
-                padding: const EdgeInsets.all(6),
-                minimumSize: const Size(28, 28),
-                onPressed: onRemove,
-                child: Icon(CupertinoIcons.xmark, size: 11, color: secondary),
+              label: 'Preview ${attachment.name}',
+              child: GestureDetector(
+                key: ValueKey('attachment-preview-${attachment.id}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => showAttachmentPreview(
+                  context,
+                  bytes: attachment.thumbnailData,
+                  name: attachment.name,
+                  isImage:
+                      attachment.isImage && attachment.thumbnailData != null,
+                  resolvedUrl:
+                      attachment.path.isNotEmpty ? attachment.path : null,
+                ),
+                child: Row(
+                  children: [
+                    if (attachment.isImage && preview != null)
+                      Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.memory(
+                            preview,
+                            width: 44,
+                            height: 44,
+                            fit: BoxFit.cover,
+                            cacheWidth: 132,
+                            gaplessPlayback: true,
+                          ),
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10, right: 6),
+                        child: Icon(
+                          CupertinoIcons.doc,
+                          size: 22,
+                          color: CupertinoColors.systemGrey.resolveFrom(context),
+                        ),
+                      ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          attachment.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10.5, height: 1.3),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          Semantics(
+            button: true,
+            label: 'Remove attachment: ${attachment.name}',
+            child: CupertinoButton(
+              key: ValueKey('attachment-remove-${attachment.id}'),
+              padding: const EdgeInsets.all(6),
+              minimumSize: const Size(28, 28),
+              onPressed: onRemove,
+              child: Icon(CupertinoIcons.xmark, size: 11, color: secondary),
+            ),
+          ),
+        ],
       ),
     );
   }

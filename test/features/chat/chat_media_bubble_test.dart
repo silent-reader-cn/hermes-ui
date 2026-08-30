@@ -9,6 +9,9 @@ import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
 import 'package:hermes_ui/core/models/message_attachment.dart';
+import 'package:hermes_ui/core/models/upload_response.dart';
+import 'package:hermes_ui/features/chat/pending_attachments_provider.dart';
+import 'package:hermes_ui/features/chat/widgets/attachment_pending_bar.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 
@@ -31,7 +34,12 @@ class _FakeActiveConnectionController extends ActiveConnectionController {
 Widget _testApp(Widget home, {FakeMediaCacheRig? rig}) {
   final service = (rig ?? buildFakeMediaCache()).service;
   return ProviderScope(
-    overrides: [mediaCacheOverride(service)],
+    overrides: [
+      activeConnectionProvider.overrideWith(
+        () => _FakeActiveConnectionController(null),
+      ),
+      mediaCacheOverride(service),
+    ],
     child: CupertinoApp(home: CupertinoPageScaffold(child: home)),
   );
 }
@@ -430,6 +438,351 @@ void main() {
         ),
       );
       expect(containerFinder, findsOneWidget);
+    });
+
+    testWidgets('待发图片附件：点缩略图/文件名区域弹出 Lightbox 全屏预览，可缩放并点击 clear_thick 关闭', (
+      tester,
+    ) async {
+      final rig = buildFakeMediaCache();
+      addTearDown(rig.dispose);
+
+      final container = ProviderContainer(
+        overrides: [mediaCacheOverride(rig.service)],
+      );
+      addTearDown(container.dispose);
+
+      final attachment = PendingAttachment(
+        id: 'att-img-1',
+        name: 'sample_photo.png',
+        path: '/tmp/sample_photo.png',
+        mime: 'image/png',
+        isImage: true,
+        thumbnailData: base64Decode(_k1x1Png.split(',').last),
+      );
+
+      container
+          .read(pendingAttachmentsProvider('session-1').notifier)
+          .add(attachment);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: AttachmentPendingBar(sessionId: 'session-1'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 验证待发条出现且有预览 key 与删除 key
+      expect(
+        find.byKey(const ValueKey('attachment-preview-att-img-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('attachment-remove-att-img-1')),
+        findsOneWidget,
+      );
+      expect(find.text('sample_photo.png'), findsOneWidget);
+
+      // 点击缩略图/文件名区域进入 Lightbox
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-preview-att-img-1')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证全屏 Lightbox
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      final viewer =
+          tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+      expect(viewer.minScale, 0.5);
+      expect(viewer.maxScale, 4.0);
+      expect(find.byIcon(CupertinoIcons.clear_thick), findsOneWidget);
+      expect(find.text('sample_photo.png'), findsOneWidget);
+
+      // 点击 clear_thick 关闭
+      await tester.tap(find.byIcon(CupertinoIcons.clear_thick));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsNothing);
+      expect(
+        find.byKey(const ValueKey('attachment-preview-att-img-1')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('待发卡点击删除按钮 xmark 仅删除附件，不误触发预览', (tester) async {
+      final rig = buildFakeMediaCache();
+      addTearDown(rig.dispose);
+
+      final container = ProviderContainer(
+        overrides: [mediaCacheOverride(rig.service)],
+      );
+      addTearDown(container.dispose);
+
+      final attachment = PendingAttachment(
+        id: 'att-img-2',
+        name: 'photo_to_remove.png',
+        path: '/tmp/photo_to_remove.png',
+        mime: 'image/png',
+        isImage: true,
+        thumbnailData: base64Decode(_k1x1Png.split(',').last),
+      );
+
+      container
+          .read(pendingAttachmentsProvider('session-2').notifier)
+          .add(attachment);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: AttachmentPendingBar(sessionId: 'session-2'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('attachment-remove-att-img-2')),
+        findsOneWidget,
+      );
+
+      // 点击 xmark 删除
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-remove-att-img-2')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证未弹出 Lightbox 且附件已被清空
+      expect(find.byType(InteractiveViewer), findsNothing);
+      expect(container.read(pendingAttachmentsProvider('session-2')), isEmpty);
+    });
+
+    testWidgets('待发非图片附件：点击弹出「不支持预览」与下载操作', (tester) async {
+      final rig = buildFakeMediaCache();
+      addTearDown(rig.dispose);
+
+      final container = ProviderContainer(
+        overrides: [mediaCacheOverride(rig.service)],
+      );
+      addTearDown(container.dispose);
+
+      final attachment = PendingAttachment(
+        id: 'att-doc-1',
+        name: 'architecture.pdf',
+        path: '/tmp/architecture.pdf',
+        mime: 'application/pdf',
+        isImage: false,
+      );
+
+      container
+          .read(pendingAttachmentsProvider('session-3').notifier)
+          .add(attachment);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: AttachmentPendingBar(sessionId: 'session-3'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-preview-att-doc-1')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证显示不支持预览文案与下载按钮
+      expect(find.text('不支持预览'), findsOneWidget);
+      expect(find.text('architecture.pdf'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('attachment-download-button')),
+        findsOneWidget,
+      );
+
+      // 点击关闭
+      await tester.tap(find.byIcon(CupertinoIcons.clear_thick));
+      await tester.pumpAndSettle();
+      expect(find.text('不支持预览'), findsNothing);
+    });
+
+    testWidgets('用户气泡图片附件：点下方芯片进入同一 Lightbox 大图并复用缓存', (tester) async {
+      final rig = buildFakeMediaCache();
+      addTearDown(rig.dispose);
+
+      const message = ChatMessage(
+        role: 'user',
+        content: '这是图片附件',
+        attachments: [
+          MessageAttachment(
+            name: 'diagram.png',
+            path: _k1x1Png,
+            isImage: true,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _testApp(const ChatMessageBubble(message: message), rig: rig),
+      );
+      await tester.pump();
+
+      // 验证芯片与内联图均渲染
+      expect(
+        find.byKey(const ValueKey('attachment-chip-preview-diagram.png')),
+        findsOneWidget,
+      );
+
+      // 点击芯片进入 Lightbox
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-chip-preview-diagram.png')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.text('diagram.png'), findsOneWidget);
+
+      // 关闭 Lightbox
+      await tester.tap(find.byIcon(CupertinoIcons.clear_thick));
+      await tester.pumpAndSettle();
+      expect(find.byType(InteractiveViewer), findsNothing);
+    });
+
+    testWidgets('用户气泡非图片附件：点击芯片弹出「不支持预览」与下载按钮，点击触发下载并成功标记', (tester) async {
+      final tmpFile = File(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}test_spec.pdf',
+      );
+      await tester.runAsync(
+        () => tmpFile.writeAsBytes([1, 2, 3]),
+      );
+      addTearDown(() async {
+        try {
+          await tmpFile.delete();
+        } on FileSystemException {
+          // ignore
+        }
+      });
+
+      const message = ChatMessage(
+        role: 'user',
+        content: '这是规范文档',
+        attachments: [
+          MessageAttachment(
+            name: 'spec.pdf',
+            path: 'https://example.com/media/spec.pdf',
+            isImage: false,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(null),
+            ),
+            mediaFileProvider.overrideWith((ref, url) async => tmpFile),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageBubble(message: message),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('attachment-chip-preview-spec.pdf')),
+        findsOneWidget,
+      );
+
+      // 点击芯片
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-chip-preview-spec.pdf')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('不支持预览'), findsOneWidget);
+      expect(find.text('spec.pdf'), findsWidgets);
+      final downloadBtn =
+          find.byKey(const ValueKey('attachment-download-button'));
+      expect(downloadBtn, findsOneWidget);
+      expect(find.text('下载'), findsOneWidget);
+
+      // 点击下载按钮
+      await tester.tap(downloadBtn);
+      await tester.pump();
+      await tester.pump();
+
+      // 验证下载成功标记
+      expect(find.text('已下载'), findsOneWidget);
+
+      // 关闭
+      await tester.tap(find.byIcon(CupertinoIcons.clear_thick));
+      await tester.pumpAndSettle();
+      expect(find.text('不支持预览'), findsNothing);
+    });
+
+    testWidgets('下载失败时不崩溃且优雅降级', (tester) async {
+      const message = ChatMessage(
+        role: 'user',
+        content: '错误文件',
+        attachments: [
+          MessageAttachment(
+            name: 'corrupted.zip',
+            path: 'https://example.com/media/corrupted.zip',
+            isImage: false,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(null),
+            ),
+            mediaFileProvider.overrideWith(
+              (ref, url) async => throw Exception('Network timeout'),
+            ),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageBubble(message: message),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-chip-preview-corrupted.zip')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('不支持预览'), findsOneWidget);
+      final downloadBtn =
+          find.byKey(const ValueKey('attachment-download-button'));
+      expect(downloadBtn, findsOneWidget);
+
+      // 点击下载（会抛异常）
+      await tester.tap(downloadBtn);
+      await tester.pump();
+      await tester.pump();
+
+      // 验证没有未捕获异常崩溃，按钮回到可重试状态
+      expect(tester.takeException(), isNull);
+      expect(find.text('下载'), findsOneWidget);
     });
   });
 }
