@@ -205,6 +205,93 @@ void main() {
         expect(_messageContent(state, streamingId), 'Hello world! Today is sunny.');
       });
     });
+
+    test('工具运行期间重连：已见 ToolStarted(stableId) 不重复入 liveToolCalls，新 Started/Completed 正常接续并完成', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        api.statusResponse = const ChatStreamStatusResponse(
+          active: false,
+          replayAvailable: true,
+        );
+        final clock = _FakeClock();
+        final container = _buildContainer(api, clock);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // live 期间工具 1 开始
+        api.emitId('s1:1');
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(stableId: 't-1', name: 'read_file'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        var state = container.read(chatControllerProvider(''));
+        expect(state.liveToolCalls, hasLength(1));
+        expect(state.liveToolCalls.first.id, 't-1');
+        expect(state.liveToolCalls.first.isCompleted, isFalse);
+
+        // 模拟断开
+        api.emit(const TransportErrorSseEvent('net drop'));
+        async.flushMicrotasks();
+
+        expect(api.startStreamCalls, 2);
+
+        // 重连回放：再次发送已见到的 ToolStarted t-1
+        api.emitId('s1:1');
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(stableId: 't-1', name: 'read_file'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        // 幂等去重：liveToolCalls 依然只有 1 项，没有重复添加
+        state = container.read(chatControllerProvider(''));
+        expect(state.liveToolCalls, hasLength(1));
+        expect(state.liveToolCalls.first.id, 't-1');
+
+        // 发送工具 1 完成
+        api.emitId('s1:2');
+        api.emit(
+          const ToolCompletedSseEvent(
+            ToolStreamEvent(stableId: 't-1', name: 'read_file'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        state = container.read(chatControllerProvider(''));
+        expect(state.liveToolCalls, hasLength(1));
+        expect(state.liveToolCalls.first.isCompleted, isTrue);
+
+        // 发送新工具 2 开始与完成
+        api.emitId('s1:3');
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(stableId: 't-2', name: 'terminal'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        api.emitId('s1:4');
+        api.emit(
+          const ToolCompletedSseEvent(
+            ToolStreamEvent(stableId: 't-2', name: 'terminal'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        state = container.read(chatControllerProvider(''));
+        expect(state.liveToolCalls, hasLength(2));
+        expect(state.liveToolCalls[0].id, 't-1');
+        expect(state.liveToolCalls[0].isCompleted, isTrue);
+        expect(state.liveToolCalls[1].id, 't-2');
+        expect(state.liveToolCalls[1].isCompleted, isTrue);
+      });
+    });
   });
 }
 

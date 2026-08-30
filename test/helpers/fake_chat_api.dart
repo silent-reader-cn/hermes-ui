@@ -26,8 +26,10 @@ class FakeChatApi implements ChatServerApi {
   ChatStartResponse? startChatResponse;
   Map<String, Object?>? startChatResult;
 
+  Object? statusError;
   ChatStreamStatusResponse? statusResponse;
   Map<String, Object?>? statusResult;
+  Future<ChatStreamStatusResponse> Function(String)? onChatStreamStatus;
 
   SessionResponse? sessionResponse;
   Map<String, Object?>? sessionResult;
@@ -157,6 +159,8 @@ class FakeChatApi implements ChatServerApi {
   @override
   Future<ChatStreamStatusResponse> chatStreamStatus(String streamId) async {
     statusCalls++;
+    if (statusError != null) throw statusError!;
+    if (onChatStreamStatus != null) return onChatStreamStatus!(streamId);
     if (statusResponse != null) return statusResponse!;
     if (statusResult != null) {
       return ChatStreamStatusResponse.fromJson(statusResult!);

@@ -29,10 +29,10 @@ class ChatWatchdogConfig {
   /// 距上次传输活动 ≥ 该值 → 触发 status 检查。
   final Duration transportStaleThreshold;
 
-  /// 距上次传输活动 ≥ 该值（无运行中工具）→ 强制重连。
+  /// 距上次传输活动 ≥ 该值（无运行中工具）或运行中工具无进度 ≥ 该值 → 强制重连 / 探活。
   final Duration forceReconnectThreshold;
 
-  /// 距上次传输活动 ≥ 该值（有运行中工具）→ 强制重连。
+  /// 距上次传输活动或运行中工具无进度 ≥ 该值（有运行中工具）→ 强制重连。
   final Duration forceReconnectWithRunningToolsThreshold;
 
   /// status 轮询冷却。

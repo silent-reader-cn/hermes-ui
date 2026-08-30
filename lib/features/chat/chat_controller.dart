@@ -2854,10 +2854,17 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final config = _watchdogConfig;
     final lastProgress = _lastProgress;
     final lastTransport = _lastTransportActivity;
-    if (lastProgress != null &&
+    final hasRunningTools = _hasRunningTools;
+
+    final isNormalStale = lastProgress != null &&
         now.difference(lastProgress) >= config.progressStaleThreshold &&
         lastTransport != null &&
-        now.difference(lastTransport) >= config.transportStaleThreshold) {
+        now.difference(lastTransport) >= config.transportStaleThreshold;
+    final isToolProgressStale = hasRunningTools &&
+        lastProgress != null &&
+        now.difference(lastProgress) >= config.forceReconnectThreshold;
+
+    if (isNormalStale || isToolProgressStale) {
       final cooldown = _statusCheckCooldownUntil;
       if (cooldown == null || now.isAfter(cooldown)) {
         _statusCheckCooldownUntil = now.add(config.statusPollCooldown);
@@ -2865,7 +2872,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           level: DiagnosticsLogLevel.warn,
           tag: 'chat_watchdog',
           message:
-              'Watchdog detected stale stream activity, polling status (session: ${state.sessionId})',
+              'Watchdog detected stale stream activity${hasRunningTools ? ' during tool execution' : ''}, polling status (session: ${state.sessionId})',
         );
         state = state.copyWith(
           stream: state.stream.copyWith(
@@ -2875,16 +2882,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         unawaited(_checkStatusAndReconnect());
       }
     }
-    final forceThreshold = _hasRunningTools
+    final forceThreshold = hasRunningTools
         ? config.forceReconnectWithRunningToolsThreshold
         : config.forceReconnectThreshold;
-    if (lastTransport != null &&
-        now.difference(lastTransport) >= forceThreshold) {
+    final isTransportForce = lastTransport != null &&
+        now.difference(lastTransport) >= forceThreshold;
+    final isToolProgressForce = hasRunningTools &&
+        lastProgress != null &&
+        now.difference(lastProgress) >=
+            config.forceReconnectWithRunningToolsThreshold;
+
+    if (isTransportForce || isToolProgressForce) {
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.error,
         tag: 'chat_watchdog',
         message:
-            'Watchdog force reconnecting due to transport silence (session: ${state.sessionId})',
+            'Watchdog force reconnecting due to ${isToolProgressForce ? 'tool progress hang' : 'transport silence'} (session: ${state.sessionId})',
       );
       _forceReconnect(state.stream.activeStreamId!);
     }
