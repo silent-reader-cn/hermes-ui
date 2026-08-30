@@ -416,13 +416,12 @@ void main() {
       final element = tester.element(find.byType(ChatMessageList));
       final container = ProviderScope.containerOf(element);
 
-      // 1. 默认 collapseCompletedProcess: true 模式下：过程收为 CollapsibleProcessCapsule，点击展开后可见 ToolCallGroupCard
-      expect(find.text('2 工具'), findsOneWidget);
-      await tester.tap(find.text('2 工具'));
+      // 1. 默认 collapseCompletedProcess: true 模式下：过程收为 CollapsibleProcessCapsule，点击展开后可见平铺 ToolCallCard
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+      await tester.tap(find.text('读取文件 \u00D71, 写入文件 \u00D71'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
-      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
 
       // 关闭 collapseCompletedProcess：保持全部直接展开
       await container
@@ -436,20 +435,17 @@ void main() {
           .setCoalesce(false);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
-      expect(find.text('读取文件 \u00D71'), findsOneWidget);
-      expect(find.text('写入文件 \u00D71'), findsOneWidget);
-      // 确认无聚合卡片残余副本
-      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
+      expect(find.textContaining('读取文件'), findsOneWidget);
+      expect(find.textContaining('写入文件'), findsOneWidget);
 
-      // 3. 再次切换回 coalesce: true 模式：即时恢复为 1 张聚合卡片
+      // 3. 再次切换回 coalesce: true 模式：依然为 2 张平铺卡片
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(true);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
-      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
 
       // 清理树与 Timer
       await tester.pumpWidget(const SizedBox());
@@ -488,7 +484,7 @@ void main() {
           .setCoalesce(false);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallCard), findsNothing);
 
       // 清理树与 Timer
       await tester.pumpWidget(const SizedBox());

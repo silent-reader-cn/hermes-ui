@@ -318,12 +318,18 @@ class _AssistantContent extends StatelessWidget {
 
     if (hasVisibleTools) {
       final toolCards = <Widget>[
-        for (var i = 0; i < distinctTools.length; i++) ...[
-          ToolCallGroupCard(
-            group: distinctTools[i],
-            hideThinking: hideThinking,
-          ),
-          if (i < distinctTools.length - 1) const SizedBox(height: 6),
+        for (final group in distinctTools)
+          for (final call in group.toolCalls)
+            if (call.isThinking) ...[
+              if (!hideThinking) ThinkingRow(call: call),
+            ] else ...[
+              ToolCallCard(call: call),
+            ],
+      ];
+      final spacedToolCards = <Widget>[
+        for (var i = 0; i < toolCards.length; i++) ...[
+          toolCards[i],
+          if (i < toolCards.length - 1) const SizedBox(height: 6),
         ],
       ];
 
@@ -332,11 +338,11 @@ class _AssistantContent extends StatelessWidget {
           CollapsibleProcessCapsule(
             toolGroups: distinctTools,
             hideThinking: hideThinking,
-            children: toolCards,
+            children: spacedToolCards,
           ),
         );
       } else {
-        sections.addAll(toolCards);
+        sections.addAll(spacedToolCards);
       }
     }
     if (parsedContent.isNotEmpty) {

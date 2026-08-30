@@ -239,59 +239,121 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     final secondaryColor =
         CupertinoColors.secondaryLabel.resolveFrom(context);
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return _buildCompact(
+          context,
+          data,
+          l10n,
+          secondaryColor,
+          constraints.maxWidth,
+        );
+      },
+    );
+  }
+
+  /// 紧凑态：空间充足 `CPU xx% · MEM xx%`，不足退化为 `CPU xx%`，极窄则隐藏（SizedBox.shrink）。
+  Widget _buildCompact(
+    BuildContext context,
+    SystemHealthResponse data,
+    AppLocalizations l10n,
+    Color secondaryColor,
+    double maxWidth,
+  ) {
+    const double paddingHorizontal = 4.0;
+    final availableTextWidth = maxWidth - (paddingHorizontal * 2);
+    if (availableTextWidth <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    final cpuColor = _thresholdColor(data.cpu.percent, context);
+    final memColor = _thresholdColor(data.memory.percent, context);
+
+    const baseStyle = TextStyle(fontSize: 11.5);
+
+    final fullSpan = TextSpan(
+      style: baseStyle.copyWith(color: secondaryColor),
+      children: [
+        TextSpan(
+          text: '${l10n.perfMonitorCpu} ',
+          style: TextStyle(color: secondaryColor),
+        ),
+        TextSpan(
+          text: '${data.cpu.percent.toStringAsFixed(0)}%',
+          style: TextStyle(color: cpuColor),
+        ),
+        TextSpan(
+          text: ' · ',
+          style: TextStyle(color: secondaryColor),
+        ),
+        TextSpan(
+          text: '${l10n.perfMonitorMem} ',
+          style: TextStyle(color: secondaryColor),
+        ),
+        TextSpan(
+          text: '${data.memory.percent.toStringAsFixed(0)}%',
+          style: TextStyle(color: memColor),
+        ),
+      ],
+    );
+
+    final cpuOnlySpan = TextSpan(
+      style: baseStyle.copyWith(color: secondaryColor),
+      children: [
+        TextSpan(
+          text: '${l10n.perfMonitorCpu} ',
+          style: TextStyle(color: secondaryColor),
+        ),
+        TextSpan(
+          text: '${data.cpu.percent.toStringAsFixed(0)}%',
+          style: TextStyle(color: cpuColor),
+        ),
+      ],
+    );
+
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final textScaler =
+        MediaQuery.maybeTextScalerOf(context) ?? TextScaler.noScaling;
+
+    // 1. 优先尝试完整跨度（CPU + MEM）
+    final fullPainter = TextPainter(
+      text: fullSpan,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+
+    TextSpan chosenSpan;
+    if (fullPainter.width <= availableTextWidth) {
+      chosenSpan = fullSpan;
+    } else {
+      // 2. 空间不足退化为仅 CPU
+      final cpuPainter = TextPainter(
+        text: cpuOnlySpan,
+        textDirection: textDirection,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+
+      if (cpuPainter.width <= availableTextWidth) {
+        chosenSpan = cpuOnlySpan;
+      } else {
+        // 3. 极窄连 CPU 也放不下，静默隐藏，不使用 ellipsis 半截截断
+        return const SizedBox.shrink();
+      }
+    }
+
     return GestureDetector(
       key: const ValueKey('perf-monitor-panel'),
       behavior: HitTestBehavior.opaque,
       onTap: _togglePopover,
       child: Container(
         key: _anchorKey,
-        child: _buildCompact(context, data, l10n, secondaryColor),
-      ),
-    );
-  }
-
-  /// 紧凑态：`CPU xx% · MEM xx%`。
-  Widget _buildCompact(
-    BuildContext context,
-    SystemHealthResponse data,
-    AppLocalizations l10n,
-    Color secondaryColor,
-  ) {
-    final cpuColor = _thresholdColor(data.cpu.percent, context);
-    final memColor = _thresholdColor(data.memory.percent, context);
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: paddingHorizontal),
         child: Text.rich(
-          TextSpan(
-            style: TextStyle(fontSize: 11.5, color: secondaryColor),
-            children: [
-              TextSpan(
-                text: '${l10n.perfMonitorCpu} ',
-                style: TextStyle(color: secondaryColor),
-              ),
-              TextSpan(
-                text: '${data.cpu.percent.toStringAsFixed(0)}%',
-                style: TextStyle(color: cpuColor),
-              ),
-              TextSpan(
-                text: ' · ',
-                style: TextStyle(color: secondaryColor),
-              ),
-              TextSpan(
-                text: '${l10n.perfMonitorMem} ',
-                style: TextStyle(color: secondaryColor),
-              ),
-              TextSpan(
-                text: '${data.memory.percent.toStringAsFixed(0)}%',
-                style: TextStyle(color: memColor),
-              ),
-            ],
-          ),
+          chosenSpan,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          softWrap: false,
         ),
       ),
     );

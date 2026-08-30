@@ -8,6 +8,7 @@ import '../../app/router.dart';
 import '../../core/utils/uuid.dart';
 import '../chat/chat_providers.dart';
 import '../desktop/window_title_service.dart';
+import 'background_keepalive_service.dart';
 import 'turn_notification_service.dart';
 
 /// App 生命周期状态（生产由 [NotificationLifecycleObserver] 驱动；测试可
@@ -33,21 +34,26 @@ class NotificationSettings {
     this.notifyTurnsEnabled = true,
     this.notifyClarifyEnabled = true,
     this.notifyErrorsEnabled = true,
+    this.bgForegroundServiceEnabled = false,
   });
 
   final bool notifyTurnsEnabled;
   final bool notifyClarifyEnabled;
   final bool notifyErrorsEnabled;
+  final bool bgForegroundServiceEnabled;
 
   NotificationSettings copyWith({
     bool? notifyTurnsEnabled,
     bool? notifyClarifyEnabled,
     bool? notifyErrorsEnabled,
+    bool? bgForegroundServiceEnabled,
   }) {
     return NotificationSettings(
       notifyTurnsEnabled: notifyTurnsEnabled ?? this.notifyTurnsEnabled,
       notifyClarifyEnabled: notifyClarifyEnabled ?? this.notifyClarifyEnabled,
       notifyErrorsEnabled: notifyErrorsEnabled ?? this.notifyErrorsEnabled,
+      bgForegroundServiceEnabled:
+          bgForegroundServiceEnabled ?? this.bgForegroundServiceEnabled,
     );
   }
 
@@ -58,13 +64,15 @@ class NotificationSettings {
           runtimeType == other.runtimeType &&
           notifyTurnsEnabled == other.notifyTurnsEnabled &&
           notifyClarifyEnabled == other.notifyClarifyEnabled &&
-          notifyErrorsEnabled == other.notifyErrorsEnabled;
+          notifyErrorsEnabled == other.notifyErrorsEnabled &&
+          bgForegroundServiceEnabled == other.bgForegroundServiceEnabled;
 
   @override
   int get hashCode => Object.hash(
         notifyTurnsEnabled,
         notifyClarifyEnabled,
         notifyErrorsEnabled,
+        bgForegroundServiceEnabled,
       );
 }
 
@@ -72,6 +80,7 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
   static const keyTurns = 'notify_turns_enabled';
   static const keyClarify = 'notify_clarify_enabled';
   static const keyErrors = 'notify_errors_enabled';
+  static const keyBgForegroundService = 'bg_foreground_service_enabled';
 
   bool _loaded = false;
 
@@ -93,6 +102,9 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
             prefs.getBool(keyClarify) ?? state.notifyClarifyEnabled,
         notifyErrorsEnabled:
             prefs.getBool(keyErrors) ?? state.notifyErrorsEnabled,
+        bgForegroundServiceEnabled:
+            prefs.getBool(keyBgForegroundService) ??
+                state.bgForegroundServiceEnabled,
       );
     } catch (_) {}
   }
@@ -123,6 +135,15 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
       await prefs.setBool(keyErrors, value);
     } catch (_) {}
   }
+
+  Future<void> setBgForegroundServiceEnabled(bool value) async {
+    _loaded = true;
+    state = state.copyWith(bgForegroundServiceEnabled: value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyBgForegroundService, value);
+    } catch (_) {}
+  }
 }
 
 /// 通知设置 Provider。
@@ -130,6 +151,12 @@ final notificationSettingsProvider =
     NotifierProvider<NotificationSettingsNotifier, NotificationSettings>(
   NotificationSettingsNotifier.new,
 );
+
+/// 后台保活服务 Provider（生产 [BackgroundKeepaliveService.instance]；测试可 override）。
+final backgroundKeepaliveServiceProvider =
+    Provider<BackgroundKeepaliveService>((ref) {
+  return BackgroundKeepaliveService.instance;
+});
 
 /// In-app 通知类型。
 enum InAppNotificationType {
@@ -160,7 +187,7 @@ final inAppNotificationProvider =
     StateProvider<InAppNotificationItem?>((ref) => null);
 
 /// 当前激活会话 ID（从 activeSessionIdProvider 读）。
-String? getActiveSessionId(Ref ref) {
+String? getActiveSessionId(dynamic ref) {
   try {
     return ref.read(activeSessionIdProvider);
   } catch (_) {
@@ -193,7 +220,12 @@ void openSessionFromNotification(dynamic ref, String sessionId) {
 final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>(
   (ref) {
     final service = ref.watch(turnNotificationServiceProvider);
+    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
     return (sessionId, title, preview) {
+      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
+      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive.cancelOneOffPoll(sessionId));
+
       final settings = ref.read(notificationSettingsProvider);
       if (!settings.notifyTurnsEnabled) return;
       final lifecycle = ref.read(appLifecycleStateProvider);
@@ -222,7 +254,12 @@ final clarificationNotificationHookProvider =
     Provider<ChatClarificationNeededCallback>(
   (ref) {
     final service = ref.watch(turnNotificationServiceProvider);
+    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
     return (sessionId, question) {
+      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
+      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive.cancelOneOffPoll(sessionId));
+
       final settings = ref.read(notificationSettingsProvider);
       if (!settings.notifyClarifyEnabled) return;
       final lifecycle = ref.read(appLifecycleStateProvider);
@@ -250,7 +287,12 @@ final sessionErrorNotificationHookProvider =
     Provider<ChatSessionErrorCallback>(
   (ref) {
     final service = ref.watch(turnNotificationServiceProvider);
+    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
     return (sessionId, title, preview) {
+      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
+      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive.cancelOneOffPoll(sessionId));
+
       final settings = ref.read(notificationSettingsProvider);
       if (!settings.notifyErrorsEnabled) return;
       final lifecycle = ref.read(appLifecycleStateProvider);

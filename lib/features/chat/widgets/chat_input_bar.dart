@@ -977,13 +977,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             ),
             const SizedBox(width: 8),
             // 性能监控面板：两段式且开关开启有数据时左靠剩余空间显示，紧跟左簇；无数据或关闭时不占位。
-            const Flexible(
+            const Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: PerfMonitorPanel(),
               ),
             ),
-            const Spacer(),
             ..._buildTrailingControls(
               l10n,
               isStreaming,

@@ -369,8 +369,9 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final title = _adaptiveActivityTitle(
-                        group: group,
+                      final title = adaptiveActivityTitle(
+                        toolCalls: group.toolCalls,
+                        hideThinking: widget.hideThinking,
                         l10n: l10n,
                         maxWidth: constraints.maxWidth,
                         style: titleStyle,
@@ -424,7 +425,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
               if (call.isThinking)
                 (widget.hideThinking
                     ? const SizedBox.shrink()
-                    : _ThinkingRow(call: call))
+                    : ThinkingRow(call: call))
               else
                 ToolCallCard(call: call),
               if (call != group.toolCalls.last) const SizedBox(height: 6),
@@ -436,22 +437,34 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
   }
 }
 
-/// 根据可用宽度自适应计算分组卡片标题。
-String _adaptiveActivityTitle({
-  required ToolCallGroup group,
+/// 根据可用宽度自适应计算工具/思考摘要标题（明细统计 + 自适应截断）。
+///
+/// 统计规则：
+/// - 思考计入 `思考 ×N` / `Thinking ×N`，与普通工具同权；
+/// - 若 [hideThinking] 为 true，思考项不计入统计；
+/// - 按频次降序排序，相同频次按首次出现顺序；
+/// - 逐项测算在 [maxWidth] 下是否能够完全容纳；
+/// - 若无法完全容纳所有分类，在末尾追加 ` …` 省略号截断；
+/// - 若即使首项也超出 [maxWidth]，兜底仅显示首项名称（不含 `×count`）+ ` …`。
+String adaptiveActivityTitle({
+  required List<ToolCall> toolCalls,
   required AppLocalizations l10n,
   required double maxWidth,
   required TextStyle style,
   required TextScaler textScaler,
   required TextDirection textDirection,
+  bool hideThinking = false,
 }) {
-  if (group.toolCalls.isEmpty) return l10n.noTools;
+  final filteredCalls = hideThinking
+      ? toolCalls.where((c) => !c.isThinking).toList()
+      : toolCalls;
+  if (filteredCalls.isEmpty) return l10n.noTools;
 
   final counts = <String, int>{};
   final initialIndex = <String, int>{};
-  for (var i = 0; i < group.toolCalls.length; i++) {
+  for (var i = 0; i < filteredCalls.length; i++) {
     // 思考子卡行也计入标题统计（「思考 ×N, 终端 ×M」）；纯思考卡标题即「思考 ×N」。
-    final call = group.toolCalls[i];
+    final call = filteredCalls[i];
     final name = call.isThinking
         ? l10n.thinkingLabel
         : l10n.localizeToolName(call.displayName);
@@ -468,6 +481,7 @@ String _adaptiveActivityTitle({
   if (entries.isEmpty) return l10n.noTools;
 
   bool fits(String text) {
+    if (maxWidth.isInfinite) return true;
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       maxLines: 1,
@@ -673,16 +687,16 @@ IconData _toolIconFor(String name) {
 }
 
 /// 思考子卡行（工具卡展开区内的思考条目）。
-class _ThinkingRow extends StatefulWidget {
-  const _ThinkingRow({required this.call});
+class ThinkingRow extends StatefulWidget {
+  const ThinkingRow({super.key, required this.call});
 
   final ToolCall call;
 
   @override
-  State<_ThinkingRow> createState() => _ThinkingRowState();
+  State<ThinkingRow> createState() => _ThinkingRowState();
 }
 
-class _ThinkingRowState extends State<_ThinkingRow> {
+class _ThinkingRowState extends State<ThinkingRow> {
   bool _expanded = false;
 
   @override

@@ -80,7 +80,9 @@ void main() {
 
       final entryFinder =
           find.byKey(const ValueKey('settings-entry-session-list-entries'));
-      await tester.scrollUntilVisible(entryFinder, 50);
+      await tester.scrollUntilVisible(entryFinder, 100);
+      await tester.drag(find.byKey(const ValueKey('settings-scroll')), const Offset(0, -150));
+      await tester.pumpAndSettle();
       expect(entryFinder, findsOneWidget);
 
       // 进入二级页
@@ -146,7 +148,9 @@ void main() {
       // 进入二级页
       final entryFinder =
           find.byKey(const ValueKey('settings-entry-session-list-entries'));
-      await tester.scrollUntilVisible(entryFinder, 50);
+      await tester.scrollUntilVisible(entryFinder, 100);
+      await tester.drag(find.byKey(const ValueKey('settings-scroll')), const Offset(0, -150));
+      await tester.pumpAndSettle();
       await tester.tap(entryFinder);
       await tester.pumpAndSettle();
 
@@ -210,7 +214,9 @@ void main() {
       // 进入二级页
       final entryFinder =
           find.byKey(const ValueKey('settings-entry-session-list-entries'));
-      await tester.scrollUntilVisible(entryFinder, 50);
+      await tester.scrollUntilVisible(entryFinder, 100);
+      await tester.drag(find.byKey(const ValueKey('settings-scroll')), const Offset(0, -150));
+      await tester.pumpAndSettle();
       await tester.tap(entryFinder);
       await tester.pumpAndSettle();
 

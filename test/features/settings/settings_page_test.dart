@@ -18,6 +18,7 @@ import 'package:hermes_ui/core/models/mcp.dart';
 import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
+import 'package:hermes_ui/features/notifications/background_keepalive_service.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
@@ -240,6 +241,7 @@ void main() {
     FakeOnboardingLoginApi? loginApi,
     ApiClient? mockApiClient,
     TurnNotificationService? notificationService,
+    BackgroundKeepaliveService? keepaliveService,
   }) async {
     final storage = InMemorySecureStorage();
     final store = ConnectionStore(storage: storage);
@@ -265,6 +267,9 @@ void main() {
         if (notificationService != null)
           turnNotificationServiceProvider
               .overrideWithValue(notificationService),
+        if (keepaliveService != null)
+          backgroundKeepaliveServiceProvider
+              .overrideWithValue(keepaliveService),
       ],
     );
     addTearDown(container.dispose);
@@ -393,6 +398,7 @@ void main() {
         '_ModelSection',
         '_CronSection',
         '_NotificationSection',
+        '_BackgroundKeepAliveSection',
         '_AdvancedSettingsSection',
         '_AboutSection',
       ]);
@@ -1650,6 +1656,125 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool(kCollapseCompletedProcessKey), isFalse);
+    });
+  });
+
+  group('后台保活设置分组', () {
+    testWidgets('展示前台服务开关（默认关闭）并支持切换持久化', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        keepaliveService: fakeKeepalive,
+      );
+      await pumpPage(tester, container, size: const Size(800, 1400));
+
+      final fgSwitchRow = find.byKey(const ValueKey('settings-bg-foreground-service'));
+      await tester.scrollUntilVisible(fgSwitchRow, 50);
+      expect(fgSwitchRow, findsOneWidget);
+
+      final switchWidget = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('settings-switch-bg-foreground-service')),
+      );
+      expect(switchWidget.value, isFalse);
+
+      // 切换开关
+      await tester.tap(
+        find.byKey(const ValueKey('settings-switch-bg-foreground-service')),
+      );
+      await tester.pumpAndSettle();
+
+      final updatedSwitch = tester.widget<CupertinoSwitch>(
+        find.byKey(const ValueKey('settings-switch-bg-foreground-service')),
+      );
+      expect(updatedSwitch.value, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('bg_foreground_service_enabled'), isTrue);
+    });
+
+    testWidgets('渲染 WorkManager 状态行与 4 个 HyperOS 引导按钮', (tester) async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        keepaliveService: fakeKeepalive,
+      );
+      await pumpPage(tester, container, size: const Size(800, 1400));
+
+      final wmStatusRow = find.byKey(const ValueKey('settings-bg-workmanager-status'));
+      await tester.scrollUntilVisible(wmStatusRow, 50);
+      expect(wmStatusRow, findsOneWidget);
+
+      final guideRow = find.byKey(const ValueKey('settings-bg-hyperos-guide'));
+      await tester.scrollUntilVisible(guideRow, 50);
+      expect(guideRow, findsOneWidget);
+
+      expect(find.byKey(const ValueKey('settings-bg-guide-autostart')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-bg-guide-battery')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-bg-guide-network')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-bg-guide-notifications')), findsOneWidget);
+    });
+
+    testWidgets('点击 4 个 HyperOS 引导按钮触发 keepalive.openHyperOsSetting', (tester) async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        keepaliveService: fakeKeepalive,
+      );
+      await pumpPage(tester, container, size: const Size(800, 1400));
+
+      final autostartBtn =
+          find.byKey(const ValueKey('settings-bg-guide-autostart'));
+      await tester.scrollUntilVisible(autostartBtn, 100);
+      await tester.drag(
+        find.byKey(const ValueKey('settings-scroll')),
+        const Offset(0, -100),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(autostartBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-bg-guide-battery')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-bg-guide-network')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-bg-guide-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(fakeKeepalive.openedSettings, [
+        HyperOsSettingType.autoStart,
+        HyperOsSettingType.batteryOptimization,
+        HyperOsSettingType.networkControl,
+        HyperOsSettingType.notificationSettings,
+      ]);
+    });
+
+    testWidgets('深色/浅色、文本缩放 1.5x、窄屏 320px 不溢出', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+      await pumpPage(
+        tester,
+        container,
+        size: const Size(320, 800),
+        textScaler: const TextScaler.linear(1.5),
+        brightness: Brightness.dark,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-bg-hyperos-guide')),
+        50,
+      );
+
+      expect(find.byKey(const ValueKey('settings-bg-hyperos-guide')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

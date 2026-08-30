@@ -38,10 +38,13 @@ class _NotificationLifecycleObserverState
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (defaultTargetPlatform == TargetPlatform.android) {
-        // 仅 Android：冷启动恢复 + 通知权限（桌面端无 POST_NOTIFICATIONS）。
+        // 仅 Android：冷启动恢复 + 通知权限（桌面端无 POST_NOTIFICATIONS）+ 后台保活初始化。
         unawaited(_handleLaunchDetails());
         unawaited(
           ref.read(turnNotificationServiceProvider).requestPermission(),
+        );
+        unawaited(
+          ref.read(backgroundKeepaliveServiceProvider).initialize(),
         );
       }
     });
@@ -58,6 +61,17 @@ class _NotificationLifecycleObserverState
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!mounted) return;
     ref.read(appLifecycleStateProvider.notifier).setState(state);
+    final settings = ref.read(notificationSettingsProvider);
+    final activeSessionId = getActiveSessionId(ref);
+    unawaited(
+      ref.read(backgroundKeepaliveServiceProvider).onAppLifecycleChanged(
+        state: state,
+        activeSessionId: activeSessionId,
+        activeStreamId: null,
+        isStreaming: false,
+        foregroundServiceEnabled: settings.bgForegroundServiceEnabled,
+      ),
+    );
     if (state == AppLifecycleState.resumed) {
       // 回到 app：通知使命完成，自动清除。
       unawaited(ref.read(turnNotificationServiceProvider).clearAll());

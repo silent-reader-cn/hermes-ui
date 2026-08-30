@@ -1442,6 +1442,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
               ListView.builder(
                 controller: _controller,
                 padding: const EdgeInsets.symmetric(vertical: 8),
+                addRepaintBoundaries: true,
+                addAutomaticKeepAlives: false,
                 itemCount: itemCount,
                 itemBuilder: (context, index) {
                   // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
@@ -1474,25 +1476,27 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                         onSecondaryTapDown: (_) => _showMessageActions(entry.message),
                         child: SearchMessageHighlight(
                           highlight: isHighlightTarget,
-                          child: ChatMessageBubble(
-                            key: ValueKey(entry.renderId),
-                            message: entry.message,
-                            toolGroups: groups,
-                            hideThinking: hideThinking,
-                            collapseInjectedEnabled: collapseEnabled,
-                            collapseCompletedProcess: collapseCompletedProcess,
-                            isStreaming: false,
-                            injectedExpanded: expanded,
-                            onToggleInjected: () {
-                              if (!mounted) return;
-                              setState(() {
-                                if (_expandedNoticeIds.contains(noticeId)) {
-                                  _expandedNoticeIds.remove(noticeId);
-                                } else {
-                                  _expandedNoticeIds.add(noticeId);
-                                }
-                              });
-                            },
+                          child: RepaintBoundary(
+                            child: ChatMessageBubble(
+                              key: ValueKey(entry.renderId),
+                              message: entry.message,
+                              toolGroups: groups,
+                              hideThinking: hideThinking,
+                              collapseInjectedEnabled: collapseEnabled,
+                              collapseCompletedProcess: collapseCompletedProcess,
+                              isStreaming: false,
+                              injectedExpanded: expanded,
+                              onToggleInjected: () {
+                                if (!mounted) return;
+                                setState(() {
+                                  if (_expandedNoticeIds.contains(noticeId)) {
+                                    _expandedNoticeIds.remove(noticeId);
+                                  } else {
+                                    _expandedNoticeIds.add(noticeId);
+                                  }
+                                });
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -1696,10 +1700,12 @@ class _StreamingBubble extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ChatMessageBubble(
-            message: message,
-            toolGroups: toolGroups,
-            hideThinking: hideThinking,
+          RepaintBoundary(
+            child: ChatMessageBubble(
+              message: message,
+              toolGroups: toolGroups,
+              hideThinking: hideThinking,
+            ),
           ),
           if (showCursor)
             const Padding(
@@ -2068,9 +2074,18 @@ class _FallbackToolReasoningCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final toolCards = <Widget>[
-      for (final group in toolGroups) ...[
-        ToolCallGroupCard(group: group, hideThinking: hideThinking),
-        if (group != toolGroups.last) const SizedBox(height: 8),
+      for (final group in toolGroups)
+        for (final call in group.toolCalls)
+          if (call.isThinking) ...[
+            if (!hideThinking) ThinkingRow(call: call),
+          ] else ...[
+            ToolCallCard(call: call),
+          ],
+    ];
+    final spacedToolCards = <Widget>[
+      for (var i = 0; i < toolCards.length; i++) ...[
+        toolCards[i],
+        if (i < toolCards.length - 1) const SizedBox(height: 6),
       ],
     ];
 
@@ -2081,11 +2096,11 @@ class _FallbackToolReasoningCards extends StatelessWidget {
           ? CollapsibleProcessCapsule(
               toolGroups: toolGroups,
               hideThinking: hideThinking,
-              children: toolCards,
+              children: spacedToolCards,
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: toolCards,
+              children: spacedToolCards,
             ),
     );
   }

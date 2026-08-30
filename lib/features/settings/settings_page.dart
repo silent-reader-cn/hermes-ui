@@ -19,6 +19,7 @@ import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_page.dart';
 import '../diagnostics/diagnostics_service.dart';
+import '../notifications/background_keepalive_service.dart';
 import '../notifications/notification_providers.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_list_providers.dart';
@@ -86,6 +87,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SliverToBoxAdapter(child: _ModelSection()),
           const SliverToBoxAdapter(child: _CronSection()),
           const SliverToBoxAdapter(child: _NotificationSection()),
+          const SliverToBoxAdapter(child: _BackgroundKeepAliveSection()),
           const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
           const SliverToBoxAdapter(child: _AboutSection()),
         ],
@@ -680,6 +682,120 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 后台保活
+// ---------------------------------------------------------------------------
+
+/// 后台保活分组：前台服务开关 + WorkManager 状态 + HyperOS 引导按键。
+class _BackgroundKeepAliveSection extends ConsumerWidget {
+  const _BackgroundKeepAliveSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final settings = ref.watch(notificationSettingsProvider);
+    final notifier = ref.read(notificationSettingsProvider.notifier);
+    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
+
+    return CupertinoListSection(
+      header: Text(l10n.bgKeepAliveSection),
+      children: [
+        CupertinoListTile(
+          key: const ValueKey('settings-bg-foreground-service'),
+          title: Text(l10n.bgForegroundServiceTitle),
+          subtitle: Text(l10n.bgForegroundServiceSubtitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-bg-foreground-service'),
+            value: settings.bgForegroundServiceEnabled,
+            onChanged: (value) {
+              unawaited(notifier.setBgForegroundServiceEnabled(value));
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-bg-workmanager-status'),
+          title: Text(l10n.bgWorkManagerStatusTitle),
+          subtitle: Text(l10n.bgWorkManagerStatusSubtitle),
+          trailing: const Icon(
+            CupertinoIcons.checkmark_seal_fill,
+            color: CupertinoColors.systemGreen,
+            size: 20,
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-bg-hyperos-guide'),
+          title: Text(l10n.bgHyperOsGuidanceTitle),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _buildGuideButton(
+                  key: const ValueKey('settings-bg-guide-autostart'),
+                  label: l10n.bgGuideAutoStart,
+                  onPressed: () => unawaited(
+                    keepalive.openHyperOsSetting(HyperOsSettingType.autoStart),
+                  ),
+                ),
+                _buildGuideButton(
+                  key: const ValueKey('settings-bg-guide-battery'),
+                  label: l10n.bgGuideBattery,
+                  onPressed: () => unawaited(
+                    keepalive.openHyperOsSetting(
+                      HyperOsSettingType.batteryOptimization,
+                    ),
+                  ),
+                ),
+                _buildGuideButton(
+                  key: const ValueKey('settings-bg-guide-network'),
+                  label: l10n.bgGuideNetwork,
+                  onPressed: () => unawaited(
+                    keepalive.openHyperOsSetting(
+                      HyperOsSettingType.networkControl,
+                    ),
+                  ),
+                ),
+                _buildGuideButton(
+                  key: const ValueKey('settings-bg-guide-notifications'),
+                  label: l10n.bgGuideNotifications,
+                  onPressed: () => unawaited(
+                    keepalive.openHyperOsSetting(
+                      HyperOsSettingType.notificationSettings,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuideButton({
+    required Key key,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return CupertinoButton(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      color: CupertinoColors.systemGrey5,
+      borderRadius: BorderRadius.circular(6),
+      minimumSize: const Size(0, 26),
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          color: CupertinoColors.label,
+        ),
+      ),
     );
   }
 }

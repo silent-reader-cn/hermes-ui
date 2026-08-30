@@ -1,12 +1,13 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
+import 'tool_call_card.dart';
 
-/// 回合完成后过程折叠胶囊组件（active.md §过程折叠）。
+/// 回合完成后过程折叠组件（active.md §过程折叠 / 历史工具一二级标题退化）。
 ///
-/// 将已完成回合中的思考块、工具调用卡等过程项收敛为单行摘要胶囊，
-/// 默认收起（首次折叠，不记忆展开偏好），点击可展开/收起详情。
+/// 将已完成回合中的思考块、工具调用卡等过程项收敛为单行明细自适应摘要按钮行，
+/// 默认收起（首次折叠，不记忆展开偏好），点击可展开/收起平铺子卡片列表。
 class CollapsibleProcessCapsule extends StatefulWidget {
   const CollapsibleProcessCapsule({
     super.key,
@@ -21,7 +22,7 @@ class CollapsibleProcessCapsule extends StatefulWidget {
   /// 归档/展示的工具调用组。
   final List<ToolCallGroup> toolGroups;
 
-  /// 展开时渲染的过程子卡片列表（如 [ToolCallGroupCard]）。
+  /// 展开时渲染的过程子卡片列表（如 [ToolCallCard] / [ThinkingRow]）。
   final List<Widget> children;
 
   /// 是否隐藏思考。
@@ -64,9 +65,6 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
       for (final g in widget.toolGroups) ...g.toolCalls,
     ];
 
-    final hasThinking =
-        !widget.hideThinking && allCalls.any((c) => c.isThinking);
-    final toolCount = allCalls.where((c) => !c.isThinking).length;
     final hasFailed = widget.toolGroups.any((g) => g.hasFailedTool) ||
         allCalls.any((c) => c.isError == true);
     final isRunning = widget.toolGroups.any((g) => !g.isComplete);
@@ -76,47 +74,37 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
         .whereType<double>()
         .fold<double>(0.0, (a, b) => a + b);
 
-    final title = l10n.formatProcessCapsuleSummary(
-      hasThinking: hasThinking,
-      toolCount: toolCount,
-      noticeCount: widget.noticeCount,
-      durationSeconds: hasThinking && durationSeconds > 0 ? durationSeconds : null,
-    );
-
     final statusColor = hasFailed
         ? CupertinoColors.systemRed.resolveFrom(context)
         : (isRunning
             ? CupertinoColors.activeBlue.resolveFrom(context)
             : CupertinoColors.systemGreen.resolveFrom(context));
 
-    final trailingDuration = (durationSeconds > 0 && !hasThinking)
+    final trailingDuration = (durationSeconds > 0)
         ? '${durationSeconds.toStringAsFixed(1)}s'
         : null;
 
-    return Container(
+    final titleStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: CupertinoColors.label.resolveFrom(context),
+    );
+
+    return SizedBox(
       key: const ValueKey('collapsible-process-capsule'),
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6.resolveFrom(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Semantics(
             button: true,
-            label: title,
             child: GestureDetector(
               key: const ValueKey('process-capsule-header'),
               behavior: HitTestBehavior.opaque,
               onTap: _toggle,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
                     if (isRunning)
@@ -138,15 +126,26 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
                       ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.label.resolveFrom(context),
-                        ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final title = adaptiveActivityTitle(
+                            toolCalls: allCalls,
+                            hideThinking: widget.hideThinking,
+                            l10n: l10n,
+                            maxWidth: constraints.maxWidth,
+                            style: titleStyle,
+                            textScaler: MediaQuery.textScalerOf(context),
+                            textDirection:
+                                Directionality.maybeOf(context) ??
+                                TextDirection.ltr,
+                          );
+                          return Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: titleStyle,
+                          );
+                        },
                       ),
                     ),
                     if (trailingDuration != null) ...[
@@ -173,18 +172,10 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
               ),
             ),
           ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 4),
-                  ...widget.children,
-                ],
-              ),
-            ),
+          if (_expanded) ...[
+            const SizedBox(height: 6),
+            ...widget.children,
+          ],
         ],
       ),
     );

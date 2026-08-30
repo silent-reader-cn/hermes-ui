@@ -1345,6 +1345,23 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _mergeTimer = null;
       _revealTimer?.cancel();
       _revealTimer = null;
+      try {
+        final keepalive = ref.read(backgroundKeepaliveServiceProvider);
+        final notifSettings = ref.read(notificationSettingsProvider);
+        final isStreaming = state.stream.activeStreamId != null ||
+            state.phase == ChatPhase.streaming ||
+            state.phase == ChatPhase.steered ||
+            state.phase == ChatPhase.sending;
+        unawaited(
+          keepalive.onAppLifecycleChanged(
+            state: next,
+            activeSessionId: state.sessionId,
+            activeStreamId: state.stream.activeStreamId,
+            isStreaming: isStreaming,
+            foregroundServiceEnabled: notifSettings.bgForegroundServiceEnabled,
+          ),
+        );
+      } catch (_) {}
       return;
     }
     DiagnosticsService.instance.log(
@@ -1352,6 +1369,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       tag: 'chat',
       message: 'App lifecycle resumed: flushing pending text + watchdog rebaseline',
     );
+    try {
+      final keepalive = ref.read(backgroundKeepaliveServiceProvider);
+      unawaited(keepalive.stopForegroundService());
+      if (state.sessionId.isNotEmpty) {
+        unawaited(keepalive.cancelOneOffPoll(state.sessionId));
+      }
+    } catch (_) {}
     // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
     // 时刻的传输停滞时长（SSE 后台静默断线无 onTransportError/onClosed 事件，
     // 只能靠时间差识别，`_lastTransportActivity` 即断线状态快照）。
@@ -2529,6 +2553,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _api?.stopStream();
     _cancelStreamTimers();
     _markProgress();
+    try {
+      final keepalive = ref.read(backgroundKeepaliveServiceProvider);
+      unawaited(keepalive.stopForegroundService());
+      if (state.sessionId.isNotEmpty) {
+        unawaited(keepalive.cancelOneOffPoll(state.sessionId));
+      }
+    } catch (_) {}
     // 瞬态相位：收尾完成后立即回 idle。
     if (endPhase != ChatPhase.idle) {
       state = state.copyWith(phase: ChatPhase.idle);

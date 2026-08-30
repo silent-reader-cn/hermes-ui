@@ -82,7 +82,7 @@ void main() {
 
       // 断言：转正归档后，工具卡必须依然存在于 transcript 气泡中，不得整卡消失！
       expect(
-        find.byType(ToolCallGroupCard),
+        find.byType(ToolCallCard),
         findsOneWidget,
         reason: 'done 后 session 未带 tool_calls 时，工具卡不应消失（应由 live/completed fallback 保底）',
       );
@@ -133,7 +133,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
-        find.byType(ToolCallGroupCard),
+        find.byType(ToolCallCard),
         findsOneWidget,
         reason: 'done 携带空 session 时，live 工具调用应归档到 completedToolCallGroups，不应丢失',
       );
@@ -203,11 +203,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言：转正后依然保持展开态（chevron_up），未被重置为 chevron_down
+      // 断言：转正后平铺为 ToolCallCard
       expect(
-        find.byIcon(CupertinoIcons.chevron_up),
+        find.byType(ToolCallCard),
         findsOneWidget,
-        reason: 'live 展开态在 done 转正为 transcript 后应被保留，不应重置为折叠态',
+        reason: 'live 结束后转正为 transcript 应平铺渲染 ToolCallCard',
       );
     });
 
@@ -275,7 +275,7 @@ void main() {
 
         // 无论 coalesce 为 true 还是 false，工具卡都必须存在且不丢失！
         expect(
-          find.byType(ToolCallGroupCard),
+          find.byType(ToolCallCard),
           findsWidgets,
           reason: 'coalesce=$coalesce 下 done 后工具卡必须全部保留',
         );

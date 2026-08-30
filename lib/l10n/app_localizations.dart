@@ -281,6 +281,36 @@ class AppLocalizations {
       : '该类型通知已关闭，仍已推送测试通知（系统通道独立）';
   String get pushTestPermissionDenied =>
       isEnglish ? 'Notification permission denied' : '通知权限已被拒绝';
+  String get bgKeepAliveSection =>
+      isEnglish ? 'Background Keepalive' : '后台保活';
+  String get bgForegroundServiceTitle =>
+      isEnglish ? 'Foreground Service Keepalive' : '前台服务保活';
+  String get bgForegroundServiceSubtitle => isEnglish
+      ? 'Show ongoing notification and hold wakelock during background generation to prevent network freeze'
+      : '后台生成时显示常驻通知并持有唤醒锁，防止网络被系统冻结（实时性高）';
+  String get bgWorkManagerStatusTitle =>
+      isEnglish ? 'WorkManager Periodic Polling' : 'WorkManager 周期探活';
+  String get bgWorkManagerStatusSubtitle => isEnglish
+      ? 'Ready (15 min periodic + instant background poll fallback)'
+      : '已就绪（15 分钟周期 + 切后台即时探活兜底）';
+  String get bgHyperOsGuidanceTitle =>
+      isEnglish ? 'System Keepalive & Permissions' : '系统保活与权限引导';
+  String get bgHyperOsGuidanceSubtitle => isEnglish
+      ? 'Jump to system settings for auto-start, unrestricted battery, etc.'
+      : '跳转系统设置以开启自启动、无限制省电等';
+  String get bgGuideAutoStart => isEnglish ? 'Auto-start' : '自启动';
+  String get bgGuideBattery =>
+      isEnglish ? 'No Restrictions' : '省电无限制';
+  String get bgGuideNetwork => isEnglish ? 'Network' : '联网控制';
+  String get bgGuideNotifications =>
+      isEnglish ? 'Notifications' : '通知权限';
+  String get bgGeneratingOngoingNotification =>
+      isEnglish ? 'Hermes is generating…' : 'Hermes 正在生成…';
+  String get bgGeneratingChannelName =>
+      isEnglish ? 'Background Keepalive' : '后台生成保活';
+  String get bgGeneratingChannelDescription => isEnglish
+      ? 'Ongoing notification during background generation'
+      : '后台流式生成进行中常驻通知';
   String get sessionErrorTitle => isEnglish ? 'Session Error' : '会话异常';
   String get sessionCancelledTitle =>
       isEnglish ? 'Response Cancelled' : '响应已取消';

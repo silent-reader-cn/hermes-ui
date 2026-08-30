@@ -1,4 +1,4 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/models/tool_call.dart';
@@ -48,20 +48,23 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ThinkingRow(call: group.toolCalls[0]),
+              ToolCallCard(call: group.toolCalls[1]),
+              ToolCallCard(call: group.toolCalls[2]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // 摘要标题应包含"思考 · 2 工具"
-      expect(find.text('思考 · 2 工具'), findsOneWidget);
+      // 摘要标题为明细自适应
+      expect(find.text('思考 \u00D71, 读取文件 \u00D71, 终端 \u00D71'), findsOneWidget);
       expect(find.byKey(const ValueKey('process-capsule-header')), findsOneWidget);
       expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
 
       // 默认折叠时，内部子卡片不在树中
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallCard), findsNothing);
+      expect(find.byType(ThinkingRow), findsNothing);
     });
 
     testWidgets('点击胶囊展开：显示子卡片；再次点击收起', (tester) async {
@@ -77,28 +80,32 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ThinkingRow(call: group.toolCalls[0]),
+              ToolCallCard(call: group.toolCalls[1]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallCard), findsNothing);
+      expect(find.byType(ThinkingRow), findsNothing);
       expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
 
       // 1. 点击展开
       await tester.tap(find.byKey(const ValueKey('process-capsule-header')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.byType(ThinkingRow), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsOneWidget);
       expect(find.byIcon(CupertinoIcons.chevron_up), findsOneWidget);
 
       // 2. 再次点击收起
       await tester.tap(find.byKey(const ValueKey('process-capsule-header')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ThinkingRow), findsNothing);
+      expect(find.byType(ToolCallCard), findsNothing);
       expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
     });
 
@@ -115,20 +122,27 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           locale: const Locale('en'),
+          width: 800,
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ThinkingRow(call: group.toolCalls[0]),
+              ToolCallCard(call: group.toolCalls[1]),
+              ToolCallCard(call: group.toolCalls[2]),
+              ToolCallCard(call: group.toolCalls[3]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Thinking · 3 tools'), findsOneWidget);
+      expect(
+        find.text('Thinking \u00D71, Read File \u00D71, Apply Patch \u00D71, Terminal \u00D71'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('长过程（10+工具）计数摘要准确', (tester) async {
+    testWidgets('长过程（10+工具）计数摘要准确并自适应截断', (tester) async {
       final calls = <ToolCall>[
         ToolCall.thinking('深度推理过程'),
         for (var i = 0; i < 12; i++)
@@ -138,20 +152,23 @@ void main() {
 
       await tester.pumpWidget(
         _buildTestApp(
+          width: 400,
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              for (final c in calls)
+                if (c.isThinking) ThinkingRow(call: c) else ToolCallCard(call: c),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('思考 · 12 工具'), findsOneWidget);
+      expect(find.textContaining('思考 \u00D71'), findsOneWidget);
+      expect(find.textContaining('\u2026'), findsOneWidget);
     });
 
-    testWidgets('仅有思考无工具时摘要为"思考"', (tester) async {
+    testWidgets('仅有思考无工具时摘要为"思考 ×1"', (tester) async {
       final group = ToolCallGroup(
         toolCalls: [
           ToolCall.thinking('纯思考内容'),
@@ -163,17 +180,17 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ThinkingRow(call: group.toolCalls[0]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('思考'), findsOneWidget);
+      expect(find.text('思考 \u00D71'), findsOneWidget);
     });
 
-    testWidgets('仅有 1 个工具无思考时摘要为"1 工具" / "1 tool"', (tester) async {
+    testWidgets('仅有 1 个工具无思考时摘要为"终端 ×1" / "Terminal ×1"', (tester) async {
       final group = ToolCallGroup(
         toolCalls: [
           ToolCall(name: 'bash', isCompleted: true),
@@ -185,14 +202,14 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ToolCallCard(call: group.toolCalls[0]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1 工具'), findsOneWidget);
+      expect(find.text('终端 \u00D71'), findsOneWidget);
 
       await tester.pumpWidget(
         _buildTestApp(
@@ -200,14 +217,14 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ToolCallCard(call: group.toolCalls[0]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1 tool'), findsOneWidget);
+      expect(find.text('Terminal \u00D71'), findsOneWidget);
     });
 
     testWidgets('hideThinking 为 true 时，思考不计入摘要', (tester) async {
@@ -224,14 +241,14 @@ void main() {
             toolGroups: [group],
             hideThinking: true,
             children: [
-              ToolCallGroupCard(group: group, hideThinking: true),
+              ToolCallCard(call: group.toolCalls[1]),
             ],
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1 工具'), findsOneWidget);
+      expect(find.text('读取文件 \u00D71'), findsOneWidget);
       expect(find.textContaining('思考'), findsNothing);
     });
 
@@ -247,7 +264,7 @@ void main() {
           child: CollapsibleProcessCapsule(
             toolGroups: [group],
             children: [
-              ToolCallGroupCard(group: group),
+              ToolCallCard(call: group.toolCalls[0]),
             ],
           ),
         ),

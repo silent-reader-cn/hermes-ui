@@ -209,28 +209,25 @@ void main() {
       // 1) 初始：正文可见，过程胶囊默认收起（标题可见，子卡片未展开）。
       expect(find.text('这是最终回答内容。'), findsOneWidget);
       expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
-      expect(find.text('思考 · 1 工具'), findsOneWidget);
+      expect(find.text('思考 \u00D71, 读取文件 \u00D71'), findsOneWidget);
       expect(find.byType(ToolCallGroupCard), findsNothing);
       expect(find.text('思考'), findsNothing);
       expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 展开过程胶囊 → ToolCallGroupCard 出现
+      // 2) 展开过程胶囊 → ThinkingRow 与 ToolCallCard 直接平铺出现（无 ToolCallGroupCard 嵌套）
       await tester.tap(find.byType(CollapsibleProcessCapsule));
       await tester.pumpAndSettle();
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-
-      // 3) 展开工具卡 → think 行与工具行都在（行序 = 时间线）。
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ThinkingRow), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
       expect(find.byType(ToolCallCard), findsOneWidget);
 
-      // 4) 点击 think 行展开完整思考文本。
+      // 3) 点击 think 行展开完整思考文本。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsOneWidget); // 展开成功
 
-      // 5) 再次点击 think 行折叠。
+      // 4) 再次点击 think 行折叠。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsNothing); // 折叠成功
@@ -279,19 +276,15 @@ void main() {
       expect(find.text('帮我分析代码'), findsOneWidget);
       expect(find.text('分析完毕，无任何错误。'), findsOneWidget);
       expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
-      expect(find.text('思考 · 1 工具'), findsOneWidget);
+      expect(find.text('思考 \u00D71, analyze_files \u00D71'), findsOneWidget);
       expect(find.byType(ToolCallGroupCard), findsNothing);
 
-      // 展开过程胶囊 → 工具卡片出现
+      // 展开过程胶囊 → 工具卡片与思考行平铺出现
       await tester.tap(find.byType(CollapsibleProcessCapsule));
       await tester.pumpAndSettle();
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
-      expect(find.text(fullThinking), findsNothing);
-
-      // 展开工具卡 → think 行出现
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ThinkingRow), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
       expect(find.text(fullThinking), findsNothing); // think 行默认收起（预览）
 

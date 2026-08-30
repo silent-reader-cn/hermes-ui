@@ -18,6 +18,7 @@ import 'features/desktop/desktop_settings.dart';
 import 'features/desktop/startup_registrar.dart';
 import 'features/diagnostics/diagnostics_models.dart';
 import 'features/diagnostics/diagnostics_service.dart';
+import 'features/notifications/background_keepalive_service.dart';
 import 'features/notifications/notification_providers.dart';
 
 /// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8）。
@@ -213,6 +214,11 @@ Future<void> main(List<String> args) async {
       );
     }
   }
+
+  if (!kIsWeb && Platform.isAndroid) {
+    unawaited(BackgroundKeepaliveService.instance.initialize());
+  }
+
   // 启动时恢复持久化的登录 cookie，避免 App 重启后登录态丢失（401）。
   // 未登录/无 cookie 时静默跳过；失败静默（会话列表会走自动重登兜底）。
   CookieStore.shared = CookieStore(

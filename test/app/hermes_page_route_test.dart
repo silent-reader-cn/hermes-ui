@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/widgets/hermes_page_route.dart';
 
-/// HermesPageRoute 转场方向测试（todo #22 验收，修正 #17 行为）：
-/// - push 进入：新页从右滑入（x: +width → 0），与 Cupertino 一致；
-/// - pop 返回：当前页向右滑出（x: 0 → +width，iOS 标准），**方向不反**
+/// HermesPageRoute 转场方向测试（todo #22 验收，修正 #17 行为；分数位移修复）：
+/// - push 进入：新页从右滑入（x: +1.0 → 0），与 Cupertino 一致；
+/// - pop 返回：当前页向右滑出（x: 0 → +1.0，iOS 标准），**方向不反**
 ///   （中间帧 dx > 0）；
 /// - 底层页全程静止（偏移量用 push 前记录的基准比对）；
 /// - pop 滑出时叠轻微淡出；
@@ -76,7 +76,7 @@ Future<void> _pushDetail(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('push 进入：新页从右滑入（x: +width → 0）', (tester) async {
+  testWidgets('push 进入：新页从右滑入（x: +1.0 → 0）', (tester) async {
     await _pumpApp(tester);
 
     await tester.tap(find.text('push'));
@@ -84,22 +84,23 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.text('detail'), findsOneWidget);
-    // 动画中帧：仍在右侧、正在向左滑入（0 < dx < 800）。
+    // 动画中帧：仍在右侧、正在向左滑入（0 < dx <= 1.0）。
     final earlyDx = _slideDx(tester);
     expect(earlyDx, greaterThan(0));
-    expect(earlyDx, lessThan(800));
+    expect(earlyDx, lessThanOrEqualTo(1.0));
 
     await tester.pump(const Duration(milliseconds: 200));
     final midDx = _slideDx(tester);
     expect(midDx, greaterThan(0));
-    expect(midDx, lessThan(800));
+    expect(midDx, lessThanOrEqualTo(1.0));
+    expect(midDx, lessThan(earlyDx)); // 向左滑入，dx 递减
 
     await tester.pumpAndSettle();
     expect(_slideDx(tester), 0);
     expect(find.text('detail'), findsOneWidget);
   });
 
-  testWidgets('pop 返回：当前页向右滑出（x: 0 → +width），底层页静止', (tester) async {
+  testWidgets('pop 返回：当前页向右滑出（x: 0 → +1.0），底层页静止', (tester) async {
     await _pumpApp(tester);
     // push 前记录底层基准（push 完成后底层会 offstage，无法再取）。
     final bottomX = tester.getTopLeft(find.byKey(_bottomKey)).dx;
@@ -108,19 +109,21 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator)).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
-    // 中帧：正在向右滑出（0 < dx < 800）。
+    // 中帧：正在向右滑出（0 < dx <= 1.0）。
     final earlyDx = _slideDx(tester);
     expect(earlyDx, greaterThan(0));
-    expect(earlyDx, lessThan(800));
+    expect(earlyDx, lessThanOrEqualTo(1.0));
 
     await tester.pump(const Duration(milliseconds: 200));
     final midDx = _slideDx(tester);
     expect(midDx, greaterThan(0));
-    expect(midDx, lessThan(800));
+    expect(midDx, lessThanOrEqualTo(1.0));
+    expect(midDx, greaterThan(earlyDx)); // 向右滑出，dx 递增
 
     await tester.pump(const Duration(milliseconds: 100));
-    // 深帧（累计 360ms，接近 400ms 动画尾声但 route 未移除）：dx 明显为正。
-    expect(_slideDx(tester), greaterThan(400));
+    // 深帧（累计 360ms，接近 400ms 动画尾声但 route 未移除）：dx 明显为正且接近 1.0。
+    expect(_slideDx(tester), greaterThan(0.5));
+    expect(_slideDx(tester), lessThanOrEqualTo(1.0));
 
     await tester.pumpAndSettle();
     expect(find.text('detail'), findsNothing);
@@ -140,6 +143,7 @@ void main() {
     for (var i = 0; i < 3; i++) {
       await tester.pump(const Duration(milliseconds: 80));
       expect(_slideDx(tester), greaterThan(0), reason: '第 $i 帧 pop 方向应为向右');
+      expect(_slideDx(tester), lessThanOrEqualTo(1.0));
     }
   });
 
@@ -188,10 +192,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.text('detail'), findsOneWidget);
-    // 中帧：从右滑入（0 < dx < 800）。
+    // 中帧：从右滑入（0 < dx <= 1.0）。
     final pushDx = _slideDx(tester);
     expect(pushDx, greaterThan(0));
-    expect(pushDx, lessThan(800));
+    expect(pushDx, lessThanOrEqualTo(1.0));
     await tester.pumpAndSettle();
     expect(_slideDx(tester), 0);
     expect(find.text('detail'), findsOneWidget);
@@ -200,8 +204,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     await tester.pump(const Duration(milliseconds: 200));
-    // 中帧：向右滑出。
+    // 中帧：向右滑出（0 < dx <= 1.0）。
     expect(_slideDx(tester), greaterThan(0));
+    expect(_slideDx(tester), lessThanOrEqualTo(1.0));
     await tester.pumpAndSettle();
     expect(find.text('detail'), findsNothing);
   });
