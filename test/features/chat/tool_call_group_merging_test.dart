@@ -23,9 +23,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({
-        kCollapseCompletedProcessKey: false,
-      });
+      SharedPreferences.setMockInitialValues({});
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -86,10 +84,6 @@ void main() {
         findsOneWidget,
         reason: 'done 后 session 未带 tool_calls 时，工具卡不应消失（应由 live/completed fallback 保底）',
       );
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byType(ToolCallCard), findsOneWidget);
     });
 
     testWidgets('复现 2: done 晚于 stream_end 到达（或空 session 载荷），工具卡不得消失', (
@@ -99,9 +93,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({
-        kCollapseCompletedProcessKey: false,
-      });
+      SharedPreferences.setMockInitialValues({});
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -141,10 +133,6 @@ void main() {
         findsOneWidget,
         reason: 'done 携带空 session 时，live 工具调用应归档到 completedToolCallGroups，不应丢失',
       );
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byType(ToolCallCard), findsOneWidget);
     });
 
     testWidgets('复现 3: live 期间用户展开工具卡，done 转正后展开状态不重置为折叠', (
@@ -154,9 +142,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues({
-        kCollapseCompletedProcessKey: false,
-      });
+      SharedPreferences.setMockInitialValues({});
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
       api.sessionResult = {
@@ -211,11 +197,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言：转正后渲染 ToolCallGroupCard
+      // 断言：转正后依然保持展开态（chevron_up），未被重置为 chevron_down
       expect(
-        find.byType(ToolCallGroupCard),
+        find.byIcon(CupertinoIcons.chevron_up),
         findsOneWidget,
-        reason: 'live 结束后转正为 transcript 应渲染 ToolCallGroupCard',
+        reason: 'live 展开态在 done 转正为 transcript 后应被保留，不应重置为折叠态',
       );
     });
 
@@ -229,7 +215,6 @@ void main() {
 
         SharedPreferences.setMockInitialValues({
           kToolGroupCoalesceKey: coalesce,
-          kCollapseCompletedProcessKey: false,
         });
         final api = FakeChatApi()
           ..statusResponse = const ChatStreamStatusResponse(active: true);
@@ -286,15 +271,6 @@ void main() {
           find.byType(ToolCallGroupCard),
           findsWidgets,
           reason: 'coalesce=$coalesce 下 done 后工具卡必须全部保留',
-        );
-        for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
-          await tester.tap(find.byWidget(card.widget));
-        }
-        await tester.pumpAndSettle();
-        expect(
-          find.byType(ToolCallCard),
-          findsWidgets,
-          reason: 'coalesce=$coalesce 下 done 后展开工具卡必须全部保留',
         );
       }
     });

@@ -26,20 +26,11 @@ final hideReasoningProvider = NotifierProvider<HideReasoningController, bool>(
   HideReasoningController.new,
 );
 
-/// 回合完成后自动折叠过程偏好设置 Provider（持久化到 shared_preferences，默认开）。
-final collapseCompletedProcessProvider =
-    NotifierProvider<CollapseCompletedProcessController, bool>(
-      CollapseCompletedProcessController.new,
-    );
-
 /// 思考聚合持久化键。
 const String kThinkGroupCoalesceKey = 'settings.groupThinkByTurn';
 
 /// 隐藏思考持久化键。
 const String kHideReasoningKey = 'settings.hideReasoning';
-
-/// 回合完成后自动折叠过程持久化键。
-const String kCollapseCompletedProcessKey = 'settings.collapseCompletedProcess';
 
 /// 思考按回合聚合控制器。
 class ThinkGroupCoalesceController extends Notifier<bool> {
@@ -183,56 +174,6 @@ class ToolGroupCoalesceController extends Notifier<bool> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyCoalesceTools, value);
-    } catch (_) {
-      // Ignored in unit test environments.
-    }
-  }
-}
-
-/// 回合完成后自动折叠过程控制器。
-class CollapseCompletedProcessController extends Notifier<bool> {
-  static const String keyCollapseCompletedProcess =
-      kCollapseCompletedProcessKey;
-
-  static Future<bool> loadCollapsePref({
-    SharedPreferences? customPrefs,
-  }) async {
-    try {
-      final prefs = customPrefs ?? await SharedPreferences.getInstance();
-      return prefs.getBool(keyCollapseCompletedProcess) ?? true;
-    } catch (_) {
-      return true;
-    }
-  }
-
-  bool _hasCustomState = false;
-
-  @override
-  bool build() {
-    _hasCustomState = false;
-    unawaited(_load());
-    return true;
-  }
-
-  Future<void> _load() async {
-    try {
-      final value = await loadCollapsePref();
-      if (!_hasCustomState) {
-        state = value;
-      }
-    } catch (_) {
-      // Ignored in unit test environments.
-    }
-  }
-
-  Future<void> load() => _load();
-
-  Future<void> setCollapse(bool value) async {
-    _hasCustomState = true;
-    state = value;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(keyCollapseCompletedProcess, value);
     } catch (_) {
       // Ignored in unit test environments.
     }

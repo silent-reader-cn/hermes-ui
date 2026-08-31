@@ -66,50 +66,6 @@ void main() {
     });
   });
 
-  group('CollapseCompletedProcessController 状态与持久化', () {
-    test('默认值为 true', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      final state = container.read(collapseCompletedProcessProvider);
-      expect(state, isTrue);
-    });
-
-    test('初始状态从 SharedPreferences 读取', () async {
-      SharedPreferences.setMockInitialValues({
-        kCollapseCompletedProcessKey: false,
-      });
-
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      final controller =
-          container.read(collapseCompletedProcessProvider.notifier);
-      await controller.load();
-
-      final state = container.read(collapseCompletedProcessProvider);
-      expect(state, isFalse);
-    });
-
-    test('setCollapse 修改配置并写入 SharedPreferences', () async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      final controller =
-          container.read(collapseCompletedProcessProvider.notifier);
-      await controller.setCollapse(false);
-
-      expect(container.read(collapseCompletedProcessProvider), isFalse);
-
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(kCollapseCompletedProcessKey), isFalse);
-
-      await controller.setCollapse(true);
-      expect(container.read(collapseCompletedProcessProvider), isTrue);
-      expect(prefs.getBool(kCollapseCompletedProcessKey), isTrue);
-    });
-  });
-
   group('ToolCallGroup.groups 聚合与穿插', () {
     test('coalesce: true 聚合模式：合并同一回合内不同 assistant 消息的工具调用', () {
       final messages = [
@@ -416,24 +372,11 @@ void main() {
       final element = tester.element(find.byType(ChatMessageList));
       final container = ProviderScope.containerOf(element);
 
-      // 1. 默认 collapseCompletedProcess: true 模式下：过程收为 CollapsibleProcessCapsule，点击展开后可见 ToolCallGroupCard
+      // 1. 默认 coalesce: true 模式下：同回合多个 assistant 消息的工具聚合为 1 张 ToolCallGroupCard 卡片
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
-      await tester.tap(find.text('读取文件 \u00D71, 写入文件 \u00D71'));
-      await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
-
-      // 关闭 collapseCompletedProcess：保持全部直接展开
-      await container
-          .read(collapseCompletedProcessProvider.notifier)
-          .setCollapse(false);
-      await tester.pumpAndSettle();
-
-      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立 ToolCallGroupCard 穿插呈现，绝无 double 副本
+      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立卡片穿插呈现，绝无 double 副本
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(false);
@@ -442,24 +385,17 @@ void main() {
       expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
       expect(find.text('读取文件 \u00D71'), findsOneWidget);
       expect(find.text('写入文件 \u00D71'), findsOneWidget);
+      // 确认无聚合卡片残余副本
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
 
-      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
-        await tester.tap(find.byWidget(card.widget));
-      }
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
-
-      // 3. 再次切换回 coalesce: true 模式：聚合为 1 张 ToolCallGroupCard
+      // 3. 再次切换回 coalesce: true 模式：即时恢复为 1 张聚合卡片
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(true);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
 
       // 清理树与 Timer
       await tester.pumpWidget(const SizedBox());
@@ -498,7 +434,7 @@ void main() {
           .setCoalesce(false);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallCard), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsNothing);
 
       // 清理树与 Timer
       await tester.pumpWidget(const SizedBox());

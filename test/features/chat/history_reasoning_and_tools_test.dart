@@ -7,7 +7,6 @@ import 'package:hermes_ui/core/models/tool_call.dart';
 import 'package:hermes_ui/features/chat/chat_models.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
-import 'package:hermes_ui/features/chat/widgets/collapsible_process_capsule.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
 
@@ -206,32 +205,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 1) 初始：正文可见，过程胶囊默认收起（标题可见，子卡片未展开）。
+      // 1) 初始：正文可见，工具卡默认收起（思考行/工具行为展开态内容，不在树）。
       expect(find.text('这是最终回答内容。'), findsOneWidget);
-      expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
-      expect(find.text('思考 \u00D71, 读取文件 \u00D71'), findsOneWidget);
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
       expect(find.text('思考'), findsNothing);
       expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 展开过程胶囊 → 出现 ToolCallGroupCard（聚合卡）
-      await tester.tap(find.byType(CollapsibleProcessCapsule));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-
-      // 3) 点击 ToolCallGroupCard 展开子卡片 → ThinkingRow 与 ToolCallCard 出现
+      // 2) 展开工具卡 → think 行与工具行都在（行序 = 时间线）。
       await tester.tap(find.byType(ToolCallGroupCard));
       await tester.pumpAndSettle();
-      expect(find.byType(ThinkingRow), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
       expect(find.byType(ToolCallCard), findsOneWidget);
 
-      // 4) 点击 think 行展开完整思考文本。
+      // 3) 点击 think 行展开完整思考文本。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsOneWidget); // 展开成功
 
-      // 5) 再次点击 think 行折叠。
+      // 4) 再次点击 think 行折叠。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsNothing); // 折叠成功
@@ -276,23 +267,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 历史消息正文可见，过程胶囊默认折叠。
+      // 历史消息正文、工具卡片已渲染（思考已融合为工具卡子卡行）。
       expect(find.text('帮我分析代码'), findsOneWidget);
       expect(find.text('分析完毕，无任何错误。'), findsOneWidget);
-      expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
-      expect(find.text('思考 \u00D71, analyze_files \u00D71'), findsOneWidget);
-      expect(find.byType(ToolCallGroupCard), findsNothing);
-
-      // 展开过程胶囊 → ToolCallGroupCard 聚合卡出现
-      await tester.tap(find.byType(CollapsibleProcessCapsule));
-      await tester.pumpAndSettle();
+      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
       expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.text(fullThinking), findsNothing);
 
-      // 点击 ToolCallGroupCard 展开子卡 → 工具卡片与思考行平铺出现
+      // 展开工具卡 → think 行出现
       await tester.tap(find.byType(ToolCallGroupCard));
       await tester.pumpAndSettle();
-      expect(find.byType(ThinkingRow), findsOneWidget);
-      expect(find.byType(ToolCallCard), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
       expect(find.text(fullThinking), findsNothing); // think 行默认收起（预览）
 
@@ -300,243 +284,6 @@ void main() {
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullThinking), findsOneWidget);
-    });
-
-    testWidgets('error 异常轮次：含报错工具调用时不折叠，直接平铺展开带框工具卡', (tester) async {
-      final failedCall = ToolCall(
-        id: 't1',
-        name: 'bash',
-        args: {'cmd': const JsonString('exit 1')},
-        isCompleted: true,
-        isError: true,
-      );
-      final toolGroup = ToolCallGroup(
-        anchorMessageID: 'a1',
-        toolCalls: [failedCall],
-      );
-      const message = ChatMessage(
-        role: 'assistant',
-        content: '命令执行失败，请检查语法。',
-        messageId: 'a1',
-      );
-
-      await tester.pumpWidget(
-        CupertinoApp(
-          home: CupertinoPageScaffold(
-            child: SingleChildScrollView(
-              child: ChatMessageBubble(
-                message: message,
-                toolGroups: [toolGroup],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // error 轮次：不生成 CollapsibleProcessCapsule，ToolCallGroupCard 直接平铺在树中
-      expect(find.byType(CollapsibleProcessCapsule), findsNothing);
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-      expect(find.text('命令执行失败，请检查语法。'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.exclamationmark_triangle_fill), findsOneWidget);
-
-      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.exclamationmark_triangle), findsOneWidget);
-    });
-
-    testWidgets('无最终可见 text 异常轮次：assistant 消息 content 为空时不折叠，直接平铺展开', (
-      tester,
-    ) async {
-      final toolCall = ToolCall(
-        id: 't1',
-        name: 'read_file',
-        args: {'path': const JsonString('config.yaml')},
-        isCompleted: true,
-      );
-      final toolGroup = ToolCallGroup(
-        anchorMessageID: 'a1',
-        toolCalls: [toolCall],
-      );
-      const message = ChatMessage(
-        role: 'assistant',
-        content: '', // 空内容，无最终 text 锚点
-        messageId: 'a1',
-      );
-
-      await tester.pumpWidget(
-        CupertinoApp(
-          home: CupertinoPageScaffold(
-            child: SingleChildScrollView(
-              child: ChatMessageBubble(
-                message: message,
-                toolGroups: [toolGroup],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // 无最终 text 锚点：不包裹胶囊，ToolCallGroupCard 直接展开平铺
-      expect(find.byType(CollapsibleProcessCapsule), findsNothing);
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
-
-      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
-      await tester.tap(find.byType(ToolCallGroupCard));
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsOneWidget);
-    });
-
-    testWidgets('多 assistant 消息同轮次：以最后非空 text 为锚点，早段 text + 工具收进胶囊，展开后按时序还原', (
-      tester,
-    ) async {
-      final call1 = ToolCall(
-        id: 't1',
-        name: 'read_file',
-        args: {'path': const JsonString('pubspec.yaml')},
-        isCompleted: true,
-      );
-      final call2 = ToolCall(
-        id: 't2',
-        name: 'write_file',
-        args: {'path': const JsonString('lib/app.dart')},
-        isCompleted: true,
-      );
-
-      final group1 = ToolCallGroup(
-        anchorMessageID: 'a1',
-        toolCalls: [call1],
-      );
-      final group2 = ToolCallGroup(
-        anchorMessageID: 'a2',
-        toolCalls: [call2],
-      );
-
-      const m1 = ChatMessage(
-        role: 'assistant',
-        content: '第一步：正在读取配置文件。',
-        messageId: 'a1',
-      );
-      const m2 = ChatMessage(
-        role: 'assistant',
-        content: '第二步：已更新代码文件。',
-        messageId: 'a2',
-      );
-      const m3 = ChatMessage(
-        role: 'assistant',
-        content: '全部修改完成，测试通过！',
-        messageId: 'a3',
-      );
-
-      await tester.pumpWidget(
-        CupertinoApp(
-          home: CupertinoPageScaffold(
-            child: SingleChildScrollView(
-              child: ChatMessageBubble(
-                message: m3,
-                turnMessages: const [m1, m2, m3],
-                toolGroups: [group1, group2],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // 1) 初始态：胶囊收起，锚点文本（m3 的内容）常显在外部
-      expect(find.text('全部修改完成，测试通过！'), findsOneWidget);
-      expect(find.byType(CollapsibleProcessCapsule), findsOneWidget);
-      // 胶囊摘要包含本轮所有工具
-      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
-      // 胶囊收起时，早段文本与子卡片不在可视树中
-      expect(find.text('第一步：正在读取配置文件。'), findsNothing);
-      expect(find.text('第二步：已更新代码文件。'), findsNothing);
-      expect(find.byType(ToolCallGroupCard), findsNothing);
-      expect(find.byType(ToolCallCard), findsNothing);
-
-      // 2) 点击展开胶囊 → 按原时序还原：工具组1 → 早段文本1 → 工具组2 → 早段文本2
-      await tester.tap(find.byType(CollapsibleProcessCapsule));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
-      expect(find.text('第一步：正在读取配置文件。'), findsOneWidget);
-      expect(find.text('第二步：已更新代码文件。'), findsOneWidget);
-      // 锚点文本依然常显于外部
-      expect(find.text('全部修改完成，测试通过！'), findsOneWidget);
-
-      // 点击展开两个 ToolCallGroupCard 查看子卡
-      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
-        await tester.tap(find.byWidget(card.widget));
-      }
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
-    });
-
-    testWidgets('多 assistant 消息同轮且含 error 时全展开不折叠', (tester) async {
-      final call1 = ToolCall(
-        id: 't1',
-        name: 'read_file',
-        args: {'path': const JsonString('pubspec.yaml')},
-        isCompleted: true,
-      );
-      final call2 = ToolCall(
-        id: 't2',
-        name: 'bash',
-        args: {'cmd': const JsonString('flutter test')},
-        isCompleted: true,
-        isError: true,
-      );
-
-      final group1 = ToolCallGroup(
-        anchorMessageID: 'a1',
-        toolCalls: [call1],
-      );
-      final group2 = ToolCallGroup(
-        anchorMessageID: 'a2',
-        toolCalls: [call2],
-      );
-
-      const m1 = ChatMessage(
-        role: 'assistant',
-        content: '读取测试依赖中。',
-        messageId: 'a1',
-      );
-      const m2 = ChatMessage(
-        role: 'assistant',
-        content: '测试失败，请检查报错。',
-        messageId: 'a2',
-      );
-
-      await tester.pumpWidget(
-        CupertinoApp(
-          home: CupertinoPageScaffold(
-            child: SingleChildScrollView(
-              child: ChatMessageBubble(
-                message: m2,
-                turnMessages: const [m1, m2],
-                toolGroups: [group1, group2],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // error 轮：不包裹胶囊，全部直接平铺展开 ToolCallGroupCard
-      expect(find.byType(CollapsibleProcessCapsule), findsNothing);
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
-      expect(find.text('读取测试依赖中。'), findsOneWidget);
-      expect(find.text('测试失败，请检查报错。'), findsOneWidget);
-
-      // 点击展开两个 ToolCallGroupCard 查看子卡
-      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
-        await tester.tap(find.byWidget(card.widget));
-      }
-      await tester.pumpAndSettle();
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
     });
   });
 }

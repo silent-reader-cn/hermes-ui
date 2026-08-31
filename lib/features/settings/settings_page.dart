@@ -170,8 +170,6 @@ class _ChatSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final hideReasoning = ref.watch(hideReasoningProvider);
-    final collapseCompletedProcess =
-        ref.watch(collapseCompletedProcessProvider);
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     final composerTwoPane = ref.watch(composerTwoPaneProvider);
     final smoothStreaming = ref.watch(smoothStreamingProvider);
@@ -247,22 +245,6 @@ class _ChatSection extends ConsumerWidget {
             onChanged: (value) {
               unawaited(
                 ref.read(hideReasoningProvider.notifier).setHide(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-collapse-completed-process'),
-          title: Text(l10n.collapseCompletedProcess),
-          subtitle: Text(l10n.collapseCompletedProcessDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-collapse-completed-process'),
-            value: collapseCompletedProcess,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(collapseCompletedProcessProvider.notifier)
-                    .setCollapse(value),
               );
             },
           ),

@@ -19,7 +19,6 @@ import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
-import 'collapsible_process_capsule.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
@@ -1141,8 +1140,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final collapseEnabled = ref.watch(
       injectedNoticeSettingsProvider.select((s) => s.collapseInjectedNotices),
     );
-    final collapseCompletedProcess =
-        ref.watch(collapseCompletedProcessProvider);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final transcript = ref.watch(transcriptMessagesProvider(sessionId));
     final streaming = ref.watch(streamingMessageProvider(sessionId));
@@ -1177,44 +1174,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
       }
       entryToolGroups[entry.renderId] = matched;
-    }
-
-    final turnKeysByAssistantAnchor =
-        TranscriptTurnClassifier.assistantTurnKeysByAnchorID(
-          [for (final e in transcript) e.message],
-          messageOffset: ref.watch(
-            chatControllerProvider(sessionId).select((s) => s.messagesOffset),
-          ),
-        );
-
-    final transcriptItems = <_TranscriptListItem>[];
-    for (final entry in transcript) {
-      final role = entry.message.role;
-      final groups = entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
-      if (role == 'assistant') {
-        final turnKey = turnKeysByAssistantAnchor[entry.anchorId] ??
-            'turn:${entry.anchorId}';
-        if (transcriptItems.isNotEmpty &&
-            transcriptItems.last.isAssistantTurn &&
-            transcriptItems.last.turnKey == turnKey) {
-          transcriptItems.last.addEntry(entry, groups);
-        } else {
-          transcriptItems.add(
-            _TranscriptListItem.assistantTurn(
-              turnKey: turnKey,
-              primaryEntry: entry,
-              toolGroups: groups,
-            ),
-          );
-        }
-      } else {
-        transcriptItems.add(
-          _TranscriptListItem.single(
-            primaryEntry: entry,
-            toolGroups: groups,
-          ),
-        );
-      }
     }
 
     // 初始定位与搜索定位均以 postFrame 调度，避免 build 期间同步 markNeedsBuild
@@ -1355,7 +1314,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? 1
         : (liveTimeline.isEmpty ? 1 : liveTimeline.length);
 
-    var itemCount = transcriptItems.length + liveItemCount;
+    var itemCount = transcript.length + liveItemCount;
     if (phase == ChatPhase.sending) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
@@ -1485,61 +1444,42 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                 itemCount: itemCount,
                 itemBuilder: (context, index) {
                   // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-                  if (index < transcriptItems.length) {
-                    final item = transcriptItems[index];
-                    final noticeId = item.primaryEntry.message.id;
+                  if (index < transcript.length) {
+                    final entry = transcript[index];
+                    final groups =
+                        entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+                    final noticeId = entry.message.id;
                     final expanded = _expandedNoticeIds.contains(noticeId);
                     final isHighlightTarget =
                         _highlightTargetRenderId != null &&
-                        item.entries.any((e) => e.renderId == _highlightTargetRenderId);
+                        entry.renderId == _highlightTargetRenderId;
                     final entryKey = _itemKeys.putIfAbsent(
-                      item.primaryEntry.renderId,
+                      entry.renderId,
                       () => GlobalKey(),
                     );
-                    for (final e in item.entries) {
-                      if (e.renderId != item.primaryEntry.renderId) {
-                        _itemKeys.putIfAbsent(e.renderId, () => entryKey);
-                      }
-                      if (e.message.messageId != null &&
-                          e.message.messageId!.isNotEmpty) {
-                        _itemKeys.putIfAbsent(e.message.messageId!, () => entryKey);
-                      }
+                    if (entry.message.messageId != null &&
+                        entry.message.messageId!.isNotEmpty) {
+                      _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
                     }
-                    for (final g in item.toolGroups) {
+                    for (final g in groups) {
                       _itemKeys.putIfAbsent(g.id, () => entryKey);
-                    }
-
-                    ChatMessage messageToDisplay = item.primaryEntry.message;
-                    if (item.isAssistantTurn) {
-                      for (var i = item.entries.length - 1; i >= 0; i--) {
-                        final m = item.entries[i].message;
-                        if ((m.content ?? '').trim().isNotEmpty) {
-                          messageToDisplay = m;
-                          break;
-                        }
-                      }
                     }
 
                     return KeyedSubtree(
                       key: isHighlightTarget ? _highlightKey : entryKey,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onLongPress: () => _showMessageActions(messageToDisplay),
-                        onSecondaryTapDown: (_) => _showMessageActions(messageToDisplay),
+                        onLongPress: () => _showMessageActions(entry.message),
+                        onSecondaryTapDown: (_) => _showMessageActions(entry.message),
                         child: SearchMessageHighlight(
                           highlight: isHighlightTarget,
                           child: RepaintBoundary(
                             child: ChatMessageBubble(
-                              key: ValueKey(item.primaryEntry.renderId),
-                              message: messageToDisplay,
-                              turnMessages: item.isAssistantTurn
-                                  ? [for (final e in item.entries) e.message]
-                                  : null,
-                              toolGroups: item.toolGroups,
+                              key: ValueKey(entry.renderId),
+                              message: entry.message,
+                              toolGroups: groups,
                               hideThinking: hideThinking,
                               collapseInjectedEnabled: collapseEnabled,
-                              collapseCompletedProcess: collapseCompletedProcess,
-                              isStreaming: false,
                               injectedExpanded: expanded,
                               onToggleInjected: () {
                                 if (!mounted) return;
@@ -1557,7 +1497,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       ),
                     );
                   }
-                  var tail = index - transcriptItems.length;
+                  var tail = index - transcript.length;
                   if (showQueuedBanner) {
                     if (tail == 0) {
                       return QueuedBanner(
@@ -1619,7 +1559,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       return _FallbackToolReasoningCards(
                         toolGroups: toolGroups,
                         hideThinking: hideThinking,
-                        collapseCompletedProcess: collapseCompletedProcess,
                       );
                     }
                     tail--;
@@ -2119,78 +2058,25 @@ class _FallbackToolReasoningCards extends StatelessWidget {
   const _FallbackToolReasoningCards({
     required this.toolGroups,
     required this.hideThinking,
-    this.collapseCompletedProcess = true,
   });
 
   final List<ToolCallGroup> toolGroups;
   final bool hideThinking;
-  final bool collapseCompletedProcess;
 
   @override
   Widget build(BuildContext context) {
-    final toolCards = <Widget>[
-      for (final group in toolGroups)
-        if (group.toolCalls.any(
-            (c) => !c.isThinking || (!hideThinking && c.isThinking)))
-          ToolCallGroupCard(
-            group: group,
-            hideThinking: hideThinking,
-          ),
-    ];
-    final spacedToolCards = <Widget>[
-      for (var i = 0; i < toolCards.length; i++) ...[
-        toolCards[i],
-        if (i < toolCards.length - 1) const SizedBox(height: 6),
-      ],
-    ];
-
     // 复用与 assistant 气泡相同的 horizontal 12 外边距；区块间统一固定间距
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: collapseCompletedProcess
-          ? CollapsibleProcessCapsule(
-              toolGroups: toolGroups,
-              hideThinking: hideThinking,
-              children: spacedToolCards,
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: spacedToolCards,
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final group in toolGroups) ...[
+            ToolCallGroupCard(group: group, hideThinking: hideThinking),
+            if (group != toolGroups.last) const SizedBox(height: 8),
+          ],
+        ],
+      ),
     );
-  }
-}
-
-/// 转录列表聚合项（用于将同一 assistant 回合的多条消息聚合成单一气泡/项进行锚点折叠）。
-class _TranscriptListItem {
-  _TranscriptListItem.single({
-    required this.primaryEntry,
-    required List<ToolCallGroup> toolGroups,
-  })  : isAssistantTurn = false,
-        turnKey = null,
-        entries = [primaryEntry],
-        toolGroups = List.of(toolGroups);
-
-  _TranscriptListItem.assistantTurn({
-    required this.turnKey,
-    required this.primaryEntry,
-    required List<ToolCallGroup> toolGroups,
-  })  : isAssistantTurn = true,
-        entries = [primaryEntry],
-        toolGroups = List.of(toolGroups);
-
-  final bool isAssistantTurn;
-  final String? turnKey;
-  final TranscriptMessage primaryEntry;
-  final List<TranscriptMessage> entries;
-  final List<ToolCallGroup> toolGroups;
-
-  void addEntry(TranscriptMessage entry, List<ToolCallGroup> groups) {
-    entries.add(entry);
-    for (final g in groups) {
-      if (!toolGroups.any((existing) => existing.id == g.id)) {
-        toolGroups.add(g);
-      }
-    }
   }
 }

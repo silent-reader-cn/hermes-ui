@@ -24,7 +24,6 @@ import 'package:hermes_ui/features/notifications/turn_notification_service.dart'
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/settings/settings_page.dart';
 import 'package:hermes_ui/features/settings/settings_providers.dart';
-import 'package:hermes_ui/features/settings/tool_group_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../golden/golden_helpers.dart';
@@ -1616,46 +1615,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('settings-notify-push-test')), findsOneWidget);
       expect(tester.takeException(), isNull);
-    });
-  });
-
-  group('对话设置分组：过程折叠开关', () {
-    testWidgets('展示完成后自动折叠过程开关并支持切换持久化', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final container = await makeContainer(
-        api: buildApi(),
-        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
-        activeId: 'c1',
-      );
-      await pumpPage(tester, container, size: const Size(800, 1400));
-
-      expect(
-        find.byKey(const ValueKey('settings-collapse-completed-process')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('settings-switch-collapse-completed-process')),
-        findsOneWidget,
-      );
-
-      final switchWidget = tester.widget<CupertinoSwitch>(
-        find.byKey(const ValueKey('settings-switch-collapse-completed-process')),
-      );
-      expect(switchWidget.value, isTrue);
-
-      // 切换开关
-      await tester.tap(
-        find.byKey(const ValueKey('settings-switch-collapse-completed-process')),
-      );
-      await tester.pumpAndSettle();
-
-      final updatedSwitch = tester.widget<CupertinoSwitch>(
-        find.byKey(const ValueKey('settings-switch-collapse-completed-process')),
-      );
-      expect(updatedSwitch.value, isFalse);
-
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(kCollapseCompletedProcessKey), isFalse);
     });
   });
 

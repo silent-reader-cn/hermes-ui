@@ -1073,46 +1073,6 @@ class AppLocalizations {
   String get hideThinkingDesc => isEnglish
       ? 'Hide thinking cards entirely, leaving text and tool cards only'
       : '完全隐藏思考卡片，仅保留文本与工具卡片';
-  String get collapseCompletedProcess =>
-      isEnglish ? 'Collapse process when completed' : '完成后自动折叠过程';
-  String get collapseCompletedProcessDesc => isEnglish
-      ? 'Fold reasoning, tools, and notices into a summary capsule after turn completion'
-      : '回合完成后将思考/工具/通知折叠为摘要胶囊，保留最终文本展开';
-  String get processCapsuleThinking => isEnglish ? 'Thinking' : '思考';
-  String processCapsuleTools(int count) =>
-      isEnglish ? '$count ${count == 1 ? 'tool' : 'tools'}' : '$count 工具';
-  String processCapsuleNotices(int count) =>
-      isEnglish ? '$count ${count == 1 ? 'notice' : 'notices'}' : '$count 通知';
-
-  /// 过程折叠胶囊摘要文案生成（如"思考 · 3 工具 · 2 通知"）。
-  String formatProcessCapsuleSummary({
-    required bool hasThinking,
-    required int toolCount,
-    int noticeCount = 0,
-    double? durationSeconds,
-  }) {
-    final parts = <String>[];
-    if (hasThinking) {
-      if (durationSeconds != null && durationSeconds > 0) {
-        final s = durationSeconds >= 10
-            ? durationSeconds.toStringAsFixed(0)
-            : durationSeconds.toStringAsFixed(1);
-        parts.add(isEnglish ? 'Thought for ${s}s' : '思考 ${s}s');
-      } else {
-        parts.add(isEnglish ? 'Thinking' : '思考');
-      }
-    }
-    if (toolCount > 0) {
-      parts.add(processCapsuleTools(toolCount));
-    }
-    if (noticeCount > 0) {
-      parts.add(processCapsuleNotices(noticeCount));
-    }
-    if (parts.isEmpty) {
-      return isEnglish ? 'Process' : '过程';
-    }
-    return parts.join(' · ');
-  }
   String get sendMessageShortcutLabel => isEnglish ? 'Send Message' : '发送消息';
   String get sendShortcutEnter => isEnglish ? 'Enter to send' : 'Enter 发送';
   String get sendShortcutCtrlEnter =>
