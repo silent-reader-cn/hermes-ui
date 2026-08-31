@@ -4,11 +4,14 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show SelectableText;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
+import 'app/theme/cupertino_theme.dart';
 import 'core/api/cookie_store.dart';
 import 'core/cache/app_database.dart';
 import 'core/cache/cache_providers.dart';
@@ -21,7 +24,7 @@ import 'features/diagnostics/diagnostics_service.dart';
 import 'features/notifications/background_keepalive_service.dart';
 import 'features/notifications/notification_providers.dart';
 
-/// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8）。
+/// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8 / active.md §1）。
 class RecoverableErrorCard extends StatefulWidget {
   const RecoverableErrorCard({
     super.key,
@@ -40,58 +43,258 @@ class RecoverableErrorCard extends StatefulWidget {
 
 class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
   bool _retried = false;
+  bool _expanded = false;
+  bool _copied = false;
+  Timer? _copiedResetTimer;
+
+  @override
+  void dispose() {
+    _copiedResetTimer?.cancel();
+    super.dispose();
+  }
+
+  String get _displayText {
+    if (widget.message != null && widget.message!.trim().isNotEmpty) {
+      return widget.message!;
+    }
+    final exceptionStr = widget.details?.exceptionAsString();
+    if (exceptionStr != null && exceptionStr.trim().isNotEmpty) {
+      return exceptionStr;
+    }
+    return '已断开 / 网络错误，重试';
+  }
+
+  bool get _hasDetails => widget.details != null;
+
+  String _buildDetailsText() {
+    if (widget.details == null) {
+      return widget.message ?? '';
+    }
+    final d = widget.details!;
+    final buffer = StringBuffer();
+    final ex = d.exceptionAsString();
+    if (ex.isNotEmpty) {
+      buffer.writeln(ex);
+    }
+    if (d.library != null && d.library!.isNotEmpty) {
+      buffer.writeln('Library: ${d.library}');
+    }
+    if (d.context != null) {
+      buffer.writeln('Context: ${d.context}');
+    }
+    if (d.stack != null) {
+      buffer.writeln('\nStackTrace:');
+      buffer.writeln(d.stack.toString());
+    }
+    final result = buffer.toString().trim();
+    if (result.isEmpty) {
+      return d.toString();
+    }
+    return result;
+  }
+
+  Future<void> _copyDetails(String text) async {
+    setState(() => _copied = true);
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    _copiedResetTimer?.cancel();
+    _copiedResetTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final displayText = widget.message ?? '已断开 / 网络错误，重试';
+    final bgColor =
+        CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    final detailBgColor =
+        CupertinoColors.tertiarySystemGroupedBackground.resolveFrom(context);
+    final primaryTextColor = CupertinoColors.label.resolveFrom(context);
+    final secondaryTextColor =
+        CupertinoColors.secondaryLabel.resolveFrom(context);
+    final redColor = CupertinoColors.systemRed.resolveFrom(context);
+    final blueColor = CupertinoColors.activeBlue.resolveFrom(context);
+    final greenColor = CupertinoColors.systemGreen.resolveFrom(context);
+    final separatorColor = CupertinoColors.separator.resolveFrom(context);
+
+    final displayText = _displayText;
+    final detailsText = _hasDetails ? _buildDetailsText() : '';
+
     Widget card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E).withValues(alpha: 0.08),
+        color: bgColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: CupertinoColors.systemRed.withValues(alpha: 0.3),
+          color: redColor.withValues(alpha: 0.35),
           width: 1,
         ),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(
-            CupertinoIcons.exclamationmark_triangle_fill,
-            color: CupertinoColors.systemRed,
-            size: 20,
+          Row(
+            children: [
+              Icon(
+                CupertinoIcons.exclamationmark_triangle_fill,
+                color: redColor,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  displayText,
+                  style: TextStyle(
+                    fontFamily: kAppFontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: primaryTextColor,
+                    decoration: TextDecoration.none,
+                  ),
+                  maxLines: _expanded ? 10 : 2,
+                  overflow:
+                      _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (_hasDetails) ...[
+                CupertinoButton(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _expanded ? '收起' : '详情',
+                        style: TextStyle(
+                          fontFamily: kAppFontFamily,
+                          fontSize: 12,
+                          color: blueColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        _expanded
+                            ? CupertinoIcons.chevron_up
+                            : CupertinoIcons.chevron_down,
+                        size: 12,
+                        color: blueColor,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                minimumSize: Size.zero,
+                color: blueColor,
+                borderRadius: BorderRadius.circular(8),
+                onPressed: () {
+                  setState(() => _retried = true);
+                  widget.onRetry?.call();
+                },
+                child: Text(
+                  _retried ? '已重试' : '重试',
+                  style: const TextStyle(
+                    fontFamily: kAppFontFamily,
+                    fontSize: 12,
+                    color: CupertinoColors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              displayText,
-              style: const TextStyle(
-                fontSize: 14,
-                color: CupertinoColors.label,
-                decoration: TextDecoration.none,
+          if (_expanded && _hasDetails) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: detailBgColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: separatorColor.withValues(alpha: 0.4),
+                  width: 0.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '异常详情',
+                        style: TextStyle(
+                          fontFamily: kAppFontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: secondaryTextColor,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        minimumSize: Size.zero,
+                        onPressed: () => _copyDetails(detailsText),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _copied
+                                  ? CupertinoIcons.check_mark
+                                  : CupertinoIcons.doc_on_doc,
+                              size: 12,
+                              color: _copied ? greenColor : blueColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _copied ? '已复制' : '复制详情',
+                              style: TextStyle(
+                                fontFamily: kAppFontFamily,
+                                fontSize: 11,
+                                color: _copied ? greenColor : blueColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        detailsText,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          height: 1.4,
+                          color: primaryTextColor,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            color: CupertinoColors.activeBlue,
-            borderRadius: BorderRadius.circular(8),
-            onPressed: () {
-              setState(() => _retried = true);
-              widget.onRetry?.call();
-            },
-            child: Text(
-              _retried ? '已重试' : '重试',
-              style: const TextStyle(
-                fontSize: 12,
-                color: CupertinoColors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          ],
         ],
       ),
     );

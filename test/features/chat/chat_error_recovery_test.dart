@@ -1,4 +1,4 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
@@ -50,7 +50,7 @@ void main() {
           ),
         );
 
-        expect(find.text('已断开 / 网络错误，重试'), findsOneWidget);
+        expect(find.text('Exception: Simulated network/render error'), findsOneWidget);
         expect(find.byType(RecoverableErrorCard), findsOneWidget);
       } finally {
         ErrorWidget.builder = oldBuilder;

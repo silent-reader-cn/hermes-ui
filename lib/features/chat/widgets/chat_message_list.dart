@@ -1179,6 +1179,44 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       entryToolGroups[entry.renderId] = matched;
     }
 
+    final turnKeysByAssistantAnchor =
+        TranscriptTurnClassifier.assistantTurnKeysByAnchorID(
+          [for (final e in transcript) e.message],
+          messageOffset: ref.watch(
+            chatControllerProvider(sessionId).select((s) => s.messagesOffset),
+          ),
+        );
+
+    final transcriptItems = <_TranscriptListItem>[];
+    for (final entry in transcript) {
+      final role = entry.message.role;
+      final groups = entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+      if (role == 'assistant') {
+        final turnKey = turnKeysByAssistantAnchor[entry.anchorId] ??
+            'turn:${entry.anchorId}';
+        if (transcriptItems.isNotEmpty &&
+            transcriptItems.last.isAssistantTurn &&
+            transcriptItems.last.turnKey == turnKey) {
+          transcriptItems.last.addEntry(entry, groups);
+        } else {
+          transcriptItems.add(
+            _TranscriptListItem.assistantTurn(
+              turnKey: turnKey,
+              primaryEntry: entry,
+              toolGroups: groups,
+            ),
+          );
+        }
+      } else {
+        transcriptItems.add(
+          _TranscriptListItem.single(
+            primaryEntry: entry,
+            toolGroups: groups,
+          ),
+        );
+      }
+    }
+
     // 初始定位与搜索定位均以 postFrame 调度，避免 build 期间同步 markNeedsBuild
     // 或在 dependents 未就绪时触发 listen 副作用。
     _positionInitialView(
@@ -1317,7 +1355,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? 1
         : (liveTimeline.isEmpty ? 1 : liveTimeline.length);
 
-    var itemCount = transcript.length + liveItemCount;
+    var itemCount = transcriptItems.length + liveItemCount;
     if (phase == ChatPhase.sending) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
@@ -1424,7 +1462,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     _pinnedTranscriptCount = ref
                         .read(transcriptMessagesProvider(widget.sessionId))
                         .length;
-                  }
+                    }
                   _userHasScrolled = true;
                   _nearBottom = false;
                   if (wasNotScrolled && mounted) {
@@ -1447,40 +1485,57 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                 itemCount: itemCount,
                 itemBuilder: (context, index) {
                   // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-                  if (index < transcript.length) {
-                    final entry = transcript[index];
-                    final groups =
-                        entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
-                    final noticeId = entry.message.id;
+                  if (index < transcriptItems.length) {
+                    final item = transcriptItems[index];
+                    final noticeId = item.primaryEntry.message.id;
                     final expanded = _expandedNoticeIds.contains(noticeId);
                     final isHighlightTarget =
                         _highlightTargetRenderId != null &&
-                        entry.renderId == _highlightTargetRenderId;
+                        item.entries.any((e) => e.renderId == _highlightTargetRenderId);
                     final entryKey = _itemKeys.putIfAbsent(
-                      entry.renderId,
+                      item.primaryEntry.renderId,
                       () => GlobalKey(),
                     );
-                    if (entry.message.messageId != null &&
-                        entry.message.messageId!.isNotEmpty) {
-                      _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
+                    for (final e in item.entries) {
+                      if (e.renderId != item.primaryEntry.renderId) {
+                        _itemKeys.putIfAbsent(e.renderId, () => entryKey);
+                      }
+                      if (e.message.messageId != null &&
+                          e.message.messageId!.isNotEmpty) {
+                        _itemKeys.putIfAbsent(e.message.messageId!, () => entryKey);
+                      }
                     }
-                    for (final g in groups) {
+                    for (final g in item.toolGroups) {
                       _itemKeys.putIfAbsent(g.id, () => entryKey);
+                    }
+
+                    ChatMessage messageToDisplay = item.primaryEntry.message;
+                    if (item.isAssistantTurn) {
+                      for (var i = item.entries.length - 1; i >= 0; i--) {
+                        final m = item.entries[i].message;
+                        if ((m.content ?? '').trim().isNotEmpty) {
+                          messageToDisplay = m;
+                          break;
+                        }
+                      }
                     }
 
                     return KeyedSubtree(
                       key: isHighlightTarget ? _highlightKey : entryKey,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onLongPress: () => _showMessageActions(entry.message),
-                        onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+                        onLongPress: () => _showMessageActions(messageToDisplay),
+                        onSecondaryTapDown: (_) => _showMessageActions(messageToDisplay),
                         child: SearchMessageHighlight(
                           highlight: isHighlightTarget,
                           child: RepaintBoundary(
                             child: ChatMessageBubble(
-                              key: ValueKey(entry.renderId),
-                              message: entry.message,
-                              toolGroups: groups,
+                              key: ValueKey(item.primaryEntry.renderId),
+                              message: messageToDisplay,
+                              turnMessages: item.isAssistantTurn
+                                  ? [for (final e in item.entries) e.message]
+                                  : null,
+                              toolGroups: item.toolGroups,
                               hideThinking: hideThinking,
                               collapseInjectedEnabled: collapseEnabled,
                               collapseCompletedProcess: collapseCompletedProcess,
@@ -1502,7 +1557,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       ),
                     );
                   }
-                  var tail = index - transcript.length;
+                  var tail = index - transcriptItems.length;
                   if (showQueuedBanner) {
                     if (tail == 0) {
                       return QueuedBanner(
@@ -2103,5 +2158,39 @@ class _FallbackToolReasoningCards extends StatelessWidget {
               children: spacedToolCards,
             ),
     );
+  }
+}
+
+/// 转录列表聚合项（用于将同一 assistant 回合的多条消息聚合成单一气泡/项进行锚点折叠）。
+class _TranscriptListItem {
+  _TranscriptListItem.single({
+    required this.primaryEntry,
+    required List<ToolCallGroup> toolGroups,
+  })  : isAssistantTurn = false,
+        turnKey = null,
+        entries = [primaryEntry],
+        toolGroups = List.of(toolGroups);
+
+  _TranscriptListItem.assistantTurn({
+    required this.turnKey,
+    required this.primaryEntry,
+    required List<ToolCallGroup> toolGroups,
+  })  : isAssistantTurn = true,
+        entries = [primaryEntry],
+        toolGroups = List.of(toolGroups);
+
+  final bool isAssistantTurn;
+  final String? turnKey;
+  final TranscriptMessage primaryEntry;
+  final List<TranscriptMessage> entries;
+  final List<ToolCallGroup> toolGroups;
+
+  void addEntry(TranscriptMessage entry, List<ToolCallGroup> groups) {
+    entries.add(entry);
+    for (final g in groups) {
+      if (!toolGroups.any((existing) => existing.id == g.id)) {
+        toolGroups.add(g);
+      }
+    }
   }
 }

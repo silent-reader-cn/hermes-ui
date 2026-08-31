@@ -179,11 +179,26 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
   }
 
   void _showPopover() {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final screenWidth = mediaQuery?.size.width ?? 800.0;
+
+    double preferredWidth = 220.0;
+    final renderBox =
+        _anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.attached) {
+      final anchorTopLeft = renderBox.localToGlobal(Offset.zero);
+      // 从锚点左侧向右可用宽度（留出 8px 安全边距），clamp 在 [220, 320]
+      final availableFromAnchor = screenWidth - anchorTopLeft.dx - 8.0;
+      preferredWidth = availableFromAnchor.clamp(220.0, 320.0);
+    } else {
+      preferredWidth = (screenWidth - 16.0).clamp(220.0, 320.0);
+    }
+
     unawaited(
       showCupertinoPopover(
         context: context,
         anchorKey: _anchorKey,
-        preferredWidth: 220,
+        preferredWidth: preferredWidth,
         preferredHeight: 85,
         maxHeight: 130,
         placement: PopoverPlacement.top,
@@ -367,23 +382,28 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     required Color valueColor,
     required Color secondaryColor,
   }) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label ',
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          child: Text(
+            label,
             style: TextStyle(fontSize: 10, color: secondaryColor),
           ),
-          Text(
-            '${percent.toStringAsFixed(0)}%',
-            style: TextStyle(fontSize: 10, color: valueColor),
+        ),
+        SizedBox(
+          width: 36,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${percent.toStringAsFixed(0)}%',
+              style: TextStyle(fontSize: 10, color: valueColor),
+            ),
           ),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 60,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SizedBox(
             height: 18,
             child: points.length >= 2
                 ? CustomPaint(
@@ -394,8 +414,55 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
                   )
                 : const SizedBox.shrink(),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildDiskRow({
+    required String label,
+    required double percent,
+    required int usedBytes,
+    required int totalBytes,
+    required Color valueColor,
+    required Color secondaryColor,
+  }) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 10, color: secondaryColor),
+          ),
+        ),
+        SizedBox(
+          width: 36,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${percent.toStringAsFixed(0)}%',
+              style: TextStyle(fontSize: 10, color: valueColor),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            height: 18,
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${_formatBytes(usedBytes)}/${_formatBytes(totalBytes)}',
+                style: TextStyle(fontSize: 10, color: secondaryColor),
+                maxLines: 1,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -448,7 +515,7 @@ class _PerfMonitorPopoverContent extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // CPU 折线 + 标签
               _PerfMonitorPanelState._buildChartRow(
@@ -470,27 +537,14 @@ class _PerfMonitorPopoverContent extends StatelessWidget {
                 secondaryColor: secondaryColor,
               ),
               const SizedBox(height: 4),
-              // DISK 仅数字，不画折线（FittedBox 自适应）
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${l10n.perfMonitorDisk} ',
-                      style: TextStyle(fontSize: 10, color: secondaryColor),
-                    ),
-                    Text(
-                      '${data.disk.percent.toStringAsFixed(0)}%',
-                      style: TextStyle(fontSize: 10, color: diskColor),
-                    ),
-                    Text(
-                      ' ${_PerfMonitorPanelState._formatBytes(data.disk.usedBytes)}/${_PerfMonitorPanelState._formatBytes(data.disk.totalBytes)}',
-                      style: TextStyle(fontSize: 10, color: secondaryColor),
-                    ),
-                  ],
-                ),
+              // DISK 仅数字，不画折线
+              _PerfMonitorPanelState._buildDiskRow(
+                label: l10n.perfMonitorDisk,
+                percent: data.disk.percent,
+                usedBytes: data.disk.usedBytes,
+                totalBytes: data.disk.totalBytes,
+                valueColor: diskColor,
+                secondaryColor: secondaryColor,
               ),
             ],
           ),

@@ -276,5 +276,38 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('外壳无框且展开后支持平铺文本与带框卡片', (tester) async {
+      final group = ToolCallGroup(
+        toolCalls: [
+          ToolCall(name: 'read_file', isCompleted: true),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          child: CollapsibleProcessCapsule(
+            toolGroups: [group],
+            children: [
+              ToolCallCard(call: group.toolCalls[0]),
+              const Text('早段说明文本'),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 默认折叠态：无外框（仅标题行），子项不可见
+      expect(find.byKey(const ValueKey('collapsible-process-capsule')), findsOneWidget);
+      expect(find.byType(ToolCallCard), findsNothing);
+      expect(find.text('早段说明文本'), findsNothing);
+
+      // 展开：工具卡片与文本均渲染
+      await tester.tap(find.byKey(const ValueKey('process-capsule-header')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ToolCallCard), findsOneWidget);
+      expect(find.text('早段说明文本'), findsOneWidget);
+    });
   });
 }

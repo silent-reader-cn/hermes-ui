@@ -617,9 +617,9 @@ void main() {
       expect(attachTopAfter, equals(attachTopBefore));
 
       // 悬浮卡片包含 CPU / MEM / DISK 内容
-      expect(find.textContaining('CPU '), findsWidgets);
-      expect(find.textContaining('MEM '), findsWidgets);
-      expect(find.textContaining('DISK '), findsOneWidget);
+      expect(find.textContaining('CPU'), findsWidgets);
+      expect(find.textContaining('MEM'), findsWidgets);
+      expect(find.textContaining('DISK'), findsOneWidget);
       expect(find.textContaining('70%'), findsOneWidget);
 
       // 点击外部遮罩收起

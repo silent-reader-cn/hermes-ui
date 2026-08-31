@@ -32,6 +32,7 @@ class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
     super.key,
     required this.message,
+    this.turnMessages,
     this.toolGroups = const [],
     this.reasoningGroups = const [],
     this.baseUrl,
@@ -46,6 +47,9 @@ class ChatMessageBubble extends StatelessWidget {
   });
 
   final ChatMessage message;
+
+  /// 同一回合内的全部 assistant 消息（多消息同轮时用于锚点聚合与折叠）。
+  final List<ChatMessage>? turnMessages;
 
   /// 锚定本消息的工具调用组（由列表按 anchorMessageId 分组后传入）。
   final List<ToolCallGroup> toolGroups;
@@ -157,6 +161,7 @@ class ChatMessageBubble extends StatelessWidget {
             width: double.infinity,
             child: _AssistantContent(
               message: message,
+              turnMessages: turnMessages,
               toolGroups: toolGroups,
               reasoningGroups: reasoningGroups,
               hideThinking: hideThinking,
@@ -269,6 +274,7 @@ class _UserContent extends StatelessWidget {
 class _AssistantContent extends StatelessWidget {
   const _AssistantContent({
     required this.message,
+    this.turnMessages,
     required this.toolGroups,
     required this.reasoningGroups,
     required this.hideThinking,
@@ -280,6 +286,7 @@ class _AssistantContent extends StatelessWidget {
   });
 
   final ChatMessage message;
+  final List<ChatMessage>? turnMessages;
   final List<ToolCallGroup> toolGroups;
   final List<ReasoningGroup> reasoningGroups;
   final bool hideThinking;
@@ -291,62 +298,254 @@ class _AssistantContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = message.content ?? '';
-    // SelectedContext 解析：assistant 历史内容也可能包含同格式块（兼容性）
-    // 同样先解析选中块，再对 cleanText 做媒体解析，渲染顺序：卡片→正文
-    final selected = SelectedContextParser.parse(content);
-    final blocks = selected.blocks;
-    final cleanText = selected.cleanText;
-    final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
+    final effectiveTurnMessages =
+        turnMessages != null && turnMessages!.isNotEmpty
+            ? turnMessages!
+            : [message];
 
     // 渲染层去重兜底：completed 与 live 双份（重连/重放场景）时只显示一份。
     // 思考子卡已由 provider 融合进工具组（ToolCallGroup 内 think 行），
     // 不再独立渲染思考卡。
     final distinctTools = _distinctToolGroups(toolGroups);
+    final hasFailed = distinctTools.any((g) => g.hasFailedTool) ||
+        distinctTools.any((g) => g.toolCalls.any((c) => c.isError == true));
 
-    // 统一间距模型：各区块（选中上下文卡片 / 工具卡(思考+工具) / 正文 / 速率）
-    // 之间固定 [kMessageSectionGap]。
-    final sections = <Widget>[];
-    if (blocks.isNotEmpty) {
-      sections.add(SelectedContextCardGroup(blocks: blocks));
+    // 判定口径 2：最后可见 text 锚点：轮次内所有 role==assistant 的 content.trim().isNotEmpty 的最后一条即锚点
+    ChatMessage? anchorMessage;
+    for (var i = effectiveTurnMessages.length - 1; i >= 0; i--) {
+      final m = effectiveTurnMessages[i];
+      if ((m.content ?? '').trim().isNotEmpty) {
+        anchorMessage = m;
+        break;
+      }
     }
-    // 真实时序对齐（Hermes 流序：思考 → 工具 → 文本）：工具卡
-    // （含思考子卡行）渲染在正文文本上方——遇 think/tool 建卡吸收连续
-    // think/tool，遇 text 打断为独立正文段。
+
+    final hasAnchorText = anchorMessage != null;
+
+    // 工具组按所属消息关联（单消息全归属；多消息按 anchorMessageID 关联，兜底归首条）
+    final toolsByMessage = <ChatMessage, List<ToolCallGroup>>{};
+    if (effectiveTurnMessages.length == 1) {
+      toolsByMessage[effectiveTurnMessages.first] = distinctTools;
+    } else {
+      final unassigned = <ToolCallGroup>[];
+      for (final g in distinctTools) {
+        ChatMessage? matchedMsg;
+        for (var i = 0; i < effectiveTurnMessages.length; i++) {
+          final m = effectiveTurnMessages[i];
+          final anchorId = TranscriptTurnClassifier.anchorID(m, at: i);
+          if ((m.messageId != null &&
+                  m.messageId!.isNotEmpty &&
+                  g.anchorMessageID == m.messageId) ||
+              (g.anchorMessageID != null && g.anchorMessageID == anchorId)) {
+            matchedMsg = m;
+            break;
+          }
+        }
+        if (matchedMsg != null) {
+          toolsByMessage.putIfAbsent(matchedMsg, () => []).add(g);
+        } else {
+          unassigned.add(g);
+        }
+      }
+      if (unassigned.isNotEmpty) {
+        toolsByMessage
+            .putIfAbsent(effectiveTurnMessages.first, () => [])
+            .insertAll(0, unassigned);
+      }
+    }
+
     final hasVisibleTools = distinctTools.any((g) => g.toolCalls.any(
         (c) => !c.isThinking || (!hideThinking && c.isThinking)));
 
-    if (hasVisibleTools) {
-      final toolCards = <Widget>[
-        for (final group in distinctTools)
-          for (final call in group.toolCalls)
-            if (call.isThinking) ...[
-              if (!hideThinking) ThinkingRow(call: call),
-            ] else ...[
-              ToolCallCard(call: call),
-            ],
-      ];
-      final spacedToolCards = <Widget>[
-        for (var i = 0; i < toolCards.length; i++) ...[
-          toolCards[i],
-          if (i < toolCards.length - 1) const SizedBox(height: 6),
-        ],
-      ];
+    final hasEarlierText = anchorMessage != null &&
+        effectiveTurnMessages
+            .takeWhile((m) => m != anchorMessage)
+            .any((m) => (m.content ?? '').trim().isNotEmpty);
 
-      if (collapseCompletedProcess && !isStreaming) {
+    final hasProcessToFold = hasVisibleTools || hasEarlierText;
+
+    // 判定口径 3 & 4：error 除外不折叠；无最终 text 除外不折叠
+    final shouldCollapse = collapseCompletedProcess &&
+        !isStreaming &&
+        !hasFailed &&
+        hasAnchorText &&
+        hasProcessToFold;
+
+    final sections = <Widget>[];
+
+    if (shouldCollapse) {
+      // 折叠态：锚点 text 之前的所有内容收进 CollapsibleProcessCapsule
+      final capsuleChildren = <Widget>[];
+      final toolsInCapsule = <ToolCallGroup>[];
+
+      for (final m in effectiveTurnMessages) {
+        final msgTools = toolsByMessage[m] ?? const <ToolCallGroup>[];
+        if (msgTools.isNotEmpty) {
+          final toolCards = _buildToolCards(
+            toolGroups: msgTools,
+            hideThinking: hideThinking,
+          );
+          if (toolCards.isNotEmpty) {
+            toolsInCapsule.addAll(msgTools);
+            capsuleChildren.addAll(toolCards);
+          }
+        }
+
+        if (m != anchorMessage) {
+          if ((m.content ?? '').trim().isNotEmpty) {
+            capsuleChildren.add(
+              _buildMarkdownBody(
+                context: context,
+                content: m.content!,
+                baseUrl: baseUrl,
+                sessionId: sessionId,
+                customHeaders: customHeaders,
+              ),
+            );
+          }
+        } else {
+          // 到达锚点消息：锚点前工具已入胶囊，锚点文本在胶囊外常显
+          break;
+        }
+      }
+
+      if (capsuleChildren.isNotEmpty) {
+        final spacedCapsuleChildren = <Widget>[
+          for (var i = 0; i < capsuleChildren.length; i++) ...[
+            capsuleChildren[i],
+            if (i < capsuleChildren.length - 1) const SizedBox(height: 6),
+          ],
+        ];
+
         sections.add(
           CollapsibleProcessCapsule(
-            toolGroups: distinctTools,
+            toolGroups:
+                toolsInCapsule.isNotEmpty ? toolsInCapsule : distinctTools,
             hideThinking: hideThinking,
-            children: spacedToolCards,
+            children: spacedCapsuleChildren,
           ),
         );
-      } else {
-        sections.addAll(spacedToolCards);
+      }
+
+      // 锚点文本常显于胶囊外
+      if ((anchorMessage.content ?? '').trim().isNotEmpty) {
+        sections.add(
+          _buildMarkdownBody(
+            context: context,
+            content: anchorMessage.content!,
+            baseUrl: baseUrl,
+            sessionId: sessionId,
+            customHeaders: customHeaders,
+          ),
+        );
+      }
+
+      final lastMsg = effectiveTurnMessages.last;
+      if (lastMsg.turnTps != null) {
+        sections.add(
+          Text(
+            '${lastMsg.turnTps!.toStringAsFixed(1)} tok/s',
+            style: TextStyle(
+              fontSize: 11,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+        );
+      }
+    } else {
+      // 例外态（报错轮 / 无最终 text 轮 / 设置关闭折叠 / 流式中）：全展开不折叠
+      for (var idx = 0; idx < effectiveTurnMessages.length; idx++) {
+        final m = effectiveTurnMessages[idx];
+        final msgTools = toolsByMessage[m] ??
+            (effectiveTurnMessages.length == 1
+                ? distinctTools
+                : const <ToolCallGroup>[]);
+        if (msgTools.isNotEmpty) {
+          final toolCards = _buildToolCards(
+            toolGroups: msgTools,
+            hideThinking: hideThinking,
+          );
+          if (toolCards.isNotEmpty) {
+            for (var i = 0; i < toolCards.length; i++) {
+              sections.add(toolCards[i]);
+            }
+          }
+        }
+
+        if ((m.content ?? '').trim().isNotEmpty) {
+          sections.add(
+            _buildMarkdownBody(
+              context: context,
+              content: m.content!,
+              baseUrl: baseUrl,
+              sessionId: sessionId,
+              customHeaders: customHeaders,
+            ),
+          );
+        }
+
+        if (m.turnTps != null && idx == effectiveTurnMessages.length - 1) {
+          sections.add(
+            Text(
+              '${m.turnTps!.toStringAsFixed(1)} tok/s',
+              style: TextStyle(
+                fontSize: 11,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          );
+        }
       }
     }
+
+    final children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) children.add(const SizedBox(height: kMessageSectionGap));
+      children.add(sections[i]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  static List<Widget> _buildToolCards({
+    required List<ToolCallGroup> toolGroups,
+    required bool hideThinking,
+  }) {
+    final toolCards = <Widget>[
+      for (final group in toolGroups)
+        for (final call in group.toolCalls)
+          if (call.isThinking) ...[
+            if (!hideThinking) ThinkingRow(call: call),
+          ] else ...[
+            ToolCallCard(call: call),
+          ],
+    ];
+    return toolCards;
+  }
+
+  static Widget _buildMarkdownBody({
+    required BuildContext context,
+    required String content,
+    String? baseUrl,
+    String? sessionId,
+    Map<String, String>? customHeaders,
+  }) {
+    final selected = SelectedContextParser.parse(content);
+    final blocks = selected.blocks;
+    final cleanText = selected.cleanText;
+    final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
+
+    final widgets = <Widget>[];
+    if (blocks.isNotEmpty) {
+      widgets.add(SelectedContextCardGroup(blocks: blocks));
+    }
     if (parsedContent.isNotEmpty) {
-      sections.add(
+      if (widgets.isNotEmpty) {
+        widgets.add(const SizedBox(height: 6));
+      }
+      widgets.add(
         MarkdownBody(
           data: parsedContent,
           selectable: true,
@@ -366,26 +565,12 @@ class _AssistantContent extends StatelessWidget {
         ),
       );
     }
-    if (message.turnTps != null) {
-      sections.add(
-        Text(
-          '${message.turnTps!.toStringAsFixed(1)} tok/s',
-          style: TextStyle(
-            fontSize: 11,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          ),
-        ),
-      );
-    }
-
-    final children = <Widget>[];
-    for (var i = 0; i < sections.length; i++) {
-      if (i > 0) children.add(const SizedBox(height: kMessageSectionGap));
-      children.add(sections[i]);
-    }
+    if (widgets.isEmpty) return const SizedBox.shrink();
+    if (widgets.length == 1) return widgets.first;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
+      mainAxisSize: MainAxisSize.min,
+      children: widgets,
     );
   }
 
