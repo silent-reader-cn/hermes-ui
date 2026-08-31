@@ -13,13 +13,19 @@ import 'package:hermes_ui/features/prompts/widgets/saved_prompts_sheet.dart';
 
 import '../../helpers/fake_prompts_api.dart';
 
-ProviderScope wrap(Widget child, FakePromptsApi api, {List<Override> extra = const []}) {
+ProviderScope wrap(
+  Widget child,
+  FakePromptsApi api, {
+  List<Override> extra = const [],
+}) {
   return ProviderScope(
     overrides: [
       // Minimal apiClient to satisfy provider factory dep (build not used when
       // promptsApiFactory overridden, but required by some code paths).
       // Use test local base.
-      apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+      apiClientProvider.overrideWithValue(
+        ApiClient(baseUrl: 'http://test.local:30002'),
+      ),
       promptsApiFactoryProvider.overrideWithValue((_) => api),
       ...extra,
     ],
@@ -57,7 +63,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('暂无收藏提示词'), findsOneWidget);
-      expect(find.byKey(const ValueKey('saved-prompts-save-current')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('saved-prompts-save-current')),
+        findsOneWidget,
+      );
       expect(find.text('收藏提示词'), findsOneWidget);
     });
 
@@ -78,7 +87,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             promptsApiFactoryProvider.overrideWithValue((_) => failing),
           ],
           child: const CupertinoApp(home: SavedPromptsSheet(onInsert: _noop)),
@@ -114,8 +125,14 @@ void main() {
       expect(find.text('My label'), findsOneWidget);
       // second row title truncated to 60 and subtitle full both contain prefix -> findsWidgets
       expect(find.textContaining('fallback only text'), findsWidgets);
-      expect(find.byKey(const ValueKey('saved-prompt-delete-a1')), findsOneWidget);
-      expect(find.byKey(const ValueKey('saved-prompt-delete-a2')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('saved-prompt-delete-a1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('saved-prompt-delete-a2')),
+        findsOneWidget,
+      );
       expect(find.byIcon(CupertinoIcons.delete), findsNWidgets(2));
     });
 
@@ -139,7 +156,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             promptsApiFactoryProvider.overrideWithValue((_) => api),
           ],
           child: CupertinoApp(
@@ -169,7 +188,9 @@ void main() {
     });
 
     testWidgets('点击删除 -> 调用 remove + 列表刷新', (tester) async {
-      final api = FakePromptsApi(initialPrompts: [p('a1', 'hello'), p('a2', 'world')]);
+      final api = FakePromptsApi(
+        initialPrompts: [p('a1', 'hello'), p('a2', 'world')],
+      );
       await tester.pumpWidget(sheetFor(api: api));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -186,12 +207,16 @@ void main() {
       expect(find.byKey(const ValueKey('saved-prompt-a2-0')), findsOneWidget);
     });
 
-    testWidgets('saveCurrentInput 空 -> 弹 savedPromptsEmptyInput 提示', (tester) async {
+    testWidgets('saveCurrentInput 空 -> 弹 savedPromptsEmptyInput 提示', (
+      tester,
+    ) async {
       final api = FakePromptsApi(initialPrompts: const []);
       await tester.pumpWidget(sheetFor(api: api, currentInput: '   '));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.byKey(const ValueKey('saved-prompts-save-current')));
+      await tester.tap(
+        find.byKey(const ValueKey('saved-prompts-save-current')),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('请先输入提示词'), findsOneWidget);
@@ -201,12 +226,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     });
 
-    testWidgets('saveCurrentInput 成功 -> promptSaved toast 并刷新列表', (tester) async {
+    testWidgets('saveCurrentInput 成功 -> promptSaved toast 并刷新列表', (
+      tester,
+    ) async {
       final api = FakePromptsApi(initialPrompts: const []);
-      await tester.pumpWidget(sheetFor(api: api, getCurrentInput: () => '  new text  '));
+      await tester.pumpWidget(
+        sheetFor(api: api, getCurrentInput: () => '  new text  '),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.byKey(const ValueKey('saved-prompts-save-current')));
+      await tester.tap(
+        find.byKey(const ValueKey('saved-prompts-save-current')),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(api.createCount, 1);
@@ -218,12 +249,43 @@ void main() {
       expect(find.byKey(const ValueKey('saved-prompt-id_1-0')), findsOneWidget);
     });
 
+    testWidgets('top inset 不应推开第一项', (tester) async {
+      final api = FakePromptsApi(
+        initialPrompts: [p('inset', '首项内容', label: '首项')],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
+            promptsApiFactoryProvider.overrideWithValue((_) => api),
+          ],
+          child: MediaQuery(
+            data: const MediaQueryData(padding: EdgeInsets.only(top: 51)),
+            child: const CupertinoApp(home: SavedPromptsSheet(onInsert: _noop)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final sheet = tester.getRect(find.byType(SavedPromptsSheet));
+      final tile = tester.getRect(
+        find.byKey(const ValueKey('saved-prompt-inset-0')),
+      );
+      // The ListView must not inherit the Android status-bar inset.
+      // With the inset bug this gap is about 100 logical px; the fixed list
+      // starts immediately after the sheet handle/title area.
+      expect(tile.top - sheet.top, lessThan(60));
+    });
     testWidgets('systemGrey6 resolveFrom 不抛异常（暗黑模式 smoke）', (tester) async {
       final api = FakePromptsApi(initialPrompts: const []);
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             promptsApiFactoryProvider.overrideWithValue((_) => api),
           ],
           child: MediaQuery(
@@ -248,7 +310,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byType(CupertinoListTile), findsWidgets);
-      expect(find.byType(CupertinoActivityIndicator), findsNothing); // not loading
+      expect(
+        find.byType(CupertinoActivityIndicator),
+        findsNothing,
+      ); // not loading
       // Material Scaffold/AppBar etc should not appear
       expect(find.byType(Scaffold), findsNothing);
     });
@@ -269,8 +334,11 @@ class _FailingFetchApi implements PromptsApi {
   }
 
   @override
-  Future<SavePromptResponse> createPrompt({required String text, String? label}) =>
-      throw UnimplementedError();
+  Future<SavePromptResponse> createPrompt({
+    required String text,
+    String? label,
+  }) => throw UnimplementedError();
   @override
-  Future<DeletePromptResponse> deletePrompt(String id) => throw UnimplementedError();
+  Future<DeletePromptResponse> deletePrompt(String id) =>
+      throw UnimplementedError();
 }

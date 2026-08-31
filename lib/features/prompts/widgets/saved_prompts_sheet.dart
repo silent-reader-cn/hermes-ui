@@ -186,6 +186,7 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
         }
         return ListView.separated(
           shrinkWrap: true,
+          padding: EdgeInsets.zero,
           itemCount: prompts.length,
           separatorBuilder: (_, _) => Container(
             height: 0.5,
@@ -277,8 +278,9 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                 const SizedBox(height: 12),
                 CupertinoButton(
                   key: const ValueKey('saved-prompts-retry'),
-                  onPressed: () =>
-                      ref.read(savedPromptsControllerProvider.notifier).refresh(),
+                  onPressed: () => ref
+                      .read(savedPromptsControllerProvider.notifier)
+                      .refresh(),
                   child: Text(l10n.retry),
                 ),
               ],
