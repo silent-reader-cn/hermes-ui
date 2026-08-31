@@ -18,6 +18,9 @@ class FakeSettingsApi implements SettingsApi {
   /// `models()` 返回的模型目录。
   ModelsResponse modelsResponse = const ModelsResponse();
 
+  /// `modelsLive()` 返回的实时模型列表（对齐 iOS `overlayLiveModels()`）。
+  ModelsLiveResponse modelsLiveResponse = const ModelsLiveResponse();
+
   /// `reasoning()` 返回的推理状态。
   ReasoningStatusResponse reasoningResponse = const ReasoningStatusResponse();
 
@@ -27,6 +30,7 @@ class FakeSettingsApi implements SettingsApi {
 
   /// 各方法抛出的异常（非 null 时优先于对应响应）。
   Object? modelsError;
+  Object? modelsLiveError;
   Object? reasoningError;
   Object? refreshModelsError;
   Object? saveDefaultModelError;
@@ -35,6 +39,9 @@ class FakeSettingsApi implements SettingsApi {
   /// 非 null 时 `models()` 挂起等待该 gate（测试加载态用）。
   Completer<void>? modelsGate;
 
+  /// 非 null 时 `modelsLive()` 挂起等待该 gate（测试加载态用）。
+  Completer<void>? modelsLiveGate;
+
   /// 非 null 时 `refreshModels()` 挂起等待该 gate（测试加载态用）。
   Completer<void>? refreshModelsGate;
 
@@ -42,6 +49,7 @@ class FakeSettingsApi implements SettingsApi {
   Completer<void>? reasoningGate;
 
   int modelsCount = 0;
+  int modelsLiveCount = 0;
   int refreshModelsCount = 0;
   int reasoningCount = 0;
   int saveDefaultModelCount = 0;
@@ -158,6 +166,16 @@ class FakeSettingsApi implements SettingsApi {
     final gate = modelsGate;
     if (gate != null) await gate.future;
     return modelsResponse;
+  }
+
+  @override
+  Future<ModelsLiveResponse> modelsLive() async {
+    modelsLiveCount++;
+    final error = modelsLiveError;
+    if (error != null) throw error;
+    final gate = modelsLiveGate;
+    if (gate != null) await gate.future;
+    return modelsLiveResponse;
   }
 
   @override

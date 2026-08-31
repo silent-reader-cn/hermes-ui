@@ -686,11 +686,18 @@ class ModelsLiveResponse {
   final List<JsonValue>? models;
   final int? count;
 
-  /// 解析后的在线选项（providerID 用 normalizedProvider）。
+  /// Provider id 去除首尾空白后归一，空白视为缺失（对齐 Swift `normalizedProvider`）。
+  String? get normalizedProvider {
+    final trimmed = provider?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
+  /// 解析后的在线选项（providerID 用 normalizedProvider，对齐 Swift `liveOptions`）。
   List<ModelCatalogOption> get liveOptions {
     return ModelCatalogParser.parseOptions(
       models ?? const [],
-      fallbackProvider: provider?.trim().toLowerCase(),
+      fallbackProvider: normalizedProvider,
     );
   }
 
@@ -1492,6 +1499,29 @@ class ModelCatalogParser {
   static String? _trimmed(String? value) {
     final trimmed = value?.trim();
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+}
+
+/// 将活跃 provider 的 live 列表覆盖到缓存分组（对齐 iOS `mergingLiveModels`）。
+///
+/// - `live.normalizedProvider` 为空 或 `live.liveOptions` 为空 → 原样返回。
+/// - 仅替换匹配 `providerID == normalizedProvider` 的分组的 `models`，保留 `extraModels`。
+extension ModelCatalogGroupListExtension on List<ModelCatalogGroup> {
+  List<ModelCatalogGroup> mergingLiveModels(ModelsLiveResponse live) {
+    final provider = live.normalizedProvider;
+    if (provider == null) return this;
+    final liveModels = live.liveOptions;
+    if (liveModels.isEmpty) return this;
+    return map((group) {
+      if (group.providerID != provider) return group;
+      return ModelCatalogGroup(
+        id: group.id,
+        name: group.name,
+        providerID: group.providerID,
+        models: liveModels,
+        extraModels: group.extraModels,
+      );
+    }).toList();
   }
 }
 

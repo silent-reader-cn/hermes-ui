@@ -39,6 +39,9 @@ abstract interface class SettingsApi {
   /// GET /api/models → 缓存模型目录（groups / default_model / active_provider）。
   Future<ModelsResponse> models();
 
+  /// GET /api/models/live → 实时未缓存模型列表（对齐 iOS overlayLiveModels）。
+  Future<ModelsLiveResponse> modelsLive();
+
   /// POST /api/models/refresh {provider} → 刷新指定 provider（或当前 provider）的模型缓存。
   Future<ModelsRefreshResponse> refreshModels({String? provider});
 
@@ -134,6 +137,9 @@ class SettingsApiClient implements SettingsApi {
 
   @override
   Future<ModelsResponse> models() => _client.models();
+
+  @override
+  Future<ModelsLiveResponse> modelsLive() => _client.modelsLive();
 
   @override
   Future<ModelsRefreshResponse> refreshModels({String? provider}) =>
@@ -371,15 +377,31 @@ class SettingsController extends AsyncNotifier<SettingsState> {
 
   Future<SettingsState> _load(SettingsApi api) async {
     final modelsResponse = await api.models();
+    final catalog = modelsResponse.catalogGroups;
+    final merged = await _tryOverlayLiveModels(api, catalog);
     final reasoning = await _tryLoadReasoning(api);
     return SettingsState(
-      modelGroups: modelsResponse.catalogGroups,
+      modelGroups: merged,
       defaultModel: modelsResponse.defaultModel,
       activeProvider: modelsResponse.activeProvider,
       reasoningEffort: reasoning?.effectiveEffort,
       supportedEfforts: reasoning?.normalizedSupportedEfforts ?? const [],
       supportsReasoningEffort: reasoning?.supportsReasoningEffort ?? false,
     );
+  }
+
+  /// 活跃 provider 的实时列表覆盖缓存分组（对齐 iOS `overlayLiveModels` →
+  /// `mergingLiveModels`；失败静默保留缓存，见 #236）。
+  Future<List<ModelCatalogGroup>> _tryOverlayLiveModels(
+    SettingsApi api,
+    List<ModelCatalogGroup> cached,
+  ) async {
+    try {
+      final live = await api.modelsLive();
+      return cached.mergingLiveModels(live);
+    } catch (_) {
+      return cached;
+    }
   }
 
   /// reasoning 状态加载失败 → 返回 null（旧服务器无 /api/reasoning 或未配置
@@ -420,10 +442,14 @@ class SettingsController extends AsyncNotifier<SettingsState> {
         await _api.refreshModels(provider: targetProvider);
       }
       final modelsResponse = await _api.models();
+      final merged = await _tryOverlayLiveModels(
+        _api,
+        modelsResponse.catalogGroups,
+      );
       final latest = state.valueOrNull ?? current;
       state = AsyncData(
         latest.copyWith(
-          modelGroups: modelsResponse.catalogGroups,
+          modelGroups: merged,
           defaultModel: () => modelsResponse.defaultModel,
           activeProvider: () => modelsResponse.activeProvider,
           isRefreshingModels: false,
