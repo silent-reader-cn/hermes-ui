@@ -2130,12 +2130,12 @@ class _FallbackToolReasoningCards extends StatelessWidget {
   Widget build(BuildContext context) {
     final toolCards = <Widget>[
       for (final group in toolGroups)
-        for (final call in group.toolCalls)
-          if (call.isThinking) ...[
-            if (!hideThinking) ThinkingRow(call: call),
-          ] else ...[
-            ToolCallCard(call: call),
-          ],
+        if (group.toolCalls.any(
+            (c) => !c.isThinking || (!hideThinking && c.isThinking)))
+          ToolCallGroupCard(
+            group: group,
+            hideThinking: hideThinking,
+          ),
     ];
     final spacedToolCards = <Widget>[
       for (var i = 0; i < toolCards.length; i++) ...[

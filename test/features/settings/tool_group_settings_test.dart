@@ -416,11 +416,15 @@ void main() {
       final element = tester.element(find.byType(ChatMessageList));
       final container = ProviderScope.containerOf(element);
 
-      // 1. 默认 collapseCompletedProcess: true 模式下：过程收为 CollapsibleProcessCapsule，点击展开后可见平铺 ToolCallCard
+      // 1. 默认 collapseCompletedProcess: true 模式下：过程收为 CollapsibleProcessCapsule，点击展开后可见 ToolCallGroupCard
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
       await tester.tap(find.text('读取文件 \u00D71, 写入文件 \u00D71'));
       await tester.pumpAndSettle();
 
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
       expect(find.byType(ToolCallCard), findsNWidgets(2));
 
       // 关闭 collapseCompletedProcess：保持全部直接展开
@@ -429,22 +433,32 @@ void main() {
           .setCollapse(false);
       await tester.pumpAndSettle();
 
-      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立卡片穿插呈现，绝无 double 副本
+      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立 ToolCallGroupCard 穿插呈现，绝无 double 副本
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(false);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
-      expect(find.textContaining('读取文件'), findsOneWidget);
-      expect(find.textContaining('写入文件'), findsOneWidget);
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
+      expect(find.text('读取文件 \u00D71'), findsOneWidget);
+      expect(find.text('写入文件 \u00D71'), findsOneWidget);
 
-      // 3. 再次切换回 coalesce: true 模式：依然为 2 张平铺卡片
+      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
+        await tester.tap(find.byWidget(card.widget));
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
+
+      // 3. 再次切换回 coalesce: true 模式：聚合为 1 张 ToolCallGroupCard
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(true);
       await tester.pumpAndSettle();
 
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
       expect(find.byType(ToolCallCard), findsNWidgets(2));
 
       // 清理树与 Timer

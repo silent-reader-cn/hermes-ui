@@ -82,10 +82,14 @@ void main() {
 
       // 断言：转正归档后，工具卡必须依然存在于 transcript 气泡中，不得整卡消失！
       expect(
-        find.byType(ToolCallCard),
+        find.byType(ToolCallGroupCard),
         findsOneWidget,
         reason: 'done 后 session 未带 tool_calls 时，工具卡不应消失（应由 live/completed fallback 保底）',
       );
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(ToolCallCard), findsOneWidget);
     });
 
     testWidgets('复现 2: done 晚于 stream_end 到达（或空 session 载荷），工具卡不得消失', (
@@ -133,10 +137,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
-        find.byType(ToolCallCard),
+        find.byType(ToolCallGroupCard),
         findsOneWidget,
         reason: 'done 携带空 session 时，live 工具调用应归档到 completedToolCallGroups，不应丢失',
       );
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(ToolCallCard), findsOneWidget);
     });
 
     testWidgets('复现 3: live 期间用户展开工具卡，done 转正后展开状态不重置为折叠', (
@@ -203,11 +211,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 断言：转正后平铺为 ToolCallCard
+      // 断言：转正后渲染 ToolCallGroupCard
       expect(
-        find.byType(ToolCallCard),
+        find.byType(ToolCallGroupCard),
         findsOneWidget,
-        reason: 'live 结束后转正为 transcript 应平铺渲染 ToolCallCard',
+        reason: 'live 结束后转正为 transcript 应渲染 ToolCallGroupCard',
       );
     });
 
@@ -275,9 +283,18 @@ void main() {
 
         // 无论 coalesce 为 true 还是 false，工具卡都必须存在且不丢失！
         expect(
-          find.byType(ToolCallCard),
+          find.byType(ToolCallGroupCard),
           findsWidgets,
           reason: 'coalesce=$coalesce 下 done 后工具卡必须全部保留',
+        );
+        for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
+          await tester.tap(find.byWidget(card.widget));
+        }
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(ToolCallCard),
+          findsWidgets,
+          reason: 'coalesce=$coalesce 下 done 后展开工具卡必须全部保留',
         );
       }
     });

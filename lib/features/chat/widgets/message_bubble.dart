@@ -515,12 +515,12 @@ class _AssistantContent extends StatelessWidget {
   }) {
     final toolCards = <Widget>[
       for (final group in toolGroups)
-        for (final call in group.toolCalls)
-          if (call.isThinking) ...[
-            if (!hideThinking) ThinkingRow(call: call),
-          ] else ...[
-            ToolCallCard(call: call),
-          ],
+        if (group.toolCalls.any(
+            (c) => !c.isThinking || (!hideThinking && c.isThinking)))
+          ToolCallGroupCard(
+            group: group,
+            hideThinking: hideThinking,
+          ),
     ];
     return toolCards;
   }

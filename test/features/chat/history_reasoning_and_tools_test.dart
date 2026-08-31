@@ -214,20 +214,24 @@ void main() {
       expect(find.text('思考'), findsNothing);
       expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 展开过程胶囊 → ThinkingRow 与 ToolCallCard 直接平铺出现（无 ToolCallGroupCard 嵌套）
+      // 2) 展开过程胶囊 → 出现 ToolCallGroupCard（聚合卡）
       await tester.tap(find.byType(CollapsibleProcessCapsule));
       await tester.pumpAndSettle();
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+
+      // 3) 点击 ToolCallGroupCard 展开子卡片 → ThinkingRow 与 ToolCallCard 出现
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
       expect(find.byType(ThinkingRow), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
       expect(find.byType(ToolCallCard), findsOneWidget);
 
-      // 3) 点击 think 行展开完整思考文本。
+      // 4) 点击 think 行展开完整思考文本。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsOneWidget); // 展开成功
 
-      // 4) 再次点击 think 行折叠。
+      // 5) 再次点击 think 行折叠。
       await tester.tap(find.text('思考'));
       await tester.pumpAndSettle();
       expect(find.text(fullReasoningText), findsNothing); // 折叠成功
@@ -279,10 +283,14 @@ void main() {
       expect(find.text('思考 \u00D71, analyze_files \u00D71'), findsOneWidget);
       expect(find.byType(ToolCallGroupCard), findsNothing);
 
-      // 展开过程胶囊 → 工具卡片与思考行平铺出现
+      // 展开过程胶囊 → ToolCallGroupCard 聚合卡出现
       await tester.tap(find.byType(CollapsibleProcessCapsule));
       await tester.pumpAndSettle();
-      expect(find.byType(ToolCallGroupCard), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+
+      // 点击 ToolCallGroupCard 展开子卡 → 工具卡片与思考行平铺出现
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
       expect(find.byType(ThinkingRow), findsOneWidget);
       expect(find.byType(ToolCallCard), findsOneWidget);
       expect(find.text('思考'), findsOneWidget);
@@ -326,10 +334,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // error 轮次：不生成 CollapsibleProcessCapsule，ToolCallCard 直接平铺在树中
+      // error 轮次：不生成 CollapsibleProcessCapsule，ToolCallGroupCard 直接平铺在树中
       expect(find.byType(CollapsibleProcessCapsule), findsNothing);
-      expect(find.byType(ToolCallCard), findsOneWidget);
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
       expect(find.text('命令执行失败，请检查语法。'), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.exclamationmark_triangle_fill), findsOneWidget);
+
+      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallCard), findsOneWidget);
       expect(find.byIcon(CupertinoIcons.exclamationmark_triangle), findsOneWidget);
     });
 
@@ -366,8 +380,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 无最终 text 锚点：不包裹胶囊，ToolCallCard 直接展开平铺
+      // 无最终 text 锚点：不包裹胶囊，ToolCallGroupCard 直接展开平铺
       expect(find.byType(CollapsibleProcessCapsule), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+
+      // 点击 ToolCallGroupCard 展开查看内部 ToolCallCard
+      await tester.tap(find.byType(ToolCallGroupCard));
+      await tester.pumpAndSettle();
       expect(find.byType(ToolCallCard), findsOneWidget);
     });
 
@@ -435,17 +454,25 @@ void main() {
       // 胶囊收起时，早段文本与子卡片不在可视树中
       expect(find.text('第一步：正在读取配置文件。'), findsNothing);
       expect(find.text('第二步：已更新代码文件。'), findsNothing);
+      expect(find.byType(ToolCallGroupCard), findsNothing);
       expect(find.byType(ToolCallCard), findsNothing);
 
-      // 2) 点击展开胶囊 → 按原时序还原：工具1 → 早段文本1 → 工具2 → 早段文本2
+      // 2) 点击展开胶囊 → 按原时序还原：工具组1 → 早段文本1 → 工具组2 → 早段文本2
       await tester.tap(find.byType(CollapsibleProcessCapsule));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
       expect(find.text('第一步：正在读取配置文件。'), findsOneWidget);
       expect(find.text('第二步：已更新代码文件。'), findsOneWidget);
       // 锚点文本依然常显于外部
       expect(find.text('全部修改完成，测试通过！'), findsOneWidget);
+
+      // 点击展开两个 ToolCallGroupCard 查看子卡
+      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
+        await tester.tap(find.byWidget(card.widget));
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
     });
 
     testWidgets('多 assistant 消息同轮且含 error 时全展开不折叠', (tester) async {
@@ -498,11 +525,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // error 轮：不包裹胶囊，全部直接平铺展开
+      // error 轮：不包裹胶囊，全部直接平铺展开 ToolCallGroupCard
       expect(find.byType(CollapsibleProcessCapsule), findsNothing);
-      expect(find.byType(ToolCallCard), findsNWidgets(2));
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
       expect(find.text('读取测试依赖中。'), findsOneWidget);
       expect(find.text('测试失败，请检查报错。'), findsOneWidget);
+
+      // 点击展开两个 ToolCallGroupCard 查看子卡
+      for (final card in find.byType(ToolCallGroupCard).evaluate().toList()) {
+        await tester.tap(find.byWidget(card.widget));
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(ToolCallCard), findsNWidgets(2));
     });
   });
 }
