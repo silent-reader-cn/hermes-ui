@@ -43,3 +43,5 @@
   4. 成功、失败、取消、重试均有 widget/单测；下载完成触发应用内提示与系统通知，点击通知进入 `/downloads`。
   5. 深浅色、窄屏/宽屏无溢出；`flutter analyze` 零告警、`flutter test` 全绿、Android debug APK 构建成功。
 - 状态：已确认，待实现。
+
+
