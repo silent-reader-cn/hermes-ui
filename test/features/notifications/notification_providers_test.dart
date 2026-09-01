@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/app/router.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
 import 'package:hermes_ui/features/desktop/window_title_service.dart';
@@ -531,7 +533,24 @@ void main() {
 
   group('handleNotificationTap 路由与前缀分发', () {
     test('sessionId 正常调用 openSessionFromNotification', () {
-      final container = ProviderContainer();
+      // routerProvider 初始化会触 activeConnectionProvider（flutter_secure_storage
+      // 真插件）——注⼊最小路由避免 MissingPluginException。
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(
+            path: '/chat/:sessionId',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+          GoRoute(
+            path: '/downloads',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [routerProvider.overrideWithValue(router)],
+      );
       addTearDown(container.dispose);
 
       // 空 payload 不崩溃

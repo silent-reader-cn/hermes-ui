@@ -15,6 +15,7 @@ import 'session_entry_visibility.dart';
 /// 4. 技能 (Skills) → /skills (CupertinoIcons.hammer, 对齐 LucideHammer)
 /// 5. 统计 (Insights) → /insights (CupertinoIcons.chart_bar_square, 对齐 LucideChartColumnIncreasing)
 /// 6. 记忆 (Memory) → /memory (CupertinoIcons.bookmark)
+/// 7. 下载 (Downloads) → /downloads (CupertinoIcons.arrow_down_circle)
 ///
 /// 视觉采用纯 Cupertino 风格，支持深浅色自适应及 VoiceOver 语义与触觉反馈。
 class SessionListUtilityRows extends ConsumerWidget {
@@ -26,6 +27,7 @@ class SessionListUtilityRows extends ConsumerWidget {
     this.onTapSkills,
     this.onTapInsights,
     this.onTapMemory,
+    this.onTapDownloads,
   });
 
   /// 任务入口自定义点击回调（为空时默认 context.go('/tasks')）。
@@ -45,6 +47,9 @@ class SessionListUtilityRows extends ConsumerWidget {
 
   /// 记忆入口自定义点击回调（为空时默认 context.go('/memory')）。
   final VoidCallback? onTapMemory;
+
+  /// 下载入口自定义点击回调（为空时默认 context.go('/downloads')）。
+  final VoidCallback? onTapDownloads;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -108,6 +113,15 @@ class SessionListUtilityRows extends ConsumerWidget {
           label: l10n.memory,
           route: '/memory',
           customCallback: onTapMemory,
+        ),
+      if (visibility.downloads)
+        _buildUtilityItem(
+          context,
+          key: const ValueKey('session-list-utility-downloads'),
+          icon: CupertinoIcons.arrow_down_circle,
+          label: l10n.downloadsTitle,
+          route: '/downloads',
+          customCallback: onTapDownloads,
         ),
     ];
 

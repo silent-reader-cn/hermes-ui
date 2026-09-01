@@ -10,6 +10,10 @@ import '../../../core/models/message_attachment.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../diagnostics/diagnostics_models.dart';
 import '../../diagnostics/diagnostics_service.dart';
+import '../../downloads/download_models.dart';
+import '../../downloads/download_page.dart';
+import '../../downloads/download_providers.dart';
+import '../../downloads/download_save_service.dart';
 import 'chat_media_parser.dart';
 import '../../../app/widgets/hermes_page_route.dart';
 
@@ -89,6 +93,12 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             memoryBytes,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
+              DiagnosticsService.instance.log(
+                level: DiagnosticsLogLevel.error,
+                tag: 'chat_media',
+                message: 'Data URI 图片解码失败',
+                errorKind: error.toString(),
+              );
               return _ImageErrorPlaceholder(
                 altText: alt ?? title,
                 rawUri: rawUri,
@@ -103,7 +113,13 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             maxWidth: maxWidth,
           );
         }
-      } catch (_) {
+      } catch (error) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'chat_media',
+          message: 'Data URI 图片解析异常',
+          errorKind: error.toString(),
+        );
         imageWidget = _ImageErrorPlaceholder(
           altText: alt ?? title,
           rawUri: rawUri,
@@ -129,9 +145,17 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             );
           },
           errorBuilder: (context, error, stackTrace) {
+            DiagnosticsService.instance.log(
+              level: DiagnosticsLogLevel.error,
+              tag: 'chat_media',
+              message: '图片解码失败: $resolvedUrl',
+              errorKind: error.toString(),
+            );
             return _ImageErrorPlaceholder(
               altText: alt ?? title,
               rawUri: rawUri,
+              resolvedUrl: resolvedUrl,
+              sessionId: sessionId,
               maxWidth: maxWidth,
             );
           },
@@ -142,11 +166,21 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           width: placeholderSize.width,
           height: placeholderSize.height,
         ),
-        error: (error, stackTrace) => _ImageErrorPlaceholder(
-          altText: alt ?? title,
-          rawUri: rawUri,
-          maxWidth: maxWidth,
-        ),
+        error: (error, stackTrace) {
+          DiagnosticsService.instance.log(
+            level: DiagnosticsLogLevel.error,
+            tag: 'chat_media',
+            message: '网络图片下载失败: $resolvedUrl',
+            errorKind: error.toString(),
+          );
+          return _ImageErrorPlaceholder(
+            altText: alt ?? title,
+            rawUri: rawUri,
+            resolvedUrl: resolvedUrl,
+            sessionId: sessionId,
+            maxWidth: maxWidth,
+          );
+        },
       );
     } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
       imageWidget = Image.file(
@@ -165,9 +199,17 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           );
         },
         errorBuilder: (context, error, stackTrace) {
+          DiagnosticsService.instance.log(
+            level: DiagnosticsLogLevel.error,
+            tag: 'chat_media',
+            message: '本地图片加载失败: $resolvedUrl',
+            errorKind: error.toString(),
+          );
           return _ImageErrorPlaceholder(
             altText: alt ?? title,
             rawUri: rawUri,
+            resolvedUrl: resolvedUrl,
+            sessionId: sessionId,
             maxWidth: maxWidth,
           );
         },
@@ -176,6 +218,8 @@ class ChatInlineMediaWidget extends ConsumerWidget {
       imageWidget = _ImageErrorPlaceholder(
         altText: alt ?? title,
         rawUri: rawUri,
+        resolvedUrl: resolvedUrl,
+        sessionId: sessionId,
         maxWidth: maxWidth,
       );
     }
@@ -223,8 +267,67 @@ class ChatInlineMediaWidget extends ConsumerWidget {
       name: altText,
       altText: altText,
       isImage: true,
+      sessionId: sessionId,
     );
   }
+}
+
+/// 弹出 Cupertino 下载确认对话框。
+///
+/// 展示：文件名、文件分类、文件大小（或未知大小）、来源会话（若有）。
+/// 返回 true 表示用户确认开始下载，返回 false 或 null 表示取消。
+Future<bool?> showDownloadConfirmationDialog(
+  BuildContext context, {
+  required String fileName,
+  String? mimeType,
+  int? expectedBytes,
+  String? sessionId,
+}) {
+  final l10n = AppLocalizations.of(context);
+  final fileType = getDownloadFileType(fileName: fileName, mimeType: mimeType);
+  final typeName = localizeDownloadFileType(fileType, l10n);
+  final sizeText = expectedBytes != null && expectedBytes > 0
+      ? formatDownloadByteSize(expectedBytes)
+      : l10n.downloadUnknownSize;
+  final sessionText = (sessionId != null && sessionId.isNotEmpty)
+      ? (sessionId.length > 12 ? '${sessionId.substring(0, 12)}…' : sessionId)
+      : null;
+
+  return showCupertinoDialog<bool>(
+    context: context,
+    builder: (dialogCtx) => CupertinoAlertDialog(
+      title: Text(l10n.downloadConfirmTitle),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${l10n.name}：$fileName'),
+            const SizedBox(height: 4),
+            Text('${l10n.info}：$typeName'),
+            const SizedBox(height: 4),
+            Text('${l10n.value}：$sizeText'),
+            if (sessionText != null) ...[
+              const SizedBox(height: 4),
+              Text('${l10n.downloadFromSession}：$sessionText'),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          child: Text(l10n.downloadConfirmCancel),
+          onPressed: () => Navigator.of(dialogCtx).pop(false),
+        ),
+        CupertinoDialogAction(
+          isDefaultAction: true,
+          child: Text(l10n.downloadConfirmStart),
+          onPressed: () => Navigator.of(dialogCtx).pop(true),
+        ),
+      ],
+    ),
+  );
 }
 
 /// 打开附件预览全屏弹窗（图片走 Lightbox 大图，非图展示文档信息与下载操作）。
@@ -235,19 +338,23 @@ void showAttachmentPreview(
   String? name,
   bool? isImage,
   String? altText,
+  String? sessionId,
+  int? expectedBytes,
+  String? mimeType,
+  Future<void> Function(String path)? onOpenFile,
 }) {
   final displayName = name ?? altText ?? '';
   final hasExplicitImage = isImage != null;
   final bool effectiveIsImage = hasExplicitImage
       ? isImage
       : ((bytes != null &&
-              (displayName.isEmpty ||
-                  MessageAttachment.isImageReference(displayName))) ||
-          (resolvedUrl != null &&
-              (resolvedUrl.startsWith('data:image/') ||
-                  MessageAttachment.isImageReference(resolvedUrl) ||
-                  (displayName.isNotEmpty &&
-                      MessageAttachment.isImageReference(displayName)))));
+                (displayName.isEmpty ||
+                    MessageAttachment.isImageReference(displayName))) ||
+            (resolvedUrl != null &&
+                (resolvedUrl.startsWith('data:image/') ||
+                    MessageAttachment.isImageReference(resolvedUrl) ||
+                    (displayName.isNotEmpty &&
+                        MessageAttachment.isImageReference(displayName)))));
 
   Navigator.of(context).push(
     HermesPageRoute<void>(
@@ -258,6 +365,10 @@ void showAttachmentPreview(
         name: displayName.isNotEmpty ? displayName : null,
         altText: altText,
         isImage: effectiveIsImage,
+        sessionId: sessionId,
+        expectedBytes: expectedBytes,
+        mimeType: mimeType,
+        onOpenFile: onOpenFile,
       ),
     ),
   );
@@ -272,6 +383,10 @@ class AttachmentLightbox extends StatelessWidget {
     this.name,
     this.altText,
     this.isImage = true,
+    this.sessionId,
+    this.expectedBytes,
+    this.mimeType,
+    this.onOpenFile,
   });
 
   final Uint8List? bytes;
@@ -279,6 +394,10 @@ class AttachmentLightbox extends StatelessWidget {
   final String? name;
   final String? altText;
   final bool isImage;
+  final String? sessionId;
+  final int? expectedBytes;
+  final String? mimeType;
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -352,11 +471,7 @@ class AttachmentLightbox extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                iconData,
-                size: 64,
-                color: CupertinoColors.white,
-              ),
+              Icon(iconData, size: 64, color: CupertinoColors.white),
               if (titleText.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -384,6 +499,10 @@ class AttachmentLightbox extends StatelessWidget {
                 resolvedUrl: resolvedUrl,
                 bytes: bytes,
                 filename: titleText,
+                sessionId: sessionId,
+                expectedBytes: expectedBytes,
+                mimeType: mimeType,
+                onOpenFile: onOpenFile,
               ),
             ],
           ),
@@ -420,81 +539,53 @@ class AttachmentLightbox extends StatelessWidget {
   }
 }
 
-class _AttachmentDownloadButton extends ConsumerStatefulWidget {
+class _AttachmentDownloadButton extends ConsumerWidget {
   const _AttachmentDownloadButton({
     this.resolvedUrl,
     this.bytes,
     this.filename,
+    this.sessionId,
+    this.expectedBytes,
+    this.mimeType,
+    this.onOpenFile,
   });
 
   final String? resolvedUrl;
   final Uint8List? bytes;
   final String? filename;
+  final String? sessionId;
+  final int? expectedBytes;
+  final String? mimeType;
+  final Future<void> Function(String path)? onOpenFile;
 
   @override
-  ConsumerState<_AttachmentDownloadButton> createState() =>
-      _AttachmentDownloadButtonState();
-}
-
-class _AttachmentDownloadButtonState
-    extends ConsumerState<_AttachmentDownloadButton> {
-  bool _isDownloading = false;
-  bool _downloaded = false;
-
-  Future<void> _handleDownload() async {
-    final url = widget.resolvedUrl;
-    if (_downloaded || _isDownloading) return;
-
-    if (widget.bytes != null ||
-        (url != null && !kIsWeb && File(url).existsSync())) {
-      setState(() => _downloaded = true);
-      return;
-    }
-
-    if (url != null &&
-        (url.startsWith('http://') || url.startsWith('https://'))) {
-      setState(() => _isDownloading = true);
-      try {
-        await ref.read(mediaFileProvider(url).future);
-        if (mounted) {
-          setState(() {
-            _isDownloading = false;
-            _downloaded = true;
-          });
-        }
-      } catch (e) {
-        DiagnosticsService.instance.log(
-          level: DiagnosticsLogLevel.error,
-          tag: 'attachment',
-          message: 'Failed to download attachment: $e',
-        );
-        if (mounted) {
-          setState(() => _isDownloading = false);
-        }
-      }
-    } else {
-      setState(() => _downloaded = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final downloadState = ref.watch(downloadControllerProvider);
+    final controller = ref.read(downloadControllerProvider.notifier);
 
-    if (_isDownloading) {
-      return const CupertinoButton.filled(
-        key: ValueKey('attachment-download-button'),
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        onPressed: null,
-        child: CupertinoActivityIndicator(color: CupertinoColors.white),
-      );
-    }
+    final url = resolvedUrl;
+    final task = url != null
+        ? downloadState.tasks.where((t) => t.sourceUrl == url).firstOrNull
+        : null;
 
-    if (_downloaded) {
+    final bool isLocalAvailable =
+        bytes != null || (url != null && !kIsWeb && File(url).existsSync());
+
+    if (isLocalAvailable) {
       return CupertinoButton.filled(
         key: const ValueKey('attachment-download-button'),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        onPressed: _handleDownload,
+        onPressed: () async {
+          if (url != null && File(url).existsSync()) {
+            await openDownloadedFile(
+              context,
+              url,
+              mimeType: mimeType,
+              customOpener: onOpenFile,
+            );
+          }
+        },
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -506,10 +597,89 @@ class _AttachmentDownloadButtonState
       );
     }
 
+    if (task != null) {
+      if (task.status == DownloadStatus.queued ||
+          task.status == DownloadStatus.downloading) {
+        return CupertinoButton.filled(
+          key: const ValueKey('attachment-download-button'),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          onPressed: null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CupertinoActivityIndicator(color: CupertinoColors.white),
+              const SizedBox(width: 6),
+              Text(l10n.downloading),
+            ],
+          ),
+        );
+      }
+
+      if (task.status == DownloadStatus.completed) {
+        final fileExists =
+            task.savedPath != null && File(task.savedPath!).existsSync();
+        if (fileExists) {
+          return CupertinoButton.filled(
+            key: const ValueKey('attachment-download-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            onPressed: () async {
+              await openDownloadedFile(
+                context,
+                task.savedPath!,
+                mimeType: task.mimeType ?? mimeType,
+                customOpener: onOpenFile,
+              );
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(CupertinoIcons.check_mark, size: 16),
+                const SizedBox(width: 6),
+                Text(l10n.downloaded),
+              ],
+            ),
+          );
+        } else {
+          return CupertinoButton.filled(
+            key: const ValueKey('attachment-download-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            onPressed: () => _triggerDownload(context, ref),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(CupertinoIcons.arrow_clockwise, size: 16),
+                const SizedBox(width: 6),
+                Text(l10n.downloadRedownload),
+              ],
+            ),
+          );
+        }
+      }
+
+      if (task.status == DownloadStatus.failed ||
+          task.status == DownloadStatus.cancelled) {
+        return CupertinoButton.filled(
+          key: const ValueKey('attachment-download-button'),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          onPressed: () async {
+            await controller.retry(task.id);
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(CupertinoIcons.arrow_clockwise, size: 16),
+              const SizedBox(width: 6),
+              Text(l10n.downloadRetry),
+            ],
+          ),
+        );
+      }
+    }
+
     return CupertinoButton.filled(
       key: const ValueKey('attachment-download-button'),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      onPressed: _handleDownload,
+      onPressed: url != null ? () => _triggerDownload(context, ref) : null,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -519,6 +689,36 @@ class _AttachmentDownloadButtonState
         ],
       ),
     );
+  }
+
+  Future<void> _triggerDownload(BuildContext context, WidgetRef ref) async {
+    final url = resolvedUrl;
+    if (url == null || url.isEmpty) return;
+
+    final cleanName = DownloadSaveService.sanitizeFileName(
+      filename?.isNotEmpty == true ? filename! : url,
+      mimeType: mimeType,
+    );
+
+    final confirmed = await showDownloadConfirmationDialog(
+      context,
+      fileName: cleanName,
+      mimeType: mimeType,
+      expectedBytes: expectedBytes ?? bytes?.length,
+      sessionId: sessionId,
+    );
+
+    if (confirmed == true && context.mounted) {
+      await ref
+          .read(downloadControllerProvider.notifier)
+          .enqueue(
+            sourceUrl: url,
+            fileName: cleanName,
+            mimeType: mimeType,
+            expectedBytes: expectedBytes ?? bytes?.length,
+            sessionId: sessionId,
+          );
+    }
   }
 }
 
@@ -598,10 +798,7 @@ Size _calculatePlaceholderSize({
       );
     }
   }
-  return Size(
-    160.0.clamp(32.0, maxWidth),
-    120.0.clamp(32.0, maxHeight),
-  );
+  return Size(160.0.clamp(32.0, maxWidth), 120.0.clamp(32.0, maxHeight));
 }
 
 Widget _loadingBox(
@@ -622,23 +819,29 @@ Widget _loadingBox(
   );
 }
 
-/// 图片加载失败占位符（灰色图标 + 提示文案，不白屏、不抛未捕获异常）。
-class _ImageErrorPlaceholder extends StatelessWidget {
+/// 图片加载失败占位符（灰色图标 + 提示文案 + 重新加载与下载原图操作）。
+class _ImageErrorPlaceholder extends ConsumerWidget {
   const _ImageErrorPlaceholder({
     this.altText,
     this.rawUri,
+    this.resolvedUrl,
+    this.sessionId,
     this.maxWidth = 360,
   });
 
   final String? altText;
   final String? rawUri;
+  final String? resolvedUrl;
+  final String? sessionId;
   final double maxWidth;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final displayName =
         altText ?? rawUri?.split('/').last.split(r'\\').last ?? l10n.mediaImage;
+
+    final hasValidUrl = resolvedUrl != null && resolvedUrl!.isNotEmpty;
 
     return Container(
       constraints: BoxConstraints(maxWidth: maxWidth),
@@ -651,41 +854,119 @@ class _ImageErrorPlaceholder extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            CupertinoIcons.photo,
-            size: 20,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.photo,
+                size: 20,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.imageLoadFailed,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ),
+                    if (displayName.isNotEmpty)
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.tertiaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (hasValidUrl) ...[
+            const SizedBox(height: 8),
+            Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  l10n.imageLoadFailed,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                CupertinoButton(
+                  key: const ValueKey('chat-media-reload-button'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-                ),
-                if (displayName.isNotEmpty)
-                  Text(
-                    displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  color: CupertinoColors.systemGrey4.resolveFrom(context),
+                  borderRadius: BorderRadius.circular(5),
+                  minimumSize: const Size(36, 26),
+                  onPressed: () {
+                    ref.invalidate(mediaFileProvider(resolvedUrl!));
+                  },
+                  child: Text(
+                    l10n.imageReload,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
+                ),
+                const SizedBox(width: 6),
+                CupertinoButton(
+                  key: const ValueKey('chat-media-download-original-button'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  color: CupertinoTheme.of(context).primaryColor,
+                  borderRadius: BorderRadius.circular(5),
+                  minimumSize: const Size(36, 26),
+                  onPressed: () async {
+                    final fileName = DownloadSaveService.sanitizeFileName(
+                      displayName.isNotEmpty ? displayName : 'image.png',
+                      mimeType: 'image/png',
+                    );
+                    final confirmed = await showDownloadConfirmationDialog(
+                      context,
+                      fileName: fileName,
+                      mimeType: 'image/png',
+                      sessionId: sessionId,
+                    );
+                    if (confirmed == true && context.mounted) {
+                      await ref
+                          .read(downloadControllerProvider.notifier)
+                          .enqueue(
+                            sourceUrl: resolvedUrl!,
+                            fileName: fileName,
+                            mimeType: 'image/png',
+                            sessionId: sessionId,
+                          );
+                    }
+                  },
+                  child: Text(
+                    l10n.imageDownloadOriginal,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -794,6 +1075,7 @@ class ChatAttachmentChipView extends StatelessWidget {
           name: name,
           altText: name,
           isImage: isImage || kind == MessageMediaKind.image,
+          sessionId: sessionId,
         ),
         child: chipWidget,
       ),

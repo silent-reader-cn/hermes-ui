@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/features/session_list/session_entry_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +28,7 @@ void main() {
           insights: false,
           workspaces: false,
           memory: false,
+          downloads: false,
         ).showsAny,
         isFalse,
       );
@@ -52,6 +53,20 @@ void main() {
           insights: false,
           workspaces: false,
           memory: true,
+        ).showsAny,
+        isTrue,
+      );
+
+      // downloads 单独开启即 showsAny。
+      expect(
+        const SessionEntryVisibility(
+          tasks: false,
+          kanban: false,
+          skills: false,
+          insights: false,
+          workspaces: false,
+          memory: false,
+          downloads: true,
         ).showsAny,
         isTrue,
       );
@@ -167,7 +182,7 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_memory'), isFalse);
     });
 
-    test('setVisible 处理所有 6 个合法 key 及未知 key', () async {
+    test('setVisible 处理所有 7 个合法 key 及未知 key', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -181,6 +196,7 @@ void main() {
       await controller.setVisible('insights', false);
       await controller.setVisible('workspaces', false);
       await controller.setVisible('memory', false);
+      await controller.setVisible('downloads', false);
       await controller.setVisible('unknown_key', false);
 
       final state = container.read(sessionEntryVisibilityProvider);
@@ -193,6 +209,7 @@ void main() {
       expect(prefs.getBool('session_entry_visibility_insights'), isFalse);
       expect(prefs.getBool('session_entry_visibility_workspaces'), isFalse);
       expect(prefs.getBool('session_entry_visibility_memory'), isFalse);
+      expect(prefs.getBool('session_entry_visibility_downloads'), isFalse);
       expect(
         prefs.containsKey('session_entry_visibility_unknown_key'),
         isFalse,

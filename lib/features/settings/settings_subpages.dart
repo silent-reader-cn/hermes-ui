@@ -177,6 +177,16 @@ class SessionListEntriesSection extends ConsumerWidget {
             },
           ),
         ),
+        CupertinoListTile(
+          title: Text(l10n.downloadsTitle),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-visibility-downloads'),
+            value: visibility.downloads,
+            onChanged: (value) {
+              unawaited(controller.setVisible('downloads', value));
+            },
+          ),
+        ),
       ],
     );
   }

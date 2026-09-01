@@ -43,9 +43,7 @@ class _NotificationLifecycleObserverState
         unawaited(
           ref.read(turnNotificationServiceProvider).requestPermission(),
         );
-        unawaited(
-          ref.read(backgroundKeepaliveServiceProvider).initialize(),
-        );
+        unawaited(ref.read(backgroundKeepaliveServiceProvider).initialize());
       }
     });
   }
@@ -64,13 +62,15 @@ class _NotificationLifecycleObserverState
     final settings = ref.read(notificationSettingsProvider);
     final activeSessionId = getActiveSessionId(ref);
     unawaited(
-      ref.read(backgroundKeepaliveServiceProvider).onAppLifecycleChanged(
-        state: state,
-        activeSessionId: activeSessionId,
-        activeStreamId: null,
-        isStreaming: false,
-        foregroundServiceEnabled: settings.bgForegroundServiceEnabled,
-      ),
+      ref
+          .read(backgroundKeepaliveServiceProvider)
+          .onAppLifecycleChanged(
+            state: state,
+            activeSessionId: activeSessionId,
+            activeStreamId: null,
+            isStreaming: false,
+            foregroundServiceEnabled: settings.bgForegroundServiceEnabled,
+          ),
     );
     if (state == AppLifecycleState.resumed) {
       // 回到 app：通知使命完成，自动清除。
@@ -78,13 +78,17 @@ class _NotificationLifecycleObserverState
     }
   }
 
-  /// 冷启动由通知拉起 → 跳转对应会话并清除通知。
+  /// 冷启动由通知拉起 → 跳转对应会话或下载页并清除通知。
   Future<void> _handleLaunchDetails() async {
-    final sessionId = await ref
+    final payload = await ref
         .read(turnNotificationServiceProvider)
         .getLaunchSessionId();
-    if (sessionId == null || sessionId.isEmpty) return;
-    ref.read(routerProvider).go('/chat/$sessionId');
+    if (payload == null || payload.isEmpty) return;
+    if (payload.startsWith('download:')) {
+      ref.read(routerProvider).go('/downloads');
+    } else {
+      ref.read(routerProvider).go('/chat/$payload');
+    }
     unawaited(ref.read(turnNotificationServiceProvider).clearAll());
   }
 

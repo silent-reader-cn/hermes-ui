@@ -55,6 +55,7 @@ class _AllHiddenVisibilityNotifier extends SessionEntryVisibilityController {
       insights: false,
       workspaces: false,
       memory: false,
+      downloads: false,
     );
   }
 }

@@ -84,6 +84,12 @@ class _NarrowNavigationDropdownButtonState
           label: l10n.memoryTitle,
           onPressed: () => context.go('/memory'),
         ),
+      if (visibility.downloads)
+        AdaptiveMenuItem(
+          key: const ValueKey('narrow-nav-downloads'),
+          label: l10n.downloadsTitle,
+          onPressed: () => context.go('/downloads'),
+        ),
     ];
 
     if (items.isEmpty) return;

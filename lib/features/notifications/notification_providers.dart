@@ -209,7 +209,7 @@ final turnNotificationServiceProvider = Provider<TurnNotificationService>((
 void handleNotificationTap(dynamic ref, String payload) {
   if (payload.isEmpty) return;
   if (payload.startsWith('download:')) {
-    // 预留下载通知路由分发契约
+    ref.read(routerProvider).go('/downloads');
     return;
   }
   openSessionFromNotification(ref, payload);

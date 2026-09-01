@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/core/cache/app_database.dart';
+import 'package:hermes_ui/core/cache/cache_providers.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
@@ -14,8 +17,78 @@ import 'package:hermes_ui/features/chat/pending_attachments_provider.dart';
 import 'package:hermes_ui/features/chat/widgets/attachment_pending_bar.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
+import 'package:hermes_ui/features/downloads/download_providers.dart';
+import 'package:hermes_ui/features/downloads/download_repository.dart';
+import 'package:hermes_ui/features/downloads/download_save_service.dart';
+import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 
 import '../../helpers/fake_media_cache.dart';
+
+/// 下载链路测试双：AttachmentLightbox 的下载按钮 watch downloadControllerProvider
+///（→ apiClientProvider 需真实连接），widget 测试必须注入假执行器、假通知与
+/// 内存 DB，避免「尚未配置服务器连接」/ 真实插件挂起。
+class _FakeDownloadNotificationService implements TurnNotificationService {
+  @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {}
+
+  @override
+  Future<void> notifyTurnCompleted(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {}
+
+  @override
+  Future<void> notifyClarificationNeeded(
+    String sessionId,
+    String question,
+  ) async {}
+
+  @override
+  Future<void> notifySessionError(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {}
+
+  @override
+  Future<void> clearAll() async {}
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<String?> getLaunchSessionId() async => null;
+}
+
+/// 构造下载链路测试 override（内存 DB + fake 下载器 + fake 通知 + 临时保存目录）。
+List<Override> buildDownloadOverrides({
+  Directory? tempDir,
+  Future<Uint8List> Function(Uri)? downloader,
+}) {
+  final db = AppDatabase.memory();
+  return [
+    appDatabaseProvider.overrideWithValue(db),
+    downloadRepositoryProvider.overrideWithValue(DownloadRepository(db)),
+    downloadSaveServiceProvider.overrideWithValue(
+      DownloadSaveService(
+        destinationDirOverride:
+            tempDir ?? Directory.systemTemp.createTempSync('media_bubble_dl_'),
+      ),
+    ),
+    turnNotificationServiceProvider.overrideWithValue(
+      _FakeDownloadNotificationService(),
+    ),
+    downloadDownloaderProvider.overrideWithValue(
+      downloader ?? ((uri) async => Uint8List.fromList([1, 2, 3, 4])),
+    ),
+  ];
+}
 
 // 1x1 像素有效透明 PNG base64 数据
 const _k1x1Png =
@@ -347,10 +420,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         _testApp(
-          const ChatInlineMediaWidget(
-            rawUri: _k1x1Png,
-            alt: 'preview.png',
-          ),
+          const ChatInlineMediaWidget(rawUri: _k1x1Png, alt: 'preview.png'),
         ),
       );
       await tester.pump();
@@ -372,9 +442,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mediaFileProvider.overrideWith(
-              (ref, url) => completer.future,
-            ),
+            mediaFileProvider.overrideWith((ref, url) => completer.future),
           ],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
@@ -407,9 +475,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mediaFileProvider.overrideWith(
-              (ref, url) => completer.future,
-            ),
+            mediaFileProvider.overrideWith((ref, url) => completer.future),
           ],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
@@ -495,8 +561,9 @@ void main() {
 
       // 验证全屏 Lightbox
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      final viewer =
-          tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+      final viewer = tester.widget<InteractiveViewer>(
+        find.byType(InteractiveViewer),
+      );
       expect(viewer.minScale, 0.5);
       expect(viewer.maxScale, 4.0);
       expect(find.byIcon(CupertinoIcons.clear_thick), findsOneWidget);
@@ -568,7 +635,10 @@ void main() {
       addTearDown(rig.dispose);
 
       final container = ProviderContainer(
-        overrides: [mediaCacheOverride(rig.service)],
+        overrides: [
+          mediaCacheOverride(rig.service),
+          ...buildDownloadOverrides(),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -623,11 +693,7 @@ void main() {
         role: 'user',
         content: '这是图片附件',
         attachments: [
-          MessageAttachment(
-            name: 'diagram.png',
-            path: _k1x1Png,
-            isImage: true,
-          ),
+          MessageAttachment(name: 'diagram.png', path: _k1x1Png, isImage: true),
         ],
       );
 
@@ -661,9 +727,7 @@ void main() {
       final tmpFile = File(
         '${Directory.systemTemp.path}${Platform.pathSeparator}test_spec.pdf',
       );
-      await tester.runAsync(
-        () => tmpFile.writeAsBytes([1, 2, 3]),
-      );
+      await tester.runAsync(() => tmpFile.writeAsBytes([1, 2, 3]));
       addTearDown(() async {
         try {
           await tmpFile.delete();
@@ -691,6 +755,7 @@ void main() {
               () => _FakeActiveConnectionController(null),
             ),
             mediaFileProvider.overrideWith((ref, url) async => tmpFile),
+            ...buildDownloadOverrides(),
           ],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
@@ -714,17 +779,31 @@ void main() {
 
       expect(find.text('不支持预览'), findsOneWidget);
       expect(find.text('spec.pdf'), findsWidgets);
-      final downloadBtn =
-          find.byKey(const ValueKey('attachment-download-button'));
+      final downloadBtn = find.byKey(
+        const ValueKey('attachment-download-button'),
+      );
       expect(downloadBtn, findsOneWidget);
       expect(find.text('下载'), findsOneWidget);
 
-      // 点击下载按钮
+      // 点击下载按钮：先弹确认框，确认后走下载队列。
       await tester.tap(downloadBtn);
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('开始下载'), findsOneWidget);
+      await tester.tap(find.text('开始下载'));
+      // 队列链跨 FakeAsync（microtask 续体）+ 真实 IO（drift/文件写入）：
+      // 交替 runAsync（推进真实事件）与 pump（消化 FakeAsync microtask）轮询。
+      var taskSettled = false;
+      for (var i = 0; i < 50 && !taskSettled; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        taskSettled =
+            find.text('已下载').evaluate().isNotEmpty ||
+            find.text('重试').evaluate().isNotEmpty;
+      }
 
-      // 验证下载成功标记
+      // 验证下载成功标记（任务已完成 → 按钮显示「已下载」）
       expect(find.text('已下载'), findsOneWidget);
 
       // 关闭
@@ -755,6 +834,10 @@ void main() {
             mediaFileProvider.overrideWith(
               (ref, url) async => throw Exception('Network timeout'),
             ),
+            // 下载执行器也抛错 → 队列任务 failed → 按钮回到可重试状态。
+            ...buildDownloadOverrides(
+              downloader: (uri) async => throw Exception('Network timeout'),
+            ),
           ],
           child: const CupertinoApp(
             home: CupertinoPageScaffold(
@@ -771,18 +854,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('不支持预览'), findsOneWidget);
-      final downloadBtn =
-          find.byKey(const ValueKey('attachment-download-button'));
+      final downloadBtn = find.byKey(
+        const ValueKey('attachment-download-button'),
+      );
       expect(downloadBtn, findsOneWidget);
 
-      // 点击下载（会抛异常）
+      // 点击下载（先确认框再确认，队列真实异步失败落定）
       await tester.tap(downloadBtn);
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('开始下载'), findsOneWidget);
+      await tester.tap(find.text('开始下载'));
+      var taskSettled = false;
+      for (var i = 0; i < 50 && !taskSettled; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        taskSettled =
+            find.text('重试').evaluate().isNotEmpty ||
+            find.text('已下载').evaluate().isNotEmpty;
+      }
 
       // 验证没有未捕获异常崩溃，按钮回到可重试状态
       expect(tester.takeException(), isNull);
-      expect(find.text('下载'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
     });
   });
 }

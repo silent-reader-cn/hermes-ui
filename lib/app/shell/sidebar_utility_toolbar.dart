@@ -68,6 +68,12 @@ class SidebarUtilityToolbar extends ConsumerWidget {
       getTitle: (l10n) => l10n.memoryTitle,
     ),
     _UtilityItem(
+      id: 'downloads',
+      path: '/downloads',
+      icon: CupertinoIcons.arrow_down_circle,
+      getTitle: (l10n) => l10n.downloadsTitle,
+    ),
+    _UtilityItem(
       id: 'settings',
       path: '/settings',
       icon: CupertinoIcons.gear_alt,

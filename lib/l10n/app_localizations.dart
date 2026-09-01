@@ -281,8 +281,7 @@ class AppLocalizations {
       : '该类型通知已关闭，仍已推送测试通知（系统通道独立）';
   String get pushTestPermissionDenied =>
       isEnglish ? 'Notification permission denied' : '通知权限已被拒绝';
-  String get bgKeepAliveSection =>
-      isEnglish ? 'Background Keepalive' : '后台保活';
+  String get bgKeepAliveSection => isEnglish ? 'Background Keepalive' : '后台保活';
   String get bgForegroundServiceTitle =>
       isEnglish ? 'Foreground Service Keepalive' : '前台服务保活';
   String get bgForegroundServiceSubtitle => isEnglish
@@ -299,11 +298,9 @@ class AppLocalizations {
       ? 'Jump to system settings for auto-start, unrestricted battery, etc.'
       : '跳转系统设置以开启自启动、无限制省电等';
   String get bgGuideAutoStart => isEnglish ? 'Auto-start' : '自启动';
-  String get bgGuideBattery =>
-      isEnglish ? 'No Restrictions' : '省电无限制';
+  String get bgGuideBattery => isEnglish ? 'No Restrictions' : '省电无限制';
   String get bgGuideNetwork => isEnglish ? 'Network' : '联网控制';
-  String get bgGuideNotifications =>
-      isEnglish ? 'Notifications' : '通知权限';
+  String get bgGuideNotifications => isEnglish ? 'Notifications' : '通知权限';
   String get bgGeneratingOngoingNotification =>
       isEnglish ? 'Hermes is generating…' : 'Hermes 正在生成…';
   String get bgGeneratingChannelName =>
@@ -391,10 +388,8 @@ class AppLocalizations {
   String get thinkingIndicator => isEnglish ? 'Thinking…' : '思考中…';
   String get sending => isEnglish ? 'Sending…' : '发送中…';
   String get sendingIndicator => isEnglish ? 'Sending…' : '发送中…';
-  String get reconnecting =>
-      isEnglish ? 'Reconnecting…' : '正在恢复连接…';
-  String get reconnectingIndicator =>
-      isEnglish ? 'Reconnecting…' : '正在恢复连接…';
+  String get reconnecting => isEnglish ? 'Reconnecting…' : '正在恢复连接…';
+  String get reconnectingIndicator => isEnglish ? 'Reconnecting…' : '正在恢复连接…';
   String get messageActions => isEnglish ? 'Message Actions' : '消息操作';
   String get copyText => isEnglish ? 'Copy Text' : '复制文本';
   String get copyMarkdown => isEnglish ? 'Copy Markdown' : '复制 Markdown';
@@ -594,8 +589,11 @@ class AppLocalizations {
   }
 
   String get imageLoadFailed => isEnglish ? 'Failed to load image' : '图片加载失败';
+  String get imageReload => isEnglish ? 'Reload' : '重新加载';
+  String get imageDownloadOriginal => isEnglish ? 'Download Original' : '下载原图';
   String get mediaDownload => isEnglish ? 'Download' : '下载';
-  String get previewUnsupported => isEnglish ? 'Preview not supported' : '不支持预览';
+  String get previewUnsupported =>
+      isEnglish ? 'Preview not supported' : '不支持预览';
   String get downloadFailed => isEnglish ? 'Download failed' : '下载失败';
   String get downloaded => isEnglish ? 'Downloaded' : '已下载';
   String get downloading => isEnglish ? 'Downloading…' : '下载中…';
@@ -603,6 +601,51 @@ class AppLocalizations {
   String get mediaVideo => isEnglish ? 'Video' : '视频';
   String get mediaDocument => isEnglish ? 'Document' : '文档';
   String get mediaImage => isEnglish ? 'Image' : '图片';
+  String get downloadsTitle => isEnglish ? 'Downloads' : '下载';
+  String get downloadStatusQueued => isEnglish ? 'Queued' : '等待中';
+  String get downloadStatusDownloading => isEnglish ? 'Downloading…' : '下载中…';
+  String get downloadStatusCompleted => isEnglish ? 'Completed' : '已完成';
+  String get downloadStatusFailed => isEnglish ? 'Failed' : '失败';
+  String get downloadStatusCancelled => isEnglish ? 'Cancelled' : '已取消';
+  String get downloadsEmpty => isEnglish ? 'No downloads yet' : '暂无下载记录';
+  String get downloadConfirmTitle => isEnglish ? 'Download File' : '下载文件';
+  String downloadConfirmBody({
+    required String fileName,
+    required String fileType,
+    required String fileSize,
+    String? session,
+  }) {
+    final buffer = StringBuffer();
+    buffer.writeln(isEnglish ? 'File name: $fileName' : '文件名：$fileName');
+    buffer.writeln(isEnglish ? 'Type: $fileType' : '类型：$fileType');
+    buffer.writeln(isEnglish ? 'Size: $fileSize' : '大小：$fileSize');
+    if (session != null && session.isNotEmpty) {
+      buffer.write(isEnglish ? 'Source session: $session' : '来源会话：$session');
+    }
+    return buffer.toString().trimRight();
+  }
+
+  String get downloadConfirmCancel => isEnglish ? 'Cancel' : '取消';
+  String get downloadConfirmStart => isEnglish ? 'Start Download' : '开始下载';
+  String get downloadOpen => isEnglish ? 'Open' : '打开';
+  String get downloadRetry => isEnglish ? 'Retry' : '重试';
+  String get downloadDelete => isEnglish ? 'Delete' : '删除';
+  String get downloadClear => isEnglish ? 'Clear Completed' : '清除已完成';
+  String get downloadClearConfirm => isEnglish
+      ? 'Clear all completed and failed downloads?'
+      : '清除所有已完成与失败的下载记录？';
+  String get downloadFileMissing =>
+      isEnglish ? 'File has been moved or deleted' : '文件已被移动或删除';
+  String get downloadRedownload => isEnglish ? 'Redownload' : '重新下载';
+  String get downloadUnknownSize => isEnglish ? 'Unknown size' : '未知大小';
+  String get downloadFromSession => isEnglish ? 'Source session' : '来源会话';
+  String downloadFromSessionLabel(String sessionId) =>
+      isEnglish ? 'From session: $sessionId' : '来自会话：$sessionId';
+  String get downloadFileTypeArchive => isEnglish ? 'Archive' : '压缩包';
+  String get downloadFileTypeCode => isEnglish ? 'Code' : '代码';
+  String get downloadFileTypeOther => isEnglish ? 'File' : '文件';
+  String get downloadOpenFileFailed =>
+      isEnglish ? 'Unable to open file' : '无法打开文件';
 
   // ---------------------------------------------------------------------------
   // 4. Tasks (Cron)

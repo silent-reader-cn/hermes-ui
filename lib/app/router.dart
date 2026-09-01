@@ -8,6 +8,7 @@ import 'shell/adaptive_shell.dart';
 import '../core/connections/connection_providers.dart';
 import '../core/providers/file_picker_provider.dart';
 import '../features/chat/chat_page.dart';
+import '../features/downloads/download_page.dart';
 import '../features/git/git_page.dart';
 import '../features/insights/insights_page.dart';
 import '../features/kanban/kanban_page.dart';
@@ -37,6 +38,7 @@ import 'widgets/hermes_page_route.dart';
 /// | `/kanban` | KanbanPage | 看板 |
 /// | `/git/:sessionId` | GitPage | 会话工作区 Git |
 /// | `/insights` | InsightsPage | 用量统计 |
+/// | `/downloads` | DownloadPage | 下载管理 |
 ///
 /// 路由守卫（§2.1 初始化顺序 + §3 守卫）：未配置服务器 → 一律重定向
 /// `/onboarding`；已有激活连接 → `/onboarding` 重定向 `/`（配置完成后自动
@@ -182,6 +184,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => HermesPage<void>(
               key: const ValueKey('insights'),
               builder: (_) => const InsightsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/downloads',
+            pageBuilder: (context, state) => HermesPage<void>(
+              key: const ValueKey('downloads'),
+              builder: (_) => const DownloadPage(),
             ),
           ),
         ],
