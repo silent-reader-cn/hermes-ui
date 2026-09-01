@@ -87,6 +87,18 @@ class TranscriptMessage {
   final String anchorId;
 
   final ChatMessage message;
+
+  @override
+  bool operator ==(Object other) {
+    return other is TranscriptMessage &&
+        other.loadedIndex == loadedIndex &&
+        other.renderId == renderId &&
+        other.anchorId == anchorId &&
+        other.message == message;
+  }
+
+  @override
+  int get hashCode => Object.hash(loadedIndex, renderId, anchorId, message);
 }
 
 /// 已归档推理段（按 assistant turn 分组渲染折叠块）。

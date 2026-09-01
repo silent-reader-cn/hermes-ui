@@ -58,6 +58,7 @@ class _SafeMarkdownBody extends StatelessWidget {
     this.selectable = true,
     // ignore: unused_element_parameter
     this.inlineSyntaxes,
+    this.isStreaming = false,
   });
 
   final String data;
@@ -66,9 +67,20 @@ class _SafeMarkdownBody extends StatelessWidget {
   final Widget Function(Uri, String?, String?) imageBuilder;
   final bool selectable;
   final List<md.InlineSyntax>? inlineSyntaxes;
+  final bool isStreaming;
 
   @override
   Widget build(BuildContext context) {
+    if (isStreaming) {
+      return Text(
+        data,
+        style: TextStyle(
+          fontSize: kMarkdownBodyFontSize,
+          height: 1.4,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
+      );
+    }
     try {
       return MarkdownBody(
         data: data,
@@ -89,7 +101,7 @@ class _SafeMarkdownBody extends StatelessWidget {
       return Text(
         data,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: kMarkdownBodyFontSize,
           height: 1.4,
           color: CupertinoColors.label.resolveFrom(context),
         ),
@@ -222,10 +234,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
       },
     );
-    final initialTranscript =
-        ref.read(transcriptMessagesProvider(widget.sessionId));
-    final initialLastUser =
-        initialTranscript.where((m) => m.message.role == 'user').lastOrNull;
+    final initialTranscript = ref.read(
+      transcriptMessagesProvider(widget.sessionId),
+    );
+    final initialLastUser = initialTranscript
+        .where((m) => m.message.role == 'user')
+        .lastOrNull;
     _lastSentUserMessageId =
         initialLastUser?.message.messageId ?? initialLastUser?.message.id;
 
@@ -295,10 +309,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
         },
       );
-      final initialTranscript =
-          ref.read(transcriptMessagesProvider(widget.sessionId));
-      final initialLastUser =
-          initialTranscript.where((m) => m.message.role == 'user').lastOrNull;
+      final initialTranscript = ref.read(
+        transcriptMessagesProvider(widget.sessionId),
+      );
+      final initialLastUser = initialTranscript
+          .where((m) => m.message.role == 'user')
+          .lastOrNull;
       _lastSentUserMessageId =
           initialLastUser?.message.messageId ?? initialLastUser?.message.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -380,7 +396,11 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   /// 记录视口顶部第一条可见条目 + 偏移（候选锚点优先级：renderId → liveRenderKey → toolGroupId → messageId，todo.md #14）。
   void _updateReadingAnchor() {
-    if (!_controller.hasClients || (_nearBottom && !_userHasScrolled) || !mounted) return;
+    if (!_controller.hasClients ||
+        (_nearBottom && !_userHasScrolled) ||
+        !mounted) {
+      return;
+    }
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) return;
 
@@ -627,7 +647,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         final target = max.clamp(0.0, max);
         if (target > 0) {
           _controller.jumpTo(target);
-          if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+          if (_controller.position.pixels >
+              _controller.position.maxScrollExtent) {
             _controller.jumpTo(_controller.position.maxScrollExtent);
           }
         }
@@ -699,7 +720,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       final target = max.clamp(0.0, max);
       if (target > 0) {
         _controller.jumpTo(target);
-        if (_controller.position.pixels > _controller.position.maxScrollExtent) {
+        if (_controller.position.pixels >
+            _controller.position.maxScrollExtent) {
           _controller.jumpTo(_controller.position.maxScrollExtent);
         }
       }
@@ -1192,11 +1214,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       });
     }
 
-    final lastUserMsg =
-        transcript.where((m) => m.message.role == 'user').lastOrNull;
+    final lastUserMsg = transcript
+        .where((m) => m.message.role == 'user')
+        .lastOrNull;
     final lastUserMsgId =
         lastUserMsg?.message.messageId ?? lastUserMsg?.message.id;
-    final hasNewUserMessage = lastUserMsgId != null &&
+    final hasNewUserMessage =
+        lastUserMsgId != null &&
         _lastSentUserMessageId != null &&
         lastUserMsgId != _lastSentUserMessageId;
     if (_lastSentUserMessageId == null && lastUserMsgId != null) {
@@ -1306,8 +1330,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // live 段落条目数：时间线模式 = 段数（空段列表 = 思考中指示器 1 条）；
     // legacy 模式 = 单个流式气泡。
     // #29 断线恢复反馈：recovery 非 idle（checking/reconnecting）期间非静默提示。
-    final showRecovering = streaming != null &&
-        recovery != ActiveStreamRecoveryState.idle;
+    final showRecovering =
+        streaming != null && recovery != ActiveStreamRecoveryState.idle;
     final liveItemCount = streaming == null
         ? 0
         : liveTimeline == null
@@ -1321,7 +1345,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (showRecovering) itemCount++;
 
     final isEnglish = AppLocalizations.of(context).isEnglish;
-    final unreadCount = (_pinnedTranscriptCount > 0 &&
+    final unreadCount =
+        (_pinnedTranscriptCount > 0 &&
             transcript.length > _pinnedTranscriptCount)
         ? transcript.length - _pinnedTranscriptCount
         : 0;
@@ -1331,7 +1356,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final distFromBottom = _controller.hasClients
         ? _controller.position.maxScrollExtent - _controller.position.pixels
         : 0.0;
-    final showScrollToBottomButton = _initialPositioned &&
+    final showScrollToBottomButton =
+        _initialPositioned &&
         _controller.hasClients &&
         (_userHasScrolled || !_nearBottom) &&
         distFromBottom >= 20.0;
@@ -1339,7 +1365,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final currentHeight = constraints.maxHeight;
-        final heightChange = _lastLayoutHeight != null &&
+        final heightChange =
+            _lastLayoutHeight != null &&
             (_lastLayoutHeight! - currentHeight).abs() > 0.5;
         _lastLayoutHeight = currentHeight;
 
@@ -1421,7 +1448,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     _pinnedTranscriptCount = ref
                         .read(transcriptMessagesProvider(widget.sessionId))
                         .length;
-                    }
+                  }
                   _userHasScrolled = true;
                   _nearBottom = false;
                   if (wasNotScrolled && mounted) {
@@ -1447,7 +1474,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                   if (index < transcript.length) {
                     final entry = transcript[index];
                     final groups =
-                        entryToolGroups[entry.renderId] ?? const <ToolCallGroup>[];
+                        entryToolGroups[entry.renderId] ??
+                        const <ToolCallGroup>[];
                     final noticeId = entry.message.id;
                     final expanded = _expandedNoticeIds.contains(noticeId);
                     final isHighlightTarget =
@@ -1459,7 +1487,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     );
                     if (entry.message.messageId != null &&
                         entry.message.messageId!.isNotEmpty) {
-                      _itemKeys.putIfAbsent(entry.message.messageId!, () => entryKey);
+                      _itemKeys.putIfAbsent(
+                        entry.message.messageId!,
+                        () => entryKey,
+                      );
                     }
                     for (final g in groups) {
                       _itemKeys.putIfAbsent(g.id, () => entryKey);
@@ -1470,7 +1501,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onLongPress: () => _showMessageActions(entry.message),
-                        onSecondaryTapDown: (_) => _showMessageActions(entry.message),
+                        onSecondaryTapDown: (_) =>
+                            _showMessageActions(entry.message),
                         child: SearchMessageHighlight(
                           highlight: isHighlightTarget,
                           child: RepaintBoundary(
@@ -1531,7 +1563,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                           () => GlobalKey(),
                         );
                         if (liveEntry.toolGroup != null) {
-                          _itemKeys.putIfAbsent(liveEntry.toolGroup!.id, () => liveKey);
+                          _itemKeys.putIfAbsent(
+                            liveEntry.toolGroup!.id,
+                            () => liveKey,
+                          );
                         }
                         return KeyedSubtree(
                           key: liveKey,
@@ -1594,10 +1629,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
 /// 悬浮回底按钮（Cupertino 悬浮 pill 样式，#2 规格）。
 class _ScrollToBottomButton extends StatelessWidget {
-  const _ScrollToBottomButton({
-    required this.label,
-    required this.onPressed,
-  });
+  const _ScrollToBottomButton({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
@@ -1636,11 +1668,7 @@ class _ScrollToBottomButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              CupertinoIcons.arrow_down,
-              size: 13,
-              color: primaryColor,
-            ),
+            Icon(CupertinoIcons.arrow_down, size: 13, color: primaryColor),
             const SizedBox(width: 5),
             Text(
               label,
@@ -1681,11 +1709,11 @@ class _StreamingBubble extends ConsumerWidget {
         chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
       );
       final pendingTokens = ref.watch(
-        chatControllerProvider(
-          sessionId,
-        ).select((s) => s.pendingAssistantTokenChunks),
+        chatControllerProvider(sessionId)
+            .select((s) => s.pendingAssistantTokenChunks),
       );
-      final showCursor = phase == ChatPhase.streaming &&
+      final showCursor =
+          phase == ChatPhase.streaming &&
           isRevealQueueEmpty &&
           pendingTokens.isEmpty &&
           hasContent;
@@ -1699,6 +1727,7 @@ class _StreamingBubble extends ConsumerWidget {
               message: message,
               toolGroups: toolGroups,
               hideThinking: hideThinking,
+              isStreaming: true,
             ),
           ),
           if (showCursor)
@@ -1860,6 +1889,7 @@ class _LiveTextBlock extends ConsumerWidget {
       sections.add(
         _SafeMarkdownBody(
           data: parsedContent,
+          isStreaming: !hasMediaMarker,
           selectable: true,
           styleSheet: buildAssistantMarkdownStyleSheet(context),
           builders: createAssistantMarkdownBuilders(context),
@@ -1881,12 +1911,12 @@ class _LiveTextBlock extends ConsumerWidget {
         chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
       );
       final pendingTokens = ref.watch(
-        chatControllerProvider(
-          sessionId,
-        ).select((s) => s.pendingAssistantTokenChunks),
+        chatControllerProvider(sessionId)
+            .select((s) => s.pendingAssistantTokenChunks),
       );
       final hasContent = (streamingMessage.content ?? '').isNotEmpty;
-      final showCursor = phase == ChatPhase.streaming &&
+      final showCursor =
+          phase == ChatPhase.streaming &&
           isRevealQueueEmpty &&
           pendingTokens.isEmpty &&
           hasContent;
@@ -1987,12 +2017,7 @@ class _StreamingCursorState extends State<_StreamingCursor> {
         fontSize: 15,
         height: 1.0,
         color: color,
-        shadows: [
-          Shadow(
-            color: color.withValues(alpha: 0.25),
-            blurRadius: 4,
-          ),
-        ],
+        shadows: [Shadow(color: color.withValues(alpha: 0.25), blurRadius: 4)],
       ),
     );
 

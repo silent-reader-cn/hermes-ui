@@ -100,8 +100,8 @@ typedef ChatClarificationNeededCallback = void Function(
 /// 澄清请求回调 Provider（notifications feature 注入点）。
 final chatClarificationNeededCallbackProvider =
     Provider<ChatClarificationNeededCallback>(
-  (ref) => (sessionId, question) {},
-);
+      (ref) => (sessionId, question) {},
+    );
 
 /// 会话异常回调（cancel / error / 重连失败时由 [ChatController] 调用）。
 typedef ChatSessionErrorCallback = void Function(
@@ -128,6 +128,20 @@ final canSendProvider = Provider.family<bool, String>((ref, sessionId) {
       !state.isShowingOfflineCache &&
       !state.stream.isCancelling;
 });
+
+final _transcriptCache = <String, List<TranscriptMessage>>{};
+
+bool _listEqualsTranscript(
+  List<TranscriptMessage> a,
+  List<TranscriptMessage> b,
+) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
 
 /// 展示层转录消息（过滤 tool 消息 / 纯工具结果消息 / 流式消息；renderId 稳定）。
 final transcriptMessagesProvider =
@@ -182,6 +196,11 @@ final transcriptMessagesProvider =
           ),
         );
       }
+      final previous = _transcriptCache[sessionId];
+      if (previous != null && _listEqualsTranscript(previous, result)) {
+        return previous;
+      }
+      _transcriptCache[sessionId] = result;
       return result;
     });
 
@@ -351,12 +370,12 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
     final pendingCallBlock = <({int seq, ToolCall call})>[];
     // 重连/重锚定场景：首个断点前的内容无断点覆盖（如恢复时锚定到一条
     // 已有内容的 assistant 消息），作为「孤儿段」前置，保证旧内容不丢失。
-    final orphanText = textStarts.isNotEmpty &&
-            textStarts.first > 0 &&
-            content.isNotEmpty
+    final orphanText =
+        textStarts.isNotEmpty && textStarts.first > 0 && content.isNotEmpty
         ? content.substring(0, textStarts.first.clamp(0, content.length))
         : null;
-    final orphanThink = thinkStarts.isNotEmpty &&
+    final orphanThink =
+        thinkStarts.isNotEmpty &&
             thinkStarts.first > 0 &&
             reasoningText.isNotEmpty
         ? reasoningText
@@ -556,30 +575,31 @@ class OutlineEntry {
 }
 
 /// 大纲条目列表 Provider（by sessionId，实时响应 transcript 变化）。
-final chatOutlineEntriesProvider =
-    Provider.family<List<OutlineEntry>, String>((ref, sessionId) {
-      final transcript = ref.watch(transcriptMessagesProvider(sessionId));
-      var userIndex = 0;
-      final result = <OutlineEntry>[];
-      for (final entry in transcript) {
-        if (entry.message.role != 'user') continue;
-        userIndex++;
-        final raw = entry.message.content?.trim() ?? '';
-        final preview = raw.isEmpty
-            ? '用户轮次 $userIndex'
-            : (raw.length > 40 ? '${raw.substring(0, 40)}\u2026' : raw);
-        result.add(
-          OutlineEntry(
-            index: userIndex,
-            renderId: entry.renderId,
-            messageId:
-                entry.message.messageId?.isNotEmpty == true
-                    ? entry.message.messageId
-                    : entry.message.id,
-            preview: preview,
-            loadedIndex: entry.loadedIndex,
-          ),
-        );
-      }
-      return result;
-    });
+final chatOutlineEntriesProvider = Provider.family<List<OutlineEntry>, String>((
+  ref,
+  sessionId,
+) {
+  final transcript = ref.watch(transcriptMessagesProvider(sessionId));
+  var userIndex = 0;
+  final result = <OutlineEntry>[];
+  for (final entry in transcript) {
+    if (entry.message.role != 'user') continue;
+    userIndex++;
+    final raw = entry.message.content?.trim() ?? '';
+    final preview = raw.isEmpty
+        ? '用户轮次 $userIndex'
+        : (raw.length > 40 ? '${raw.substring(0, 40)}\u2026' : raw);
+    result.add(
+      OutlineEntry(
+        index: userIndex,
+        renderId: entry.renderId,
+        messageId: entry.message.messageId?.isNotEmpty == true
+            ? entry.message.messageId
+            : entry.message.id,
+        preview: preview,
+        loadedIndex: entry.loadedIndex,
+      ),
+    );
+  }
+  return result;
+});

@@ -40,6 +40,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.onToggleInjected,
     this.collapseInjectedEnabled = true,
     this.hideThinking = false,
+    this.isStreaming = false,
   });
 
   final ChatMessage message;
@@ -70,6 +71,9 @@ class ChatMessageBubble extends StatelessWidget {
 
   /// 隐藏思考子卡行（设置「隐藏思考」开启时透传工具卡）。
   final bool hideThinking;
+
+  /// 是否为流式进行中气泡（streaming 期间走轻量文本渲染，done 后走 MarkdownBody）。
+  final bool isStreaming;
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +158,7 @@ class ChatMessageBubble extends StatelessWidget {
               baseUrl: effectiveBaseUrl,
               sessionId: sessionId,
               customHeaders: effectiveHeaders,
+              isStreaming: isStreaming,
             ),
           ),
         );
@@ -264,6 +269,7 @@ class _AssistantContent extends StatelessWidget {
     this.baseUrl,
     this.sessionId,
     this.customHeaders,
+    this.isStreaming = false,
   });
 
   final ChatMessage message;
@@ -273,6 +279,7 @@ class _AssistantContent extends StatelessWidget {
   final String? baseUrl;
   final String? sessionId;
   final Map<String, String>? customHeaders;
+  final bool isStreaming;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +289,11 @@ class _AssistantContent extends StatelessWidget {
     final selected = SelectedContextParser.parse(content);
     final blocks = selected.blocks;
     final cleanText = selected.cleanText;
-    final parsedContent = ChatMediaParser.parseMediaMarkers(cleanText);
+    final hasMediaMarker =
+        cleanText.contains('MEDIA:') || cleanText.contains('file://');
+    final parsedContent = hasMediaMarker
+        ? ChatMediaParser.parseMediaMarkers(cleanText)
+        : cleanText;
 
     // 渲染层去重兜底：completed 与 live 双份（重连/重放场景）时只显示一份。
     // 思考子卡已由 provider 融合进工具组（ToolCallGroup 内 think 行），
@@ -302,25 +313,38 @@ class _AssistantContent extends StatelessWidget {
       sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (parsedContent.isNotEmpty) {
-      sections.add(
-        MarkdownBody(
-          data: parsedContent,
-          selectable: true,
-          styleSheet: buildAssistantMarkdownStyleSheet(context),
-          builders: createAssistantMarkdownBuilders(context),
-          // ignore: deprecated_member_use
-          imageBuilder: (uri, title, alt) {
-            return ChatInlineMediaWidget(
-              rawUri: uri.toString(),
-              title: title,
-              alt: alt,
-              baseUrl: baseUrl,
-              sessionId: sessionId,
-              customHeaders: customHeaders,
-            );
-          },
-        ),
-      );
+      if (isStreaming && !hasMediaMarker) {
+        sections.add(
+          Text(
+            parsedContent,
+            style: TextStyle(
+              fontSize: kMarkdownBodyFontSize,
+              height: 1.4,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+        );
+      } else {
+        sections.add(
+          MarkdownBody(
+            data: parsedContent,
+            selectable: true,
+            styleSheet: buildAssistantMarkdownStyleSheet(context),
+            builders: createAssistantMarkdownBuilders(context),
+            // ignore: deprecated_member_use
+            imageBuilder: (uri, title, alt) {
+              return ChatInlineMediaWidget(
+                rawUri: uri.toString(),
+                title: title,
+                alt: alt,
+                baseUrl: baseUrl,
+                sessionId: sessionId,
+                customHeaders: customHeaders,
+              );
+            },
+          ),
+        );
+      }
     }
     if (message.turnTps != null) {
       sections.add(

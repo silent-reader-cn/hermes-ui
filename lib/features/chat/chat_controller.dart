@@ -87,6 +87,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// status 轮询冷却截止。
   DateTime? _statusCheckCooldownUntil;
 
+  /// 最近一次从后台/锁屏恢复的时刻（用于诊断统计 resume→首字耗时）。
+  DateTime? _resumedAt;
+
   /// 异步操作代数守卫（防双 finalize / 覆盖新流）。
   int _generation = 0;
 
@@ -1168,7 +1171,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final api = _api;
     if (api == null) return;
     final useReplay = replayAfterSeq != null || fullReconnect;
-    final effectiveReplayAfterSeq = replayAfterSeq ??
+    final effectiveReplayAfterSeq =
+        replayAfterSeq ??
         (fullReconnect ? _replayAfterSeq(state.stream.lastEventId) : 0);
     state = state.copyWith(
       stream: state.stream.copyWith(
@@ -1222,11 +1226,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         // 避免重复推流和 UI 闪动。心跳与终结事件仍正常分发。
         switch (event) {
           case TokenSseEvent() ||
-                InterimAssistantSseEvent() ||
-                ReasoningSseEvent() ||
-                ToolStartedSseEvent() ||
-                ToolCompletedSseEvent() ||
-                PendingSteerLeftoverSseEvent():
+              InterimAssistantSseEvent() ||
+              ReasoningSseEvent() ||
+              ToolStartedSseEvent() ||
+              ToolCompletedSseEvent() ||
+              PendingSteerLeftoverSseEvent():
             return;
           default:
             break;
@@ -1318,6 +1322,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         remainder,
       ],
     );
+    if (_resumedAt != null) {
+      final elapsed = _now().difference(_resumedAt!);
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat_resume',
+        message:
+            'First token received after resume in ${elapsed.inMilliseconds}ms',
+      );
+      _resumedAt = null;
+    }
     _scheduleMerge();
     return true;
   }
@@ -1339,7 +1353,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'chat',
-        message: 'App lifecycle paused/hidden: reveal & merge consumption paused',
+        message:
+            'App lifecycle paused/hidden: reveal & merge consumption paused',
       );
       _mergeTimer?.cancel();
       _mergeTimer = null;
@@ -1348,7 +1363,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       try {
         final keepalive = ref.read(backgroundKeepaliveServiceProvider);
         final notifSettings = ref.read(notificationSettingsProvider);
-        final isStreaming = state.stream.activeStreamId != null ||
+        final isStreaming =
+            state.stream.activeStreamId != null ||
             state.phase == ChatPhase.streaming ||
             state.phase == ChatPhase.steered ||
             state.phase == ChatPhase.sending;
@@ -1367,7 +1383,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
       tag: 'chat',
-      message: 'App lifecycle resumed: flushing pending text + watchdog rebaseline',
+      message:
+          'App lifecycle resumed: flushing pending text + watchdog rebaseline',
     );
     try {
       final keepalive = ref.read(backgroundKeepaliveServiceProvider);
@@ -1390,16 +1407,31 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastProgress = _now();
     _lastTransportActivity = _now();
     _statusCheckCooldownUntil = null;
-    // #29：空窗 ≥ 传输停滞阈值 → 立即主动查 stream status（不等 watchdog
-    // 12-18s 重探测）。恢复中（recovery != idle）说明已有恢复流程在跑
-    // （watchdog/transportError 接管），不重复触发；死流/超时立即重连或补差，
-    // 健康流 loadMessages 顺带把后台期间新内容落地——「切回立即呈现最新状态」。
     final stream = state.stream;
-    if (stream.activeStreamId != null &&
+    final isStreamingActive =
+        stream.activeStreamId != null &&
         !stream.hasCompletedResponse &&
-        !state.pendingAction.hasPendingPrompt &&
+        !state.pendingAction.hasPendingPrompt;
+    if (isStreamingActive) {
+      _resumedAt = _now();
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat_resume',
+        message:
+            'App lifecycle resumed (transportGap: ${transportGap.inMilliseconds}ms, streamId: ${stream.activeStreamId})',
+      );
+    }
+    // resume 立即主动查 stream status（不等 watchdog 12s 阈值）：
+    // 空窗达到阈值（生产环境 gap >= 2s，测试 override 时取其较小值）且 recovery == idle 时立即探测，
+    // 弱网/后台空窗目标 resume→首个新字 ≤3s；死流/超时立即重连或补差，健康流 loadMessages
+    // 顺带把后台期间新内容落地——「切回立即呈现最新状态」。
+    final resumeProbeThreshold =
+        _watchdogConfig.transportStaleThreshold < const Duration(seconds: 2)
+        ? _watchdogConfig.transportStaleThreshold
+        : const Duration(seconds: 2);
+    if (isStreamingActive &&
         stream.recovery == ActiveStreamRecoveryState.idle &&
-        transportGap >= _watchdogConfig.transportStaleThreshold) {
+        transportGap >= resumeProbeThreshold) {
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'chat_resume',
@@ -1517,7 +1549,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         : _revealQueue.length;
     final units = _revealQueue.sublist(0, effectiveCount);
     _revealQueue.removeRange(0, effectiveCount);
-    _appendToStreamingMessage(units.join(), isRevealQueueEmpty: _revealQueue.isEmpty);
+    _appendToStreamingMessage(
+      units.join(),
+      isRevealQueueEmpty: _revealQueue.isEmpty,
+    );
     _markProgress();
     // 最大滞后 1s：积压超过时限一次性排空。
     final start = _revealQueueStart;
@@ -1548,9 +1583,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       _appendToStreamingMessage(text);
     } else {
-      state = state.copyWith(
-        isRevealQueueEmpty: true,
-      );
+      state = state.copyWith(isRevealQueueEmpty: true);
     }
     _flushReasoningChunks();
   }
@@ -1905,7 +1938,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.warn,
         tag: 'chat',
-        message: 'Phase changed to approvalPending (session: ${state.sessionId})',
+        message:
+            'Phase changed to approvalPending (session: ${state.sessionId})',
       );
       state = state.copyWith(
         phase: ChatPhase.approvalPending,
@@ -1922,12 +1956,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyClarificationUpdate(Map<String, Object?> payload) {
     final pending = payload['pending'];
     if (pending is Map) {
-      final isNew = state.phase != ChatPhase.clarifyPending ||
+      final isNew =
+          state.phase != ChatPhase.clarifyPending ||
           state.pendingAction.clarificationPrompt == null;
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.warn,
         tag: 'chat',
-        message: 'Phase changed to clarifyPending (session: ${state.sessionId})',
+        message:
+            'Phase changed to clarifyPending (session: ${state.sessionId})',
       );
       state = state.copyWith(
         phase: ChatPhase.clarifyPending,
@@ -2887,11 +2923,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final lastTransport = _lastTransportActivity;
     final hasRunningTools = _hasRunningTools;
 
-    final isNormalStale = lastProgress != null &&
+    final isNormalStale =
+        lastProgress != null &&
         now.difference(lastProgress) >= config.progressStaleThreshold &&
         lastTransport != null &&
         now.difference(lastTransport) >= config.transportStaleThreshold;
-    final isToolProgressStale = hasRunningTools &&
+    final isToolProgressStale =
+        hasRunningTools &&
         lastProgress != null &&
         now.difference(lastProgress) >= config.forceReconnectThreshold;
 
@@ -2916,9 +2954,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final forceThreshold = hasRunningTools
         ? config.forceReconnectWithRunningToolsThreshold
         : config.forceReconnectThreshold;
-    final isTransportForce = lastTransport != null &&
+    final isTransportForce =
+        lastTransport != null &&
         now.difference(lastTransport) >= forceThreshold;
-    final isToolProgressForce = hasRunningTools &&
+    final isToolProgressForce =
+        hasRunningTools &&
         lastProgress != null &&
         now.difference(lastProgress) >=
             config.forceReconnectWithRunningToolsThreshold;
@@ -2939,10 +2979,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Future<void> _checkStatusAndReconnect() async {
     final streamId = state.stream.activeStreamId;
     if (streamId == null) return;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_resume',
+      message:
+          'Checking stream status (streamId: $streamId, session: ${state.sessionId})',
+    );
     final gen = _generation;
     try {
       final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat_resume',
+        message:
+            'Stream status checked: active=${status.active}, replayAvailable=${status.replayAvailable}',
+      );
       if (status.active == true) {
         await _loadMessagesAndResume(streamId);
       } else if (status.replayAvailable == true) {
@@ -2966,8 +3018,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       } else {
         await _finalizeAfterRecovery(streamId);
       }
-    } on ApiException {
+    } on ApiException catch (e) {
       if (_disposed || gen != _generation) return;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat_resume',
+        message: 'Status check failed: $e, falling back to force reconnect',
+      );
       _forceReconnect(streamId);
     }
   }
@@ -3075,7 +3132,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         .toSet();
     return groups.map((g) {
       final anchor = g.anchorMessageID;
-      final needsReanchor = anchor == null ||
+      final needsReanchor =
+          anchor == null ||
           anchor == oldStreamingId ||
           ((anchor.startsWith('local-') || anchor == 'unanchored') &&
               !messageIds.contains(anchor));
@@ -3105,15 +3163,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         .toSet();
     return groups.map((g) {
       final anchor = g.anchorMessageId;
-      final needsReanchor = anchor == null ||
+      final needsReanchor =
+          anchor == null ||
           anchor == oldStreamingId ||
           ((anchor.startsWith('local-') || anchor == 'unanchored') &&
               !messageIds.contains(anchor));
       if (needsReanchor) {
-        return ReasoningGroup(
-          anchorMessageId: newAnchorId,
-          text: g.text,
-        );
+        return ReasoningGroup(anchorMessageId: newAnchorId, text: g.text);
       }
       return g;
     }).toList();
