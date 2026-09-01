@@ -1296,6 +1296,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     var remainder = text;
     final stream = state.stream;
     if (stream.isReplayConnection) {
+      // 打点前记录匹配游标：重放帧即使全命中（remainder 空），也要用它
+      // 重建 text 段断点（该帧在最终 content 中的起点）。
+      final prevCursor = stream.matchedPrefixLength;
       final deduped = deduplicatedReplayToken(
         token: text,
         existingContent: _currentStreamingContent(),
@@ -1308,7 +1311,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           isReplayConnection: deduped.stillReplay,
         ),
       );
-      if (remainder.isEmpty) return false;
+      if (remainder.isEmpty) {
+        // 重放帧（fullReconnect 从 0 重放）文本全部命中断线前已 flush 的内容：
+        // 内容不再追加，但该帧仍是真实 text 事件——补建断点，恢复段落穿插；
+        // 否则 points 为空 + 归档锚定 → liveTimeline=null → 旧分组式气泡沉底。
+        _ensureTimelinePoint(LiveSegmentKind.text, prevCursor);
+        return false;
+      }
     }
     // 时间线断点：在「事件到达」时记录（而非 flush 时），保证与真实事件顺序一致；
     // start 取缓冲全量（content + 待合并 + 待揭示），使切片与最终 content 对齐。
@@ -1612,6 +1621,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     var remainder = text;
     final stream = state.stream;
     if (stream.isReplayConnection) {
+      // 打点前记录匹配游标：重放帧全命中（remainder 空）时用它重建
+      // thinking 段断点（该帧在最终 reasoning 文本中的起点）。
+      final prevCursor = stream.matchedReasoningLength;
       final deduped = deduplicatedReplayText(
         text: text,
         existingContent: _currentReasoningContent(),
@@ -1624,7 +1636,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           isReplayConnection: deduped.stillReplay,
         ),
       );
-      if (remainder.isEmpty) return false;
+      if (remainder.isEmpty) {
+        // same 重放帧：内容命中已有思考，补建 thinking 断点（渲染层按
+        // hideReasoning 过滤），避免重连后断点结构缺失导致时间线回退。
+
+        _ensureTimelinePoint(LiveSegmentKind.thinking, prevCursor);
+        return false;
+      }
     }
     // 与工具事件一致：reasoning 先到时也立即锚定空流式气泡（思考中指示器兜底）。
     _ensureStreamingAssistantMessage();
