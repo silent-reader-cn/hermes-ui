@@ -137,10 +137,7 @@ FakeSettingsApi buildApi() {
         label: 'Context Compression',
       ),
     ],
-    main: AuxMainModel(
-      provider: 'openai',
-      model: 'gpt-4o',
-    ),
+    main: AuxMainModel(provider: 'openai', model: 'gpt-4o'),
   );
   return api;
 }
@@ -171,10 +168,7 @@ ApiClient buildMockApiClient({
     BaseOptions(validateStatus: (_) => true, followRedirects: false),
   );
   dio.httpClientAdapter = _MockHttpClientAdapter(handler);
-  return ApiClient(
-    baseUrl: baseUrl,
-    dio: dio,
-  );
+  return ApiClient(baseUrl: baseUrl, dio: dio);
 }
 
 class _FakeTurnNotificationService implements TurnNotificationService {
@@ -211,6 +205,13 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   ) async {
     errorCalls.add((sessionId, title, preview));
   }
+
+  @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {}
 
   @override
   Future<void> clearAll() async {
@@ -264,11 +265,13 @@ void main() {
           (baseUrl, headers) => client,
         ),
         if (notificationService != null)
-          turnNotificationServiceProvider
-              .overrideWithValue(notificationService),
+          turnNotificationServiceProvider.overrideWithValue(
+            notificationService,
+          ),
         if (keepaliveService != null)
-          backgroundKeepaliveServiceProvider
-              .overrideWithValue(keepaliveService),
+          backgroundKeepaliveServiceProvider.overrideWithValue(
+            keepaliveService,
+          ),
       ],
     );
     addTearDown(container.dispose);
@@ -338,8 +341,9 @@ void main() {
       // 模型：默认模型显示名 + 推理强度
       expect(find.text('默认模型'), findsOneWidget);
       expect(find.text('GPT-4o'), findsOneWidget);
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-reasoning')),
+      );
       expect(find.text('推理强度'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);
 
@@ -562,7 +566,7 @@ void main() {
       final container = await makeContainer(
         api: buildApi(),
         connections: [
-          buildConn('c2', 'Office', 'http://office.example.com:30002')
+          buildConn('c2', 'Office', 'http://office.example.com:30002'),
         ],
         activeId: 'c2',
       );
@@ -663,10 +667,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 错误提示 + 表单停留 + 未落库
-      expect(
-        find.text('登录失败：密码被拒绝。请检查服务器密码后重试。'),
-        findsOneWidget,
-      );
+      expect(find.text('登录失败：密码被拒绝。请检查服务器密码后重试。'), findsOneWidget);
       expect(find.byKey(const ValueKey('server-editor-url')), findsOneWidget);
       expect(container.read(connectionsProvider), hasLength(1));
     });
@@ -706,7 +707,7 @@ void main() {
               '{"profiles":[{"name":"Default"},{"name":"Work"}],"active":"$currentProfile"}',
               200,
               headers: {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           }
@@ -716,7 +717,7 @@ void main() {
               '{"profiles":[{"name":"Default"},{"name":"Work"}],"active":"Work"}',
               200,
               headers: {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           }
@@ -740,8 +741,9 @@ void main() {
       expect(find.text('Default'), findsOneWidget);
 
       // 点击打开选择弹窗
-      await tester
-          .tap(find.byKey(const ValueKey('server-editor-profile-tile')));
+      await tester.tap(
+        find.byKey(const ValueKey('server-editor-profile-tile')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('选择 Profile'), findsOneWidget);
@@ -765,7 +767,7 @@ void main() {
                 '{"error":"Network error"}',
                 500,
                 headers: {
-                  'content-type': ['application/json']
+                  'content-type': ['application/json'],
                 },
               );
             }
@@ -773,7 +775,7 @@ void main() {
               '{"profiles":[{"name":"Production"}],"active":"Production"}',
               200,
               headers: {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           }
@@ -798,8 +800,9 @@ void main() {
 
       // 恢复后重试
       shouldFail = false;
-      await tester
-          .tap(find.byKey(const ValueKey('server-editor-profile-retry')));
+      await tester.tap(
+        find.byKey(const ValueKey('server-editor-profile-retry')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('读取失败'), findsNothing);
@@ -814,7 +817,7 @@ void main() {
               '{"profiles":[{"name":"Default"},{"name":"Dev"}],"active":"Default"}',
               200,
               headers: {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           }
@@ -823,7 +826,7 @@ void main() {
               '{"error":"Switch forbidden"}',
               403,
               headers: {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           }
@@ -842,8 +845,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
       await tester.pumpAndSettle();
 
-      await tester
-          .tap(find.byKey(const ValueKey('server-editor-profile-tile')));
+      await tester.tap(
+        find.byKey(const ValueKey('server-editor-profile-tile')),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Dev'));
@@ -896,8 +900,9 @@ void main() {
       );
       await pumpPage(tester, container);
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('settings-reasoning')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-reasoning')),
+      );
       await tester.tap(find.byKey(const ValueKey('settings-reasoning')));
       await tester.pumpAndSettle();
 
@@ -928,8 +933,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
       await tester.pumpAndSettle();
 
-      final toggle =
-          find.byKey(const ValueKey('extension-toggle-ext-web-search'));
+      final toggle = find.byKey(
+        const ValueKey('extension-toggle-ext-web-search'),
+      );
       expect(find.text('Web Search'), findsOneWidget);
       expect(find.textContaining('ext-web-search'), findsOneWidget);
       expect(toggle, findsOneWidget);
@@ -958,8 +964,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
       await tester.pumpAndSettle();
 
-      final rowFinder =
-          find.byKey(const ValueKey('extension-row-ext-web-search'));
+      final rowFinder = find.byKey(
+        const ValueKey('extension-row-ext-web-search'),
+      );
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
 
@@ -968,21 +975,24 @@ void main() {
         find.byKey(const ValueKey('extension-sidecar-ext-web-search')),
         findsOneWidget,
       );
-      await tester
-          .tap(find.byKey(const ValueKey('extension-sidecar-ext-web-search')));
+      await tester.tap(
+        find.byKey(const ValueKey('extension-sidecar-ext-web-search')),
+      );
       await tester.pumpAndSettle();
       expect(api.setSidecarConsentCalls, [('ext-web-search', false)]);
 
       // Uninstall
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
-      await tester
-          .tap(find.byKey(const ValueKey('extension-uninstall-ext-web-search')));
+      await tester.tap(
+        find.byKey(const ValueKey('extension-uninstall-ext-web-search')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('卸载扩展'), findsOneWidget);
-      await tester
-          .tap(find.byKey(const ValueKey('extension-uninstall-confirm')));
+      await tester.tap(
+        find.byKey(const ValueKey('extension-uninstall-confirm')),
+      );
       await tester.pumpAndSettle();
 
       expect(api.uninstallExtensionCalls, ['ext-web-search']);
@@ -1006,8 +1016,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('settings-entry-extensions')));
       await tester.pumpAndSettle();
 
-      final installTile =
-          find.byKey(const ValueKey('settings-extension-install'));
+      final installTile = find.byKey(
+        const ValueKey('settings-extension-install'),
+      );
       await tester.tap(installTile);
       await tester.pumpAndSettle();
 
@@ -1016,8 +1027,9 @@ void main() {
         find.byKey(const ValueKey('registry-item-ext-calculator')),
         findsOneWidget,
       );
-      await tester
-          .tap(find.byKey(const ValueKey('registry-item-ext-calculator')));
+      await tester.tap(
+        find.byKey(const ValueKey('registry-item-ext-calculator')),
+      );
       await tester.pump();
 
       final idField = tester.widget<CupertinoTextField>(
@@ -1050,7 +1062,9 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-mcp')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
@@ -1075,13 +1089,16 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-mcp')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
 
-      final rowFinder =
-          find.byKey(const ValueKey('mcp-server-row-fetch-server'));
+      final rowFinder = find.byKey(
+        const ValueKey('mcp-server-row-fetch-server'),
+      );
       await tester.tap(rowFinder);
       await tester.pumpAndSettle();
 
@@ -1123,7 +1140,9 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入 MCP 二级页
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-mcp')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-mcp')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-mcp')));
       await tester.pumpAndSettle();
@@ -1168,7 +1187,9 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入辅助模型二级页
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-auxiliary')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
       await tester.pumpAndSettle();
@@ -1198,8 +1219,9 @@ void main() {
         findsOneWidget,
       );
 
-      await tester
-          .tap(find.byKey(const ValueKey('aux-model-option-claude-sonnet-4')));
+      await tester.tap(
+        find.byKey(const ValueKey('aux-model-option-claude-sonnet-4')),
+      );
       await tester.pumpAndSettle();
 
       expect(api.setAuxiliaryModelCalls, [
@@ -1222,7 +1244,9 @@ void main() {
       await pumpPage(tester, container);
 
       // 进入辅助模型二级页
-      await tester.ensureVisible(find.byKey(const ValueKey('settings-entry-auxiliary')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-entry-auxiliary')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-entry-auxiliary')));
       await tester.pumpAndSettle();
@@ -1232,82 +1256,83 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('全部重置为自动'), findsWidgets);
-      await tester
-          .tap(find.byKey(const ValueKey('settings-aux-reset-confirm')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-aux-reset-confirm')),
+      );
       await tester.pumpAndSettle();
 
       expect(api.setAuxiliaryModelCalls, [
-        (
-          task: '__reset__',
-          provider: 'auto',
-          model: '',
-          advanced: null,
-        ),
+        (task: '__reset__', provider: 'auto', model: '', advanced: null),
       ]);
     });
   });
 
   group('保存按钮几何回归测试', () {
     testWidgets(
-        '深色模式 + 真实主题 + 金照字体：保存文本完全落在 CupertinoNavigationBar 内 (scale 1.0 & 1.3)',
-        (tester) async {
-      await loadHermesGoldenFonts();
-      tester.view.physicalSize = const Size(800, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+      '深色模式 + 真实主题 + 金照字体：保存文本完全落在 CupertinoNavigationBar 内 (scale 1.0 & 1.3)',
+      (tester) async {
+        await loadHermesGoldenFonts();
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
 
-      for (final textScale in [1.0, 1.3]) {
-        final container = await makeContainer(
-          api: buildApi(),
-          connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
-          activeId: 'c1',
-        );
+        for (final textScale in [1.0, 1.3]) {
+          final container = await makeContainer(
+            api: buildApi(),
+            connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+            activeId: 'c1',
+          );
 
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: CupertinoApp(
-              theme: buildCupertinoTheme(Brightness.dark),
-              home: MediaQuery(
-                data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-                child: const SettingsPage(),
+          await tester.pumpWidget(
+            UncontrolledProviderScope(
+              container: container,
+              child: CupertinoApp(
+                theme: buildCupertinoTheme(Brightness.dark),
+                home: MediaQuery(
+                  data: MediaQueryData(
+                    textScaler: TextScaler.linear(textScale),
+                  ),
+                  child: const SettingsPage(),
+                ),
               ),
             ),
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
 
-        // 打开服务器编辑页
-        await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
-        await tester.pumpAndSettle();
+          // 打开服务器编辑页
+          await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+          await tester.pumpAndSettle();
 
-        final navBarFinder = find.byType(CupertinoNavigationBar);
-        expect(navBarFinder, findsOneWidget);
-        final navBarRect = tester.getRect(navBarFinder);
+          final navBarFinder = find.byType(CupertinoNavigationBar);
+          expect(navBarFinder, findsOneWidget);
+          final navBarRect = tester.getRect(navBarFinder);
 
-        final saveBtnFinder = find.byKey(const ValueKey('server-editor-save'));
-        expect(saveBtnFinder, findsOneWidget);
-        final saveBtnRect = tester.getRect(saveBtnFinder);
+          final saveBtnFinder = find.byKey(
+            const ValueKey('server-editor-save'),
+          );
+          expect(saveBtnFinder, findsOneWidget);
+          final saveBtnRect = tester.getRect(saveBtnFinder);
 
-        final textFinder = find.descendant(
-          of: saveBtnFinder,
-          matching: find.text('保存'),
-        );
-        expect(textFinder, findsOneWidget);
-        final textRect = tester.getRect(textFinder);
+          final textFinder = find.descendant(
+            of: saveBtnFinder,
+            matching: find.text('保存'),
+          );
+          expect(textFinder, findsOneWidget);
+          final textRect = tester.getRect(textFinder);
 
-        // 断言保存按钮及文本在垂直方向完全处于 44pt 导航栏之内
-        expect(saveBtnRect.top, greaterThanOrEqualTo(navBarRect.top));
-        expect(saveBtnRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
-        expect(textRect.top, greaterThanOrEqualTo(navBarRect.top));
-        expect(textRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
+          // 断言保存按钮及文本在垂直方向完全处于 44pt 导航栏之内
+          expect(saveBtnRect.top, greaterThanOrEqualTo(navBarRect.top));
+          expect(saveBtnRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
+          expect(textRect.top, greaterThanOrEqualTo(navBarRect.top));
+          expect(textRect.bottom, lessThanOrEqualTo(navBarRect.bottom));
 
-        // 返回设置页
-        await tester.tap(find.byType(CupertinoNavigationBarBackButton));
-        await tester.pumpAndSettle();
-      }
-    });
+          // 返回设置页
+          await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+          await tester.pumpAndSettle();
+        }
+      },
+    );
   });
 
   group('设置页滚动与双击回顶', () {
@@ -1342,7 +1367,9 @@ void main() {
       );
       expect(titleDetectorFinder, findsWidgets);
 
-      final detector = tester.widget<GestureDetector>(titleDetectorFinder.first);
+      final detector = tester.widget<GestureDetector>(
+        titleDetectorFinder.first,
+      );
       detector.onDoubleTap!.call();
       await tester.pumpAndSettle();
 
@@ -1390,9 +1417,18 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1200));
 
-      expect(find.byKey(const ValueKey('settings-switch-notify-turns')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-switch-notify-clarify')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-switch-notify-errors')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-switch-notify-clarify')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-switch-notify-errors')),
+        findsOneWidget,
+      );
 
       final turnsSwitch = tester.widget<CupertinoSwitch>(
         find.byKey(const ValueKey('settings-switch-notify-turns')),
@@ -1400,7 +1436,9 @@ void main() {
       expect(turnsSwitch.value, isTrue);
 
       // 切换 turns 开关
-      await tester.tap(find.byKey(const ValueKey('settings-switch-notify-turns')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+      );
       await tester.pumpAndSettle();
 
       final updatedSwitch = tester.widget<CupertinoSwitch>(
@@ -1421,14 +1459,24 @@ void main() {
       await pumpPage(tester, container);
 
       // 推送测试行与组件
-      expect(find.byKey(const ValueKey('settings-notify-push-test')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-notify-push-test-type')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-notify-push-test-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-notify-push-test')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-notify-push-test-type')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+        findsOneWidget,
+      );
 
       // 默认选择为回合完成
-      final segmented = tester.widget<CupertinoSlidingSegmentedControl<PushTestType>>(
-        find.byKey(const ValueKey('settings-notify-push-test-type')),
-      );
+      final segmented = tester
+          .widget<CupertinoSlidingSegmentedControl<PushTestType>>(
+            find.byKey(const ValueKey('settings-notify-push-test-type')),
+          );
       expect(segmented.groupValue, PushTestType.turns);
 
       // 选项文本与按钮文本
@@ -1438,7 +1486,9 @@ void main() {
       expect(find.text('推送'), findsOneWidget);
     });
 
-    testWidgets('默认选“回合完成”，点击推送 → 请求权限 + 触发 notifyTurnCompleted + 弹已推送轻提示', (tester) async {
+    testWidgets('默认选“回合完成”，点击推送 → 请求权限 + 触发 notifyTurnCompleted + 弹已推送轻提示', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final fakeService = _FakeTurnNotificationService();
       final container = await makeContainer(
@@ -1450,7 +1500,9 @@ void main() {
       await pumpPage(tester, container);
 
       // 点击推送按钮
-      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeService.permissionRequests, 1);
@@ -1467,7 +1519,9 @@ void main() {
       expect(find.text('已推送：回合完成'), findsNothing);
     });
 
-    testWidgets('切换为“需要澄清”，点击推送 → 触发 clarify 通道 mock + 弹已推送轻提示', (tester) async {
+    testWidgets('切换为“需要澄清”，点击推送 → 触发 clarify 通道 mock + 弹已推送轻提示', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final fakeService = _FakeTurnNotificationService();
       final container = await makeContainer(
@@ -1479,14 +1533,18 @@ void main() {
       await pumpPage(tester, container);
 
       // 切换选择器到“需要澄清”
-      await tester.tap(find.descendant(
-        of: find.byKey(const ValueKey('settings-notify-push-test-type')),
-        matching: find.text('需要澄清'),
-      ));
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('settings-notify-push-test-type')),
+          matching: find.text('需要澄清'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 点击推送
-      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeService.permissionRequests, 1);
@@ -1514,14 +1572,18 @@ void main() {
       await pumpPage(tester, container);
 
       // 切换选择器到“异常中断”
-      await tester.tap(find.descendant(
-        of: find.byKey(const ValueKey('settings-notify-push-test-type')),
-        matching: find.text('异常中断'),
-      ));
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('settings-notify-push-test-type')),
+          matching: find.text('异常中断'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 点击推送
-      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeService.permissionRequests, 1);
@@ -1549,11 +1611,15 @@ void main() {
       await pumpPage(tester, container);
 
       // 关闭 turns 开关
-      await tester.tap(find.byKey(const ValueKey('settings-switch-notify-turns')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+      );
       await tester.pumpAndSettle();
 
       // 点击推送测试
-      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeService.notifyCalls, hasLength(1));
@@ -1564,7 +1630,8 @@ void main() {
 
     testWidgets('权限被拒绝时，记录诊断日志并轻提示权限被拒绝', (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final fakeService = _FakeTurnNotificationService()..permissionResult = false;
+      final fakeService = _FakeTurnNotificationService()
+        ..permissionResult = false;
       final container = await makeContainer(
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
@@ -1577,7 +1644,9 @@ void main() {
       await DiagnosticsService.instance.setEnabled(true);
 
       // 点击推送测试
-      await tester.tap(find.byKey(const ValueKey('settings-notify-push-test-button')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-notify-push-test-button')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeService.permissionRequests, 1);
@@ -1589,7 +1658,10 @@ void main() {
       // 验证诊断日志
       final logs = DiagnosticsService.instance.logs;
       expect(
-        logs.any((e) => e.tag == 'notifications' && e.level == DiagnosticsLogLevel.warn),
+        logs.any(
+          (e) =>
+              e.tag == 'notifications' && e.level == DiagnosticsLogLevel.warn,
+        ),
         isTrue,
       );
     });
@@ -1613,7 +1685,10 @@ void main() {
         50,
       );
 
-      expect(find.byKey(const ValueKey('settings-notify-push-test')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-notify-push-test')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   });
@@ -1630,7 +1705,9 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
-      final fgSwitchRow = find.byKey(const ValueKey('settings-bg-foreground-service'));
+      final fgSwitchRow = find.byKey(
+        const ValueKey('settings-bg-foreground-service'),
+      );
       await tester.scrollUntilVisible(fgSwitchRow, 50);
       expect(fgSwitchRow, findsOneWidget);
 
@@ -1664,7 +1741,9 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
-      final wmStatusRow = find.byKey(const ValueKey('settings-bg-workmanager-status'));
+      final wmStatusRow = find.byKey(
+        const ValueKey('settings-bg-workmanager-status'),
+      );
       await tester.scrollUntilVisible(wmStatusRow, 50);
       expect(wmStatusRow, findsOneWidget);
 
@@ -1672,13 +1751,27 @@ void main() {
       await tester.scrollUntilVisible(guideRow, 50);
       expect(guideRow, findsOneWidget);
 
-      expect(find.byKey(const ValueKey('settings-bg-guide-autostart')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-bg-guide-battery')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-bg-guide-network')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-bg-guide-notifications')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-autostart')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-battery')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-network')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-notifications')),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('点击 4 个 HyperOS 引导按钮触发 keepalive.openHyperOsSetting', (tester) async {
+    testWidgets('点击 4 个 HyperOS 引导按钮触发 keepalive.openHyperOsSetting', (
+      tester,
+    ) async {
       final fakeKeepalive = FakeBackgroundKeepaliveService();
       final container = await makeContainer(
         api: buildApi(),
@@ -1688,8 +1781,9 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
-      final autostartBtn =
-          find.byKey(const ValueKey('settings-bg-guide-autostart'));
+      final autostartBtn = find.byKey(
+        const ValueKey('settings-bg-guide-autostart'),
+      );
       await tester.scrollUntilVisible(autostartBtn, 100);
       await tester.drag(
         find.byKey(const ValueKey('settings-scroll')),
@@ -1703,7 +1797,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-bg-guide-network')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-bg-guide-notifications')));
+      await tester.tap(
+        find.byKey(const ValueKey('settings-bg-guide-notifications')),
+      );
       await tester.pumpAndSettle();
 
       expect(fakeKeepalive.openedSettings, [
@@ -1732,7 +1828,10 @@ void main() {
         50,
       );
 
-      expect(find.byKey(const ValueKey('settings-bg-hyperos-guide')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-bg-hyperos-guide')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   });

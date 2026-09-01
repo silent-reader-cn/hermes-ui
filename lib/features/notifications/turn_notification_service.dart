@@ -4,8 +4,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
+import '../downloads/download_models.dart';
 
-/// 回合/澄清/错误三类通知服务（抽象接口，平台无关契约）。
+/// 回合/澄清/错误/下载通知服务（抽象接口，平台无关契约）。
 ///
 /// 生产实现 [LocalNotificationsTurnNotificationService] 基于
 /// flutter_local_notifications；测试注入 fake 实现即可验证通知触发逻辑。
@@ -23,10 +24,7 @@ abstract interface class TurnNotificationService {
   /// 需要澄清 → 弹系统通知（Android channel: "clarify", ID: 1101; Windows）。
   ///
   /// [sessionId] 编码进点击 payload；[question] 为澄清问题正文。
-  Future<void> notifyClarificationNeeded(
-    String sessionId,
-    String question,
-  );
+  Future<void> notifyClarificationNeeded(String sessionId, String question);
 
   /// 异常中断/错误 → 弹系统通知（Android channel: "errors", ID: 1201; Windows）。
   ///
@@ -37,14 +35,24 @@ abstract interface class TurnNotificationService {
     String preview,
   );
 
+  /// 下载完成 → 弹系统通知（Android channel: "downloads", ID: 1301; Windows）。
+  ///
+  /// [downloadId] 编码进点击 payload（payload 格式为 `download:<downloadId>`）；
+  /// [fileName] 为文件名，[byteSize] 为文件字节大小。
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  );
+
   /// 清除全部通知（回到前台 / 点击通知后调用）。
   Future<void> clearAll();
 
   /// 请求通知权限（Android 13+ 必需；其他平台视为已授权）。
   Future<bool> requestPermission();
 
-  /// 冷启动来源 sessionId：由通知点击拉起 app 时返回 payload 中的
-  /// sessionId（非通知启动返回 null）。
+  /// 冷启动来源 payload / sessionId：由通知点击拉起 app 时返回 payload 中的
+  /// 内容（非通知启动返回 null）。
   Future<String?> getLaunchSessionId();
 }
 
@@ -70,12 +78,12 @@ abstract interface class TurnNotificationService {
 ///      后台拉取 `GET /api/sessions/:id/status` 纠偏，触发补发通知；
 ///    - 方案 C（FCM / 统一推送通道）：服务端生成完成时直接下发推送通知唤醒 App。
 ///
-/// flutter_local_notifications 生产实现（Android 3 通道 + Windows Toast）。
+/// flutter_local_notifications 生产实现（Android 4 通道 + Windows Toast）。
 ///
 /// 行为对齐契约：
-/// 1. Android 分区 1001(turns)/1101(clarify)/1201(errors)，冷启动即批量预创建通道；
+/// 1. Android 分区 1001(turns)/1101(clarify)/1201(errors)/1301(downloads)，冷启动即批量预创建通道；
 /// 2. Windows Toast 初始化 (Hermes UI + AUMID com.hermes.ui)；
-/// 3. 点击回到对应会话，回到 app 自动清除。所有平台调用均吞异常并记日志与诊断。
+/// 3. 点击回到对应会话或处理下载，回到 app 自动清除。所有平台调用均吞异常并记日志与诊断。
 class LocalNotificationsTurnNotificationService
     implements TurnNotificationService {
   LocalNotificationsTurnNotificationService({
@@ -101,6 +109,12 @@ class LocalNotificationsTurnNotificationService
   static const channelErrorsDescription = '会话异常中断或出错时推送系统通知';
   static const notificationErrorsId = 1201;
 
+  /// Android 通知通道：下载完成。
+  static const channelDownloadsId = 'downloads';
+  static const channelDownloadsName = '下载完成';
+  static const channelDownloadsDescription = '文件下载完成时推送系统通知';
+  static const notificationDownloadsId = 1301;
+
   /// Android 通知渠道配置列表（启动时批量预创建）。
   static const androidChannels = <AndroidNotificationChannel>[
     AndroidNotificationChannel(
@@ -121,6 +135,12 @@ class LocalNotificationsTurnNotificationService
       description: channelErrorsDescription,
       importance: Importance.high,
     ),
+    AndroidNotificationChannel(
+      channelDownloadsId,
+      channelDownloadsName,
+      description: channelDownloadsDescription,
+      importance: Importance.high,
+    ),
   ];
 
   /// 兼容历史 channel 常量。
@@ -134,8 +154,8 @@ class LocalNotificationsTurnNotificationService
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  /// 点击通知回调（入参为 payload 中的 sessionId）。
-  final void Function(String sessionId)? onTap;
+  /// 点击通知回调（入参为 payload：sessionId 或 `download:<id>` 等扩展前缀）。
+  final void Function(String payload)? onTap;
 
   bool _initialized = false;
 
@@ -161,8 +181,10 @@ class LocalNotificationsTurnNotificationService
       _initialized = true;
 
       // 显式批量预创建 Android 通知三渠道（覆盖安装冷启动后立即补齐三通道）：
-      final android = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (android != null) {
         for (final channel in androidChannels) {
           await android.createNotificationChannel(channel);
@@ -171,9 +193,7 @@ class LocalNotificationsTurnNotificationService
           level: DiagnosticsLogLevel.info,
           tag: 'notifications',
           message: '预创建 Android 通知渠道成功',
-          details: {
-            'channels': androidChannels.map((c) => c.id).toList(),
-          },
+          details: {'channels': androidChannels.map((c) => c.id).toList()},
         );
       }
     } on Object catch (error) {
@@ -336,6 +356,57 @@ class LocalNotificationsTurnNotificationService
   }
 
   @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {
+    if (downloadId.isEmpty) return;
+    await _ensureInitialized();
+    final sizeText = formatDownloadByteSize(byteSize);
+    final body = sizeText.isNotEmpty ? '$fileName ($sizeText)' : fileName;
+    try {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '发送下载完成通知',
+        details: {
+          'downloadId': downloadId,
+          'fileName': fileName,
+          'byteSize': byteSize,
+          'channel': channelDownloadsId,
+          'notificationId': notificationDownloadsId,
+        },
+      );
+      await _plugin.show(
+        id: notificationDownloadsId,
+        title: '下载完成',
+        body: formatPreview(body),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelDownloadsId,
+            channelDownloadsName,
+            channelDescription: channelDownloadsDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          windows: WindowsNotificationDetails(),
+        ),
+        payload: 'download:$downloadId',
+      );
+    } on Object catch (error) {
+      developer.log('下载完成通知发送失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '下载完成通知发送失败',
+        details: {'downloadId': downloadId, 'fileName': fileName},
+        errorKind: error.toString(),
+      );
+    }
+  }
+
+  @override
   Future<void> clearAll() async {
     try {
       await _plugin.cancelAll();
@@ -363,7 +434,8 @@ class LocalNotificationsTurnNotificationService
     try {
       final android = _plugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       final granted = await android?.requestNotificationsPermission();
       final result = granted ?? true;
       DiagnosticsService.instance.log(

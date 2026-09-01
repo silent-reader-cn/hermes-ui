@@ -164,29 +164,32 @@ void main() {
   });
 
   group('通知 Hook 与 Keepalive 联动', () {
-    test('回合完成 hook 触发时调用 keepalive.recordTurnNotified & stopForegroundService', () {
-      final fakeKeepalive = FakeBackgroundKeepaliveService();
-      final fakeTurnService = _FakeTurnNotificationService();
-      final container = ProviderContainer(
-        overrides: [
-          backgroundKeepaliveServiceProvider.overrideWithValue(fakeKeepalive),
-          turnNotificationServiceProvider.overrideWithValue(fakeTurnService),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      '回合完成 hook 触发时调用 keepalive.recordTurnNotified & stopForegroundService',
+      () {
+        final fakeKeepalive = FakeBackgroundKeepaliveService();
+        final fakeTurnService = _FakeTurnNotificationService();
+        final container = ProviderContainer(
+          overrides: [
+            backgroundKeepaliveServiceProvider.overrideWithValue(fakeKeepalive),
+            turnNotificationServiceProvider.overrideWithValue(fakeTurnService),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      container
-          .read(appLifecycleStateProvider.notifier)
-          .setState(AppLifecycleState.paused);
-      final hook = container.read(turnNotificationHookProvider);
+        container
+            .read(appLifecycleStateProvider.notifier)
+            .setState(AppLifecycleState.paused);
+        final hook = container.read(turnNotificationHookProvider);
 
-      hook('sess-100', 'Title', 'Preview content');
+        hook('sess-100', 'Title', 'Preview content');
 
-      expect(fakeTurnService.notifyCalls, hasLength(1));
-      expect(fakeKeepalive.stoppedForegroundServices, ['stopped']);
-      expect(fakeKeepalive.cancelledOneOffPolls, ['sess-100']);
-      expect(fakeKeepalive.notifiedRecords, [('sess-100', null)]);
-    });
+        expect(fakeTurnService.notifyCalls, hasLength(1));
+        expect(fakeKeepalive.stoppedForegroundServices, ['stopped']);
+        expect(fakeKeepalive.cancelledOneOffPolls, ['sess-100']);
+        expect(fakeKeepalive.notifiedRecords, [('sess-100', null)]);
+      },
+    );
   });
 }
 
@@ -221,6 +224,13 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   ) async {
     errorCalls.add((sessionId, title, preview));
   }
+
+  @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {}
 
   @override
   Future<void> clearAll() async {

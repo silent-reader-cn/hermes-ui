@@ -12,6 +12,7 @@ import 'package:hermes_ui/features/notifications/notification_lifecycle_observer
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../helpers/fake_chat_api.dart';
 
 void main() {
@@ -27,9 +28,7 @@ void main() {
     setUp(() {
       service = _FakeTurnNotificationService();
       container = ProviderContainer(
-        overrides: [
-          turnNotificationServiceProvider.overrideWithValue(service),
-        ],
+        overrides: [turnNotificationServiceProvider.overrideWithValue(service)],
       );
       addTearDown(container.dispose);
     });
@@ -85,7 +84,10 @@ void main() {
     test('默认前台 resumed', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      expect(container.read(appLifecycleStateProvider), AppLifecycleState.resumed);
+      expect(
+        container.read(appLifecycleStateProvider),
+        AppLifecycleState.resumed,
+      );
     });
 
     test('setState 相同值不重复通知（listener 只收到一次变化）', () {
@@ -131,9 +133,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container
-          .read(appLifecycleStateProvider.notifier)
-          .setState(lifecycle);
+      container.read(appLifecycleStateProvider.notifier).setState(lifecycle);
       return container;
     }
 
@@ -144,30 +144,23 @@ void main() {
     });
 
     Map<String, Object?> doneSession() => {
-          'session_id': 'sess-new',
-          'title': '我的会话',
-          'messages': [
-            {
-              'role': 'user',
-              'content': '你好',
-              'message_id': 'u1',
-              'timestamp': 0,
-            },
-            {
-              'role': 'assistant',
-              'content': '你好！有什么可以帮你？',
-              'message_id': 'a1',
-              'timestamp': 1,
-            },
-          ],
-        };
+      'session_id': 'sess-new',
+      'title': '我的会话',
+      'messages': [
+        {'role': 'user', 'content': '你好', 'message_id': 'u1', 'timestamp': 0},
+        {
+          'role': 'assistant',
+          'content': '你好！有什么可以帮你？',
+          'message_id': 'a1',
+          'timestamp': 1,
+        },
+      ],
+    };
 
     test('后台 + done → 发通知（sessionId/标题/预览取自收尾状态）', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -179,9 +172,7 @@ void main() {
         api.emit(DoneSseEvent(DoneStreamEvent(session: doneSession())));
         async.flushMicrotasks();
 
-        expect(service.notifyCalls, [
-          ('sess-new', '我的会话', '你好！有什么可以帮你？'),
-        ]);
+        expect(service.notifyCalls, [('sess-new', '我的会话', '你好！有什么可以帮你？')]);
         expect(service.clearAllCalls, 0);
         expect(
           container.read(chatControllerProvider('')).phase,
@@ -192,10 +183,8 @@ void main() {
 
     test('前台 + done → 不发通知，清残留', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.resumed);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.resumed);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -209,10 +198,8 @@ void main() {
 
     test('后台 + stream_end（无 done）→ 发通知一次', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -228,16 +215,17 @@ void main() {
         final (sessionId, title, preview) = service.notifyCalls.single;
         expect(sessionId, 'sess-new');
         expect(preview, contains('好的，马上处理'));
-        expect(container.read(chatControllerProvider('')).phase, ChatPhase.idle);
+        expect(
+          container.read(chatControllerProvider('')).phase,
+          ChatPhase.idle,
+        );
       });
     });
 
     test('done 后 stream_end → 不重复通知', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -253,10 +241,8 @@ void main() {
 
     test('取消（cancel）→ 触发异常中断通知', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -271,10 +257,8 @@ void main() {
 
     test('错误事件 → 触发异常中断通知', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
@@ -289,21 +273,21 @@ void main() {
 
     test('澄清事件 → 触发澄清请求通知', () {
       fakeAsync((async) {
-        final container =
-            buildContainer(lifecycle: AppLifecycleState.paused);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final container = buildContainer(lifecycle: AppLifecycleState.paused);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
-        api.emit(const ClarificationPendingSseEvent({
-          'pending': {
-            'clarify_id': 'c1',
-            'question': '请选择模式',
-            'choices_offered': ['A', 'B'],
-          },
-          'pending_count': 1,
-        }));
+        api.emit(
+          const ClarificationPendingSseEvent({
+            'pending': {
+              'clarify_id': 'c1',
+              'question': '请选择模式',
+              'choices_offered': ['A', 'B'],
+            },
+            'pending_count': 1,
+          }),
+        );
         async.flushMicrotasks();
 
         expect(service.clarifyCalls, [('sess-new', '请选择模式')]);
@@ -323,15 +307,17 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
-        final controller =
-            container.read(chatControllerProvider('').notifier);
+        final controller = container.read(chatControllerProvider('').notifier);
 
         unawaited(controller.send('你好'));
         async.flushMicrotasks();
         api.emit(DoneSseEvent(DoneStreamEvent(session: doneSession())));
         async.flushMicrotasks();
 
-        expect(container.read(chatControllerProvider('')).phase, ChatPhase.idle);
+        expect(
+          container.read(chatControllerProvider('')).phase,
+          ChatPhase.idle,
+        );
       });
     });
   });
@@ -343,9 +329,7 @@ void main() {
     setUp(() {
       service = _FakeTurnNotificationService();
       container = ProviderContainer(
-        overrides: [
-          turnNotificationServiceProvider.overrideWithValue(service),
-        ],
+        overrides: [turnNotificationServiceProvider.overrideWithValue(service)],
       );
       addTearDown(container.dispose);
     });
@@ -482,13 +466,15 @@ void main() {
           .read(appLifecycleStateProvider.notifier)
           .setState(AppLifecycleState.resumed);
 
-      final clarifyHook =
-          activeContainer.read(clarificationNotificationHookProvider);
+      final clarifyHook = activeContainer.read(
+        clarificationNotificationHookProvider,
+      );
       clarifyHook('sess-active', '请澄清');
       expect(activeContainer.read(inAppNotificationProvider), isNull);
 
-      final errorHook =
-          activeContainer.read(sessionErrorNotificationHookProvider);
+      final errorHook = activeContainer.read(
+        sessionErrorNotificationHookProvider,
+      );
       errorHook('sess-active', '异常标题', '异常正文');
       expect(activeContainer.read(inAppNotificationProvider), isNull);
 
@@ -500,26 +486,22 @@ void main() {
   });
 
   group('NotificationLifecycleObserver（前后台驱动 + 回前台清除）', () {
-    testWidgets('paused → resumed：更新生命周期并在回前台时 clearAll',
-        (tester) async {
+    testWidgets('paused → resumed：更新生命周期并在回前台时 clearAll', (tester) async {
       final service = _FakeTurnNotificationService();
       final container = ProviderContainer(
-        overrides: [
-          turnNotificationServiceProvider.overrideWithValue(service),
-        ],
+        overrides: [turnNotificationServiceProvider.overrideWithValue(service)],
       );
       addTearDown(container.dispose);
       addTearDown(() {
-        tester.binding
-            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
       });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const NotificationLifecycleObserver(
-            child: SizedBox(),
-          ),
+          child: const NotificationLifecycleObserver(child: SizedBox()),
         ),
       );
       await tester.pump();
@@ -546,6 +528,19 @@ void main() {
       expect(service.clearAllCalls, 1);
     });
   });
+
+  group('handleNotificationTap 路由与前缀分发', () {
+    test('sessionId 正常调用 openSessionFromNotification', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // 空 payload 不崩溃
+      handleNotificationTap(container, '');
+
+      // download: 前缀不抛异常、不跳转 chat
+      handleNotificationTap(container, 'download:dl-12345');
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -556,6 +551,7 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   final List<(String, String, String)> notifyCalls = [];
   final List<(String, String)> clarifyCalls = [];
   final List<(String, String, String)> errorCalls = [];
+  final List<(String, String, int)> downloadCalls = [];
   int clearAllCalls = 0;
   int permissionRequests = 0;
   String? launchSessionId;
@@ -584,6 +580,15 @@ class _FakeTurnNotificationService implements TurnNotificationService {
     String preview,
   ) async {
     errorCalls.add((sessionId, title, preview));
+  }
+
+  @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {
+    downloadCalls.add((downloadId, fileName, byteSize));
   }
 
   @override

@@ -13,9 +13,11 @@ class _MockAndroidPlugin extends Mock
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(const InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-    ));
+    registerFallbackValue(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+    );
     registerFallbackValue(const NotificationDetails());
     registerFallbackValue(const NotificationAppLaunchDetails(false));
     registerFallbackValue(const AndroidNotificationChannel('id', 'name'));
@@ -36,8 +38,9 @@ void main() {
       when(
         () => plugin.initialize(
           settings: any(named: 'settings'),
-          onDidReceiveNotificationResponse:
-              any(named: 'onDidReceiveNotificationResponse'),
+          onDidReceiveNotificationResponse: any(
+            named: 'onDidReceiveNotificationResponse',
+          ),
         ),
       ).thenAnswer((_) async => true);
       when(
@@ -53,36 +56,43 @@ void main() {
     });
 
     group('notifyTurnCompleted 参数组装', () {
-      test('首次调用先 initialize，再 show 到 "turns" 通道、payload 带 sessionId',
-          () async {
-        await service.notifyTurnCompleted('sess-1', '我的会话', '你好！');
+      test(
+        '首次调用先 initialize，再 show 到 "turns" 通道、payload 带 sessionId',
+        () async {
+          await service.notifyTurnCompleted('sess-1', '我的会话', '你好！');
 
-        verify(
-          () => plugin.initialize(
-            settings: any(named: 'settings'),
-            onDidReceiveNotificationResponse:
-                any(named: 'onDidReceiveNotificationResponse'),
-          ),
-        ).called(1);
+          verify(
+            () => plugin.initialize(
+              settings: any(named: 'settings'),
+              onDidReceiveNotificationResponse: any(
+                named: 'onDidReceiveNotificationResponse',
+              ),
+            ),
+          ).called(1);
 
-        final details = verify(
-          () => plugin.show(
-            id: 1001,
-            title: '我的会话',
-            body: '你好！',
-            notificationDetails: captureAny(named: 'notificationDetails'),
-            payload: 'sess-1',
-          ),
-        ).captured.single as NotificationDetails;
+          final details =
+              verify(
+                    () => plugin.show(
+                      id: 1001,
+                      title: '我的会话',
+                      body: '你好！',
+                      notificationDetails: captureAny(
+                        named: 'notificationDetails',
+                      ),
+                      payload: 'sess-1',
+                    ),
+                  ).captured.single
+                  as NotificationDetails;
 
-        expect(details.android, isNotNull);
-        expect(details.android!.channelId, 'turns');
-        expect(details.android!.channelName, '回合完成');
-        expect(details.android!.channelDescription, isNotEmpty);
-        expect(details.android!.importance, Importance.high);
-        expect(details.android!.priority, Priority.high);
-        expect(details.windows, isNotNull);
-      });
+          expect(details.android, isNotNull);
+          expect(details.android!.channelId, 'turns');
+          expect(details.android!.channelName, '回合完成');
+          expect(details.android!.channelDescription, isNotEmpty);
+          expect(details.android!.importance, Importance.high);
+          expect(details.android!.priority, Priority.high);
+          expect(details.windows, isNotNull);
+        },
+      );
 
       test('重复通知：initialize 仅一次、固定 id 替换旧通知', () async {
         await service.notifyTurnCompleted('s1', 't', 'p');
@@ -91,8 +101,9 @@ void main() {
         verify(
           () => plugin.initialize(
             settings: any(named: 'settings'),
-            onDidReceiveNotificationResponse:
-                any(named: 'onDidReceiveNotificationResponse'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
           ),
         ).called(1);
         verify(
@@ -124,15 +135,19 @@ void main() {
       test('show 到 "clarify" 通道、id 为 1101', () async {
         await service.notifyClarificationNeeded('sess-2', '请问您需要选择哪种模式？');
 
-        final details = verify(
-          () => plugin.show(
-            id: 1101,
-            title: '需要澄清',
-            body: '请问您需要选择哪种模式？',
-            notificationDetails: captureAny(named: 'notificationDetails'),
-            payload: 'sess-2',
-          ),
-        ).captured.single as NotificationDetails;
+        final details =
+            verify(
+                  () => plugin.show(
+                    id: 1101,
+                    title: '需要澄清',
+                    body: '请问您需要选择哪种模式？',
+                    notificationDetails: captureAny(
+                      named: 'notificationDetails',
+                    ),
+                    payload: 'sess-2',
+                  ),
+                ).captured.single
+                as NotificationDetails;
 
         expect(details.android, isNotNull);
         expect(details.android!.channelId, 'clarify');
@@ -146,21 +161,68 @@ void main() {
       test('show 到 "errors" 通道、id 为 1201', () async {
         await service.notifySessionError('sess-3', '响应已取消', '用户已停止');
 
-        final details = verify(
-          () => plugin.show(
-            id: 1201,
-            title: '响应已取消',
-            body: '用户已停止',
-            notificationDetails: captureAny(named: 'notificationDetails'),
-            payload: 'sess-3',
-          ),
-        ).captured.single as NotificationDetails;
+        final details =
+            verify(
+                  () => plugin.show(
+                    id: 1201,
+                    title: '响应已取消',
+                    body: '用户已停止',
+                    notificationDetails: captureAny(
+                      named: 'notificationDetails',
+                    ),
+                    payload: 'sess-3',
+                  ),
+                ).captured.single
+                as NotificationDetails;
 
         expect(details.android, isNotNull);
         expect(details.android!.channelId, 'errors');
         expect(details.android!.channelName, '异常中断');
         expect(details.android!.importance, Importance.high);
         expect(details.windows, isNotNull);
+      });
+    });
+
+    group('notifyDownloadCompleted 参数组装', () {
+      test('show 到 "downloads" 通道、id 为 1301、payload 为 download:<id>', () async {
+        await service.notifyDownloadCompleted(
+          'dl-99',
+          'archive.zip',
+          1024 * 1024,
+        );
+
+        final details =
+            verify(
+                  () => plugin.show(
+                    id: 1301,
+                    title: '下载完成',
+                    body: 'archive.zip (1.0 MB)',
+                    notificationDetails: captureAny(
+                      named: 'notificationDetails',
+                    ),
+                    payload: 'download:dl-99',
+                  ),
+                ).captured.single
+                as NotificationDetails;
+
+        expect(details.android, isNotNull);
+        expect(details.android!.channelId, 'downloads');
+        expect(details.android!.channelName, '下载完成');
+        expect(details.android!.importance, Importance.high);
+        expect(details.windows, isNotNull);
+      });
+
+      test('downloadId 为空时不弹通知', () async {
+        await service.notifyDownloadCompleted('', 'file.txt', 100);
+        verifyNever(
+          () => plugin.show(
+            id: any(named: 'id'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        );
       });
     });
 
@@ -176,8 +238,9 @@ void main() {
 
       test('超长截断到 120 字符并带省略号', () {
         final long = 'a' * 200;
-        final result =
-            LocalNotificationsTurnNotificationService.formatPreview(long);
+        final result = LocalNotificationsTurnNotificationService.formatPreview(
+          long,
+        );
         expect(result.length, 121); // 120 + '…'
         expect(result.endsWith('…'), isTrue);
         expect(result.substring(0, 120), 'a' * 120);
@@ -206,40 +269,58 @@ void main() {
     });
 
     group('点击通知回调', () {
-      test('initialize 注册的 response 回调 → payload 转成 onTap(sessionId)',
-          () async {
+      test('initialize 注册的 response 回调 → payload 转成 onTap(payload)', () async {
         await service.notifyTurnCompleted('s1', 't', 'p');
         final captured = verify(
           () => plugin.initialize(
             settings: any(named: 'settings'),
-            onDidReceiveNotificationResponse:
-                captureAny(named: 'onDidReceiveNotificationResponse'),
+            onDidReceiveNotificationResponse: captureAny(
+              named: 'onDidReceiveNotificationResponse',
+            ),
           ),
         ).captured;
         final callback =
             captured.single as DidReceiveNotificationResponseCallback;
 
-        callback(const NotificationResponse(
-          payload: 'sess-9',
-          notificationResponseType: NotificationResponseType.selectedNotification,
-        ));
+        callback(
+          const NotificationResponse(
+            payload: 'sess-9',
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+          ),
+        );
         expect(tapped, ['sess-9']);
 
+        // download: 前缀 payload 也能正常传递
+        callback(
+          const NotificationResponse(
+            payload: 'download:dl-123',
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+          ),
+        );
+        expect(tapped, ['sess-9', 'download:dl-123']);
+
         // 空 payload 不触发
-        callback(const NotificationResponse(
-          payload: '',
-          notificationResponseType: NotificationResponseType.selectedNotification,
-        ));
-        expect(tapped, ['sess-9']);
+        callback(
+          const NotificationResponse(
+            payload: '',
+            notificationResponseType:
+                NotificationResponseType.selectedNotification,
+          ),
+        );
+        expect(tapped, ['sess-9', 'download:dl-123']);
       });
     });
 
-    group('Android 三渠道预创建与时序', () {
-      test('冷启动/首次初始化显式批量预创建三通知渠道（turns/clarify/errors）', () async {
+    group('Android 四渠道预创建与时序', () {
+      test('冷启动/首次初始化显式批量预创建四通知渠道（turns/clarify/errors/downloads）', () async {
         final android = _MockAndroidPlugin();
         when(
-          () => plugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>(),
+          () => plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >(),
         ).thenReturn(android);
         when(() => android.createNotificationChannel(any()))
             .thenAnswer((_) async {});
@@ -248,11 +329,11 @@ void main() {
 
         await service.requestPermission();
 
-        // 验证三渠道预创建
+        // 验证四渠道预创建
         final captured = verify(
           () => android.createNotificationChannel(captureAny()),
         ).captured;
-        expect(captured, hasLength(3));
+        expect(captured, hasLength(4));
 
         final channels = captured.cast<AndroidNotificationChannel>();
         expect(channels[0].id, 'turns');
@@ -269,13 +350,20 @@ void main() {
         expect(channels[2].name, '异常中断');
         expect(channels[2].description, '会话异常中断或出错时推送系统通知');
         expect(channels[2].importance, Importance.high);
+
+        expect(channels[3].id, 'downloads');
+        expect(channels[3].name, '下载完成');
+        expect(channels[3].description, '文件下载完成时推送系统通知');
+        expect(channels[3].importance, Importance.high);
       });
 
       test('notifyTurnCompleted 前若未初始化，先 initialize 并创建三渠道再 show', () async {
         final android = _MockAndroidPlugin();
         when(
-          () => plugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>(),
+          () => plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >(),
         ).thenReturn(android);
         when(() => android.createNotificationChannel(any()))
             .thenAnswer((_) async {});
@@ -284,18 +372,19 @@ void main() {
 
         verifyInOrder([
           () => plugin.initialize(
-                settings: any(named: 'settings'),
-                onDidReceiveNotificationResponse:
-                    any(named: 'onDidReceiveNotificationResponse'),
-              ),
+            settings: any(named: 'settings'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
+          ),
           () => android.createNotificationChannel(any()),
           () => plugin.show(
-                id: 1001,
-                title: '标题',
-                body: '正文',
-                notificationDetails: any(named: 'notificationDetails'),
-                payload: 's-test',
-              ),
+            id: 1001,
+            title: '标题',
+            body: '正文',
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: 's-test',
+          ),
         ]);
       });
     });
@@ -309,8 +398,10 @@ void main() {
       test('根因②回归：先 initialize 再请求权限，授予结果原样返回', () async {
         final android = _MockAndroidPlugin();
         when(
-          () => plugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>(),
+          () => plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >(),
         ).thenReturn(android);
         when(() => android.createNotificationChannel(any()))
             .thenAnswer((_) async {});
@@ -324,17 +415,16 @@ void main() {
         verifyInOrder([
           () => plugin.initialize(
             settings: any(named: 'settings'),
-            onDidReceiveNotificationResponse:
-                any(named: 'onDidReceiveNotificationResponse'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
           ),
           () => android.requestNotificationsPermission(),
         ]);
       });
 
       test('通知点击冷启动 → 返回 payload sessionId', () async {
-        when(
-          () => plugin.getNotificationAppLaunchDetails(),
-        ).thenAnswer(
+        when(() => plugin.getNotificationAppLaunchDetails()).thenAnswer(
           (_) async => const NotificationAppLaunchDetails(
             true,
             notificationResponse: NotificationResponse(
@@ -348,18 +438,15 @@ void main() {
       });
 
       test('非通知启动 → null', () async {
-        when(
-          () => plugin.getNotificationAppLaunchDetails(),
-        ).thenAnswer((_) async => const NotificationAppLaunchDetails(false));
+        when(() => plugin.getNotificationAppLaunchDetails())
+            .thenAnswer((_) async => const NotificationAppLaunchDetails(false));
         expect(await service.getLaunchSessionId(), isNull);
       });
     });
 
     group('DiagnosticsService 诊断日志采集', () {
       setUp(() async {
-        SharedPreferences.setMockInitialValues({
-          kDiagnosticsEnabledKey: true,
-        });
+        SharedPreferences.setMockInitialValues({kDiagnosticsEnabledKey: true});
         await DiagnosticsService.instance.init();
         await DiagnosticsService.instance.clear();
       });
@@ -367,8 +454,10 @@ void main() {
       test('成功通知、权限请求与渠道预创建均记录 notifications tag 日志', () async {
         final android = _MockAndroidPlugin();
         when(
-          () => plugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>(),
+          () => plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >(),
         ).thenReturn(android);
         when(() => android.createNotificationChannel(any()))
             .thenAnswer((_) async {});
@@ -379,6 +468,7 @@ void main() {
         await service.notifyTurnCompleted('s1', '标题1', '正文1');
         await service.notifyClarificationNeeded('s2', '澄清问题');
         await service.notifySessionError('s3', '错误标题', '错误正文');
+        await service.notifyDownloadCompleted('dl1', 'file.zip', 2048);
         await service.clearAll();
 
         final logs = DiagnosticsService.instance.logs
@@ -392,6 +482,7 @@ void main() {
         expect(messages, contains('发送回合完成通知'));
         expect(messages, contains('发送需要澄清通知'));
         expect(messages, contains('发送异常中断通知'));
+        expect(messages, contains('发送下载完成通知'));
         expect(messages, contains('清除全部通知'));
       });
 
@@ -409,8 +500,11 @@ void main() {
         await service.notifyTurnCompleted('s1', '标题', '正文');
 
         final errorLogs = DiagnosticsService.instance.logs
-            .where((l) =>
-                l.tag == 'notifications' && l.level == DiagnosticsLogLevel.error)
+            .where(
+              (l) =>
+                  l.tag == 'notifications' &&
+                  l.level == DiagnosticsLogLevel.error,
+            )
             .toList();
         expect(errorLogs, hasLength(1));
         expect(errorLogs.single.message, '回合完成通知发送失败');

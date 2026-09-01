@@ -13,8 +13,10 @@ import 'turn_notification_service.dart';
 
 /// App 生命周期状态（生产由 [NotificationLifecycleObserver] 驱动；测试可
 /// 直接调用 notifier.setState 或 override 注入）。
-final appLifecycleStateProvider = NotifierProvider<AppLifecycleNotifier,
-    AppLifecycleState>(AppLifecycleNotifier.new);
+final appLifecycleStateProvider =
+    NotifierProvider<AppLifecycleNotifier, AppLifecycleState>(
+      AppLifecycleNotifier.new,
+    );
 
 /// 生命周期跟踪：默认前台（resumed）——观察器未挂载时 hook 保守不发通知。
 class AppLifecycleNotifier extends Notifier<AppLifecycleState> {
@@ -69,11 +71,11 @@ class NotificationSettings {
 
   @override
   int get hashCode => Object.hash(
-        notifyTurnsEnabled,
-        notifyClarifyEnabled,
-        notifyErrorsEnabled,
-        bgForegroundServiceEnabled,
-      );
+    notifyTurnsEnabled,
+    notifyClarifyEnabled,
+    notifyErrorsEnabled,
+    bgForegroundServiceEnabled,
+  );
 }
 
 class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
@@ -104,7 +106,7 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
             prefs.getBool(keyErrors) ?? state.notifyErrorsEnabled,
         bgForegroundServiceEnabled:
             prefs.getBool(keyBgForegroundService) ??
-                state.bgForegroundServiceEnabled,
+            state.bgForegroundServiceEnabled,
       );
     } catch (_) {}
   }
@@ -149,21 +151,18 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
 /// 通知设置 Provider。
 final notificationSettingsProvider =
     NotifierProvider<NotificationSettingsNotifier, NotificationSettings>(
-  NotificationSettingsNotifier.new,
-);
+      NotificationSettingsNotifier.new,
+    );
 
 /// 后台保活服务 Provider（生产 [BackgroundKeepaliveService.instance]；测试可 override）。
-final backgroundKeepaliveServiceProvider =
-    Provider<BackgroundKeepaliveService>((ref) {
-  return BackgroundKeepaliveService.instance;
-});
+final backgroundKeepaliveServiceProvider = Provider<BackgroundKeepaliveService>(
+  (ref) {
+    return BackgroundKeepaliveService.instance;
+  },
+);
 
 /// In-app 通知类型。
-enum InAppNotificationType {
-  turnCompleted,
-  clarificationNeeded,
-  sessionError,
-}
+enum InAppNotificationType { turnCompleted, clarificationNeeded, sessionError }
 
 /// In-app 通知条目模型。
 class InAppNotificationItem {
@@ -183,8 +182,9 @@ class InAppNotificationItem {
 }
 
 /// In-app 通知事件 Provider（前台跨会话触发时推送）。
-final inAppNotificationProvider =
-    StateProvider<InAppNotificationItem?>((ref) => null);
+final inAppNotificationProvider = StateProvider<InAppNotificationItem?>(
+  (ref) => null,
+);
 
 /// 当前激活会话 ID（从 activeSessionIdProvider 读）。
 String? getActiveSessionId(dynamic ref) {
@@ -195,15 +195,25 @@ String? getActiveSessionId(dynamic ref) {
   }
 }
 
-/// 回合/澄清/错误通知服务（生产 [LocalNotificationsTurnNotificationService]；
+/// 回合/澄清/错误/下载通知服务（生产 [LocalNotificationsTurnNotificationService]；
 /// 测试可 override 注入 fake）。
-final turnNotificationServiceProvider = Provider<TurnNotificationService>(
-  (ref) {
-    return LocalNotificationsTurnNotificationService(
-      onTap: (sessionId) => openSessionFromNotification(ref, sessionId),
-    );
-  },
-);
+final turnNotificationServiceProvider = Provider<TurnNotificationService>((
+  ref,
+) {
+  return LocalNotificationsTurnNotificationService(
+    onTap: (payload) => handleNotificationTap(ref, payload),
+  );
+});
+
+/// 处理通知点击（根据 payload 前缀分发路由：`download:<id>` 或 sessionId）。
+void handleNotificationTap(dynamic ref, String payload) {
+  if (payload.isEmpty) return;
+  if (payload.startsWith('download:')) {
+    // 预留下载通知路由分发契约
+    return;
+  }
+  openSessionFromNotification(ref, payload);
+}
 
 /// 通知点击 → 跳转对应会话（go_router；无激活连接时守卫自动重定向）。
 void openSessionFromNotification(dynamic ref, String sessionId) {
@@ -217,79 +227,82 @@ void openSessionFromNotification(dynamic ref, String sessionId) {
 /// - 开关关闭：不发系统通知也不发 in-app
 /// - app 前台（resumed）：仅事件会话 ≠ 当前激活会话时触发 in-app 提示，并清除残留系统通知
 /// - app 后台（paused / inactive / detached / hidden）：发系统通知
-final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>(
-  (ref) {
-    final service = ref.watch(turnNotificationServiceProvider);
-    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
-    return (sessionId, title, preview) {
-      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
-      unawaited(keepalive.stopForegroundService());
-      unawaited(keepalive.cancelOneOffPoll(sessionId));
+final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
+  final service = ref.watch(turnNotificationServiceProvider);
+  final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
+  return (sessionId, title, preview) {
+    unawaited(
+      keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
+    );
+    unawaited(keepalive.stopForegroundService());
+    unawaited(keepalive.cancelOneOffPoll(sessionId));
 
-      final settings = ref.read(notificationSettingsProvider);
-      if (!settings.notifyTurnsEnabled) return;
-      final lifecycle = ref.read(appLifecycleStateProvider);
-      if (lifecycle == AppLifecycleState.resumed) {
-        final active = getActiveSessionId(ref);
-        if (active != sessionId) {
-          ref.read(inAppNotificationProvider.notifier).state =
-              InAppNotificationItem(
-            id: uuidV4(),
-            sessionId: sessionId,
-            title: title.isNotEmpty ? title : '回合完成',
-            message: preview,
-            type: InAppNotificationType.turnCompleted,
-          );
-        }
-        unawaited(service.clearAll());
-      } else {
-        unawaited(service.notifyTurnCompleted(sessionId, title, preview));
+    final settings = ref.read(notificationSettingsProvider);
+    if (!settings.notifyTurnsEnabled) return;
+    final lifecycle = ref.read(appLifecycleStateProvider);
+    if (lifecycle == AppLifecycleState.resumed) {
+      final active = getActiveSessionId(ref);
+      if (active != sessionId) {
+        ref
+            .read(inAppNotificationProvider.notifier)
+            .state = InAppNotificationItem(
+          id: uuidV4(),
+          sessionId: sessionId,
+          title: title.isNotEmpty ? title : '回合完成',
+          message: preview,
+          type: InAppNotificationType.turnCompleted,
+        );
       }
-    };
-  },
-);
+      unawaited(service.clearAll());
+    } else {
+      unawaited(service.notifyTurnCompleted(sessionId, title, preview));
+    }
+  };
+});
 
 /// chat 澄清请求 hook：chat_controller 在收到 clarify 事件时调用。
 final clarificationNotificationHookProvider =
-    Provider<ChatClarificationNeededCallback>(
-  (ref) {
-    final service = ref.watch(turnNotificationServiceProvider);
-    final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
-    return (sessionId, question) {
-      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
-      unawaited(keepalive.stopForegroundService());
-      unawaited(keepalive.cancelOneOffPoll(sessionId));
+    Provider<ChatClarificationNeededCallback>((ref) {
+      final service = ref.watch(turnNotificationServiceProvider);
+      final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
+      return (sessionId, question) {
+        unawaited(
+          keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
+        );
+        unawaited(keepalive.stopForegroundService());
+        unawaited(keepalive.cancelOneOffPoll(sessionId));
 
-      final settings = ref.read(notificationSettingsProvider);
-      if (!settings.notifyClarifyEnabled) return;
-      final lifecycle = ref.read(appLifecycleStateProvider);
-      if (lifecycle == AppLifecycleState.resumed) {
-        final active = getActiveSessionId(ref);
-        if (active != sessionId) {
-          ref.read(inAppNotificationProvider.notifier).state =
-              InAppNotificationItem(
-            id: uuidV4(),
-            sessionId: sessionId,
-            title: '需要澄清',
-            message: question,
-            type: InAppNotificationType.clarificationNeeded,
-          );
+        final settings = ref.read(notificationSettingsProvider);
+        if (!settings.notifyClarifyEnabled) return;
+        final lifecycle = ref.read(appLifecycleStateProvider);
+        if (lifecycle == AppLifecycleState.resumed) {
+          final active = getActiveSessionId(ref);
+          if (active != sessionId) {
+            ref
+                .read(inAppNotificationProvider.notifier)
+                .state = InAppNotificationItem(
+              id: uuidV4(),
+              sessionId: sessionId,
+              title: '需要澄清',
+              message: question,
+              type: InAppNotificationType.clarificationNeeded,
+            );
+          }
+        } else {
+          unawaited(service.notifyClarificationNeeded(sessionId, question));
         }
-      } else {
-        unawaited(service.notifyClarificationNeeded(sessionId, question));
-      }
-    };
-  },
-);
+      };
+    });
 
 /// chat 会话异常 hook：chat_controller 在 cancel / error / 重连失败时调用。
-final sessionErrorNotificationHookProvider =
-    Provider<ChatSessionErrorCallback>(
+final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
   (ref) {
     final service = ref.watch(turnNotificationServiceProvider);
     final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
     return (sessionId, title, preview) {
-      unawaited(keepalive.recordTurnNotified(sessionId: sessionId, streamId: null));
+      unawaited(
+        keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
+      );
       unawaited(keepalive.stopForegroundService());
       unawaited(keepalive.cancelOneOffPoll(sessionId));
 
@@ -299,8 +312,9 @@ final sessionErrorNotificationHookProvider =
       if (lifecycle == AppLifecycleState.resumed) {
         final active = getActiveSessionId(ref);
         if (active != sessionId) {
-          ref.read(inAppNotificationProvider.notifier).state =
-              InAppNotificationItem(
+          ref
+              .read(inAppNotificationProvider.notifier)
+              .state = InAppNotificationItem(
             id: uuidV4(),
             sessionId: sessionId,
             title: title.isNotEmpty ? title : '会话异常',

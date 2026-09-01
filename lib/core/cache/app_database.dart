@@ -67,11 +67,36 @@ class DiagnosticsLogs extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// 下载记录持久化表（下载核心层）。
+class DownloadRecords extends Table {
+  TextColumn get id => text()();
+  TextColumn get sourceUrl => text()();
+  TextColumn get fileName => text()();
+  TextColumn get mimeType => text().nullable()();
+  IntColumn get expectedBytes => integer().nullable()();
+  IntColumn get receivedBytes => integer().withDefault(const Constant(0))();
+  TextColumn get status => text()();
+  TextColumn get savedPath => text().nullable()();
+  IntColumn get createdAt => integer()();
+  IntColumn get completedAt => integer().nullable()();
+  TextColumn get failureMessage => text().nullable()();
+  TextColumn get sessionId => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 /// **单例约束**：生产代码不要直接多次 `AppDatabase.production()`。
 /// 请改为 `ref.watch(appDatabaseProvider)` 取得全进程唯一实例，避免
 /// 同名 `hermes_cache` 的 `QueryExecutor` 争用导致崩溃。
 @DriftDatabase(
-  tables: [CachedSessions, CachedMessages, CachedMedia, DiagnosticsLogs],
+  tables: [
+    CachedSessions,
+    CachedMessages,
+    CachedMedia,
+    DiagnosticsLogs,
+    DownloadRecords,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
@@ -84,12 +109,13 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.memory() => AppDatabase(openConnectionInMemory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// 迁移策略：新建库创建全部表；升级时按版本增量补建表（drift 默认在
   /// schema 升级时若未提供 onUpgrade 会直接抛异常）。
   /// - v1→v2：给已有生产库补建 `cached_media` 表；
-  /// - v2→v3：补建 `diagnostics_logs` 诊断日志表（#33 存储迁移）。
+  /// - v2→v3：补建 `diagnostics_logs` 诊断日志表（#33 存储迁移）；
+  /// - v3→v4：补建 `download_records` 下载记录表。
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -101,6 +127,9 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(diagnosticsLogs);
         // drift 的 createTable 不建索引，需显式补建（#33）。
         await m.createIndex(idxDiagnosticsLogsTimestamp);
+      }
+      if (from < 4) {
+        await m.createTable(downloadRecords);
       }
     },
   );

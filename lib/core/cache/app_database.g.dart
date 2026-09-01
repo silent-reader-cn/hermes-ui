@@ -1669,6 +1669,736 @@ class DiagnosticsLogsCompanion extends UpdateCompanion<DiagnosticsLog> {
   }
 }
 
+class $DownloadRecordsTable extends DownloadRecords
+    with TableInfo<$DownloadRecordsTable, DownloadRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DownloadRecordsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceUrlMeta = const VerificationMeta(
+    'sourceUrl',
+  );
+  @override
+  late final GeneratedColumn<String> sourceUrl = GeneratedColumn<String>(
+    'source_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileNameMeta = const VerificationMeta(
+    'fileName',
+  );
+  @override
+  late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
+    'file_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeTypeMeta = const VerificationMeta(
+    'mimeType',
+  );
+  @override
+  late final GeneratedColumn<String> mimeType = GeneratedColumn<String>(
+    'mime_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expectedBytesMeta = const VerificationMeta(
+    'expectedBytes',
+  );
+  @override
+  late final GeneratedColumn<int> expectedBytes = GeneratedColumn<int>(
+    'expected_bytes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _receivedBytesMeta = const VerificationMeta(
+    'receivedBytes',
+  );
+  @override
+  late final GeneratedColumn<int> receivedBytes = GeneratedColumn<int>(
+    'received_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _savedPathMeta = const VerificationMeta(
+    'savedPath',
+  );
+  @override
+  late final GeneratedColumn<String> savedPath = GeneratedColumn<String>(
+    'saved_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<int> completedAt = GeneratedColumn<int>(
+    'completed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _failureMessageMeta = const VerificationMeta(
+    'failureMessage',
+  );
+  @override
+  late final GeneratedColumn<String> failureMessage = GeneratedColumn<String>(
+    'failure_message',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sourceUrl,
+    fileName,
+    mimeType,
+    expectedBytes,
+    receivedBytes,
+    status,
+    savedPath,
+    createdAt,
+    completedAt,
+    failureMessage,
+    sessionId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'download_records';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DownloadRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('source_url')) {
+      context.handle(
+        _sourceUrlMeta,
+        sourceUrl.isAcceptableOrUnknown(data['source_url']!, _sourceUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceUrlMeta);
+    }
+    if (data.containsKey('file_name')) {
+      context.handle(
+        _fileNameMeta,
+        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fileNameMeta);
+    }
+    if (data.containsKey('mime_type')) {
+      context.handle(
+        _mimeTypeMeta,
+        mimeType.isAcceptableOrUnknown(data['mime_type']!, _mimeTypeMeta),
+      );
+    }
+    if (data.containsKey('expected_bytes')) {
+      context.handle(
+        _expectedBytesMeta,
+        expectedBytes.isAcceptableOrUnknown(
+          data['expected_bytes']!,
+          _expectedBytesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('received_bytes')) {
+      context.handle(
+        _receivedBytesMeta,
+        receivedBytes.isAcceptableOrUnknown(
+          data['received_bytes']!,
+          _receivedBytesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('saved_path')) {
+      context.handle(
+        _savedPathMeta,
+        savedPath.isAcceptableOrUnknown(data['saved_path']!, _savedPathMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('failure_message')) {
+      context.handle(
+        _failureMessageMeta,
+        failureMessage.isAcceptableOrUnknown(
+          data['failure_message']!,
+          _failureMessageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DownloadRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DownloadRecord(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_url'],
+      )!,
+      fileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_name'],
+      )!,
+      mimeType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime_type'],
+      ),
+      expectedBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_bytes'],
+      ),
+      receivedBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}received_bytes'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      savedPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}saved_path'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}completed_at'],
+      ),
+      failureMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure_message'],
+      ),
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      ),
+    );
+  }
+
+  @override
+  $DownloadRecordsTable createAlias(String alias) {
+    return $DownloadRecordsTable(attachedDatabase, alias);
+  }
+}
+
+class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
+  final String id;
+  final String sourceUrl;
+  final String fileName;
+  final String? mimeType;
+  final int? expectedBytes;
+  final int receivedBytes;
+  final String status;
+  final String? savedPath;
+  final int createdAt;
+  final int? completedAt;
+  final String? failureMessage;
+  final String? sessionId;
+  const DownloadRecord({
+    required this.id,
+    required this.sourceUrl,
+    required this.fileName,
+    this.mimeType,
+    this.expectedBytes,
+    required this.receivedBytes,
+    required this.status,
+    this.savedPath,
+    required this.createdAt,
+    this.completedAt,
+    this.failureMessage,
+    this.sessionId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['source_url'] = Variable<String>(sourceUrl);
+    map['file_name'] = Variable<String>(fileName);
+    if (!nullToAbsent || mimeType != null) {
+      map['mime_type'] = Variable<String>(mimeType);
+    }
+    if (!nullToAbsent || expectedBytes != null) {
+      map['expected_bytes'] = Variable<int>(expectedBytes);
+    }
+    map['received_bytes'] = Variable<int>(receivedBytes);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || savedPath != null) {
+      map['saved_path'] = Variable<String>(savedPath);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<int>(completedAt);
+    }
+    if (!nullToAbsent || failureMessage != null) {
+      map['failure_message'] = Variable<String>(failureMessage);
+    }
+    if (!nullToAbsent || sessionId != null) {
+      map['session_id'] = Variable<String>(sessionId);
+    }
+    return map;
+  }
+
+  DownloadRecordsCompanion toCompanion(bool nullToAbsent) {
+    return DownloadRecordsCompanion(
+      id: Value(id),
+      sourceUrl: Value(sourceUrl),
+      fileName: Value(fileName),
+      mimeType: mimeType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mimeType),
+      expectedBytes: expectedBytes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedBytes),
+      receivedBytes: Value(receivedBytes),
+      status: Value(status),
+      savedPath: savedPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(savedPath),
+      createdAt: Value(createdAt),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
+      failureMessage: failureMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureMessage),
+      sessionId: sessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionId),
+    );
+  }
+
+  factory DownloadRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DownloadRecord(
+      id: serializer.fromJson<String>(json['id']),
+      sourceUrl: serializer.fromJson<String>(json['sourceUrl']),
+      fileName: serializer.fromJson<String>(json['fileName']),
+      mimeType: serializer.fromJson<String?>(json['mimeType']),
+      expectedBytes: serializer.fromJson<int?>(json['expectedBytes']),
+      receivedBytes: serializer.fromJson<int>(json['receivedBytes']),
+      status: serializer.fromJson<String>(json['status']),
+      savedPath: serializer.fromJson<String?>(json['savedPath']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      completedAt: serializer.fromJson<int?>(json['completedAt']),
+      failureMessage: serializer.fromJson<String?>(json['failureMessage']),
+      sessionId: serializer.fromJson<String?>(json['sessionId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sourceUrl': serializer.toJson<String>(sourceUrl),
+      'fileName': serializer.toJson<String>(fileName),
+      'mimeType': serializer.toJson<String?>(mimeType),
+      'expectedBytes': serializer.toJson<int?>(expectedBytes),
+      'receivedBytes': serializer.toJson<int>(receivedBytes),
+      'status': serializer.toJson<String>(status),
+      'savedPath': serializer.toJson<String?>(savedPath),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'completedAt': serializer.toJson<int?>(completedAt),
+      'failureMessage': serializer.toJson<String?>(failureMessage),
+      'sessionId': serializer.toJson<String?>(sessionId),
+    };
+  }
+
+  DownloadRecord copyWith({
+    String? id,
+    String? sourceUrl,
+    String? fileName,
+    Value<String?> mimeType = const Value.absent(),
+    Value<int?> expectedBytes = const Value.absent(),
+    int? receivedBytes,
+    String? status,
+    Value<String?> savedPath = const Value.absent(),
+    int? createdAt,
+    Value<int?> completedAt = const Value.absent(),
+    Value<String?> failureMessage = const Value.absent(),
+    Value<String?> sessionId = const Value.absent(),
+  }) => DownloadRecord(
+    id: id ?? this.id,
+    sourceUrl: sourceUrl ?? this.sourceUrl,
+    fileName: fileName ?? this.fileName,
+    mimeType: mimeType.present ? mimeType.value : this.mimeType,
+    expectedBytes: expectedBytes.present
+        ? expectedBytes.value
+        : this.expectedBytes,
+    receivedBytes: receivedBytes ?? this.receivedBytes,
+    status: status ?? this.status,
+    savedPath: savedPath.present ? savedPath.value : this.savedPath,
+    createdAt: createdAt ?? this.createdAt,
+    completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    failureMessage: failureMessage.present
+        ? failureMessage.value
+        : this.failureMessage,
+    sessionId: sessionId.present ? sessionId.value : this.sessionId,
+  );
+  DownloadRecord copyWithCompanion(DownloadRecordsCompanion data) {
+    return DownloadRecord(
+      id: data.id.present ? data.id.value : this.id,
+      sourceUrl: data.sourceUrl.present ? data.sourceUrl.value : this.sourceUrl,
+      fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
+      expectedBytes: data.expectedBytes.present
+          ? data.expectedBytes.value
+          : this.expectedBytes,
+      receivedBytes: data.receivedBytes.present
+          ? data.receivedBytes.value
+          : this.receivedBytes,
+      status: data.status.present ? data.status.value : this.status,
+      savedPath: data.savedPath.present ? data.savedPath.value : this.savedPath,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+      failureMessage: data.failureMessage.present
+          ? data.failureMessage.value
+          : this.failureMessage,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DownloadRecord(')
+          ..write('id: $id, ')
+          ..write('sourceUrl: $sourceUrl, ')
+          ..write('fileName: $fileName, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('expectedBytes: $expectedBytes, ')
+          ..write('receivedBytes: $receivedBytes, ')
+          ..write('status: $status, ')
+          ..write('savedPath: $savedPath, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('failureMessage: $failureMessage, ')
+          ..write('sessionId: $sessionId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sourceUrl,
+    fileName,
+    mimeType,
+    expectedBytes,
+    receivedBytes,
+    status,
+    savedPath,
+    createdAt,
+    completedAt,
+    failureMessage,
+    sessionId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DownloadRecord &&
+          other.id == this.id &&
+          other.sourceUrl == this.sourceUrl &&
+          other.fileName == this.fileName &&
+          other.mimeType == this.mimeType &&
+          other.expectedBytes == this.expectedBytes &&
+          other.receivedBytes == this.receivedBytes &&
+          other.status == this.status &&
+          other.savedPath == this.savedPath &&
+          other.createdAt == this.createdAt &&
+          other.completedAt == this.completedAt &&
+          other.failureMessage == this.failureMessage &&
+          other.sessionId == this.sessionId);
+}
+
+class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
+  final Value<String> id;
+  final Value<String> sourceUrl;
+  final Value<String> fileName;
+  final Value<String?> mimeType;
+  final Value<int?> expectedBytes;
+  final Value<int> receivedBytes;
+  final Value<String> status;
+  final Value<String?> savedPath;
+  final Value<int> createdAt;
+  final Value<int?> completedAt;
+  final Value<String?> failureMessage;
+  final Value<String?> sessionId;
+  final Value<int> rowid;
+  const DownloadRecordsCompanion({
+    this.id = const Value.absent(),
+    this.sourceUrl = const Value.absent(),
+    this.fileName = const Value.absent(),
+    this.mimeType = const Value.absent(),
+    this.expectedBytes = const Value.absent(),
+    this.receivedBytes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.savedPath = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.failureMessage = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DownloadRecordsCompanion.insert({
+    required String id,
+    required String sourceUrl,
+    required String fileName,
+    this.mimeType = const Value.absent(),
+    this.expectedBytes = const Value.absent(),
+    this.receivedBytes = const Value.absent(),
+    required String status,
+    this.savedPath = const Value.absent(),
+    required int createdAt,
+    this.completedAt = const Value.absent(),
+    this.failureMessage = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sourceUrl = Value(sourceUrl),
+       fileName = Value(fileName),
+       status = Value(status),
+       createdAt = Value(createdAt);
+  static Insertable<DownloadRecord> custom({
+    Expression<String>? id,
+    Expression<String>? sourceUrl,
+    Expression<String>? fileName,
+    Expression<String>? mimeType,
+    Expression<int>? expectedBytes,
+    Expression<int>? receivedBytes,
+    Expression<String>? status,
+    Expression<String>? savedPath,
+    Expression<int>? createdAt,
+    Expression<int>? completedAt,
+    Expression<String>? failureMessage,
+    Expression<String>? sessionId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceUrl != null) 'source_url': sourceUrl,
+      if (fileName != null) 'file_name': fileName,
+      if (mimeType != null) 'mime_type': mimeType,
+      if (expectedBytes != null) 'expected_bytes': expectedBytes,
+      if (receivedBytes != null) 'received_bytes': receivedBytes,
+      if (status != null) 'status': status,
+      if (savedPath != null) 'saved_path': savedPath,
+      if (createdAt != null) 'created_at': createdAt,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (failureMessage != null) 'failure_message': failureMessage,
+      if (sessionId != null) 'session_id': sessionId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DownloadRecordsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sourceUrl,
+    Value<String>? fileName,
+    Value<String?>? mimeType,
+    Value<int?>? expectedBytes,
+    Value<int>? receivedBytes,
+    Value<String>? status,
+    Value<String?>? savedPath,
+    Value<int>? createdAt,
+    Value<int?>? completedAt,
+    Value<String?>? failureMessage,
+    Value<String?>? sessionId,
+    Value<int>? rowid,
+  }) {
+    return DownloadRecordsCompanion(
+      id: id ?? this.id,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
+      fileName: fileName ?? this.fileName,
+      mimeType: mimeType ?? this.mimeType,
+      expectedBytes: expectedBytes ?? this.expectedBytes,
+      receivedBytes: receivedBytes ?? this.receivedBytes,
+      status: status ?? this.status,
+      savedPath: savedPath ?? this.savedPath,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: completedAt ?? this.completedAt,
+      failureMessage: failureMessage ?? this.failureMessage,
+      sessionId: sessionId ?? this.sessionId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sourceUrl.present) {
+      map['source_url'] = Variable<String>(sourceUrl.value);
+    }
+    if (fileName.present) {
+      map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (mimeType.present) {
+      map['mime_type'] = Variable<String>(mimeType.value);
+    }
+    if (expectedBytes.present) {
+      map['expected_bytes'] = Variable<int>(expectedBytes.value);
+    }
+    if (receivedBytes.present) {
+      map['received_bytes'] = Variable<int>(receivedBytes.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (savedPath.present) {
+      map['saved_path'] = Variable<String>(savedPath.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<int>(completedAt.value);
+    }
+    if (failureMessage.present) {
+      map['failure_message'] = Variable<String>(failureMessage.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DownloadRecordsCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceUrl: $sourceUrl, ')
+          ..write('fileName: $fileName, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('expectedBytes: $expectedBytes, ')
+          ..write('receivedBytes: $receivedBytes, ')
+          ..write('status: $status, ')
+          ..write('savedPath: $savedPath, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('failureMessage: $failureMessage, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1676,6 +2406,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CachedMessagesTable cachedMessages = $CachedMessagesTable(this);
   late final $CachedMediaTable cachedMedia = $CachedMediaTable(this);
   late final $DiagnosticsLogsTable diagnosticsLogs = $DiagnosticsLogsTable(
+    this,
+  );
+  late final $DownloadRecordsTable downloadRecords = $DownloadRecordsTable(
     this,
   );
   late final Index idxDiagnosticsLogsTimestamp = Index(
@@ -1691,6 +2424,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cachedMessages,
     cachedMedia,
     diagnosticsLogs,
+    downloadRecords,
     idxDiagnosticsLogsTimestamp,
   ];
 }
@@ -2585,6 +3319,353 @@ typedef $$DiagnosticsLogsTableProcessedTableManager =
       DiagnosticsLog,
       PrefetchHooks Function()
     >;
+typedef $$DownloadRecordsTableCreateCompanionBuilder =
+    DownloadRecordsCompanion Function({
+      required String id,
+      required String sourceUrl,
+      required String fileName,
+      Value<String?> mimeType,
+      Value<int?> expectedBytes,
+      Value<int> receivedBytes,
+      required String status,
+      Value<String?> savedPath,
+      required int createdAt,
+      Value<int?> completedAt,
+      Value<String?> failureMessage,
+      Value<String?> sessionId,
+      Value<int> rowid,
+    });
+typedef $$DownloadRecordsTableUpdateCompanionBuilder =
+    DownloadRecordsCompanion Function({
+      Value<String> id,
+      Value<String> sourceUrl,
+      Value<String> fileName,
+      Value<String?> mimeType,
+      Value<int?> expectedBytes,
+      Value<int> receivedBytes,
+      Value<String> status,
+      Value<String?> savedPath,
+      Value<int> createdAt,
+      Value<int?> completedAt,
+      Value<String?> failureMessage,
+      Value<String?> sessionId,
+      Value<int> rowid,
+    });
+
+class $$DownloadRecordsTableFilterComposer
+    extends Composer<_$AppDatabase, $DownloadRecordsTable> {
+  $$DownloadRecordsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceUrl => $composableBuilder(
+    column: $table.sourceUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedBytes => $composableBuilder(
+    column: $table.expectedBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get savedPath => $composableBuilder(
+    column: $table.savedPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DownloadRecordsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DownloadRecordsTable> {
+  $$DownloadRecordsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceUrl => $composableBuilder(
+    column: $table.sourceUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedBytes => $composableBuilder(
+    column: $table.expectedBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get savedPath => $composableBuilder(
+    column: $table.savedPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DownloadRecordsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DownloadRecordsTable> {
+  $$DownloadRecordsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceUrl =>
+      $composableBuilder(column: $table.sourceUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get fileName =>
+      $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumn<String> get mimeType =>
+      $composableBuilder(column: $table.mimeType, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedBytes => $composableBuilder(
+    column: $table.expectedBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get savedPath =>
+      $composableBuilder(column: $table.savedPath, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+}
+
+class $$DownloadRecordsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DownloadRecordsTable,
+          DownloadRecord,
+          $$DownloadRecordsTableFilterComposer,
+          $$DownloadRecordsTableOrderingComposer,
+          $$DownloadRecordsTableAnnotationComposer,
+          $$DownloadRecordsTableCreateCompanionBuilder,
+          $$DownloadRecordsTableUpdateCompanionBuilder,
+          (
+            DownloadRecord,
+            BaseReferences<
+              _$AppDatabase,
+              $DownloadRecordsTable,
+              DownloadRecord
+            >,
+          ),
+          DownloadRecord,
+          PrefetchHooks Function()
+        > {
+  $$DownloadRecordsTableTableManager(
+    _$AppDatabase db,
+    $DownloadRecordsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DownloadRecordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DownloadRecordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DownloadRecordsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sourceUrl = const Value.absent(),
+                Value<String> fileName = const Value.absent(),
+                Value<String?> mimeType = const Value.absent(),
+                Value<int?> expectedBytes = const Value.absent(),
+                Value<int> receivedBytes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> savedPath = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int?> completedAt = const Value.absent(),
+                Value<String?> failureMessage = const Value.absent(),
+                Value<String?> sessionId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DownloadRecordsCompanion(
+                id: id,
+                sourceUrl: sourceUrl,
+                fileName: fileName,
+                mimeType: mimeType,
+                expectedBytes: expectedBytes,
+                receivedBytes: receivedBytes,
+                status: status,
+                savedPath: savedPath,
+                createdAt: createdAt,
+                completedAt: completedAt,
+                failureMessage: failureMessage,
+                sessionId: sessionId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sourceUrl,
+                required String fileName,
+                Value<String?> mimeType = const Value.absent(),
+                Value<int?> expectedBytes = const Value.absent(),
+                Value<int> receivedBytes = const Value.absent(),
+                required String status,
+                Value<String?> savedPath = const Value.absent(),
+                required int createdAt,
+                Value<int?> completedAt = const Value.absent(),
+                Value<String?> failureMessage = const Value.absent(),
+                Value<String?> sessionId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DownloadRecordsCompanion.insert(
+                id: id,
+                sourceUrl: sourceUrl,
+                fileName: fileName,
+                mimeType: mimeType,
+                expectedBytes: expectedBytes,
+                receivedBytes: receivedBytes,
+                status: status,
+                savedPath: savedPath,
+                createdAt: createdAt,
+                completedAt: completedAt,
+                failureMessage: failureMessage,
+                sessionId: sessionId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DownloadRecordsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DownloadRecordsTable,
+      DownloadRecord,
+      $$DownloadRecordsTableFilterComposer,
+      $$DownloadRecordsTableOrderingComposer,
+      $$DownloadRecordsTableAnnotationComposer,
+      $$DownloadRecordsTableCreateCompanionBuilder,
+      $$DownloadRecordsTableUpdateCompanionBuilder,
+      (
+        DownloadRecord,
+        BaseReferences<_$AppDatabase, $DownloadRecordsTable, DownloadRecord>,
+      ),
+      DownloadRecord,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2597,4 +3678,6 @@ class $AppDatabaseManager {
       $$CachedMediaTableTableManager(_db, _db.cachedMedia);
   $$DiagnosticsLogsTableTableManager get diagnosticsLogs =>
       $$DiagnosticsLogsTableTableManager(_db, _db.diagnosticsLogs);
+  $$DownloadRecordsTableTableManager get downloadRecords =>
+      $$DownloadRecordsTableTableManager(_db, _db.downloadRecords);
 }
