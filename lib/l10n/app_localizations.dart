@@ -1383,6 +1383,124 @@ class AppLocalizations {
       isEnglish ? '$count selected' : '已选择 $count 条';
   String get diagnosticsDetailsTitle => isEnglish ? 'Log Details' : '日志详情';
 
+  String get bgKeepalivePersistentHint => isEnglish
+      ? 'When enabled, an ongoing notification displays the number of active sessions'
+      : '开启后常驻通知显示进行中会话数';
+  String get bgKeepaliveNoActiveSessions =>
+      isEnglish ? 'No active sessions' : '暂无进行中会话';
+  String bgKeepaliveActiveCount(int count) => count > 0
+      ? (isEnglish
+            ? '$count session${count == 1 ? '' : 's'} generating'
+            : '$count 个会话正在生成')
+      : (isEnglish ? 'No active sessions' : '暂无进行中会话');
+
+  String get chatStatusConnecting => isEnglish ? 'Connecting…' : '连接中…';
+  String get chatStatusWaitingResponse =>
+      isEnglish ? 'Waiting for model response…' : '等待模型响应…';
+  String get chatStatusGenerating => isEnglish ? 'Generating' : '生成中';
+  String get chatStatusInvestigating =>
+      isEnglish ? 'Connection anomaly, investigating…' : '连接异常，排查中…';
+  String get chatStatusReconnecting => isEnglish ? 'Reconnecting…' : '正在重新连接…';
+  String get chatStatusReconnected => isEnglish ? 'Reconnected' : '已重连';
+  String get chatStatusContextUnavailable =>
+      isEnglish ? 'Context unavailable' : '上下文不可用';
+  String get chatStatusLine => isEnglish ? 'Chat Status Line' : '聊天状态指示';
+  String get chatStatusLineDesc => isEnglish
+      ? 'Show real-time status at the bottom of chat message list'
+      : '在聊天消息列表底部显示实时连接与生成状态';
+
+  // ---------------------------------------------------------------------------
+  // 13. Install Guide (Windows Local Deployment)
+  // ---------------------------------------------------------------------------
+  String get installGuideTitle =>
+      isEnglish ? 'Windows Local Deployment Guide' : 'Windows 本机部署向导';
+  String get installGuideSubtitle => isEnglish
+      ? 'One-click pull, configure, and deploy Hermes Agent & WebUI'
+      : '一键拉取、配置与部署 Hermes Agent 和 WebUI';
+  String get installGuideLocalDeploy => isEnglish ? 'Local Deployment' : '本机部署';
+  String get installGuideLocalDeployDesc => isEnglish
+      ? 'Install Hermes Agent & WebUI locally on Windows'
+      : '在 Windows 本机一键安装并部署 Hermes';
+  String get installGuideStagePrereqs =>
+      isEnglish ? 'Environment Check' : '环境检查';
+  String get installGuideStagePrereqsDesc => isEnglish
+      ? 'Check Python, Git, and PowerShell requirements'
+      : '检查 Python、Git 及 PowerShell 环境';
+  String get installGuideStageAgent => isEnglish ? 'Pull Agent' : '拉取 Agent';
+  String get installGuideStageAgentDesc => isEnglish
+      ? 'Download and install Hermes Agent via install.ps1'
+      : '下载并通过 install.ps1 安装 Hermes Agent';
+  String get installGuideStageDeps =>
+      isEnglish ? 'Install Dependencies' : '安装依赖';
+  String get installGuideStageDepsDesc => isEnglish
+      ? 'Set up Python virtual environment and dependencies'
+      : '配置 Python 虚拟环境并安装核心依赖';
+  String get installGuideStageWebui => isEnglish ? 'Deploy WebUI' : '部署 WebUI';
+  String get installGuideStageWebuiDesc => isEnglish
+      ? 'Clone official WebUI repository and install packages'
+      : '克隆官方 WebUI 仓库并安装依赖';
+  String get installGuideStageServer => isEnglish ? 'Start Service' : '启动服务';
+  String get installGuideStageServerDesc => isEnglish
+      ? 'Launch backend server and verify /health endpoint'
+      : '启动后台服务并验证 /health 健康状态';
+  String get installGuideStageModel => isEnglish ? 'Configure Model' : '配置模型';
+  String get installGuideStageModelDesc =>
+      isEnglish ? 'Set up LLM provider and API key' : '选择大模型服务商并配置 API Key';
+  String get installGuideStatusPending => isEnglish ? 'Pending' : '等待中';
+  String get installGuideStatusRunning => isEnglish ? 'Running' : '执行中';
+  String get installGuideStatusSuccess => isEnglish ? 'Completed' : '已完成';
+  String get installGuideStatusFailed => isEnglish ? 'Failed' : '执行失败';
+  String get installGuideStartInstall =>
+      isEnglish ? 'Start One-Click Install' : '开始一键安装';
+  String get installGuideInstalling => isEnglish ? 'Installing...' : '正在安装...';
+  String get installGuideRetry => isEnglish ? 'Retry' : '重试';
+  String get installGuideRetryStage =>
+      isEnglish ? 'Retry Failed Step' : '重试当前步骤';
+  String get installGuideCompleted =>
+      isEnglish ? 'Installation Completed!' : '安装配置完成！';
+  String get installGuideEnterChat => isEnglish ? 'Enter Chat' : '进入聊天';
+  String get installGuideLogs => isEnglish ? 'Installation Logs' : '安装日志';
+  String get installGuideShowLogs => isEnglish ? 'Show Logs' : '展开日志';
+  String get installGuideHideLogs => isEnglish ? 'Hide Logs' : '收起日志';
+  String get installGuideCopyLogs => isEnglish ? 'Copy Logs' : '复制日志';
+  String get installGuideLogsCopied =>
+      isEnglish ? 'Logs copied to clipboard' : '日志已复制到剪贴板';
+  String get installGuideSelectProvider =>
+      isEnglish ? 'Select Provider' : '选择模型服务商';
+  String get installGuideApiKey => isEnglish ? 'API Key' : 'API Key';
+  String get installGuideApiKeyHint =>
+      isEnglish ? 'Enter your API key' : '请输入 API Key';
+  String get installGuideBaseUrl =>
+      isEnglish ? 'Base URL (Optional)' : 'API 地址（选填）';
+  String get installGuideBaseUrlHint => isEnglish
+      ? 'e.g. https://api.example.com/v1'
+      : '例如 https://api.example.com/v1';
+  String get installGuideModelName =>
+      isEnglish ? 'Model Name (Optional)' : '模型名称（选填）';
+  String get installGuideModelNameHint => isEnglish
+      ? 'e.g. claude-3-5-sonnet-20241022'
+      : '例如 claude-3-5-sonnet-20241022';
+  String get installGuideSaveAndContinue =>
+      isEnglish ? 'Save & Start Using' : '保存并开始使用';
+  String get installGuideSaving => isEnglish ? 'Saving...' : '正在保存配置...';
+  String get installGuideSkipModelConfig =>
+      isEnglish ? 'Skip for now' : '暂不配置，稍后设置';
+  String get installGuideWindowsOnly => isEnglish
+      ? 'Local deployment guide is only supported on Windows'
+      : '本机部署向导仅支持 Windows 系统';
+  String get installGuideBackToConnect =>
+      isEnglish ? 'Back to Remote Connection' : '返回远程连接';
+  String get installGuideDownloadScriptFailed => isEnglish
+      ? 'Failed to download install.ps1. Please check network connection.'
+      : '下载 install.ps1 失败，请检查网络连接';
+  String get installGuideWebuiStartFailed => isEnglish
+      ? 'Failed to start WebUI server or health check timed out.'
+      : 'WebUI 服务启动失败或健康检查超时';
+  String get installGuideProviderRequired =>
+      isEnglish ? 'Please select a provider' : '请选择模型服务商';
+  String get installGuideApiKeyRequired =>
+      isEnglish ? 'API Key is required for this provider' : '该服务商需要填写 API Key';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));
