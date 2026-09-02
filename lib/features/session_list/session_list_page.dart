@@ -13,6 +13,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/shell/adaptive_shell.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/narrow_navigation_dropdown.dart';
@@ -698,7 +699,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final id = await controller.createSession(workspace: workspace);
     if (!context.mounted) return;
     if (id != null) {
-      context.go('/chat/$id');
+      _openChatRoute(context, id);
     }
   }
 
@@ -867,7 +868,21 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   void _openSession(BuildContext context, SessionSummary session) {
-    context.go('/chat/${session.sessionId ?? session.id}');
+    _openChatRoute(context, session.sessionId ?? session.id);
+  }
+
+  /// 进入聊天路由（todo：#43 返回动画修正——窄屏 push / 宽屏 go）。
+  ///
+  /// - 窄屏（< kAdaptiveBreakpoint）：`context.push` 真入栈，返回时
+  ///   `AppBackButton` 走 `pop()` 反向（聊天页向右滑出、会话列表不动）。
+  /// - 宽屏（>= kAdaptiveBreakpoint）：双栏外壳 `go` 替换不破坏侧栏选中态。
+  void _openChatRoute(BuildContext context, String sessionId) {
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    if (isWide) {
+      context.go('/chat/$sessionId');
+    } else {
+      unawaited(context.push('/chat/$sessionId'));
+    }
   }
 
   void _showRowActions(
@@ -1047,7 +1062,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   ) async {
     final newId = await controller.branch(session);
     if (newId != null && context.mounted) {
-      context.go('/chat/$newId');
+      _openChatRoute(context, newId);
     }
   }
 
@@ -1921,17 +1936,11 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
     final n = workspaces.length;
 
     return Stack(
-      children: [
-        for (var i = 0; i < n; i++) ..._buildItem(i, n, isDark),
-      ],
+      children: [for (var i = 0; i < n; i++) ..._buildItem(i, n, isDark)],
     );
   }
 
-  List<Widget> _buildItem(
-    int index,
-    int total,
-    bool isDark,
-  ) {
+  List<Widget> _buildItem(int index, int total, bool isDark) {
     final workspace = workspaces[index];
     final isHovered = hoveredIndex == index;
     final displayName = _workspaceDisplayName(workspace);
@@ -1960,14 +1969,14 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
               color: isHovered
                   ? const Color(0xFF007AFF)
                   : (isDark
-                      ? const Color(0xCC2C2C2E)
-                      : const Color(0xEEFFFFFF)),
+                        ? const Color(0xCC2C2C2E)
+                        : const Color(0xEEFFFFFF)),
               border: Border.all(
                 color: isHovered
                     ? CupertinoColors.white.withValues(alpha: 0.85)
                     : (isDark
-                        ? const Color(0x33FFFFFF)
-                        : const Color(0x1F000000)),
+                          ? const Color(0x33FFFFFF)
+                          : const Color(0x1F000000)),
                 width: isHovered ? 1.5 : 0.8,
               ),
               boxShadow: [
@@ -1983,15 +1992,11 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
             ),
             child: Center(
               child: Icon(
-                isHovered
-                    ? CupertinoIcons.folder_fill
-                    : CupertinoIcons.folder,
+                isHovered ? CupertinoIcons.folder_fill : CupertinoIcons.folder,
                 size: 21,
                 color: isHovered
                     ? CupertinoColors.white
-                    : (isDark
-                        ? CupertinoColors.white
-                        : CupertinoColors.black),
+                    : (isDark ? CupertinoColors.white : CupertinoColors.black),
               ),
             ),
           ),
@@ -2011,10 +2016,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                     ? const Color(0xEE1C1C1E)
                     : const Color(0xF0000000),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0x33FFFFFF),
-                  width: 0.5,
-                ),
+                border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x33000000),
@@ -2065,9 +2067,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? CupertinoColors.white
-                      : CupertinoColors.black,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
                 ),
               ),
             ),
@@ -2091,4 +2091,3 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
     return trimmed.substring(idx + 1);
   }
 }
-
