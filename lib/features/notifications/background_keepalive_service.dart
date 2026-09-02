@@ -40,7 +40,7 @@ abstract interface class BackgroundKeepaliveService {
   /// 冷启动初始化（注册 WorkManager 与 ForegroundTask 配置）。
   Future<void> initialize();
 
-  /// App 生命周期变更联动。
+  /// App 生命周期变更联动（仅上报流状态用于文本更新与 WorkManager 加急任务调度，不停止常驻前台服务）。
   Future<void> onAppLifecycleChanged({
     required AppLifecycleState state,
     required String? activeSessionId,
@@ -49,14 +49,18 @@ abstract interface class BackgroundKeepaliveService {
     required bool foregroundServiceEnabled,
   });
 
-  /// 启动前台服务（持 WakeLock 保活网络）。
+  /// 启动前台服务（持 WakeLock 保活网络，常驻通知显示进行中会话数）。
   Future<void> startForegroundService({
-    required String sessionId,
-    required String? streamId,
+    String sessionId = '',
+    String? streamId,
+    int? activeCount,
   });
 
-  /// 停止前台服务。
-  Future<void> stopForegroundService();
+  /// 停止前台服务（force 为 true 时无条件停止；force 为 false 且开关开启时仅刷新通知文本为 0）。
+  Future<void> stopForegroundService({bool force = false});
+
+  /// 更新常驻通知文本（会话数动态文本）。
+  Future<void> updateNotification({int activeCount = 0});
 
   /// 调度 WorkManager 加急/退避单次轮询任务。
   Future<void> scheduleExpeditedOneOffPoll({
@@ -129,10 +133,19 @@ class ProductionBackgroundKeepaliveService
   static const String keyLastNotifiedSessionPrefix = 'bg_last_notified_session_';
 
   bool _initialized = false;
-  bool _foregroundServiceRunning = false;
 
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// 格式化常驻通知文本（「N 个会话正在生成」/「暂无进行中会话」）。
+  static String formatNotificationText(int count, {bool isEnglish = false}) {
+    if (count > 0) {
+      return isEnglish
+          ? '$count session${count == 1 ? '' : 's'} generating'
+          : '$count 个会话正在生成';
+    }
+    return isEnglish ? 'No active sessions' : '暂无进行中会话';
+  }
 
   @override
   Future<void> initialize() async {
@@ -160,6 +173,9 @@ class ProductionBackgroundKeepaliveService
       );
 
       // 3. 初始化 Foreground Task
+      // 注：flutter_foreground_task 8.x 的 AndroidNotificationOptions 无 foregroundServiceType 参数，
+      // 依 Android 14+ 规范在 AndroidManifest.xml 中显式声明 foregroundServiceType="specialUse"
+      // 及 PROPERTY_SPECIAL_USE_FGS_SUBTYPE 为 "hermes_keepalive"。
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'hermes_foreground_service',
@@ -184,6 +200,18 @@ class ProductionBackgroundKeepaliveService
           allowWifiLock: true,
         ),
       );
+
+      // 4. 若保活开关已开启，冷启动直启常驻服务
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('bg_foreground_service_enabled') ?? false;
+      if (enabled) {
+        final isStreaming = prefs.getBool(keyIsStreaming) ?? false;
+        final activeStreamId = prefs.getString(keyActiveStreamId);
+        final hasActive =
+            isStreaming ||
+            (activeStreamId != null && activeStreamId.isNotEmpty);
+        await startForegroundService(activeCount: hasActive ? 1 : 0);
+      }
 
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
@@ -217,21 +245,34 @@ class ProductionBackgroundKeepaliveService
       await prefs.setString(keyActiveStreamId, activeStreamId ?? '');
       await prefs.setBool(keyIsStreaming, isStreaming);
 
+      // 流状态即时更新通知文本（0 ↔ 1）
+      final activeCount =
+          (isStreaming ||
+                  (activeStreamId != null && activeStreamId.isNotEmpty))
+              ? 1
+              : 0;
+      if (foregroundServiceEnabled) {
+        final isRunning = await FlutterForegroundTask.isRunningService;
+        if (isRunning) {
+          await updateNotification(activeCount: activeCount);
+        } else {
+          await startForegroundService(
+            sessionId: activeSessionId ?? '',
+            streamId: activeStreamId,
+            activeCount: activeCount,
+          );
+        }
+      }
+
       if (state == AppLifecycleState.resumed) {
-        // 回到前台：停止前台服务并清理通知
-        await stopForegroundService();
+        // 回到前台：取消加急轮询（常驻服务不停止）
         if (activeSessionId != null && activeSessionId.isNotEmpty) {
           await cancelOneOffPoll(activeSessionId);
         }
       } else {
-        // 切后台：若正在生成
-        if (isStreaming || (activeStreamId != null && activeStreamId.isNotEmpty)) {
-          if (foregroundServiceEnabled) {
-            await startForegroundService(
-              sessionId: activeSessionId ?? '',
-              streamId: activeStreamId,
-            );
-          }
+        // 切后台：若正在生成，调度加急轮询兜底
+        if (isStreaming ||
+            (activeStreamId != null && activeStreamId.isNotEmpty)) {
           if (activeSessionId != null && activeSessionId.isNotEmpty) {
             await scheduleExpeditedOneOffPoll(
               sessionId: activeSessionId,
@@ -247,32 +288,42 @@ class ProductionBackgroundKeepaliveService
 
   @override
   Future<void> startForegroundService({
-    required String sessionId,
-    required String? streamId,
+    String sessionId = '',
+    String? streamId,
+    int? activeCount,
   }) async {
     if (!_isAndroid) return;
-    if (_foregroundServiceRunning) return;
 
     try {
       if (!_initialized) {
         await initialize();
       }
+      final count = activeCount ??
+          ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
+      final text = formatNotificationText(count);
+
       final isRunning = await FlutterForegroundTask.isRunningService;
       if (isRunning) {
-        _foregroundServiceRunning = true;
+        await FlutterForegroundTask.updateService(
+          notificationTitle: 'Hermes',
+          notificationText: text,
+        );
         return;
       }
 
       await FlutterForegroundTask.startService(
         notificationTitle: 'Hermes',
-        notificationText: 'Hermes 正在生成…',
+        notificationText: text,
       );
-      _foregroundServiceRunning = true;
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'keepalive',
         message: '启动前台保活服务成功',
-        details: {'sessionId': sessionId, 'streamId': streamId},
+        details: {
+          'sessionId': sessionId,
+          'streamId': streamId,
+          'activeCount': count,
+        },
       );
     } catch (e) {
       developer.log('startForegroundService error: $e');
@@ -286,14 +337,46 @@ class ProductionBackgroundKeepaliveService
   }
 
   @override
-  Future<void> stopForegroundService() async {
+  Future<void> updateNotification({int activeCount = 0}) async {
     if (!_isAndroid) return;
     try {
+      final isRunning = await FlutterForegroundTask.isRunningService;
+      if (!isRunning) return;
+      final text = formatNotificationText(activeCount);
+      await FlutterForegroundTask.updateService(
+        notificationTitle: 'Hermes',
+        notificationText: text,
+      );
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'keepalive',
+        message: '更新前台服务常驻通知文本',
+        details: {'activeCount': activeCount, 'text': text},
+      );
+    } catch (e) {
+      developer.log('updateNotification error: $e');
+    }
+  }
+
+  @override
+  Future<void> stopForegroundService({bool force = false}) async {
+    if (!_isAndroid) return;
+    try {
+      if (!force) {
+        final prefs = await SharedPreferences.getInstance();
+        final enabled =
+            prefs.getBool('bg_foreground_service_enabled') ?? false;
+        if (enabled) {
+          // 开关仍开启时，通知常驻不消失，仅将文本更新为「暂无进行中会话」
+          await updateNotification(activeCount: 0);
+          return;
+        }
+      }
+
       final isRunning = await FlutterForegroundTask.isRunningService;
       if (isRunning) {
         await FlutterForegroundTask.stopService();
       }
-      _foregroundServiceRunning = false;
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'keepalive',
@@ -525,24 +608,11 @@ class ProductionBackgroundKeepaliveService
       final notifyTurns = prefs.getBool('notify_turns_enabled') ?? true;
       final notifyClarify = prefs.getBool('notify_clarify_enabled') ?? true;
       final notifyErrors = prefs.getBool('notify_errors_enabled') ?? true;
-
-      if (!notifyTurns && !notifyClarify && !notifyErrors) {
-        return true;
-      }
+      final bgFgsEnabled =
+          prefs.getBool('bg_foreground_service_enabled') ?? false;
 
       final baseUrl = prefs.getString(keyActiveBaseUrl);
       if (baseUrl == null || baseUrl.isEmpty) {
-        return true;
-      }
-
-      final sessionId = (inputData?['sessionId'] as String?) ??
-          prefs.getString(keyActiveSessionId) ??
-          '';
-      final streamId = (inputData?['streamId'] as String?) ??
-          prefs.getString(keyActiveStreamId) ??
-          '';
-
-      if (sessionId.isEmpty && streamId.isEmpty) {
         return true;
       }
 
@@ -556,6 +626,46 @@ class ProductionBackgroundKeepaliveService
           headers: {'Accept': 'application/json'},
         ),
       );
+
+      // 0. 后台保活：拉取 /health?deep=1 刷新常驻通知文本
+      if (bgFgsEnabled) {
+        try {
+          final healthRes = await dio.get<Map<String, dynamic>>(
+            '/health',
+            queryParameters: {'deep': 1},
+          );
+          final healthData = healthRes.data;
+          if (healthData != null && healthData.containsKey('active_streams')) {
+            final activeStreams =
+                (healthData['active_streams'] as num?)?.toInt() ?? 0;
+            final isRunning = await FlutterForegroundTask.isRunningService;
+            if (isRunning) {
+              final text = formatNotificationText(activeStreams);
+              await FlutterForegroundTask.updateService(
+                notificationTitle: 'Hermes',
+                notificationText: text,
+              );
+            }
+          }
+        } catch (e) {
+          developer.log('WorkManager /health?deep=1 error: $e');
+        }
+      }
+
+      if (!notifyTurns && !notifyClarify && !notifyErrors) {
+        return true;
+      }
+
+      final sessionId = (inputData?['sessionId'] as String?) ??
+          prefs.getString(keyActiveSessionId) ??
+          '';
+      final streamId = (inputData?['streamId'] as String?) ??
+          prefs.getString(keyActiveStreamId) ??
+          '';
+
+      if (sessionId.isEmpty && streamId.isEmpty) {
+        return true;
+      }
 
       // 1. 若有 activeStreamId，查 /api/chat/stream/status
       if (streamId.isNotEmpty) {
@@ -669,6 +779,18 @@ class ProductionBackgroundKeepaliveService
               // 清理 activeStream 状态并取消 OneOff
               await prefs.setString(keyActiveStreamId, '');
               await prefs.setBool(keyIsStreaming, false);
+              if (bgFgsEnabled) {
+                try {
+                  final isRunning =
+                      await FlutterForegroundTask.isRunningService;
+                  if (isRunning) {
+                    await FlutterForegroundTask.updateService(
+                      notificationTitle: 'Hermes',
+                      notificationText: formatNotificationText(0),
+                    );
+                  }
+                } catch (_) {}
+              }
               try {
                 await Workmanager().cancelByUniqueName('hermes-bg-oneoff-$sessionId');
               } catch (_) {}
@@ -739,6 +861,18 @@ class ProductionBackgroundKeepaliveService
               await prefs.setString(
                   '$keyLastNotifiedSessionPrefix$sessionId', nowStr);
               await prefs.setBool(keyIsStreaming, false);
+              if (bgFgsEnabled) {
+                try {
+                  final isRunning =
+                      await FlutterForegroundTask.isRunningService;
+                  if (isRunning) {
+                    await FlutterForegroundTask.updateService(
+                      notificationTitle: 'Hermes',
+                      notificationText: formatNotificationText(0),
+                    );
+                  }
+                } catch (_) {}
+              }
             }
           }
         } catch (e) {
@@ -795,12 +929,15 @@ class ProductionBackgroundKeepaliveService
 class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
   final List<String> startedForegroundServices = [];
   final List<String> stoppedForegroundServices = [];
+  final List<int> updatedNotificationCounts = [];
   final List<(String sessionId, String? streamId)> scheduledOneOffPolls = [];
   final List<String> cancelledOneOffPolls = [];
   final List<(String sessionId, String? streamId)> notifiedRecords = [];
   final List<HyperOsSettingType> openedSettings = [];
 
   bool isInitialized = false;
+  bool isForegroundServiceRunning = false;
+  int currentActiveCount = 0;
 
   @override
   Future<void> initialize() async {
@@ -815,19 +952,29 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
     required bool isStreaming,
     required bool foregroundServiceEnabled,
   }) async {
+    final activeCount =
+        (isStreaming || (activeStreamId != null && activeStreamId.isNotEmpty))
+            ? 1
+            : 0;
+    if (foregroundServiceEnabled) {
+      if (isForegroundServiceRunning) {
+        await updateNotification(activeCount: activeCount);
+      } else {
+        await startForegroundService(
+          sessionId: activeSessionId ?? '',
+          streamId: activeStreamId,
+          activeCount: activeCount,
+        );
+      }
+    }
+
     if (state == AppLifecycleState.resumed) {
-      await stopForegroundService();
       if (activeSessionId != null && activeSessionId.isNotEmpty) {
         await cancelOneOffPoll(activeSessionId);
       }
     } else {
-      if (isStreaming || (activeStreamId != null && activeStreamId.isNotEmpty)) {
-        if (foregroundServiceEnabled) {
-          await startForegroundService(
-            sessionId: activeSessionId ?? '',
-            streamId: activeStreamId,
-          );
-        }
+      if (isStreaming ||
+          (activeStreamId != null && activeStreamId.isNotEmpty)) {
         if (activeSessionId != null && activeSessionId.isNotEmpty) {
           await scheduleExpeditedOneOffPoll(
             sessionId: activeSessionId,
@@ -840,15 +987,32 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
 
   @override
   Future<void> startForegroundService({
-    required String sessionId,
-    required String? streamId,
+    String sessionId = '',
+    String? streamId,
+    int? activeCount,
   }) async {
     startedForegroundServices.add(sessionId);
+    isForegroundServiceRunning = true;
+    currentActiveCount = activeCount ??
+        ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
+    updatedNotificationCounts.add(currentActiveCount);
   }
 
   @override
-  Future<void> stopForegroundService() async {
+  Future<void> stopForegroundService({bool force = false}) async {
     stoppedForegroundServices.add('stopped');
+    if (force) {
+      isForegroundServiceRunning = false;
+    } else {
+      currentActiveCount = 0;
+      updatedNotificationCounts.add(0);
+    }
+  }
+
+  @override
+  Future<void> updateNotification({int activeCount = 0}) async {
+    currentActiveCount = activeCount;
+    updatedNotificationCounts.add(activeCount);
   }
 
   @override

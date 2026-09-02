@@ -40,6 +40,8 @@ void main() {
       expect(service.startedForegroundServices, ['sess-123']);
       expect(service.scheduledOneOffPolls, [('sess-123', 'stream-abc')]);
       expect(service.stoppedForegroundServices, isEmpty);
+      expect(service.currentActiveCount, 1);
+      expect(service.isForegroundServiceRunning, isTrue);
     });
 
     test('切后台 + 正在流式生成 + 前台服务关闭（默认） → 仅调度 OneOff 探活，不启前台服务', () async {
@@ -53,9 +55,11 @@ void main() {
 
       expect(service.startedForegroundServices, isEmpty);
       expect(service.scheduledOneOffPolls, [('sess-123', 'stream-abc')]);
+      expect(service.isForegroundServiceRunning, isFalse);
     });
 
-    test('回到前台（resumed） → 停止前台服务并取消 OneOff 任务', () async {
+    test('回到前台（resumed） → 取消 OneOff 任务且不停止常驻前台服务', () async {
+      service.isForegroundServiceRunning = true;
       await service.onAppLifecycleChanged(
         state: AppLifecycleState.resumed,
         activeSessionId: 'sess-123',
@@ -64,8 +68,91 @@ void main() {
         foregroundServiceEnabled: true,
       );
 
-      expect(service.stoppedForegroundServices, ['stopped']);
+      // 回到前台不再调用 stopForegroundService，服务保持常驻
+      expect(service.isForegroundServiceRunning, isTrue);
       expect(service.cancelledOneOffPolls, ['sess-123']);
+      expect(service.currentActiveCount, 0);
+    });
+  });
+
+  group('开关直启与常驻保活联动（Switch Direct Start/Stop & Persistent）', () {
+    test('开关打开 → 立即 startForegroundService（前后台都启），关闭 → 立即 stopForegroundService(force: true)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final container = ProviderContainer(
+        overrides: [
+          backgroundKeepaliveServiceProvider.overrideWithValue(fakeKeepalive),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(notificationSettingsProvider.notifier);
+      expect(fakeKeepalive.isForegroundServiceRunning, isFalse);
+
+      // 1. 开关打开 → 立即启动前台服务常驻
+      await notifier.setBgForegroundServiceEnabled(true);
+      expect(fakeKeepalive.startedForegroundServices, hasLength(1));
+      expect(fakeKeepalive.isForegroundServiceRunning, isTrue);
+
+      // 2. 开关关闭 → 立即停止前台服务
+      await notifier.setBgForegroundServiceEnabled(false);
+      expect(fakeKeepalive.stoppedForegroundServices, contains('stopped'));
+      expect(fakeKeepalive.isForegroundServiceRunning, isFalse);
+    });
+
+    test('流开始/结束 → 文本 0 ↔ N 动态更新，无会话时显示「暂无」且不 stop', () async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+
+      // 启动常驻服务（初始无活跃会话，count = 0）
+      await fakeKeepalive.startForegroundService(activeCount: 0);
+      expect(fakeKeepalive.isForegroundServiceRunning, isTrue);
+      expect(fakeKeepalive.currentActiveCount, 0);
+
+      // 流开始：更新为 1 个会话生成中
+      await fakeKeepalive.updateNotification(activeCount: 1);
+      expect(fakeKeepalive.currentActiveCount, 1);
+      expect(fakeKeepalive.isForegroundServiceRunning, isTrue);
+
+      // 多流并发：更新为 2 个会话生成中
+      await fakeKeepalive.updateNotification(activeCount: 2);
+      expect(fakeKeepalive.currentActiveCount, 2);
+
+      // 流结束：调用非强制 stopForegroundService → 计数归 0，常驻服务不消失
+      await fakeKeepalive.stopForegroundService(force: false);
+      expect(fakeKeepalive.currentActiveCount, 0);
+      expect(fakeKeepalive.isForegroundServiceRunning, isTrue);
+    });
+  });
+
+  group('常驻通知文本格式化 formatNotificationText', () {
+    test('中文格式：0 -> 暂无进行中会话，N -> N 个会话正在生成', () {
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(0),
+        '暂无进行中会话',
+      );
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(1),
+        '1 个会话正在生成',
+      );
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(3),
+        '3 个会话正在生成',
+      );
+    });
+
+    test('英文格式：0 -> No active sessions，1 -> 1 session generating，N -> N sessions generating', () {
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(0, isEnglish: true),
+        'No active sessions',
+      );
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(1, isEnglish: true),
+        '1 session generating',
+      );
+      expect(
+        ProductionBackgroundKeepaliveService.formatNotificationText(2, isEnglish: true),
+        '2 sessions generating',
+      );
     });
   });
 

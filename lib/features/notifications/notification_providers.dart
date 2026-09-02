@@ -145,6 +145,15 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyBgForegroundService, value);
     } catch (_) {}
+
+    try {
+      final keepalive = ref.read(backgroundKeepaliveServiceProvider);
+      if (value) {
+        await keepalive.startForegroundService();
+      } else {
+        await keepalive.stopForegroundService(force: true);
+      }
+    } catch (_) {}
   }
 }
 

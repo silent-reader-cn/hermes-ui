@@ -50,7 +50,7 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
             CupertinoListTile(
               key: const ValueKey('settings-bg-foreground-service'),
               title: Text(l10n.bgForegroundServiceTitle),
-              subtitle: Text(l10n.bgForegroundServiceSubtitle),
+              subtitle: Text(l10n.bgKeepalivePersistentHint),
               trailing: CupertinoSwitch(
                 key: const ValueKey('settings-switch-bg-foreground-service'),
                 value: settings.bgForegroundServiceEnabled,
