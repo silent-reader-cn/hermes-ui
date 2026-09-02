@@ -207,8 +207,8 @@ void main() {
         async.flushMicrotasks();
         api.emit(const TokenSseEvent('好的，'));
         api.emit(const TokenSseEvent('马上处理'));
-        // 16ms 合并 + 48ms 词级 reveal，让内容进入 messages
-        async.elapse(const Duration(milliseconds: 80));
+        // 16ms 合并 + 词级 reveal，让内容进入 messages
+        async.elapse(const Duration(milliseconds: 200));
 
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();

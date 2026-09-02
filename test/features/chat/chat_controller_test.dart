@@ -135,30 +135,243 @@ void main() {
   });
 
   group('平滑打字机与积压自适应（smoothStreaming）', () {
-    test('adaptiveWordUnitsPerTick 自适应速率算法：探针断言 tick count 与 backlog 正相关', () {
-      expect(ChatController.adaptiveWordUnitsPerTick(0), 0);
-      expect(ChatController.adaptiveWordUnitsPerTick(2), 2);
-      expect(ChatController.adaptiveWordUnitsPerTick(4), 4);
-      expect(ChatController.adaptiveWordUnitsPerTick(5), 5);
-      expect(ChatController.adaptiveWordUnitsPerTick(6), 5);
-      expect(ChatController.adaptiveWordUnitsPerTick(8), 5);
-      expect(ChatController.adaptiveWordUnitsPerTick(20), 6);
-      expect(ChatController.adaptiveWordUnitsPerTick(44), 8);
-      expect(ChatController.adaptiveWordUnitsPerTick(68), 10);
-      expect(ChatController.adaptiveWordUnitsPerTick(128), 15);
-      expect(ChatController.adaptiveWordUnitsPerTick(200), 21);
-      expect(ChatController.adaptiveWordUnitsPerTick(500), 32);
+    test('adaptiveWordUnitsPerTick 自适应速率算法：五档语义断言', () {
+      // 1. 逐字档（固定 1 词/字）
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          0,
+          SmoothStreamingSpeedPreset.charByChar,
+        ),
+        0,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          1,
+          SmoothStreamingSpeedPreset.charByChar,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          5,
+          SmoothStreamingSpeedPreset.charByChar,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          500,
+          SmoothStreamingSpeedPreset.charByChar,
+        ),
+        1,
+      );
 
-      // 单调递增检验（正相关）
-      int lastCount = 0;
-      for (final b in [1, 3, 5, 10, 25, 50, 100, 200, 400]) {
-        final c = ChatController.adaptiveWordUnitsPerTick(b);
-        expect(c, greaterThanOrEqualTo(lastCount), reason: 'backlog=$b 时 count=$c 应 >= $lastCount');
-        lastCount = c;
-      }
+      // 2. 慢档（固定 1 单元）
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          0,
+          SmoothStreamingSpeedPreset.slow,
+        ),
+        0,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          1,
+          SmoothStreamingSpeedPreset.slow,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          5,
+          SmoothStreamingSpeedPreset.slow,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          500,
+          SmoothStreamingSpeedPreset.slow,
+        ),
+        1,
+      );
+
+      // 3. 标准档（默认，固定 2 单元）
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          0,
+          SmoothStreamingSpeedPreset.standard,
+        ),
+        0,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          1,
+          SmoothStreamingSpeedPreset.standard,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          2,
+          SmoothStreamingSpeedPreset.standard,
+        ),
+        2,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          5,
+          SmoothStreamingSpeedPreset.standard,
+        ),
+        2,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          500,
+          SmoothStreamingSpeedPreset.standard,
+        ),
+        2,
+      );
+
+      // 4. 快档（base=3，自适应加速，上限 32）
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          0,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        0,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          1,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        1,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          2,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        2,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          3,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        3,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          8,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        3,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          20,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        4,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          500,
+          SmoothStreamingSpeedPreset.fast,
+        ),
+        32,
+      );
+
+      // 5. 极快档（base=5，自适应加速，上限 32）
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          0,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        0,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          2,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        2,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          4,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        4,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          5,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        5,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          6,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        5,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          8,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        5,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          20,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        6,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          44,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        8,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          68,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        10,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          128,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        15,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          200,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        21,
+      );
+      expect(
+        ChatController.adaptiveWordUnitsPerTick(
+          500,
+          SmoothStreamingSpeedPreset.veryFast,
+        ),
+        32,
+      );
     });
 
-    test('批量注入 2k 字（未超 2000 单元）→ 逐 tick 自适应平滑吐出，isRevealQueueEmpty 正确翻转', () {
+    test('标准档（默认）：16ms merge + 64ms 固定 2 词 reveal', () {
       fakeAsync((async) {
         final api = _FakeChatApi();
         final container = _buildContainer(api, _FakeClock());
@@ -177,24 +390,174 @@ void main() {
 
         final streamId = state.stream.streamingAssistantMessageId;
 
-        // 48ms tick 1: backlog = 50 -> count = 5 + (50-8)~/12 = 8 词单元
-        async.elapse(const Duration(milliseconds: 48));
+        // 64ms tick 1: 标准档固定吐 2 词单元
+        async.elapse(const Duration(milliseconds: 64));
         state = container.read(chatControllerProvider(''));
-        final contentAfterTick1 = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
-        expect(contentAfterTick1, 'word ' * 8);
+        final contentAfterTick1 =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(contentAfterTick1, 'word ' * 2);
         expect(state.isRevealQueueEmpty, isFalse);
 
-        // 48ms tick 2: backlog = 42 -> count = 5 + (42-8)~/12 = 7 词单元
-        async.elapse(const Duration(milliseconds: 48));
+        // 64ms tick 2: 再次吐 2 词单元（累计 4 词）
+        async.elapse(const Duration(milliseconds: 64));
         state = container.read(chatControllerProvider(''));
-        final contentAfterTick2 = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
-        expect(contentAfterTick2, 'word ' * 15);
+        final contentAfterTick2 =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(contentAfterTick2, 'word ' * 4);
         expect(state.isRevealQueueEmpty, isFalse);
 
         // 推进直至队列排空
+        async.elapse(const Duration(seconds: 4));
+        state = container.read(chatControllerProvider(''));
+        final finalContent =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(finalContent, text);
+        expect(state.isRevealQueueEmpty, isTrue);
+      });
+    });
+
+    test('极快档：48ms tick + 自适应加速', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        unawaited(
+          container
+              .read(smoothStreamingSpeedProvider.notifier)
+              .setSpeed(SmoothStreamingSpeedPreset.veryFast),
+        );
+        async.flushMicrotasks();
+
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        final text = 'word ' * 50;
+        api.emit(TokenSseEvent(text));
+
+        async.elapse(const Duration(milliseconds: 16));
+        var state = container.read(chatControllerProvider(''));
+        expect(state.isRevealQueueEmpty, isFalse);
+
+        final streamId = state.stream.streamingAssistantMessageId;
+
+        // 48ms tick 1: backlog = 50 -> count = 5 + (50-8)~/12 = 8 词单元
+        async.elapse(const Duration(milliseconds: 48));
+        state = container.read(chatControllerProvider(''));
+        final contentAfterTick1 =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(contentAfterTick1, 'word ' * 8);
+
+        // 48ms tick 2: backlog = 42 -> count = 5 + (42-8)~/12 = 7 词单元（累计 15 词）
+        async.elapse(const Duration(milliseconds: 48));
+        state = container.read(chatControllerProvider(''));
+        final contentAfterTick2 =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(contentAfterTick2, 'word ' * 15);
+
         async.elapse(const Duration(milliseconds: 500));
         state = container.read(chatControllerProvider(''));
-        final finalContent = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        final finalContent =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(finalContent, text);
+        expect(state.isRevealQueueEmpty, isTrue);
+      });
+    });
+
+    test('流式中切换档位：立即重启 reveal timer 并在下一 tick 生效新速度', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        final text = 'word ' * 20;
+        api.emit(TokenSseEvent(text));
+        async.elapse(const Duration(milliseconds: 16));
+
+        final streamId = container
+            .read(chatControllerProvider(''))
+            .stream
+            .streamingAssistantMessageId;
+
+        // 初始为标准档（64ms, 2 词）
+        async.elapse(const Duration(milliseconds: 64));
+        var state = container.read(chatControllerProvider(''));
+        expect(
+          state.messages.firstWhere((m) => m.messageId == streamId).content,
+          'word ' * 2,
+        );
+
+        // 流式途中切换为极快档（48ms, 自适应）
+        unawaited(
+          container
+              .read(smoothStreamingSpeedProvider.notifier)
+              .setSpeed(SmoothStreamingSpeedPreset.veryFast),
+        );
+        async.flushMicrotasks();
+
+        // 48ms 后以极快档 tick 消费（backlog=18 -> count = 5 + (18-8)~/12 = 5 词）
+        async.elapse(const Duration(milliseconds: 48));
+        state = container.read(chatControllerProvider(''));
+        expect(
+          state.messages.firstWhere((m) => m.messageId == streamId).content,
+          'word ' * 7,
+        );
+      });
+    });
+
+    test('慢档 maxRevealLag 放宽：2s 积压不排空，达到档位上限（8s）才整段排空', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final clock = _FakeClock();
+        final container = _buildContainer(api, clock);
+        unawaited(
+          container
+              .read(smoothStreamingSpeedProvider.notifier)
+              .setSpeed(SmoothStreamingSpeedPreset.charByChar),
+        );
+        async.flushMicrotasks();
+
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // 逐字档：100ms 吐 1 词，maxRevealLag 为 8s
+        final text = 'word ' * 30;
+        api.emit(TokenSseEvent(text));
+        async.elapse(const Duration(milliseconds: 16));
+
+        final streamId = container
+            .read(chatControllerProvider(''))
+            .stream
+            .streamingAssistantMessageId;
+
+        // 运行 2s（远超原 1s maxRevealLag）
+        clock.advance(const Duration(seconds: 2));
+        async.elapse(const Duration(seconds: 2));
+
+        var state = container.read(chatControllerProvider(''));
+        // 2000ms / 100ms = 20 ticks -> 吐出 20 词，未被 1s 误排空
+        final contentAt2s =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
+        expect(contentAt2s, 'word ' * 20);
+        expect(state.isRevealQueueEmpty, isFalse);
+
+        // 再过 6s（累计 8s >= charByChar.maxRevealLag 8s）触发排空
+        clock.advance(const Duration(seconds: 6));
+        async.elapse(const Duration(seconds: 6));
+
+        state = container.read(chatControllerProvider(''));
+        final finalContent =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
         expect(finalContent, text);
         expect(state.isRevealQueueEmpty, isTrue);
       });
@@ -205,7 +568,11 @@ void main() {
         final api = _FakeChatApi();
         final container = _buildContainer(api, _FakeClock());
         // 关闭平滑输出
-        unawaited(container.read(smoothStreamingProvider.notifier).setSmoothStreaming(false));
+        unawaited(
+          container
+              .read(smoothStreamingProvider.notifier)
+              .setSmoothStreaming(false),
+        );
         async.flushMicrotasks();
 
         final controller = container.read(chatControllerProvider('').notifier);
@@ -214,20 +581,24 @@ void main() {
 
         api.emit(const TokenSseEvent('Hello World from fast stream! '));
         var state = container.read(chatControllerProvider(''));
-        expect(state.pendingAssistantTokenChunks, ['Hello World from fast stream! ']);
+        expect(state.pendingAssistantTokenChunks, [
+          'Hello World from fast stream! ',
+        ]);
 
-        // 16ms 合并后直接落地全文，无 48ms reveal 队列延迟
+        // 16ms 合并后直接落地全文，无 reveal 队列延迟
         async.elapse(const Duration(milliseconds: 16));
         state = container.read(chatControllerProvider(''));
         final streamId = state.stream.streamingAssistantMessageId;
-        final content = state.messages.firstWhere((m) => m.messageId == streamId).content ?? '';
+        final content =
+            state.messages.firstWhere((m) => m.messageId == streamId).content ??
+            '';
         expect(content, 'Hello World from fast stream! ');
         expect(state.isRevealQueueEmpty, isTrue);
       });
     });
   });
   group('token 三段式缓冲（§3.1）', () {
-    test('16ms 合并 + 48ms 词级 reveal，收尾全量 flush', () {
+    test('16ms 合并 + reveal 词级 reveal，收尾全量 flush', () {
       fakeAsync((async) {
         final api = _FakeChatApi();
         final container = _buildContainer(api, _FakeClock());
@@ -260,8 +631,8 @@ void main() {
             .firstOrNull;
         expect(stillEmpty!.content, '');
 
-        // 48ms reveal tick → 内容落地
-        async.elapse(const Duration(milliseconds: 48));
+        // reveal tick（标准档 64ms）→ 内容落地
+        async.elapse(ChatController.revealInterval);
         state = container.read(chatControllerProvider(''));
         final streaming = state.messages
             .where(
@@ -1423,7 +1794,7 @@ void main() {
         unawaited(controller.send('hi'));
         async.flushMicrotasks();
         api.emit(const TokenSseEvent('Hello world'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
 
         // 断开重连（replay）
         api.emitId('evt:5');
@@ -1437,11 +1808,11 @@ void main() {
 
         // 重放：先 Hello（已有，吃掉）再 world（已有，吃掉）再 !（新增）
         api.emit(const TokenSseEvent('Hello'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
         api.emit(const TokenSseEvent(' world'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
         api.emit(const TokenSseEvent('!'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
 
         final state = container.read(chatControllerProvider(''));
         final streaming = state.messages
@@ -1466,10 +1837,32 @@ void main() {
       );
     });
 
-    test('无空白 CJK 长串每 8 字符切一刀', () {
-      final units = ChatController.splitIntoWordUnits('你好世界你好世界你好');
-      expect(units, ['你好世界你好世界', '你好']);
-      expect(units.join(), '你好世界你好世界你好');
+    test('无空白 CJK 长串按 cjkChunkSize 粒度切分', () {
+      const text = '你好世界你好世界你好';
+      // 默认 8 字符切一刀
+      final unitsDefault = ChatController.splitIntoWordUnits(text);
+      expect(unitsDefault, ['你好世界你好世界', '你好']);
+      expect(unitsDefault.join(), text);
+
+      // 1 字符切一刀（逐字）
+      final units1 = ChatController.splitIntoWordUnits(text, cjkChunkSize: 1);
+      expect(units1, ['你', '好', '世', '界', '你', '好', '世', '界', '你', '好']);
+      expect(units1.join(), text);
+
+      // 2 字符切一刀（慢/标准）
+      final units2 = ChatController.splitIntoWordUnits(text, cjkChunkSize: 2);
+      expect(units2, ['你好', '世界', '你好', '世界', '你好']);
+      expect(units2.join(), text);
+
+      // 4 字符切一刀（快）
+      final units4 = ChatController.splitIntoWordUnits(text, cjkChunkSize: 4);
+      expect(units4, ['你好世界', '你好世界', '你好']);
+      expect(units4.join(), text);
+
+      // 8 字符切一刀（极快）
+      final units8 = ChatController.splitIntoWordUnits(text, cjkChunkSize: 8);
+      expect(units8, ['你好世界你好世界', '你好']);
+      expect(units8.join(), text);
     });
   });
 

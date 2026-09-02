@@ -19,65 +19,70 @@ import '../../helpers/in_memory_secure_storage.dart';
 
 void main() {
   group('重连回放防重复加固（replayAfterSeq & 内容级去重）', () {
-    test('live 中已收到 token A,B (seq 1,2) → 断线重连 → 回放含 seq 1,2,3 (A,B,C) → 仅 C 生效', () {
-      fakeAsync((async) {
-        final api = FakeChatApi();
-        api.statusResponse = const ChatStreamStatusResponse(
-          active: false,
-          replayAvailable: true,
-        );
-        final clock = _FakeClock();
-        final container = _buildContainer(api, clock);
-        final controller = container.read(chatControllerProvider('').notifier);
+    test(
+      'live 中已收到 token A,B (seq 1,2) → 断线重连 → 回放含 seq 1,2,3 (A,B,C) → 仅 C 生效',
+      () {
+        fakeAsync((async) {
+          final api = FakeChatApi();
+          api.statusResponse = const ChatStreamStatusResponse(
+            active: false,
+            replayAvailable: true,
+          );
+          final clock = _FakeClock();
+          final container = _buildContainer(api, clock);
+          final controller = container.read(
+            chatControllerProvider('').notifier,
+          );
 
-        unawaited(controller.send('hi'));
-        async.flushMicrotasks();
-        expect(api.startStreamCalls, 1);
+          unawaited(controller.send('hi'));
+          async.flushMicrotasks();
+          expect(api.startStreamCalls, 1);
 
-        // 收到 token A (seq 1) 与 B (seq 2)
-        api.emitId('s1:1');
-        api.emit(const TokenSseEvent('A'));
-        async.elapse(const Duration(milliseconds: 64));
+          // 收到 token A (seq 1) 与 B (seq 2)
+          api.emitId('s1:1');
+          api.emit(const TokenSseEvent('A'));
+          async.elapse(const Duration(milliseconds: 100));
 
-        api.emitId('s1:2');
-        api.emit(const TokenSseEvent('B'));
-        async.elapse(const Duration(milliseconds: 64));
+          api.emitId('s1:2');
+          api.emit(const TokenSseEvent('B'));
+          async.elapse(const Duration(milliseconds: 100));
 
-        var state = container.read(chatControllerProvider(''));
-        final streamingId = state.stream.streamingAssistantMessageId;
-        expect(_messageContent(state, streamingId), 'AB');
+          var state = container.read(chatControllerProvider(''));
+          final streamingId = state.stream.streamingAssistantMessageId;
+          expect(_messageContent(state, streamingId), 'AB');
 
-        // 触发传输断开 → 进入恢复重连
-        api.emit(const TransportErrorSseEvent('SSE connection lost'));
-        async.flushMicrotasks();
+          // 触发传输断开 → 进入恢复重连
+          api.emit(const TransportErrorSseEvent('SSE connection lost'));
+          async.flushMicrotasks();
 
-        expect(api.startStreamCalls, 2);
-        state = container.read(chatControllerProvider(''));
-        expect(state.stream.isReplayConnection, isTrue);
-        expect(state.stream.replayAfterSeq, 2);
+          expect(api.startStreamCalls, 2);
+          state = container.read(chatControllerProvider(''));
+          expect(state.stream.isReplayConnection, isTrue);
+          expect(state.stream.replayAfterSeq, 2);
 
-        // 服务端重放：回放 seq 1 (A), seq 2 (B), seq 3 (C)
-        api.emitId('s1:1');
-        api.emit(const TokenSseEvent('A'));
-        async.elapse(const Duration(milliseconds: 64));
+          // 服务端重放：回放 seq 1 (A), seq 2 (B), seq 3 (C)
+          api.emitId('s1:1');
+          api.emit(const TokenSseEvent('A'));
+          async.elapse(const Duration(milliseconds: 100));
 
-        api.emitId('s1:2');
-        api.emit(const TokenSseEvent('B'));
-        async.elapse(const Duration(milliseconds: 64));
+          api.emitId('s1:2');
+          api.emit(const TokenSseEvent('B'));
+          async.elapse(const Duration(milliseconds: 100));
 
-        // 此时 A, B 被 seq 门槛或 token 去重拦截，内容依然为 AB，未发生重复推流或抖动
-        state = container.read(chatControllerProvider(''));
-        expect(_messageContent(state, streamingId), 'AB');
+          // 此时 A, B 被 seq 门槛或 token 去重拦截，内容依然为 AB，未发生重复推流或抖动
+          state = container.read(chatControllerProvider(''));
+          expect(_messageContent(state, streamingId), 'AB');
 
-        // 发射新增 seq 3 (C)
-        api.emitId('s1:3');
-        api.emit(const TokenSseEvent('C'));
-        async.elapse(const Duration(milliseconds: 64));
+          // 发射新增 seq 3 (C)
+          api.emitId('s1:3');
+          api.emit(const TokenSseEvent('C'));
+          async.elapse(const Duration(milliseconds: 100));
 
-        state = container.read(chatControllerProvider(''));
-        expect(_messageContent(state, streamingId), 'ABC');
-      });
-    });
+          state = container.read(chatControllerProvider(''));
+          expect(_messageContent(state, streamingId), 'ABC');
+        });
+      },
+    );
 
     test('重连回放：reasoning 与 tool 事件不重复生成和冗余入段', () {
       fakeAsync((async) {
@@ -152,7 +157,7 @@ void main() {
         // 新增 seq 4 最终文本
         api.emitId('s1:4');
         api.emit(const TokenSseEvent('Found the answer.'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 300));
 
         final streamingId = state.stream.streamingAssistantMessageId;
         state = container.read(chatControllerProvider(''));
@@ -176,9 +181,9 @@ void main() {
 
         // 无 seq ID 的首批 token
         api.emit(const TokenSseEvent('Hello '));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
         api.emit(const TokenSseEvent('world'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
 
         var state = container.read(chatControllerProvider(''));
         final streamingId = state.stream.streamingAssistantMessageId;
@@ -190,19 +195,22 @@ void main() {
 
         // 无 seq ID 回放（触发 token 粒度去重）
         api.emit(const TokenSseEvent('Hello '));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
         api.emit(const TokenSseEvent('world'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 100));
 
         state = container.read(chatControllerProvider(''));
         expect(_messageContent(state, streamingId), 'Hello world');
 
         // 追加新增
         api.emit(const TokenSseEvent('! Today is sunny.'));
-        async.elapse(const Duration(milliseconds: 64));
+        async.elapse(const Duration(milliseconds: 300));
 
         state = container.read(chatControllerProvider(''));
-        expect(_messageContent(state, streamingId), 'Hello world! Today is sunny.');
+        expect(
+          _messageContent(state, streamingId),
+          'Hello world! Today is sunny.',
+        );
       });
     });
 

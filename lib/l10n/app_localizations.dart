@@ -1098,6 +1098,15 @@ class AppLocalizations {
   String get smoothStreamingDesc => isEnglish
       ? 'Smooth typewriter output with adaptive speed during backlog'
       : '逐字平滑输出，积压时自适应加速';
+  String get smoothStreamingSpeed => isEnglish ? 'Typing Speed' : '打字机速度';
+  String get smoothStreamingSpeedDesc =>
+      isEnglish ? 'Speed preset for typewriter streaming' : '调节流式消息的吐字速度与平滑节奏';
+  String get smoothStreamingSpeedCharByChar =>
+      isEnglish ? 'Per Character' : '逐字';
+  String get smoothStreamingSpeedSlow => isEnglish ? 'Slow' : '慢';
+  String get smoothStreamingSpeedStandard => isEnglish ? 'Standard' : '标准';
+  String get smoothStreamingSpeedFast => isEnglish ? 'Fast' : '快';
+  String get smoothStreamingSpeedVeryFast => isEnglish ? 'Very Fast' : '极快';
   String get composerTwoPane => isEnglish ? 'Two-pane input bar' : '两段式输入栏';
   String get composerTwoPaneDesc => isEnglish
       ? 'Multi-line text area with a separate tool row below'

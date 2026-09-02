@@ -171,7 +171,7 @@ void main() {
       expect(l10n.approvalNeeded, '需要审批');
       expect(l10n.clarificationNeeded, '需要澄清');
       expect(l10n.queuedBannerMessage(2), '已排队 2 条消息，将在当前回复结束后自动发送');
-            expect(l10n.pickFileFailed, '选择文件失败');
+      expect(l10n.pickFileFailed, '选择文件失败');
       expect(l10n.selectFileFailed, '选择文件失败');
       expect(l10n.uploadSucceeded, '上传成功');
       expect(l10n.uploadSuccess, '上传成功');
@@ -550,6 +550,13 @@ void main() {
       expect(l10n.deleteProjectWarning, '删除后项目内会话不会被删除，仅解除归类。');
       expect(l10n.smoothStreaming, '平滑输出');
       expect(l10n.smoothStreamingDesc, '逐字平滑输出，积压时自适应加速');
+      expect(l10n.smoothStreamingSpeed, '打字机速度');
+      expect(l10n.smoothStreamingSpeedDesc, '调节流式消息的吐字速度与平滑节奏');
+      expect(l10n.smoothStreamingSpeedCharByChar, '逐字');
+      expect(l10n.smoothStreamingSpeedSlow, '慢');
+      expect(l10n.smoothStreamingSpeedStandard, '标准');
+      expect(l10n.smoothStreamingSpeedFast, '快');
+      expect(l10n.smoothStreamingSpeedVeryFast, '极快');
     });
   });
 
@@ -601,6 +608,16 @@ void main() {
         l10n.smoothStreamingDesc,
         'Smooth typewriter output with adaptive speed during backlog',
       );
+      expect(l10n.smoothStreamingSpeed, 'Typing Speed');
+      expect(
+        l10n.smoothStreamingSpeedDesc,
+        'Speed preset for typewriter streaming',
+      );
+      expect(l10n.smoothStreamingSpeedCharByChar, 'Per Character');
+      expect(l10n.smoothStreamingSpeedSlow, 'Slow');
+      expect(l10n.smoothStreamingSpeedStandard, 'Standard');
+      expect(l10n.smoothStreamingSpeedFast, 'Fast');
+      expect(l10n.smoothStreamingSpeedVeryFast, 'Very Fast');
     });
 
     test('Parameterized methods work in English', () {

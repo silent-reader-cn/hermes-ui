@@ -167,6 +167,40 @@ class _AppearanceSection extends ConsumerWidget {
 class _ChatSection extends ConsumerWidget {
   const _ChatSection();
 
+  Future<void> _openSpeedPresetPicker(
+    BuildContext context,
+    WidgetRef ref,
+    SmoothStreamingSpeedPreset currentSpeed,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(l10n.smoothStreamingSpeed),
+        actions: [
+          for (final preset in SmoothStreamingSpeedPreset.values)
+            CupertinoActionSheetAction(
+              key: ValueKey('smooth-streaming-speed-${preset.id}'),
+              isDefaultAction: preset == currentSpeed,
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(
+                  ref
+                      .read(smoothStreamingSpeedProvider.notifier)
+                      .setSpeed(preset),
+                );
+              },
+              child: Text(preset.localizedName(l10n)),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.cancel),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
@@ -175,6 +209,7 @@ class _ChatSection extends ConsumerWidget {
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     final composerTwoPane = ref.watch(composerTwoPaneProvider);
     final smoothStreaming = ref.watch(smoothStreamingProvider);
+    final smoothStreamingSpeed = ref.watch(smoothStreamingSpeedProvider);
     final showPerfMonitor = ref.watch(perfMonitorProvider);
     return CupertinoListSection(
       dividerMargin: 0,
@@ -226,6 +261,28 @@ class _ChatSection extends ConsumerWidget {
             },
           ),
         ),
+        if (smoothStreaming)
+          CupertinoListTile(
+            key: const ValueKey('settings-smooth-streaming-speed'),
+            title: Text(l10n.smoothStreamingSpeed),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  smoothStreamingSpeed.localizedName(l10n),
+                  style: const TextStyle(color: CupertinoColors.secondaryLabel),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 18,
+                  color: CupertinoColors.systemGrey,
+                ),
+              ],
+            ),
+            onTap: () =>
+                _openSpeedPresetPicker(context, ref, smoothStreamingSpeed),
+          ),
         CupertinoListTile(
           key: const ValueKey('settings-group-tools-by-turn'),
           title: Text(l10n.groupToolsByTurn),
