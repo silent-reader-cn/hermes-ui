@@ -270,13 +270,15 @@ class _ChatSection extends ConsumerWidget {
               children: [
                 Text(
                   smoothStreamingSpeed.localizedName(l10n),
-                  style: const TextStyle(color: CupertinoColors.secondaryLabel),
+                  style: TextStyle(
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(
+                Icon(
                   CupertinoIcons.chevron_right,
                   size: 18,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.systemGrey.resolveFrom(context),
                 ),
               ],
             ),
