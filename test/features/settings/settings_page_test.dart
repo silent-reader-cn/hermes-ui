@@ -309,6 +309,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
+  /// 滚动设置主页使目标可见（兼容两种状态）：
+  /// - 目标已 build 但视口外 → `ensureVisible` 直接对齐
+  /// - 目标未 build（CustomScrollView 惰性区外）→ 先 `scrollUntilVisible` 触发 build
+  Future<void> scrollEntryIntoView(WidgetTester tester, Finder finder) async {
+    if (finder.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(finder, 100);
+    }
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+  }
+
   group('分组渲染', () {
     testWidgets('分组标题 + 当前服务器 + 默认模型 + 推理强度 + 版本号', (tester) async {
       final container = await makeContainer(
@@ -401,7 +412,6 @@ void main() {
         '_ModelSection',
         '_CronSection',
         '_NotificationSection',
-        '_BackgroundKeepAliveSection',
         '_AdvancedSettingsSection',
         '_AboutSection',
       ]);
@@ -1693,7 +1703,7 @@ void main() {
     });
   });
 
-  group('后台保活设置分组', () {
+  group('后台保活设置分组（高级设置二级页）', () {
     testWidgets('展示前台服务开关（默认关闭）并支持切换持久化', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fakeKeepalive = FakeBackgroundKeepaliveService();
@@ -1705,10 +1715,21 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
+      // 主页不再内联后台保活分组：从「高级设置」入口进入二级页
+      expect(
+        find.byKey(const ValueKey('settings-bg-foreground-service')),
+        findsNothing,
+      );
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      expect(entry, findsOneWidget);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
       final fgSwitchRow = find.byKey(
         const ValueKey('settings-bg-foreground-service'),
       );
-      await tester.scrollUntilVisible(fgSwitchRow, 50);
+      await scrollEntryIntoView(tester, fgSwitchRow);
       expect(fgSwitchRow, findsOneWidget);
 
       final switchWidget = tester.widget<CupertinoSwitch>(
@@ -1731,7 +1752,7 @@ void main() {
       expect(prefs.getBool('bg_foreground_service_enabled'), isTrue);
     });
 
-    testWidgets('渲染 WorkManager 状态行与 4 个 HyperOS 引导按钮', (tester) async {
+    testWidgets('渲染 WorkManager 状态行与 4 个 HyperOS 引导项（独立行）', (tester) async {
       final fakeKeepalive = FakeBackgroundKeepaliveService();
       final container = await makeContainer(
         api: buildApi(),
@@ -1741,16 +1762,18 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
       final wmStatusRow = find.byKey(
         const ValueKey('settings-bg-workmanager-status'),
       );
-      await tester.scrollUntilVisible(wmStatusRow, 50);
+      await scrollEntryIntoView(tester, wmStatusRow);
       expect(wmStatusRow, findsOneWidget);
 
-      final guideRow = find.byKey(const ValueKey('settings-bg-hyperos-guide'));
-      await tester.scrollUntilVisible(guideRow, 50);
-      expect(guideRow, findsOneWidget);
-
+      // 引导项各自为独立 list tile（不再塞在单个 subtitle Wrap 内）
       expect(
         find.byKey(const ValueKey('settings-bg-guide-autostart')),
         findsOneWidget,
@@ -1767,9 +1790,14 @@ void main() {
         find.byKey(const ValueKey('settings-bg-guide-notifications')),
         findsOneWidget,
       );
+      // 旧的「单个引导 tile」容器不再存在
+      expect(
+        find.byKey(const ValueKey('settings-bg-hyperos-guide')),
+        findsNothing,
+      );
     });
 
-    testWidgets('点击 4 个 HyperOS 引导按钮触发 keepalive.openHyperOsSetting', (
+    testWidgets('点击 4 个 HyperOS 引导项触发 keepalive.openHyperOsSetting', (
       tester,
     ) async {
       final fakeKeepalive = FakeBackgroundKeepaliveService();
@@ -1781,15 +1809,15 @@ void main() {
       );
       await pumpPage(tester, container, size: const Size(800, 1400));
 
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
       final autostartBtn = find.byKey(
         const ValueKey('settings-bg-guide-autostart'),
       );
-      await tester.scrollUntilVisible(autostartBtn, 100);
-      await tester.drag(
-        find.byKey(const ValueKey('settings-scroll')),
-        const Offset(0, -100),
-      );
-      await tester.pumpAndSettle();
+      await scrollEntryIntoView(tester, autostartBtn);
 
       await tester.tap(autostartBtn);
       await tester.pumpAndSettle();
@@ -1823,13 +1851,19 @@ void main() {
         textScaler: const TextScaler.linear(1.5),
         brightness: Brightness.dark,
       );
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-bg-hyperos-guide')),
-        50,
-      );
 
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
+      // 窄屏 + 1.5x 下 4 个引导项各自独立成行、不溢出
       expect(
-        find.byKey(const ValueKey('settings-bg-hyperos-guide')),
+        find.byKey(const ValueKey('settings-bg-guide-autostart')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-notifications')),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
