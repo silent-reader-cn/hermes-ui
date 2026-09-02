@@ -13,6 +13,7 @@ import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
+import 'package:hermes_ui/features/chat/chat_models.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
@@ -298,6 +299,148 @@ void main() {
         expect(state.liveToolCalls[0].isCompleted, isTrue);
         expect(state.liveToolCalls[1].id, 't-2');
         expect(state.liveToolCalls[1].isCompleted, isTrue);
+      });
+    });
+
+    test('interim 重放碎片吸收：残余段为已展示内容子串时不重复拼接', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        api.statusResponse = const ChatStreamStatusResponse(
+          active: false,
+          replayAvailable: true,
+        );
+        final clock = _FakeClock();
+        final container = _buildContainer(api, clock);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // live 期间收到整段文本
+        api.emitId('s1:1');
+        api.emit(
+          const InterimAssistantSseEvent(
+            text: '20260902.md 已有 #35-#42 归档。现在按序提交：先把共享的 l10n 合并提了',
+            alreadyStreamed: false,
+          ),
+        );
+        async.elapse(const Duration(milliseconds: 100));
+
+        var state = container.read(chatControllerProvider(''));
+        final streamingId = state.stream.streamingAssistantMessageId;
+        expect(
+          _messageContent(state, streamingId),
+          '20260902.md 已有 #35-#42 归档。现在按序提交：先把共享的 l10n 合并提了',
+        );
+
+        // 断开重连（游标错位：matchedPrefixLength 回 0）
+        api.emit(const TransportErrorSseEvent('cut'));
+        async.flushMicrotasks();
+
+        // 重放帧 1：完整重复段 → 游标追平（吞噬）
+        api.emitId('s1:1');
+        api.emit(
+          const InterimAssistantSseEvent(
+            text: '20260902.md 已有 #35-#42 归档。现在按序提交：先把共享的 l10n 合并提了',
+            alreadyStreamed: false,
+          ),
+        );
+        async.elapse(const Duration(milliseconds: 100));
+
+        // 重放帧 2（游标错位残段：已有内容后缀碎片，修复前 overlap 启发式
+        // 会当新内容拼出「…归档-#42 归档」式重复）
+        api.emitId('s1:2');
+        api.emit(
+          const InterimAssistantSseEvent(
+            text: '-#42 归档',
+            alreadyStreamed: false,
+          ),
+        );
+        async.elapse(const Duration(milliseconds: 100));
+
+        // 内容保持一份，无碎片重复
+        state = container.read(chatControllerProvider(''));
+        expect(
+          _messageContent(state, streamingId),
+          '20260902.md 已有 #35-#42 归档。现在按序提交：先把共享的 l10n 合并提了',
+        );
+
+        // 新增帧正常接续（重放已退出 → 按设计作为新段落，\n\n 分隔）
+        api.emitId('s1:3');
+        api.emit(
+          const InterimAssistantSseEvent(
+            text: '，再分任务提功能 commit',
+            alreadyStreamed: false,
+          ),
+        );
+        async.elapse(const Duration(milliseconds: 100));
+
+        state = container.read(chatControllerProvider(''));
+        expect(
+          _messageContent(state, streamingId),
+          '20260902.md 已有 #35-#42 归档。现在按序提交：先把共享的 l10n 合并提了\n\n，再分任务提功能 commit',
+        );
+      });
+    });
+
+    test('live 重连重放：全命中帧不向时间线尾部叠加重复断点（防成簇卡簇）', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        api.statusResponse = const ChatStreamStatusResponse(
+          active: false,
+          replayAvailable: true,
+        );
+        final clock = _FakeClock();
+        final container = _buildContainer(api, clock);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // live 期间：思考 → 文本（时间线：thinking@0 → text@13）
+        api.emitId('s1:1');
+        api.emit(const ReasoningSseEvent('思考内容甲'));
+        async.elapse(const Duration(milliseconds: 64));
+
+        api.emitId('s1:2');
+        api.emit(const TokenSseEvent('正文一段'));
+        async.elapse(const Duration(milliseconds: 100));
+
+        var state = container.read(chatControllerProvider(''));
+        expect(state.liveTimelinePoints, hasLength(2));
+
+        // 断开重连
+        api.emit(const TransportErrorSseEvent('cut'));
+        async.flushMicrotasks();
+        expect(state.stream.isReplayConnection, isFalse); // 更新前状态
+
+        // 重放全命中帧：reasoning + token（修复前各自补建断点 → 尾部叠成簇）
+        api.emitId('s1:1');
+        api.emit(const ReasoningSseEvent('思考内容甲'));
+        async.elapse(const Duration(milliseconds: 64));
+
+        api.emitId('s1:2');
+        api.emit(const TokenSseEvent('正文一段'));
+        async.elapse(const Duration(milliseconds: 100));
+
+        // 断点数保持 2（不叠加），时间线形状不重复
+        state = container.read(chatControllerProvider(''));
+        expect(state.liveTimelinePoints, hasLength(2));
+        expect(state.liveTimelinePoints[0].kind, LiveSegmentKind.thinking);
+        expect(state.liveTimelinePoints[1].kind, LiveSegmentKind.text);
+
+        // 新增帧正常追加点
+        api.emitId('s1:3');
+        api.emit(const TokenSseEvent('正文二段'));
+        async.elapse(const Duration(milliseconds: 100));
+
+        state = container.read(chatControllerProvider(''));
+        // 同 kind 相邻不重复建点：text@0 段续写，断点数仍 2
+        expect(state.liveTimelinePoints, hasLength(2));
+        expect(
+          _messageContent(state, state.stream.streamingAssistantMessageId),
+          '正文一段正文二段',
+        );
       });
     });
   });

@@ -25,8 +25,18 @@ void main() {
   group('diffMergeMessages 算法（类 VDOM 调和）', () {
     test('初始状态：本地为空，以服务端列表全量填充', () {
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'hello', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'world', timestamp: 101),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'hello',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'world',
+          timestamp: 101,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -41,7 +51,12 @@ void main() {
 
     test('服务端为空：保留本地消息', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'hello', timestamp: 100),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'hello',
+          timestamp: 100,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -55,13 +70,38 @@ void main() {
 
     test('跨端漏记在末尾（尾部补漏）：本地 [m1, m2]，服务端 [m1, m2, m3] → [m1, m2, m3]', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
-        ChatMessage(messageId: 'm3', role: 'user', content: 'm3 (Web 端发送)', timestamp: 102),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'user',
+          content: 'm3 (Web 端发送)',
+          timestamp: 102,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -76,13 +116,38 @@ void main() {
 
     test('跨端漏记在中间（中间插入）：本地 [m1, m3]，服务端 [m1, m2, m3] → [m1, m2, m3]', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm3', role: 'assistant', content: 'm3', timestamp: 103),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'assistant',
+          content: 'm3',
+          timestamp: 103,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
-        ChatMessage(messageId: 'm3', role: 'user', content: 'm3', timestamp: 103),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'user',
+          content: 'm3',
+          timestamp: 103,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -96,17 +161,35 @@ void main() {
 
     test('内容与元数据就地更新（Patch）：已存在消息被服务端权威内容替换', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: '旧内容', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: '旧回复', timestamp: 101, turnTps: 42.0),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: '旧内容',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: '旧回复',
+          timestamp: 101,
+          turnTps: 42.0,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: '更新后的内容', timestamp: 100),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: '更新后的内容',
+          timestamp: 100,
+        ),
         ChatMessage(
           messageId: 'm2',
           role: 'assistant',
           content: '更新后的完整回复',
           timestamp: 101,
-          attachments: [MessageAttachment(name: 'file.txt', mime: 'text/plain')],
+          attachments: [
+            MessageAttachment(name: 'file.txt', mime: 'text/plain'),
+          ],
           toolCalls: [JsonString('tool-call-data')],
         ),
       ];
@@ -126,12 +209,32 @@ void main() {
 
     test('指纹去重：本地 messageId == null 乐观消息与服务端权威消息匹配，不重复插入', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: null, role: 'user', content: 'hello from local', timestamp: 105.0),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: null,
+          role: 'user',
+          content: 'hello from local',
+          timestamp: 105.0,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'srv-105', role: 'user', content: 'hello from local', timestamp: 105.05),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'srv-105',
+          role: 'user',
+          content: 'hello from local',
+          timestamp: 105.05,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -146,10 +249,20 @@ void main() {
 
     test('指纹去重：本地 local- 开头临时 ID 与服务端分配 ID 匹配', () {
       const local = [
-        ChatMessage(messageId: 'local-uuid-1234', role: 'user', content: 'ping', timestamp: 200.0),
+        ChatMessage(
+          messageId: 'local-uuid-1234',
+          role: 'user',
+          content: 'ping',
+          timestamp: 200.0,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'msg-real-999', role: 'user', content: 'ping', timestamp: 200.02),
+        ChatMessage(
+          messageId: 'msg-real-999',
+          role: 'user',
+          content: 'ping',
+          timestamp: 200.02,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -161,17 +274,123 @@ void main() {
       expect(merged[0].messageId, 'msg-real-999');
     });
 
-    test('头部保留：历史分页消息（早于首个命中项）不被覆盖丢弃', () {
+    test('内容吸收匹配：超长流式回合（>120s）污染的临时消息仍替换服务端占位行（防双打字机）', () {
+      // 时间戳差 600s（超 120s 窗口），但内容互为前缀 = 同一回合消息。
+      // 修复前：不匹配 → 尾部保留本地项 + 补入服务端行 → 同文双份渲染。
       const local = [
-        ChatMessage(messageId: 'm_hist1', role: 'user', content: '历史 1', timestamp: 50),
-        ChatMessage(messageId: 'm_hist2', role: 'assistant', content: '历史 2', timestamp: 60),
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'hi',
+          timestamp: 100.0,
+        ),
+        ChatMessage(
+          messageId: 'stream-uuid-abc',
+          role: 'assistant',
+          content: '状态行测试 11/11 全绿喵！补一下 grep 残留检查',
+          timestamp: 101.0,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
-        ChatMessage(messageId: 'm3', role: 'user', content: 'm3', timestamp: 102),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'hi',
+          timestamp: 100.0,
+        ),
+        ChatMessage(
+          messageId: 'msg-a1',
+          role: 'assistant',
+          content: '状态行测试 11/11 全绿喵！补',
+          timestamp: 700.0,
+        ),
+      ];
+
+      final merged = diffMergeMessages(
+        localMessages: local,
+        serverMessages: server,
+      );
+
+      // 服务端行被本地（更长）内容吸收替换，不产生双份。
+      expect(merged, hasLength(2));
+      expect(merged[0].messageId, 'm1');
+      expect(merged[1].messageId, 'msg-a1');
+      expect(merged[1].content, '状态行测试 11/11 全绿喵！补一下 grep 残留检查');
+    });
+
+    test('内容吸收不误匹配：内容互不重叠的两条临时消息不吸收（不同回合）', () {
+      const local = [
+        ChatMessage(
+          messageId: 'stream-uuid-abc',
+          role: 'assistant',
+          content: '这是完全不同的内容',
+          timestamp: 101.0,
+        ),
+      ];
+      const server = [
+        ChatMessage(
+          messageId: 'msg-a1',
+          role: 'assistant',
+          content: '另一回合的输出文本',
+          timestamp: 700.0,
+        ),
+      ];
+
+      final merged = diffMergeMessages(
+        localMessages: local,
+        serverMessages: server,
+      );
+
+      // 无交集：本地 + 服务端都保留（时间序）。
+      expect(merged, hasLength(2));
+    });
+
+    test('头部保留：历史分页消息（早于首个命中项）不被覆盖丢弃', () {
+      const local = [
+        ChatMessage(
+          messageId: 'm_hist1',
+          role: 'user',
+          content: '历史 1',
+          timestamp: 50,
+        ),
+        ChatMessage(
+          messageId: 'm_hist2',
+          role: 'assistant',
+          content: '历史 2',
+          timestamp: 60,
+        ),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
+      ];
+      const server = [
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'user',
+          content: 'm3',
+          timestamp: 102,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -180,21 +399,49 @@ void main() {
       );
 
       expect(merged, hasLength(5));
-      expect(
-        merged.map((m) => m.messageId).toList(),
-        ['m_hist1', 'm_hist2', 'm1', 'm2', 'm3'],
-      );
+      expect(merged.map((m) => m.messageId).toList(), [
+        'm_hist1',
+        'm_hist2',
+        'm1',
+        'm2',
+        'm3',
+      ]);
     });
 
     test('尾部保留：本地尚未落库的乐观消息（晚于最后一个命中项）予以保留', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
-        ChatMessage(messageId: 'local-pending', role: 'user', content: '未上送内容', timestamp: 105),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
+        ChatMessage(
+          messageId: 'local-pending',
+          role: 'user',
+          content: '未上送内容',
+          timestamp: 105,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 101,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -209,13 +456,38 @@ void main() {
 
     test('中间未命中本地消息保留：夹在中间的本地消息不做删除', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'local-draft', role: 'user', content: '草稿', timestamp: 102),
-        ChatMessage(messageId: 'm3', role: 'assistant', content: 'm3', timestamp: 103),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'local-draft',
+          role: 'user',
+          content: '草稿',
+          timestamp: 102,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'assistant',
+          content: 'm3',
+          timestamp: 103,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm3', role: 'assistant', content: 'm3', timestamp: 103),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'assistant',
+          content: 'm3',
+          timestamp: 103,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -224,19 +496,53 @@ void main() {
       );
 
       expect(merged, hasLength(3));
-      expect(merged.map((m) => m.messageId).toList(), ['m1', 'local-draft', 'm3']);
+      expect(merged.map((m) => m.messageId).toList(), [
+        'm1',
+        'local-draft',
+        'm3',
+      ]);
     });
 
     test('服务端重排：保持服务端相对顺序', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm2', role: 'user', content: 'm2', timestamp: 101),
-        ChatMessage(messageId: 'm3', role: 'assistant', content: 'm3', timestamp: 102),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'user',
+          content: 'm2',
+          timestamp: 101,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'assistant',
+          content: 'm3',
+          timestamp: 102,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100),
-        ChatMessage(messageId: 'm3', role: 'assistant', content: 'm3', timestamp: 102),
-        ChatMessage(messageId: 'm2', role: 'user', content: 'm2', timestamp: 101),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 100,
+        ),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'assistant',
+          content: 'm3',
+          timestamp: 102,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'user',
+          content: 'm2',
+          timestamp: 101,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -250,12 +556,32 @@ void main() {
 
     test('无交集双列表：按时间戳前后拼接', () {
       const local = [
-        ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 10),
-        ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 20),
+        ChatMessage(
+          messageId: 'm1',
+          role: 'user',
+          content: 'm1',
+          timestamp: 10,
+        ),
+        ChatMessage(
+          messageId: 'm2',
+          role: 'assistant',
+          content: 'm2',
+          timestamp: 20,
+        ),
       ];
       const server = [
-        ChatMessage(messageId: 'm3', role: 'user', content: 'm3', timestamp: 30),
-        ChatMessage(messageId: 'm4', role: 'assistant', content: 'm4', timestamp: 40),
+        ChatMessage(
+          messageId: 'm3',
+          role: 'user',
+          content: 'm3',
+          timestamp: 30,
+        ),
+        ChatMessage(
+          messageId: 'm4',
+          role: 'assistant',
+          content: 'm4',
+          timestamp: 40,
+        ),
       ];
 
       final merged = diffMergeMessages(
@@ -275,23 +601,50 @@ void main() {
         'session': {
           'session_id': 'sess-1',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-            {'message_id': 'm2', 'role': 'assistant', 'content': 'm2', 'timestamp': 101.0},
-            {'message_id': 'm3', 'role': 'user', 'content': 'm3 (Web 端)', 'timestamp': 102.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': 'm1',
+              'timestamp': 100.0,
+            },
+            {
+              'message_id': 'm2',
+              'role': 'assistant',
+              'content': 'm2',
+              'timestamp': 101.0,
+            },
+            {
+              'message_id': 'm3',
+              'role': 'user',
+              'content': 'm3 (Web 端)',
+              'timestamp': 102.0,
+            },
           ],
         },
       };
 
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       // 初始填充本地只有 m1, m2
       controller.state = controller.state.copyWith(
         messages: const [
-          ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100.0),
-          ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101.0),
+          ChatMessage(
+            messageId: 'm1',
+            role: 'user',
+            content: 'm1',
+            timestamp: 100.0,
+          ),
+          ChatMessage(
+            messageId: 'm2',
+            role: 'assistant',
+            content: 'm2',
+            timestamp: 101.0,
+          ),
         ],
       );
 
@@ -311,21 +664,43 @@ void main() {
         'session': {
           'session_id': 'sess-1',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-            {'message_id': 'm2', 'role': 'assistant', 'content': '已由其它端编辑的最新回答', 'timestamp': 101.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': 'm1',
+              'timestamp': 100.0,
+            },
+            {
+              'message_id': 'm2',
+              'role': 'assistant',
+              'content': '已由其它端编辑的最新回答',
+              'timestamp': 101.0,
+            },
           ],
         },
       };
 
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       controller.state = controller.state.copyWith(
         messages: const [
-          ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100.0),
-          ChatMessage(messageId: 'm2', role: 'assistant', content: '旧回答', timestamp: 101.0),
+          ChatMessage(
+            messageId: 'm1',
+            role: 'user',
+            content: 'm1',
+            timestamp: 100.0,
+          ),
+          ChatMessage(
+            messageId: 'm2',
+            role: 'assistant',
+            content: '旧回答',
+            timestamp: 101.0,
+          ),
         ],
       );
 
@@ -342,21 +717,43 @@ void main() {
         'session': {
           'session_id': 'sess-1',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-            {'message_id': 'srv-msg-2', 'role': 'user', 'content': '我的乐观消息', 'timestamp': 102.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': 'm1',
+              'timestamp': 100.0,
+            },
+            {
+              'message_id': 'srv-msg-2',
+              'role': 'user',
+              'content': '我的乐观消息',
+              'timestamp': 102.0,
+            },
           ],
         },
       };
 
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       controller.state = controller.state.copyWith(
         messages: const [
-          ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100.0),
-          ChatMessage(messageId: 'local-opt-1', role: 'user', content: '我的乐观消息', timestamp: 102.0),
+          ChatMessage(
+            messageId: 'm1',
+            role: 'user',
+            content: 'm1',
+            timestamp: 100.0,
+          ),
+          ChatMessage(
+            messageId: 'local-opt-1',
+            role: 'user',
+            content: '我的乐观消息',
+            timestamp: 102.0,
+          ),
         ],
       );
 
@@ -371,12 +768,19 @@ void main() {
       final api = FakeChatApi();
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       controller.state = controller.state.copyWith(
         messages: const [
-          ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100.0),
+          ChatMessage(
+            messageId: 'm1',
+            role: 'user',
+            content: 'm1',
+            timestamp: 100.0,
+          ),
         ],
         clearErrorMessage: true,
       );
@@ -394,7 +798,9 @@ void main() {
       final api = FakeChatApi();
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       controller.state = controller.state.copyWith(
@@ -415,14 +821,21 @@ void main() {
           'session_id': 'sess-1',
           'active_stream_id': 'srv-stream-88',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': 'm1',
+              'timestamp': 100.0,
+            },
           ],
         },
       };
 
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       await controller.syncMissingMessages();
@@ -440,23 +853,55 @@ void main() {
         'session': {
           'session_id': 'sess-1',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-            {'message_id': 'm2', 'role': 'assistant', 'content': 'm2', 'timestamp': 101.0},
-            {'message_id': 'm3', 'role': 'user', 'content': 'm3', 'timestamp': 102.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': 'm1',
+              'timestamp': 100.0,
+            },
+            {
+              'message_id': 'm2',
+              'role': 'assistant',
+              'content': 'm2',
+              'timestamp': 101.0,
+            },
+            {
+              'message_id': 'm3',
+              'role': 'user',
+              'content': 'm3',
+              'timestamp': 102.0,
+            },
           ],
         },
       };
 
       final clock = _FakeClock();
       final container = _buildContainer(api, clock);
-      final controller = container.read(chatControllerProvider('sess-1').notifier);
+      final controller = container.read(
+        chatControllerProvider('sess-1').notifier,
+      );
 
       // 本地拥有更早的历史分页记录 m_old
       controller.state = controller.state.copyWith(
         messages: const [
-          ChatMessage(messageId: 'm_old', role: 'user', content: '分页更早记录', timestamp: 50.0),
-          ChatMessage(messageId: 'm1', role: 'user', content: 'm1', timestamp: 100.0),
-          ChatMessage(messageId: 'm2', role: 'assistant', content: 'm2', timestamp: 101.0),
+          ChatMessage(
+            messageId: 'm_old',
+            role: 'user',
+            content: '分页更早记录',
+            timestamp: 50.0,
+          ),
+          ChatMessage(
+            messageId: 'm1',
+            role: 'user',
+            content: 'm1',
+            timestamp: 100.0,
+          ),
+          ChatMessage(
+            messageId: 'm2',
+            role: 'assistant',
+            content: 'm2',
+            timestamp: 101.0,
+          ),
         ],
       );
 
@@ -464,10 +909,12 @@ void main() {
 
       final state = container.read(chatControllerProvider('sess-1'));
       expect(state.messages, hasLength(4));
-      expect(
-        state.messages.map((m) => m.messageId).toList(),
-        ['m_old', 'm1', 'm2', 'm3'],
-      );
+      expect(state.messages.map((m) => m.messageId).toList(), [
+        'm_old',
+        'm1',
+        'm2',
+        'm3',
+      ]);
     });
   });
 
@@ -479,8 +926,18 @@ void main() {
           'session': {
             'session_id': 'sess-1',
             'messages': [
-              {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-              {'message_id': 'm2', 'role': 'assistant', 'content': 'm2', 'timestamp': 101.0},
+              {
+                'message_id': 'm1',
+                'role': 'user',
+                'content': 'm1',
+                'timestamp': 100.0,
+              },
+              {
+                'message_id': 'm2',
+                'role': 'assistant',
+                'content': 'm2',
+                'timestamp': 101.0,
+              },
             ],
           },
         };
@@ -488,35 +945,48 @@ void main() {
         final container = _buildContainer(api, clock);
 
         // 切换生命周期到 paused 再回到 resumed
-        container.read(appLifecycleStateProvider.notifier).setState(AppLifecycleState.paused);
-        expect(container.read(appLifecycleStateProvider), AppLifecycleState.paused);
+        container
+            .read(appLifecycleStateProvider.notifier)
+            .setState(AppLifecycleState.paused);
+        expect(
+          container.read(appLifecycleStateProvider),
+          AppLifecycleState.paused,
+        );
 
-        container.read(appLifecycleStateProvider.notifier).setState(AppLifecycleState.resumed);
-        expect(container.read(appLifecycleStateProvider), AppLifecycleState.resumed);
+        container
+            .read(appLifecycleStateProvider.notifier)
+            .setState(AppLifecycleState.resumed);
+        expect(
+          container.read(appLifecycleStateProvider),
+          AppLifecycleState.resumed,
+        );
       });
     });
   });
 
   group('ChatPage 页面级同步与防抖测试', () {
-    testWidgets('ChatPage 初始化自动触发 loadMessages 与 syncMissingMessages', (tester) async {
+    testWidgets('ChatPage 初始化自动触发 loadMessages 与 syncMissingMessages', (
+      tester,
+    ) async {
       final api = FakeChatApi();
       api.sessionResult = {
         'session': {
           'session_id': 's1',
           'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': '初次加载消息', 'timestamp': 100.0},
+            {
+              'message_id': 'm1',
+              'role': 'user',
+              'content': '初次加载消息',
+              'timestamp': 100.0,
+            },
           ],
         },
       };
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            chatApiProvider.overrideWithValue(api),
-          ],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 's1'),
-          ),
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
         ),
       );
 
@@ -530,55 +1000,65 @@ void main() {
       await tester.pump();
     });
 
-    testWidgets('AppLifecycleState.resumed 切换触发 syncMissingMessages 且受 500ms 防抖保护', (tester) async {
-      final api = FakeChatApi();
-      api.sessionResult = {
-        'session': {
-          'session_id': 's1',
-          'messages': [
-            {'message_id': 'm1', 'role': 'user', 'content': 'm1', 'timestamp': 100.0},
-          ],
-        },
-      };
+    testWidgets(
+      'AppLifecycleState.resumed 切换触发 syncMissingMessages 且受 500ms 防抖保护',
+      (tester) async {
+        final api = FakeChatApi();
+        api.sessionResult = {
+          'session': {
+            'session_id': 's1',
+            'messages': [
+              {
+                'message_id': 'm1',
+                'role': 'user',
+                'content': 'm1',
+                'timestamp': 100.0,
+              },
+            ],
+          },
+        };
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            chatApiProvider.overrideWithValue(api),
-          ],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 's1'),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [chatApiProvider.overrideWithValue(api)],
+            child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
           ),
-        ),
-      );
+        );
 
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      final callsBefore = api.sessionCalls;
+        final callsBefore = api.sessionCalls;
 
-      // 快速连续触发两次 resumed（在 500ms 内）
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
+        // 快速连续触发两次 resumed（在 500ms 内）
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
 
-      // 防抖拦截，在 500ms 内未产生多余调用
-      expect(api.sessionCalls - callsBefore, lessThanOrEqualTo(1));
+        // 防抖拦截，在 500ms 内未产生多余调用
+        expect(api.sessionCalls - callsBefore, lessThanOrEqualTo(1));
 
-      // 等待 600ms 超过防抖窗口
-      await tester.pump(const Duration(milliseconds: 600));
+        // 等待 600ms 超过防抖窗口
+        await tester.pump(const Duration(milliseconds: 600));
 
-      // 再次触发 resumed
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+        // 再次触发 resumed
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-      expect(api.sessionCalls, greaterThan(callsBefore));
+        expect(api.sessionCalls, greaterThan(callsBefore));
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-    });
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
   });
 }
 
@@ -597,9 +1077,13 @@ class _FakeClock {
 class _NoopCacheService extends CacheService {
   _NoopCacheService(super.db);
   @override
-  Future<void> writeMessages({required String sessionId, required List<Map<String, Object?>> messages}) async {}
+  Future<void> writeMessages({
+    required String sessionId,
+    required List<Map<String, Object?>> messages,
+  }) async {}
   @override
-  Future<List<Map<String, Object?>>> readMessages(String sessionId) async => const [];
+  Future<List<Map<String, Object?>>> readMessages(String sessionId) async =>
+      const [];
   @override
   Future<void> writeSessions(List<SessionSummary> sessions) async {}
   @override

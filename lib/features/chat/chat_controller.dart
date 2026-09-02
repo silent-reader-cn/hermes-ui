@@ -108,6 +108,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// resumed 后直接铺全文并重新校准看门狗基线。
   bool _appPaused = false;
 
+  /// 重放期间是否需要逐帧重建时间线断点（仅断点为空的恢复场景为 true）。
+  /// 正常 live 重连断点仍在：重放帧全命中时不再补点，避免已展示段在时间线
+  /// 尾部重复叠加成簇（底部连续思考/文本卡簇的放大源）。
+  bool _replayRebuildTimeline = false;
+
   /// SSE 连接当前是否存活（409 恢复路径判断是否需要重连）。
   bool _streamConnected = false;
 
@@ -1155,6 +1160,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _beginStream(String streamId) {
     _timelineSequence = 0;
+    _replayRebuildTimeline = false;
     state = state.copyWith(
       phase: ChatPhase.streaming,
       clearSendErrorMessage: true,
@@ -1212,6 +1218,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         replayAfterSeq ??
         (fullReconnect ? _replayAfterSeq(state.stream.lastEventId) : 0);
     state = state.copyWith(
+      // 旧时间线断点保留（见 _replayRebuildTimeline 语义）：重放帧对已展示
+      // 内容不再向尾部叠加重复断点，成簇卡片的放大源被切断。
       stream: state.stream.copyWith(
         isReplayConnection: useReplay,
         matchedPrefixLength: 0,
@@ -1221,6 +1229,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         clearLastEventId: true,
       ),
     );
+    // 重放是否需要逐帧重建时间线：仅「断点为空的恢复场景」（如重启后 resume，
+    // 断点丢失但内容已在服务端占位行中）需要；正常 live 重连时断点仍在，
+    // 重放帧全命中时若再补点，会把已展示段重复叠加到时间线尾部（卡簇）。
+    // 工具断点依赖 _appendToolCall 正常路径，此处旗标只约束 text/think 补点。
+    _replayRebuildTimeline = useReplay && state.liveTimelinePoints.isEmpty;
     _streamConnected = true;
     unawaited(
       api.startStream(
@@ -1352,9 +1365,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       if (remainder.isEmpty) {
         // 重放帧（fullReconnect 从 0 重放）文本全部命中断线前已 flush 的内容：
-        // 内容不再追加，但该帧仍是真实 text 事件——补建断点，恢复段落穿插；
-        // 否则 points 为空 + 归档锚定 → liveTimeline=null → 旧分组式气泡沉底。
-        _ensureTimelinePoint(LiveSegmentKind.text, prevCursor);
+        // 内容不再追加。断点补建仅在「断点为空的恢复场景」（
+        // _replayRebuildTimeline）执行，避免时间线为空 + 归档锚定 →
+        // liveTimeline=null → 旧分组式气泡沉底；正常 live 重连断点仍在，
+        // 此时补点会把已展示段重复叠加到时间线尾部（成簇卡片）。
+        if (_replayRebuildTimeline) {
+          _ensureTimelinePoint(LiveSegmentKind.text, prevCursor);
+        }
         return false;
       }
     }
@@ -1697,10 +1714,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         ),
       );
       if (remainder.isEmpty) {
-        // same 重放帧：内容命中已有思考，补建 thinking 断点（渲染层按
-        // hideReasoning 过滤），避免重连后断点结构缺失导致时间线回退。
-
-        _ensureTimelinePoint(LiveSegmentKind.thinking, prevCursor);
+        // same 重放帧：内容命中已有思考。断点补建仅在「断点为空的恢复场景」
+        // （_replayRebuildTimeline）执行，避免时间线为空导致时间线回退；
+        // 正常 live 重连断点仍在，补点会把已展示思考段叠加到时间线尾部
+        // （底部连续思考卡簇的放大源）。
+        if (_replayRebuildTimeline) {
+          _ensureTimelinePoint(LiveSegmentKind.thinking, prevCursor);
+        }
         return false;
       }
     }
@@ -1761,7 +1781,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (text.isEmpty) return;
     _ensureStreamingAssistantMessage();
     final id = state.stream.streamingAssistantMessageId!;
-    final index = state.messages.indexWhere((m) => m.messageId == id);
+    var index = state.messages.indexWhere((m) => m.messageId == id);
+    if (index == -1) {
+      // 防御重锚：diff-merge 吸收匹配后流式临时消息可能被服务端权威行替换
+      //（isMessageMatch 内容吸收），锚点重指最后一条 assistant，保证后续
+      // 内容继续追加而不是静默丢失。
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role == 'assistant' &&
+            state.messages[i].messageId != null) {
+          index = i;
+          state = state.copyWith(
+            stream: state.stream.copyWith(
+              streamingAssistantMessageId: state.messages[i].messageId,
+            ),
+          );
+          break;
+        }
+      }
+    }
     if (index == -1) return;
     final current = state.messages[index];
     // 兜底断点：所有直达追加路径（interim_assistant / flush）都保证段落归属
@@ -1826,6 +1863,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         matchedLength: stream.matchedPrefixLength,
       );
       append = deduped.remainder;
+      // 整段吸收：游标错位（中段重放/多次重连叠加）时残余段常是已展示
+      // 内容的后缀碎片，overlap 启发式会把它当新内容拼出「归档-#42 归档」
+      // 式重复。凡残余段已被现有内容整体包含，一律吞掉并保持 replay 态，
+      // 由后续帧的 offset 对齐自然衔接。
+      if (append.isNotEmpty && currentContent.contains(append)) {
+        append = '';
+      }
       state = state.copyWith(
         stream: state.stream.copyWith(
           matchedPrefixLength: deduped.newCursor,
@@ -2087,10 +2131,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   void _handleContextStatus(ContextPrefillStatus status, String? label) {
-    state = state.copyWith(
-      prefillStatus: status,
-      prefillLabel: label,
-    );
+    state = state.copyWith(prefillStatus: status, prefillLabel: label);
     _markProgress();
   }
 
@@ -3463,7 +3504,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final expectedRemainder = existingContent.substring(cursor);
 
     if (expectedRemainder.isNotEmpty && expectedRemainder.startsWith(token)) {
-      // 纯重复：游标前进。
+      // 纯重复：游标前进。（保持 replay 态直到不匹配帧自然退出：重放流
+      // 中途「追平」不代表重放结束，提前关闸会让后续旧事件帧裸追加。）
       final newCursor = cursor + token.length;
       return (
         remainder: '',

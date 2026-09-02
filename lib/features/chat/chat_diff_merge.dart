@@ -53,10 +53,12 @@ List<ChatMessage> diffMergeMessages({
     return combined;
   }
 
-  final firstMatchedLocalIdx =
-      matchedLocalIndices.reduce((a, b) => a < b ? a : b);
-  final lastMatchedLocalIdx =
-      matchedLocalIndices.reduce((a, b) => a > b ? a : b);
+  final firstMatchedLocalIdx = matchedLocalIndices.reduce(
+    (a, b) => a < b ? a : b,
+  );
+  final lastMatchedLocalIdx = matchedLocalIndices.reduce(
+    (a, b) => a > b ? a : b,
+  );
 
   final result = <ChatMessage>[];
 
@@ -157,10 +159,22 @@ bool isMessageMatch(ChatMessage local, ChatMessage server) {
   if (local.role == 'assistant' && _isTempId(localId)) {
     final localTs = local.timestamp;
     final serverTs = server.timestamp;
-    if (localTs != null && serverTs != null && localTs > 0 && serverTs > 0) {
-      return (localTs - serverTs).abs() <= 120.0;
-    }
-    return true;
+    final withinTimeWindow =
+        localTs == null ||
+        serverTs == null ||
+        localTs <= 0 ||
+        serverTs <= 0 ||
+        (localTs - serverTs).abs() <= 120.0;
+    if (withinTimeWindow) return true;
+    // 内容吸收匹配：流式回合超长（>120s）时时间窗失效，但本地流式内容
+    // 与服务端占位行互为前缀（一方是另一方的前缀）即同一回合消息。
+    // 不匹配会导致 diff-merge 把污染的 live 消息当「未落库本地项」整条
+    // 保留、又补入服务端行 → 同一段文字双份渲染、各自跑打字机（双打字机）。
+    final localContent = local.content ?? '';
+    final serverContent = server.content ?? '';
+    if (localContent.isEmpty || serverContent.isEmpty) return false;
+    return localContent.startsWith(serverContent) ||
+        serverContent.startsWith(localContent);
   }
 
   return false;
@@ -172,7 +186,23 @@ bool _isTempId(String? id) {
 }
 
 ChatMessage _patchMessage(ChatMessage local, ChatMessage server) {
+  // 前缀包含去重（chat_spec.md §5.5 最低档）：内容互为前缀时取更长一方
+  // （流式中途 transcript 重载常见「服务端 checkpoint 落后本地已展示内容」，
+  // 取短会让可见文本回缩）。与 done 路径 _mergingLoadedMessages 语义一致。
+  var content = server.content;
+  final localContent = local.content ?? '';
+  final serverContent = server.content ?? '';
+  if (localContent.isNotEmpty &&
+      serverContent.isNotEmpty &&
+      localContent != serverContent &&
+      (localContent.startsWith(serverContent) ||
+          serverContent.startsWith(localContent))) {
+    content = localContent.length >= serverContent.length
+        ? local.content
+        : server.content;
+  }
   return server.copyWith(
+    content: content,
     turnTps: server.turnTps ?? local.turnTps,
   );
 }
