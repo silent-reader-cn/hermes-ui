@@ -165,6 +165,40 @@ class _AppearanceSection extends ConsumerWidget {
 class _ChatSection extends ConsumerWidget {
   const _ChatSection();
 
+  Future<void> _openSpeedPresetPicker(
+    BuildContext context,
+    WidgetRef ref,
+    SmoothStreamingSpeedPreset currentSpeed,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(l10n.smoothStreamingSpeed),
+        actions: [
+          for (final preset in SmoothStreamingSpeedPreset.values)
+            CupertinoActionSheetAction(
+              key: ValueKey('smooth-streaming-speed-${preset.id}'),
+              isDefaultAction: preset == currentSpeed,
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(
+                  ref
+                      .read(smoothStreamingSpeedProvider.notifier)
+                      .setSpeed(preset),
+                );
+              },
+              child: Text(preset.localizedName(l10n)),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.cancel),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
@@ -173,6 +207,7 @@ class _ChatSection extends ConsumerWidget {
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
     final composerTwoPane = ref.watch(composerTwoPaneProvider);
     final smoothStreaming = ref.watch(smoothStreamingProvider);
+    final smoothStreamingSpeed = ref.watch(smoothStreamingSpeedProvider);
     final showPerfMonitor = ref.watch(perfMonitorProvider);
     return CupertinoListSection(
       header: Text(l10n.chatSection),
@@ -221,6 +256,28 @@ class _ChatSection extends ConsumerWidget {
             },
           ),
         ),
+        if (smoothStreaming)
+          CupertinoListTile(
+            key: const ValueKey('settings-smooth-streaming-speed'),
+            title: Text(l10n.smoothStreamingSpeed),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  smoothStreamingSpeed.localizedName(l10n),
+                  style: const TextStyle(color: CupertinoColors.secondaryLabel),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 18,
+                  color: CupertinoColors.systemGrey,
+                ),
+              ],
+            ),
+            onTap: () =>
+                _openSpeedPresetPicker(context, ref, smoothStreamingSpeed),
+          ),
         CupertinoListTile(
           key: const ValueKey('settings-group-tools-by-turn'),
           title: Text(l10n.groupToolsByTurn),
@@ -439,11 +496,7 @@ class _CronSection extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 /// 通知推送测试类型。
-enum PushTestType {
-  turns,
-  clarify,
-  errors,
-}
+enum PushTestType { turns, clarify, errors }
 
 /// 通知设置分组（回合完成 / 澄清请求 / 异常中断 三类开关 + 推送测试）。
 class _NotificationSection extends ConsumerStatefulWidget {
@@ -474,10 +527,7 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
           tag: 'notifications',
           message: '推送测试权限被拒绝',
         );
-        _showNotice(
-          l10n.pushTestTitle,
-          l10n.pushTestPermissionDenied,
-        );
+        _showNotice(l10n.pushTestTitle, l10n.pushTestPermissionDenied);
         return;
       }
 
@@ -545,10 +595,7 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
       );
       if (mounted) {
         final l10n = AppLocalizations.of(context);
-        _showNotice(
-          l10n.pushTestTitle,
-          error.toString(),
-        );
+        _showNotice(l10n.pushTestTitle, error.toString());
       }
     } finally {
       if (mounted) {
@@ -1438,10 +1485,8 @@ class _ModelPickerPage extends ConsumerWidget {
           onPressed: isRefreshing
               ? null
               : () => unawaited(
-                    ref
-                        .read(settingsControllerProvider.notifier)
-                        .refreshModels(),
-                  ),
+                  ref.read(settingsControllerProvider.notifier).refreshModels(),
+                ),
           child: isRefreshing
               ? const CupertinoActivityIndicator(radius: 8)
               : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
@@ -1452,9 +1497,8 @@ class _ModelPickerPage extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             CupertinoSliverRefreshControl(
-              onRefresh: () => ref
-                  .read(settingsControllerProvider.notifier)
-                  .refreshModels(),
+              onRefresh: () =>
+                  ref.read(settingsControllerProvider.notifier).refreshModels(),
             ),
             if (currentState.refreshError != null)
               SliverToBoxAdapter(
