@@ -12,6 +12,7 @@ import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
@@ -67,11 +68,11 @@ void main() {
         expect(state.pendingAssistantTokenChunks, isEmpty);
         expect(_streamingContent(state, streamId), '$first$backlog');
 
-        // 前台流式体验恢复：后续 token 继续 16ms 合并 + 48ms 逐词。
+        // 前台流式体验恢复：后续 token 继续 16ms 合并 + reveal 逐词。
         api.emit(const TokenSseEvent('tail word '));
-        async.elapse(const Duration(milliseconds: 16));
+        async.elapse(ChatController.mergeDelay);
         expect(_streamingContent(state, streamId), '$first$backlog');
-        async.elapse(const Duration(milliseconds: 48));
+        async.elapse(ChatController.revealInterval);
         state = container.read(chatControllerProvider(''));
         expect(
           _streamingContent(state, streamId),
@@ -93,17 +94,17 @@ void main() {
             .stream
             .streamingAssistantMessageId;
 
-        // 前台先露 5 词（48ms tick，'Zeta ' 留在队列）。
+        // 前台先露 2 词（标准档 64ms tick，'Gamma Delta Epsilon Zeta ' 留在队列）。
         const first = 'Alpha Beta Gamma Delta Epsilon Zeta ';
         api.emit(const TokenSseEvent(first));
-        async.elapse(const Duration(milliseconds: 16));
-        async.elapse(const Duration(milliseconds: 48));
+        async.elapse(ChatController.mergeDelay);
+        async.elapse(ChatController.revealInterval);
         expect(
           _streamingContent(
             container.read(chatControllerProvider('')),
             streamId,
           ),
-          'Alpha Beta Gamma Delta Epsilon ',
+          'Alpha Beta ',
         );
 
         // 锁屏期间新 token 只进 pending。
@@ -116,10 +117,10 @@ void main() {
             container.read(chatControllerProvider('')),
             streamId,
           ),
-          'Alpha Beta Gamma Delta Epsilon ',
+          'Alpha Beta ',
         );
 
-        // 解锁：queue（'Zeta '）在前、pending 在后，文本顺序与到达一致。
+        // 解锁：queue 在前、pending 在后，文本顺序与到达一致。
         _setLifecycle(container, AppLifecycleState.resumed);
         final state = container.read(chatControllerProvider(''));
         expect(_streamingContent(state, streamId), '$first$backlog');
@@ -158,8 +159,8 @@ void main() {
         // 注意：big 尾部自带空格，正常拼接为 `${big}b c `（b 前无额外空格，
         // 不要写成 '$big b c ' 模板字面空格，那会误判成双空格）。
         api.emit(const TokenSseEvent('b c '));
-        async.elapse(const Duration(milliseconds: 16));
-        async.elapse(const Duration(milliseconds: 48));
+        async.elapse(ChatController.mergeDelay);
+        async.elapse(ChatController.revealInterval);
         state = container.read(chatControllerProvider(''));
         expect(_streamingContent(state, streamId), '${big}b c ');
       });
@@ -309,8 +310,8 @@ void main() {
         // 正常流产出内容 'AB根因C'（中文场景：单字重叠最易误判）。
         const full = 'AB根因C';
         api.emit(const TokenSseEvent(full));
-        async.elapse(const Duration(milliseconds: 16));
-        async.elapse(const Duration(milliseconds: 48));
+        async.elapse(ChatController.mergeDelay);
+        async.elapse(const Duration(milliseconds: 200));
 
         // 断线 → status active → transcript 重载 + fullReconnect（replay 态）。
         api.statusResponse = const ChatStreamStatusResponse(active: true);
@@ -352,8 +353,8 @@ void main() {
 
         // 后续 token 继续正常增量（非重复）。
         api.emit(const TokenSseEvent(' 结尾'));
-        async.elapse(const Duration(milliseconds: 16));
-        async.elapse(const Duration(milliseconds: 48));
+        async.elapse(ChatController.mergeDelay);
+        async.elapse(ChatController.revealInterval);
         state = container.read(chatControllerProvider(''));
         expect(_streamingContent(state, reAnchor), 'AB根因C续文 结尾');
       });

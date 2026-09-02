@@ -73,7 +73,7 @@ void main() {
         // 推送带有 Markdown 格式的 token
         api.emit(const TokenSseEvent('**Bold Story** with `code snippet`\n'));
         await tester.pump(const Duration(milliseconds: 16));
-        await tester.pump(const Duration(milliseconds: 48));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
 
         // 验证：在流式过程中，流式气泡走轻量文本渲染，不构建 MarkdownBody
@@ -86,7 +86,7 @@ void main() {
         // 继续推送更多 token
         api.emit(const TokenSseEvent('Second line of the story.\n'));
         await tester.pump(const Duration(milliseconds: 16));
-        await tester.pump(const Duration(milliseconds: 48));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
 
         expect(find.byType(MarkdownBody), findsNothing);
