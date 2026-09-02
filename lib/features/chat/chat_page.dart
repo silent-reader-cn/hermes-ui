@@ -240,10 +240,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       CupertinoIcons.arrow_2_squarepath,
                       size: 12,
-                      color: CupertinoColors.secondaryLabel,
+                      color: secondaryText.resolveFrom(context),
                     ),
                     const SizedBox(width: 3),
                     Text(

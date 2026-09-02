@@ -1319,7 +1319,7 @@ class _SessionRowState extends State<_SessionRow> {
       if (isBranched)
         Icon(
           CupertinoIcons.arrow_2_squarepath,
-          size: 10,
+          size: 12,
           color: secondaryColor,
         ),
       if (readOnly)

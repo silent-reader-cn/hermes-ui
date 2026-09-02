@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/message_highlight.dart';
@@ -171,11 +172,21 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // badge 出现
-      expect(find.byKey(const ValueKey('chat-branch-badge')), findsOneWidget);
+      // badge 出现，且图标为 size 12、secondaryText 主题色
+      final badgeFinder = find.byKey(const ValueKey('chat-branch-badge'));
+      expect(badgeFinder, findsOneWidget);
+      final badgeIconFinder = find.descendant(
+        of: badgeFinder,
+        matching: find.byIcon(CupertinoIcons.arrow_2_squarepath),
+      );
+      expect(badgeIconFinder, findsOneWidget);
+      final badgeIcon = tester.widget<Icon>(badgeIconFinder);
+      expect(badgeIcon.size, 12);
+      final chatContext = tester.element(find.byType(ChatPage));
+      expect(badgeIcon.color, secondaryText.resolveFrom(chatContext));
 
       // 点击 → 对话框
-      await tester.tap(find.byKey(const ValueKey('chat-branch-badge')));
+      await tester.tap(badgeFinder);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(

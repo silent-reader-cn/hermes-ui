@@ -150,6 +150,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 贴底判定阈值（收紧至 80px，既保障平滑跟随又防止向上轻扫被拽回）。
   static const double _nearBottomThreshold = 80.0;
 
+  /// 拖动起始判定敏感阈值（8px，touchSlop 基准附近，排除轻点，#41）。
+  static const double _dragSensitivityThreshold = 8.0;
+
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -158,6 +161,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _restoringOlderPosition = false;
   bool _userHasScrolled = false;
   bool _isUserInteracting = false;
+  bool _pressFollowed = true;
+  double _dragDisplacement = 0.0;
+  bool _dragExceededThreshold = false;
+  bool _isGestureActive = false;
   int _pinnedTranscriptCount = 0;
   String? _lastSentUserMessageId;
   int _layoutGeneration = 0;
@@ -171,6 +178,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   @visibleForTesting
   bool get userHasScrolled => _userHasScrolled;
+
+  @visibleForTesting
+  bool get pressFollowed => _pressFollowed;
+
+  @visibleForTesting
+  bool get isUserInteracting => _isUserInteracting;
 
   @visibleForTesting
   bool get initialPositioned => _initialPositioned;
@@ -262,6 +275,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _restoringOlderPosition = false;
       _userHasScrolled = false;
       _isUserInteracting = false;
+      _pressFollowed = true;
+      _dragDisplacement = 0.0;
+      _dragExceededThreshold = false;
+      _isGestureActive = false;
       _pinnedTranscriptCount = 0;
       _highlightTargetRenderId = null;
       _highlightSettled = false;
@@ -373,17 +390,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
         }
       } else {
-        // 只有在用户主动交互或已进入离底状态时才确认为用户上滚离底；
-        // 避免键盘/输入栏高度挤压或新气泡入场瞬间将「跟随态」误判为「用户已上滚」。
-        if (_isUserInteracting || _userHasScrolled) {
-          final wasNotScrolled = !_userHasScrolled;
-          final wasNear = _nearBottom;
-          _userHasScrolled = true;
-          _readingAnchor = null;
-          _nearBottom = false;
-          if ((wasNotScrolled || wasNear) && mounted) {
-            setState(() {});
-          }
+        // 非贴底位置：
+        // 任何非触摸手势（新消息到达、键盘/输入栏高度挤压、窗口 resize、程序滚动等）
+        // 一律不得置 _userHasScrolled = true；跟随状态的取消与判定全部交由
+        // 手势状态机（及大纲跳转/高亮定位等主动导航）处理。
+        final wasNear = _nearBottom;
+        _nearBottom = false;
+        if (wasNear && mounted) {
+          setState(() {});
         }
       }
     }
@@ -868,6 +882,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 时先按索引比例粗跳，下一帧再 ensureVisible。
   void _scrollToHighlight() {
     if (_highlightTargetRenderId == null) return;
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+    _userHasScrolled = true;
+    _nearBottom = false;
+    _justSent = false;
+    _readingAnchor = null;
+    _pinnedTranscriptCount = transcript.length;
+    if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.hasClients) return;
       final ctx = _highlightKey.currentContext;
@@ -1156,6 +1177,74 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
+  /// 手势松手结束：按累计位移方向与按压前跟随态定夺最终跟随状态（#41）。
+  void _handleGestureEnd() {
+    if (!_isGestureActive) return;
+    _isGestureActive = false;
+    _isUserInteracting = false;
+
+    if (!_initialPositioned || _initialPositioning || _restoringOlderPosition) {
+      _dragDisplacement = 0.0;
+      _dragExceededThreshold = false;
+      return;
+    }
+
+    final wasUserHasScrolled = _userHasScrolled;
+    final wasNearBottom = _nearBottom;
+
+    if (!_dragExceededThreshold ||
+        _dragDisplacement.abs() < _dragSensitivityThreshold) {
+      // 3. 无位移（轻点已排除）→ 状态回到按压前（不改变）
+      _userHasScrolled = !_pressFollowed;
+      if (!_userHasScrolled) {
+        _nearBottom = true;
+        _readingAnchor = null;
+        _pinnedTranscriptCount = 0;
+      }
+    } else if (_dragDisplacement < -_dragSensitivityThreshold) {
+      // 2. 累计向下滑（=内容向下=朝顶部，手指从下往上滑，pixels 减小）→ 一定取消跟随
+      _userHasScrolled = true;
+      _nearBottom = false;
+      if (!wasUserHasScrolled) {
+        _pinnedTranscriptCount = ref
+            .read(transcriptMessagesProvider(widget.sessionId))
+            .length;
+      }
+    } else if (_dragDisplacement > _dragSensitivityThreshold) {
+      // 1. 累计向上滑（=内容向上=朝底部，手指从上往下滑，pixels 增大）
+      if (_pressFollowed) {
+        // 按压前跟随中 → 恢复跟随（继续跟）
+        _userHasScrolled = false;
+        _nearBottom = true;
+        _readingAnchor = null;
+        _pinnedTranscriptCount = 0;
+      } else {
+        // 按压前不跟随 → 若松手位置接近底部超 80px 阈值 → 进入跟随；否则保持不跟随
+        final distFromBottom = _controller.hasClients
+            ? _controller.position.maxScrollExtent - _controller.position.pixels
+            : 0.0;
+        if (distFromBottom < _nearBottomThreshold) {
+          _userHasScrolled = false;
+          _nearBottom = true;
+          _readingAnchor = null;
+          _pinnedTranscriptCount = 0;
+        } else {
+          _userHasScrolled = true;
+          _nearBottom = false;
+        }
+      }
+    }
+
+    _dragDisplacement = 0.0;
+    _dragExceededThreshold = false;
+
+    if ((wasUserHasScrolled != _userHasScrolled ||
+            wasNearBottom != _nearBottom) &&
+        mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionId = widget.sessionId;
@@ -1392,39 +1481,37 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             if (notification is ScrollStartNotification) {
               if (notification.dragDetails != null) {
                 _isUserInteracting = true;
+                _isGestureActive = true;
+                _pressFollowed = !_userHasScrolled;
+                _dragDisplacement = 0.0;
+                _dragExceededThreshold = false;
               }
             } else if (notification is UserScrollNotification) {
               if (notification.direction == ScrollDirection.idle) {
-                _isUserInteracting = false;
+                if (_isGestureActive) {
+                  _handleGestureEnd();
+                } else {
+                  _isUserInteracting = false;
+                }
               } else {
                 _isUserInteracting = true;
-                if (_initialPositioned &&
-                    !_initialPositioning &&
-                    !_restoringOlderPosition) {
-                  if (notification.direction == ScrollDirection.forward) {
-                    final wasNotScrolled = !_userHasScrolled;
-                    if (!_userHasScrolled) {
-                      _pinnedTranscriptCount = ref
-                          .read(transcriptMessagesProvider(widget.sessionId))
-                          .length;
-                    }
-                    _userHasScrolled = true;
-                    _nearBottom = false;
-                    if (wasNotScrolled && mounted) {
-                      setState(() {});
-                    }
-                  }
-                }
               }
             } else if (notification is ScrollUpdateNotification) {
-              if (notification.dragDetails != null) {
+              if (notification.dragDetails != null || _isGestureActive) {
                 _isUserInteracting = true;
-                if (_initialPositioned &&
-                    !_initialPositioning &&
-                    !_restoringOlderPosition) {
-                  if (notification.dragDetails!.delta.dy > 0 ||
-                      (notification.scrollDelta != null &&
-                          notification.scrollDelta! < 0)) {
+                final stepDelta = (notification.scrollDelta != null &&
+                        notification.scrollDelta! != 0)
+                    ? notification.scrollDelta!
+                    : -(notification.dragDetails?.delta.dy ?? 0.0);
+                _dragDisplacement += stepDelta;
+
+                if (!_dragExceededThreshold &&
+                    _dragDisplacement.abs() >= _dragSensitivityThreshold) {
+                  _dragExceededThreshold = true;
+                  // 拖动开始超过 8px 敏感阈值即置取消（解锁自由滚动，不滚到离底不算用户离开）
+                  if (_initialPositioned &&
+                      !_initialPositioning &&
+                      !_restoringOlderPosition) {
                     final wasNotScrolled = !_userHasScrolled;
                     if (!_userHasScrolled) {
                       _pinnedTranscriptCount = ref
@@ -1436,28 +1523,15 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     if (wasNotScrolled && mounted) {
                       setState(() {});
                     }
-                  }
-                }
-              } else if (notification.scrollDelta != null &&
-                  notification.scrollDelta! < -1.0) {
-                if (_initialPositioned &&
-                    !_initialPositioning &&
-                    !_restoringOlderPosition) {
-                  final wasNotScrolled = !_userHasScrolled;
-                  if (!_userHasScrolled) {
-                    _pinnedTranscriptCount = ref
-                        .read(transcriptMessagesProvider(widget.sessionId))
-                        .length;
-                  }
-                  _userHasScrolled = true;
-                  _nearBottom = false;
-                  if (wasNotScrolled && mounted) {
-                    setState(() {});
                   }
                 }
               }
             } else if (notification is ScrollEndNotification) {
-              _isUserInteracting = false;
+              if (_isGestureActive) {
+                _handleGestureEnd();
+              } else {
+                _isUserInteracting = false;
+              }
             }
             return false;
           },

@@ -417,7 +417,7 @@ void main() {
       expect(find.textContaining('迁移项目'), findsOneWidget);
     });
 
-    testWidgets('置顶/分支/只读 图标置于副标题右侧，统一尺寸 10 与 secondaryText 灰色', (tester) async {
+    testWidgets('置顶/分支/只读 图标置于副标题右侧，分支尺寸 12、置顶/只读尺寸 10 与 secondaryText 灰色', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final api = FakeSessionListApi(
         sessions: [
@@ -446,7 +446,7 @@ void main() {
       final lockIcon = tester.widget<Icon>(lockFinder);
 
       expect(pinIcon.size, 10);
-      expect(branchIcon.size, 10);
+      expect(branchIcon.size, 12);
       expect(lockIcon.size, 10);
 
       final context = tester.element(find.byType(SessionListPage));
