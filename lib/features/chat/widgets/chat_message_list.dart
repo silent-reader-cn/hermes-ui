@@ -9,6 +9,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/api/sse_client.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
@@ -1257,9 +1258,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final liveTimeline = ref.watch(liveTimelineProvider(sessionId));
     final toolGroups = ref.watch(toolGroupsProvider(sessionId));
     final phase = ref.watch(chatPhaseProvider(sessionId));
-    final recovery = ref.watch(
-      chatControllerProvider(sessionId).select((s) => s.stream.recovery),
-    );
     final queuedMessages = ref.watch(
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
     );
@@ -1418,9 +1416,19 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
     // live 段落条目数：时间线模式 = 段数（空段列表 = 思考中指示器 1 条）；
     // legacy 模式 = 单个流式气泡。
-    // #29 断线恢复反馈：recovery 非 idle（checking/reconnecting）期间非静默提示。
-    final showRecovering =
-        streaming != null && recovery != ActiveStreamRecoveryState.idle;
+    // #52 统一状态行：sending / 等待 prefill / 生成中 / recovery / prefill error 期间
+    // 在列表尾部显示一行状态指示（开关控制 + 空闲自动隐藏）。
+    final prefillStatus = ref.watch(
+      chatControllerProvider(sessionId).select((s) => s.prefillStatus),
+    );
+    final statusLineEnabled = ref.watch(chatStatusLineProvider);
+    final showStatusLine =
+        statusLineEnabled &&
+        (phase == ChatPhase.sending ||
+            streaming != null ||
+            prefillStatus == ContextPrefillStatus.loading ||
+            prefillStatus == ContextPrefillStatus.notConfigured ||
+            prefillStatus == ContextPrefillStatus.error);
     final liveItemCount = streaming == null
         ? 0
         : liveTimeline == null
@@ -1428,10 +1436,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         : (liveTimeline.isEmpty ? 1 : liveTimeline.length);
 
     var itemCount = transcript.length + liveItemCount;
-    if (phase == ChatPhase.sending) itemCount++;
+    if (showStatusLine) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
-    if (showRecovering) itemCount++;
 
     final isEnglish = AppLocalizations.of(context).isEnglish;
     final unreadCount =
@@ -1499,7 +1506,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             } else if (notification is ScrollUpdateNotification) {
               if (notification.dragDetails != null || _isGestureActive) {
                 _isUserInteracting = true;
-                final stepDelta = (notification.scrollDelta != null &&
+                final stepDelta =
+                    (notification.scrollDelta != null &&
                         notification.scrollDelta! != 0)
                     ? notification.scrollDelta!
                     : -(notification.dragDetails?.delta.dy ?? 0.0);
@@ -1655,12 +1663,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       tail -= liveTimeline.length;
                     }
                   }
-                  if (showRecovering) {
-                    if (tail == 0) return const _ReconnectingIndicator();
-                    tail--;
-                  }
-                  if (phase == ChatPhase.sending) {
-                    if (tail == 0) return const _SendingIndicator();
+                  if (showStatusLine) {
+                    if (tail == 0) {
+                      return _ChatStatusLine(sessionId: sessionId);
+                    }
                     tail--;
                   }
                   if (needFallback) {
@@ -1850,25 +1856,179 @@ class _StreamingThinkingIndicator extends StatelessWidget {
   }
 }
 
-/// #29 断线恢复提示（recovery=checking/reconnecting 期间的非静默反馈）。
-class _ReconnectingIndicator extends StatelessWidget {
-  const _ReconnectingIndicator();
+/// #52 统一状态行：聊天列表尾部的连接/回合状态指示。
+/// 取代旧 _ReconnectingIndicator / _SendingIndicator；
+/// 按优先级渲染：prefill error → recovery → sending → 等待 prefill → 已重连 → 生成中；
+/// 空闲自动隐藏（由外层 showStatusLine 控制占位）。
+class _ChatStatusLine extends ConsumerStatefulWidget {
+  const _ChatStatusLine({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  ConsumerState<_ChatStatusLine> createState() => _ChatStatusLineState();
+}
+
+class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
+    with SingleTickerProviderStateMixin {
+  /// 重连成功「已重连」绿点渐隐控制器（1.5s）。
+  late final AnimationController _flashController;
+  bool _flashReconnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _flashController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1500),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && mounted) {
+            setState(() => _flashReconnected = false);
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _flashController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final sessionId = widget.sessionId;
+    final phase = ref.watch(chatPhaseProvider(sessionId));
+    final streaming = ref.watch(streamingMessageProvider(sessionId));
+    final prefillStatus = ref.watch(
+      chatControllerProvider(sessionId).select((s) => s.prefillStatus),
+    );
+    final recovery = ref.watch(
+      chatControllerProvider(sessionId).select((s) => s.stream.recovery),
+    );
+    final liveTps = ref.watch(
+      chatControllerProvider(sessionId)
+          .select((s) => s.stream.liveTokensPerSecond),
+    );
+
+    // 重连成功（recovery 非 idle → idle）→ 触发「已重连」绿点 1.5s 渐隐。
+    ref.listen<ActiveStreamRecoveryState>(
+      chatControllerProvider(sessionId).select((s) => s.stream.recovery),
+      (previous, next) {
+        if (previous != null &&
+            previous != ActiveStreamRecoveryState.idle &&
+            next == ActiveStreamRecoveryState.idle &&
+            !_flashReconnected) {
+          _flashReconnected = true;
+          _flashController.forward(from: 0);
+        }
+      },
+    );
+
+    if (prefillStatus == ContextPrefillStatus.error) {
+      return _StatusLineRow(
+        color: CupertinoColors.systemRed,
+        label: l10n.chatStatusContextUnavailable,
+      );
+    }
+    if (recovery == ActiveStreamRecoveryState.checking) {
+      return _StatusLineRow(
+        color: CupertinoColors.systemOrange,
+        label: l10n.chatStatusInvestigating,
+        showSpinner: true,
+      );
+    }
+    if (recovery == ActiveStreamRecoveryState.reconnecting) {
+      return _StatusLineRow(
+        color: CupertinoColors.systemOrange,
+        label: l10n.chatStatusReconnecting,
+        showSpinner: true,
+      );
+    }
+    if (phase == ChatPhase.sending) {
+      return _StatusLineRow(
+        color: CupertinoColors.secondaryLabel,
+        label: l10n.chatStatusConnecting,
+        showSpinner: true,
+      );
+    }
+    if (prefillStatus == ContextPrefillStatus.loading ||
+        prefillStatus == ContextPrefillStatus.notConfigured) {
+      return _StatusLineRow(
+        color: CupertinoColors.systemYellow,
+        label: l10n.chatStatusWaitingResponse,
+        showSpinner: true,
+      );
+    }
+    if (_flashReconnected && !_flashController.isDismissed) {
+      final opacity = 1 - _flashController.value;
+      return Opacity(
+        opacity: opacity.clamp(0.0, 1.0),
+        child: _StatusLineRow(
+          color: CupertinoColors.systemGreen,
+          label: l10n.chatStatusReconnected,
+        ),
+      );
+    }
+    if (streaming != null) {
+      final tpsSuffix = (liveTps != null && liveTps.isFinite && liveTps > 0)
+          ? ' ≈${liveTps.round()} tps'
+          : '';
+      return _StatusLineRow(
+        color: CupertinoColors.systemGreen,
+        label: l10n.chatStatusGenerating + tpsSuffix,
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+/// 状态行单行：状态点/转圈 + 文案（secondaryLabel 13px，居中）。
+class _StatusLineRow extends StatelessWidget {
+  const _StatusLineRow({this.color, this.label = '', this.showSpinner = false});
+
+  /// 状态点颜色；null 时显示转圈。
+  final Color? color;
+  final String label;
+
+  /// 转圈优先（checking/reconnecting/sending/等待 prefill 均转圈）。
+  final bool showSpinner;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color == null
+        ? null
+        : CupertinoDynamicColor.resolve(color!, context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CupertinoActivityIndicator(radius: 7),
+          if (showSpinner || resolved == null)
+            CupertinoActivityIndicator(
+              radius: color == null ? 7 : 6,
+              color: resolved,
+            )
+          else
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: resolved,
+                shape: BoxShape.circle,
+              ),
+            ),
           const SizedBox(width: 6),
-          Text(
-            l10n.reconnectingIndicator,
-            style: TextStyle(
-              fontSize: 13,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
             ),
           ),
         ],
@@ -2114,39 +2274,6 @@ class _StreamingCursorState extends State<_StreamingCursor> {
           padding: const EdgeInsets.only(left: 2),
           child: content,
         ),
-      ),
-    );
-  }
-}
-
-/// 发送中指示器（sending 相位，未拿到 stream_id）。
-class _SendingIndicator extends StatelessWidget {
-  const _SendingIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            child: Row(
-              children: [
-                const CupertinoActivityIndicator(radius: 8),
-                const SizedBox(width: 8),
-                Text(
-                  l10n.sendingIndicator,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -274,6 +274,53 @@ void main() {
       expect(clarify.clarification.pending?.question, '继续？');
     });
 
+    test('context_status 事件解析（loading / loaded / error / not_configured + label + 宽容解析）', () {
+      final eLoading = SseEventDecoder.decode(
+        'context_status',
+        '{"prefill":{"status":"loading","label":"Loading context..."}}',
+      );
+      expect(eLoading, isA<ContextStatusSseEvent>());
+      final csLoading = eLoading as ContextStatusSseEvent;
+      expect(csLoading.status, ContextPrefillStatus.loading);
+      expect(csLoading.label, 'Loading context...');
+      expect(csLoading.rawStatus, 'loading');
+
+      final eLoaded = SseEventDecoder.decode(
+        'context_status',
+        '{"prefill":{"status":"loaded","label":"Context ready"}}',
+      ) as ContextStatusSseEvent;
+      expect(eLoaded.status, ContextPrefillStatus.loaded);
+      expect(eLoaded.label, 'Context ready');
+
+      final eError = SseEventDecoder.decode(
+        'context_status',
+        '{"prefill":{"status":"error","label":"Context failed"}}',
+      ) as ContextStatusSseEvent;
+      expect(eError.status, ContextPrefillStatus.error);
+      expect(eError.label, 'Context failed');
+
+      final eNotConfigured = SseEventDecoder.decode(
+        'context_status',
+        '{"prefill":{"status":"not_configured"}}',
+      ) as ContextStatusSseEvent;
+      expect(eNotConfigured.status, ContextPrefillStatus.notConfigured);
+      expect(eNotConfigured.label, isNull);
+
+      final eTolerant = SseEventDecoder.decode(
+        'context_status',
+        '{"unknown_field": 123, "prefill": {"status": "custom_val", "extra": true}}',
+      ) as ContextStatusSseEvent;
+      expect(eTolerant.status, ContextPrefillStatus.unknown);
+      expect(eTolerant.rawStatus, 'custom_val');
+
+      final eMalformed = SseEventDecoder.decode(
+        'context_status',
+        'not a json',
+      ) as ContextStatusSseEvent;
+      expect(eMalformed.status, ContextPrefillStatus.unknown);
+      expect(eMalformed.label, isNull);
+    });
+
     test('pending_steer_leftover', () {
       final event = SseEventDecoder.decode(
         'pending_steer_leftover',

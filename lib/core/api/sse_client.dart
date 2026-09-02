@@ -300,6 +300,52 @@ class HeartbeatSseEvent extends SseEvent {
   const HeartbeatSseEvent();
 }
 
+/// 上下文 prefill 状态枚举。
+enum ContextPrefillStatus {
+  notConfigured,
+  loading,
+  loaded,
+  error,
+  unknown;
+
+  static ContextPrefillStatus fromString(String? raw) {
+    return switch (raw?.toLowerCase().trim()) {
+      'not_configured' => ContextPrefillStatus.notConfigured,
+      'loading' => ContextPrefillStatus.loading,
+      'loaded' => ContextPrefillStatus.loaded,
+      'error' => ContextPrefillStatus.error,
+      _ => ContextPrefillStatus.unknown,
+    };
+  }
+}
+
+/// `context_status` 事件（prefill.status: not_configured/loading/loaded/error + label）。
+class ContextStatusSseEvent extends SseEvent {
+  const ContextStatusSseEvent({
+    this.status = ContextPrefillStatus.unknown,
+    this.label,
+    this.rawStatus,
+    this.payload = const {},
+  });
+
+  final ContextPrefillStatus status;
+  final String? label;
+  final String? rawStatus;
+  final Map<String, Object?> payload;
+
+  factory ContextStatusSseEvent.fromJson(Map<String, Object?> map) {
+    final prefill = _asMap(map['prefill']);
+    final rawStatus = _string(prefill['status']) ?? _string(map['status']);
+    final label = _string(prefill['label']) ?? _string(map['label']);
+    return ContextStatusSseEvent(
+      status: ContextPrefillStatus.fromString(rawStatus),
+      label: label,
+      rawStatus: rawStatus,
+      payload: map,
+    );
+  }
+}
+
 /// 未知事件类型（静默丢弃）。
 class IgnoredSseEvent extends SseEvent {
   const IgnoredSseEvent();
@@ -427,8 +473,8 @@ class DoneStreamEvent {
     this.session,
     ContextWindowSnapshot? explicitUsageSnapshot,
     SessionDetail? explicitSessionDetail,
-  })  : _usageSnapshot = explicitUsageSnapshot,
-        _sessionDetail = explicitSessionDetail;
+  }) : _usageSnapshot = explicitUsageSnapshot,
+       _sessionDetail = explicitSessionDetail;
 
   /// 兼容原始 Map 字段。
   final Map<String, Object?>? usage;
@@ -508,6 +554,8 @@ class SseEventDecoder {
         return const StreamEndSseEvent();
       case 'cancel':
         return const CancelledSseEvent();
+      case 'context_status':
+        return ContextStatusSseEvent.fromJson(_jsonMap(data));
       case 'error':
       case 'apperror':
         final map = _jsonMap(data);
@@ -547,10 +595,12 @@ class SseEventDecoder {
     final sessionMap = rawSession is Map<String, Object?>
         ? Map<String, Object?>.from(rawSession)
         : (rawSession is Map ? Map<String, Object?>.from(rawSession) : null);
-    final usageSnapshot =
-        usageMap != null ? ContextWindowSnapshot.fromJson(usageMap) : null;
-    final sessionDetail =
-        sessionMap != null ? SessionDetail.fromJson(sessionMap) : null;
+    final usageSnapshot = usageMap != null
+        ? ContextWindowSnapshot.fromJson(usageMap)
+        : null;
+    final sessionDetail = sessionMap != null
+        ? SessionDetail.fromJson(sessionMap)
+        : null;
     return DoneSseEvent(
       DoneStreamEvent(
         usage: usageMap,
@@ -802,11 +852,7 @@ void _logSseEvent(SseEvent event) {
         message: 'heartbeat (:comment)',
       );
     case DoneSseEvent():
-      service.log(
-        level: DiagnosticsLogLevel.info,
-        tag: 'sse',
-        message: 'done',
-      );
+      service.log(level: DiagnosticsLogLevel.info, tag: 'sse', message: 'done');
     case TitleSseEvent(:final title, :final sessionId):
       service.log(
         level: DiagnosticsLogLevel.info,
@@ -818,6 +864,16 @@ void _logSseEvent(SseEvent event) {
         level: DiagnosticsLogLevel.debug,
         tag: 'sse',
         message: 'metering: tps=$tps (session: $sessionId)',
+      );
+    case ContextStatusSseEvent(:final status, :final rawStatus, :final label):
+      service.log(
+        level: status == ContextPrefillStatus.error
+            ? DiagnosticsLogLevel.error
+            : DiagnosticsLogLevel.debug,
+        tag: 'sse',
+        message:
+            'context_status: ${rawStatus ?? status.name}'
+            '${label != null ? ' (label: $label)' : ''}',
       );
     case ApprovalPendingSseEvent():
       service.log(

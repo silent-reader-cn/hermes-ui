@@ -1,3 +1,4 @@
+import '../../core/api/sse_client.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/context_window_snapshot.dart';
 import '../../core/models/tool_call.dart';
@@ -356,6 +357,8 @@ class ChatState {
     this.responseCompletionNeedsTranscriptRefresh = false,
     this.streamingScrollTrigger = 0,
     this.isRevealQueueEmpty = true,
+    this.prefillStatus,
+    this.prefillLabel,
   });
 
   /// 初始状态（会话参数经 family key 传入）。
@@ -474,6 +477,12 @@ class ChatState {
   /// reveal 队列是否为空（追上积压后渲染层据此展示闪烁光标）。
   final bool isRevealQueueEmpty;
 
+  /// 上下文 prefill 状态。
+  final ContextPrefillStatus? prefillStatus;
+
+  /// 上下文 prefill 说明标签。
+  final String? prefillLabel;
+
   /// isStartingChat（sending 相位）。
   bool get isStartingChat => phase == ChatPhase.sending;
 
@@ -528,6 +537,10 @@ class ChatState {
     bool? responseCompletionNeedsTranscriptRefresh,
     int? streamingScrollTrigger,
     bool? isRevealQueueEmpty,
+    ContextPrefillStatus? prefillStatus,
+    bool clearPrefillStatus = false,
+    String? prefillLabel,
+    bool clearPrefillLabel = false,
   }) {
     return ChatState(
       sessionId: sessionId ?? this.sessionId,
@@ -576,9 +589,7 @@ class ChatState {
           completedReasoningGroups ?? this.completedReasoningGroups,
       queuedSlashMessages: queuedSlashMessages ?? this.queuedSlashMessages,
       pinnedLocalNotices: pinnedLocalNotices ?? this.pinnedLocalNotices,
-      steerHints: clearSteerHints
-          ? const []
-          : (steerHints ?? this.steerHints),
+      steerHints: clearSteerHints ? const [] : (steerHints ?? this.steerHints),
       stream: stream ?? this.stream,
       pendingAction: pendingAction ?? this.pendingAction,
       contextWindowSnapshot: clearContextWindowSnapshot
@@ -590,6 +601,12 @@ class ChatState {
       streamingScrollTrigger:
           streamingScrollTrigger ?? this.streamingScrollTrigger,
       isRevealQueueEmpty: isRevealQueueEmpty ?? this.isRevealQueueEmpty,
+      prefillStatus: clearPrefillStatus
+          ? null
+          : (prefillStatus ?? this.prefillStatus),
+      prefillLabel: clearPrefillLabel
+          ? null
+          : (prefillLabel ?? this.prefillLabel),
     );
   }
 

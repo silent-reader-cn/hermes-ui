@@ -16,6 +16,7 @@ import '../../core/models/server_catalog.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/chat_providers.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_page.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -353,6 +354,20 @@ class _ChatSection extends ConsumerWidget {
               },
             ),
           ),
+        CupertinoListTile(
+          key: const ValueKey('settings-chat-status-line'),
+          title: Text(l10n.chatStatusLine),
+          subtitle: Text(l10n.chatStatusLineDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-chat-status-line'),
+            value: ref.watch(chatStatusLineProvider),
+            onChanged: (value) {
+              unawaited(
+                ref.read(chatStatusLineProvider.notifier).setEnabled(value),
+              );
+            },
+          ),
+        ),
       ],
     );
   }

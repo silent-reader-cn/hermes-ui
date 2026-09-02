@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/chat_message.dart';
@@ -8,6 +11,62 @@ import 'chat_controller.dart';
 import 'chat_models.dart';
 import 'chat_server_api.dart';
 import 'chat_state.dart';
+
+/// 聊天状态指示行持久化键。
+const String kChatStatusLineKey = 'settings.chatStatusLine';
+
+/// 聊天状态指示行偏好设置 Provider（持久化到 shared_preferences，默认开启）。
+final chatStatusLineProvider =
+    NotifierProvider<ChatStatusLineController, bool>(
+      ChatStatusLineController.new,
+    );
+
+/// 聊天状态指示行控制器。
+class ChatStatusLineController extends Notifier<bool> {
+  static const String keyChatStatusLine = kChatStatusLineKey;
+
+  static Future<bool> loadStatusLinePref({SharedPreferences? customPrefs}) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyChatStatusLine) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true;
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadStatusLinePref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+
+  Future<void> load() => _load();
+
+  Future<void> setEnabled(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyChatStatusLine, value);
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+}
 
 /// 看门狗阈值配置（chat_spec.md §5.3；测试可 override 缩短阈值）。
 class ChatWatchdogConfig {

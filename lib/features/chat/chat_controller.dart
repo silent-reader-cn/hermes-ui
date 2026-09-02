@@ -997,6 +997,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messages: [...state.messages, optimistic],
       clearSendErrorMessage: true,
       clearErrorMessage: true,
+      clearPrefillStatus: true,
+      clearPrefillLabel: true,
     );
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
@@ -1157,6 +1159,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       phase: ChatPhase.streaming,
       clearSendErrorMessage: true,
       clearErrorMessage: true,
+      clearPrefillStatus: true,
+      clearPrefillLabel: true,
       liveTimelinePoints: const [],
       stream: state.stream.copyWith(
         activeStreamId: streamId,
@@ -1297,6 +1301,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         );
       case DoneSseEvent(:final event):
         _applyDone(event);
+      case ContextStatusSseEvent(:final status, :final label):
+        _handleContextStatus(status, label);
       case ApprovalPendingSseEvent(:final payload):
         _applyApprovalUpdate(payload);
       case ClarificationPendingSseEvent(:final payload):
@@ -2080,6 +2086,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  void _handleContextStatus(ContextPrefillStatus status, String? label) {
+    state = state.copyWith(
+      prefillStatus: status,
+      prefillLabel: label,
+    );
+    _markProgress();
+  }
+
   /// 启动独立 Clarify SSE 流 + 轮询兜底通道。
   void _startClarifyChannel(String sessionId) {
     if (sessionId.isEmpty) return;
@@ -2492,6 +2506,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       liveReasoningText: '',
       liveTimelinePoints: const [],
       clearSteerHints: true,
+      clearPrefillStatus: true,
+      clearPrefillLabel: true,
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
         clearLastEventId: true,
@@ -2640,6 +2656,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messages: messages,
       pinnedLocalNotices: const [],
       clearSteerHints: true,
+      clearPrefillStatus: true,
+      clearPrefillLabel: true,
       liveTimelinePoints: const [],
       pendingAction: const ChatPendingActionState(),
       stream: state.stream.copyWith(
