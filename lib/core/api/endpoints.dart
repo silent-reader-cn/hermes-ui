@@ -99,6 +99,7 @@ class Endpoint {
   static const authStatus = Endpoint('/api/auth/status');
   static const login = Endpoint('/api/auth/login');
   static const logout = Endpoint('/api/auth/logout');
+
   /// GET /api/system/health（系统健康状态：CPU/内存/磁盘）。
   static const systemHealth = Endpoint('/api/system/health');
 
@@ -108,14 +109,16 @@ class Endpoint {
 
   /// `include_archived` 为 opt-in（issue #17）：关闭时请求保持与默认一致；
   /// `archived_limit` 仅随 `include_archived=1` 发送。
+  /// 始终带 `sidebar_source=webui`（对齐 WebUI 前端 `sessions.js:_sessionListQueryString`）：
+  /// 服务端据此过滤掉 CLI/agy 等只读导入会话，避免测试痕迹污染会话列表。
   static Endpoint sessions({bool includeArchived = false, int? archivedLimit}) {
-    if (!includeArchived) return const Endpoint('/api/sessions');
     return Endpoint(
       '/api/sessions',
       query: [
-        const QueryParam('include_archived', '1'),
+        if (includeArchived) const QueryParam('include_archived', '1'),
         if (archivedLimit != null)
           QueryParam('archived_limit', '$archivedLimit'),
+        const QueryParam('sidebar_source', 'webui'),
       ],
     );
   }
@@ -770,22 +773,16 @@ class Endpoint {
   static const mcpTools = Endpoint('/api/mcp/tools');
 
   /// PUT /api/mcp/servers/{name}
-  static Endpoint mcpServerUpdate(String name) => Endpoint(
-        '/api/mcp/servers/{name}',
-        pathParams: {'name': name},
-      );
+  static Endpoint mcpServerUpdate(String name) =>
+      Endpoint('/api/mcp/servers/{name}', pathParams: {'name': name});
 
   /// PATCH /api/mcp/servers/{name}
-  static Endpoint mcpServerToggle(String name) => Endpoint(
-        '/api/mcp/servers/{name}',
-        pathParams: {'name': name},
-      );
+  static Endpoint mcpServerToggle(String name) =>
+      Endpoint('/api/mcp/servers/{name}', pathParams: {'name': name});
 
   /// DELETE /api/mcp/servers/{name}
-  static Endpoint mcpServerDelete(String name) => Endpoint(
-        '/api/mcp/servers/{name}',
-        pathParams: {'name': name},
-      );
+  static Endpoint mcpServerDelete(String name) =>
+      Endpoint('/api/mcp/servers/{name}', pathParams: {'name': name});
 
   // ---------------------------------------------------------------------------
   // 1.19 auxiliary models — 2 个
@@ -806,4 +803,3 @@ class Endpoint {
     );
   }
 }
-

@@ -333,18 +333,21 @@ void main() {
       expect(Endpoint.health.url('$base/').toString(), '$base/health');
     });
 
-    test('sessions：include_archived 为 opt-in，archived_limit 仅随其发送', () {
-      expect(Endpoint.sessions().url(base).toString(), '$base/api/sessions');
+    test('sessions：include_archived 为 opt-in，archived_limit 仅随其发送，始终带 sidebar_source=webui', () {
+      expect(
+        Endpoint.sessions().url(base).toString(),
+        '$base/api/sessions?sidebar_source=webui',
+      );
       expect(
         Endpoint.sessions(includeArchived: true).url(base).toString(),
-        '$base/api/sessions?include_archived=1',
+        '$base/api/sessions?include_archived=1&sidebar_source=webui',
       );
       expect(
         Endpoint.sessions(
           includeArchived: true,
           archivedLimit: 10,
         ).url(base).toString(),
-        '$base/api/sessions?include_archived=1&archived_limit=10',
+        '$base/api/sessions?include_archived=1&archived_limit=10&sidebar_source=webui',
       );
       // archivedLimit 单独发送时必须带 include_archived
       expect(
@@ -352,7 +355,7 @@ void main() {
           includeArchived: false,
           archivedLimit: 10,
         ).url(base).toString(),
-        '$base/api/sessions',
+        '$base/api/sessions?archived_limit=10&sidebar_source=webui',
       );
     });
 
@@ -668,14 +671,8 @@ void main() {
     });
 
     test('MCP 端点（5 个）路径、URL 与路径段编码', () {
-      expect(
-        Endpoint.mcpServers.url(base).toString(),
-        '$base/api/mcp/servers',
-      );
-      expect(
-        Endpoint.mcpTools.url(base).toString(),
-        '$base/api/mcp/tools',
-      );
+      expect(Endpoint.mcpServers.url(base).toString(), '$base/api/mcp/servers');
+      expect(Endpoint.mcpTools.url(base).toString(), '$base/api/mcp/tools');
       expect(
         Endpoint.mcpServerUpdate('my-server').url(base).toString(),
         '$base/api/mcp/servers/my-server',
@@ -709,14 +706,10 @@ void main() {
         Endpoint.auxiliaryModels.url(base).toString(),
         '$base/api/model/auxiliary',
       );
-      expect(
-        Endpoint.modelSet.url(base).toString(),
-        '$base/api/model/set',
-      );
+      expect(Endpoint.modelSet.url(base).toString(), '$base/api/model/set');
     });
   });
 }
-
 
 /// 全部静态（无参）端点，供路径完整性校验。
 List<Endpoint> _staticEndpoints() {
