@@ -684,6 +684,123 @@ void main() {
 
       await _unmount(tester);
     });
+
+    testWidgets('澄清卡片控件高度与字号规格：按钮与输入框高 36，字号紧凑阶梯', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-input-field')),
+        '规格测试',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      api.emit(const ClarificationPendingSseEvent({
+        'pending': {
+          'clarify_id': 'clarify-spec',
+          'question': '测试问题',
+          'choices_offered': ['选项A'],
+          'timeout_seconds': 120,
+        },
+        'pending_count': 1,
+      }));
+      await tester.pump();
+
+      // 校验控件高度统一为 36
+      final inputSize = tester.getSize(
+        find.byKey(const ValueKey('chat-prompt-clarify-input')),
+      );
+      final submitSize = tester.getSize(
+        find.byKey(const ValueKey('chat-prompt-clarify-submit')),
+      );
+      final choiceSize = tester.getSize(
+        find.byKey(const ValueKey('chat-prompt-choice-选项A')),
+      );
+      expect(inputSize.height, 36.0);
+      expect(submitSize.height, 36.0);
+      expect(choiceSize.height, 36.0);
+
+      // 校验字号：按钮文字 13，输入框文字 13，问题 14，标题 13，提示 12
+      final choiceText = tester.widget<Text>(find.text('选项A'));
+      expect(choiceText.style?.fontSize, 13.0);
+
+      final submitText = tester.widget<Text>(find.text('发送'));
+      expect(submitText.style?.fontSize, 13.0);
+
+      final questionText = tester.widget<Text>(find.text('测试问题'));
+      expect(questionText.style?.fontSize, 14.0);
+
+      final titleText = tester.widget<Text>(find.text('需要澄清'));
+      expect(titleText.style?.fontSize, 13.0);
+
+      final hintText = tester.widget<Text>(find.text('请选择一个选项，或在下方输入你的回答。'));
+      expect(hintText.style?.fontSize, 12.0);
+
+      await _unmount(tester);
+    });
+  });
+
+  group('审批卡片 UI 测试', () {
+    testWidgets('渲染审批卡片：标题、问题、选项按钮高度与字号对齐 + 点击作答', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'messages': const []},
+      };
+      await _pumpPage(tester, api);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-input-field')),
+        '申请权限',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('chat-send-button')));
+      await tester.pump();
+      await tester.pump();
+
+      api.emit(const ApprovalPendingSseEvent({
+        'pending': {
+          'approval_id': 'app-1',
+          'question': '是否允许执行危险命令？',
+          'choices_offered': ['允许', '拒绝'],
+        },
+        'pending_count': 1,
+      }));
+      await tester.pump();
+
+      expect(find.text('需要审批'), findsOneWidget);
+      expect(find.text('是否允许执行危险命令？'), findsOneWidget);
+      expect(find.text('允许'), findsOneWidget);
+      expect(find.text('拒绝'), findsOneWidget);
+
+      // 选项按钮高度 36
+      final approveSize = tester.getSize(
+        find.byKey(const ValueKey('chat-prompt-choice-允许')),
+      );
+      final denySize = tester.getSize(
+        find.byKey(const ValueKey('chat-prompt-choice-拒绝')),
+      );
+      expect(approveSize.height, 36.0);
+      expect(denySize.height, 36.0);
+
+      // 按钮文字字号 13
+      final approveText = tester.widget<Text>(find.text('允许'));
+      expect(approveText.style?.fontSize, 13.0);
+
+      // 点击作答
+      await tester.tap(find.byKey(const ValueKey('chat-prompt-choice-允许')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('需要审批'), findsNothing);
+
+      await _unmount(tester);
+    });
   });
 }
 

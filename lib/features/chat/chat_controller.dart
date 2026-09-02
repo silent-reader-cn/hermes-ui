@@ -62,6 +62,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// reveal 队列词单元硬上限（超限直接落全文，防后台/锁屏积压爆吐卡死）。
   static const maxRevealQueueUnits = 2000;
 
+  /// Live 流式期间上下文窗口读数轮询频率（2s）。
+  static const contextWindowPollInterval = Duration(seconds: 2);
+
   ChatServerApi? _api;
   Timer? _mergeTimer;
   Timer? _revealTimer;
@@ -83,6 +86,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 最近一次传输活动（看门狗 12s/18s/25s 阈值）。
   DateTime? _lastTransportActivity;
+
+  /// 最近一次 live 上下文窗口轮询请求发起的时刻。
+  DateTime? _lastContextPollTime;
+
+  /// 标记是否有上下文轮询请求正在途中，防并发重复请求。
+  bool _isContextPolling = false;
 
   /// status 轮询冷却截止。
   DateTime? _statusCheckCooldownUntil;
@@ -137,6 +146,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealQueue.clear();
     _revealQueueStart = null;
     _appPaused = false;
+    _lastContextPollTime = null;
+    _isContextPolling = false;
     _startWatchdog();
     ref.onDispose(_dispose);
     // 后台/锁屏暂停 reveal 消费、resumed 铺全文并重新校准 watchdog 基线。
@@ -189,6 +200,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer?.cancel();
     _watchdogTimer?.cancel();
     _transcriptRefreshTimer?.cancel();
+    _lastContextPollTime = null;
+    _isContextPolling = false;
     _stopClarifyChannel();
     _api?.stopStream();
   }
@@ -859,6 +872,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (activeStreamId != null &&
         activeStreamId.isNotEmpty &&
         state.stream.activeStreamId == null) {
+      _lastContextPollTime = _now();
       state = state.copyWith(
         phase: ChatPhase.streaming,
         stream: state.stream.copyWith(activeStreamId: activeStreamId),
@@ -1157,6 +1171,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       verifyInBackground: true,
     );
     _connectStream(streamId);
+    _lastContextPollTime = _now();
     _markProgress();
     _recordTransportActivity();
   }
@@ -2636,6 +2651,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer = null;
     _revealQueue.clear();
     _revealQueueStart = null;
+    _lastContextPollTime = null;
+    _isContextPolling = false;
   }
 
   Future<void> _refreshCompletedResponseTitleIfNeeded() async {
@@ -2926,6 +2943,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _watchdogTimer?.cancel();
     _watchdogTimer = Timer.periodic(_watchdogConfig.watchdogInterval, (_) {
       _recoverStaleStreamIfNeeded();
+      _pollContextWindowIfNeeded();
     });
   }
 
@@ -3053,6 +3071,79 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       state = state.copyWith(
         stream: state.stream.copyWith(recovery: ActiveStreamRecoveryState.idle),
       );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Live 流式上下文窗口轮询（N = 2s；活跃流期间轮询；空闲零请求）
+  // -------------------------------------------------------------------------
+
+  /// Live 流式期间每 2s 轮询一次会话详情以实时刷新上下文窗口指示器读数。
+  void _pollContextWindowIfNeeded() {
+    if (_disposed) return;
+    if (_appPaused) return;
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return;
+    if (state.stream.hasCompletedResponse) return;
+    if (state.sessionId.isEmpty) return;
+    if (_isContextPolling) return;
+
+    final now = _now();
+    final lastPoll = _lastContextPollTime;
+    if (lastPoll != null &&
+        now.difference(lastPoll) < contextWindowPollInterval) {
+      return;
+    }
+
+    _lastContextPollTime = now;
+    unawaited(_pollContextWindow(streamId));
+  }
+
+  Future<void> _pollContextWindow(String streamId) async {
+    final api = _api;
+    if (api == null) return;
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    final gen = _generation;
+    _isContextPolling = true;
+    try {
+      final response = await api.session(
+        sessionId: sessionId,
+        includeMessages: false,
+      );
+      if (_disposed || gen != _generation) return;
+      if (state.stream.activeStreamId != streamId ||
+          state.stream.hasCompletedResponse) {
+        return;
+      }
+      final detail = response.session;
+      if (detail == null) return;
+
+      final prev = state.contextWindowSnapshot;
+      final snapshot = ContextWindowSnapshot(
+        contextLength: detail.contextLength ?? prev?.contextLength,
+        thresholdTokens: detail.thresholdTokens ?? prev?.thresholdTokens,
+        lastPromptTokens: detail.lastPromptTokens ?? prev?.lastPromptTokens,
+        inputTokens: detail.inputTokens ?? prev?.inputTokens,
+        outputTokens: detail.outputTokens ?? prev?.outputTokens,
+        estimatedCost: detail.estimatedCost ?? prev?.estimatedCost,
+        tokensPerSecond:
+            state.stream.liveTokensPerSecond ?? prev?.tokensPerSecond,
+      );
+      final hasSnapshotValues =
+          snapshot.contextLength != null ||
+          snapshot.thresholdTokens != null ||
+          snapshot.lastPromptTokens != null ||
+          snapshot.inputTokens != null ||
+          snapshot.outputTokens != null ||
+          snapshot.estimatedCost != null;
+      if (hasSnapshotValues) {
+        state = state.copyWith(contextWindowSnapshot: snapshot);
+      }
+    } on Object {
+      // 轮询静默容错：网络波动或临时异常不打断流式渲染，不报全局错误
+    } finally {
+      _isContextPolling = false;
     }
   }
 

@@ -823,7 +823,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
     if (isApproval) {
       return Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: CupertinoColors.systemOrange.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
@@ -839,21 +839,29 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                 color: CupertinoColors.systemOrange.resolveFrom(context),
               ),
             ),
-            if (question != null) ...[
-              const SizedBox(height: 4),
-              Text(question, style: const TextStyle(fontSize: 14)),
+            if (question != null && question.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                question,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
             if (choices.isNotEmpty) ...[
               const SizedBox(height: 8),
-              for (final choice in choices)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: CupertinoButton.filled(
-                    key: ValueKey('chat-prompt-choice-$choice'),
-                    onPressed: () => controller.respondToApproval(choice),
-                    child: Text(choice),
-                  ),
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final choice in choices)
+                    _buildChoiceButton(
+                      choice: choice,
+                      onPressed: () => controller.respondToApproval(choice),
+                    ),
+                ],
+              ),
             ],
           ],
         ),
@@ -908,8 +916,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               const SizedBox(width: 6),
               CupertinoButton(
                 padding: EdgeInsets.zero,
-                // ignore: deprecated_member_use
-                minSize: 24,
+                minimumSize: const Size(24, 24),
                 onPressed: () => setState(() => _isCollapsed = !_isCollapsed),
                 child: Icon(
                   _isCollapsed
@@ -939,15 +946,10 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                 runSpacing: 6,
                 children: [
                   for (final choice in choices)
-                    CupertinoButton.filled(
-                      key: ValueKey('chat-prompt-choice-$choice'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
+                    _buildChoiceButton(
+                      choice: choice,
                       onPressed: () =>
                           controller.respondToClarification(choice),
-                      child: Text(choice),
                     ),
                 ],
               ),
@@ -956,22 +958,41 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
             Row(
               children: [
                 Expanded(
-                  child: CupertinoTextField(
-                    key: const ValueKey('chat-prompt-clarify-input'),
-                    controller: _textController,
-                    placeholder: l10n.clarifyInputPlaceholder,
-                    onSubmitted: _submitText,
+                  child: SizedBox(
+                    height: 36,
+                    child: CupertinoTextField(
+                      key: const ValueKey('chat-prompt-clarify-input'),
+                      controller: _textController,
+                      placeholder: l10n.clarifyInputPlaceholder,
+                      style: const TextStyle(fontSize: 13),
+                      placeholderStyle: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.placeholderText.resolveFrom(
+                          context,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      onSubmitted: _submitText,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                CupertinoButton.filled(
-                  key: const ValueKey('chat-prompt-clarify-submit'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
+                SizedBox(
+                  height: 36,
+                  child: CupertinoButton.filled(
+                    key: const ValueKey('chat-prompt-clarify-submit'),
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    borderRadius: BorderRadius.circular(8),
+                    onPressed: _submitting ? null : _submitText,
+                    child: Text(
+                      l10n.clarifySend,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                  onPressed: _submitting ? null : _submitText,
-                  child: Text(l10n.clarifySend),
                 ),
               ],
             ),
@@ -985,6 +1006,29 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceButton({
+    required String choice,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 36,
+      child: CupertinoButton.filled(
+        key: ValueKey('chat-prompt-choice-$choice'),
+        minimumSize: Size.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        borderRadius: BorderRadius.circular(8),
+        onPressed: onPressed,
+        child: Text(
+          choice,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
