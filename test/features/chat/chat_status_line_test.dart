@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
@@ -8,6 +9,7 @@ import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_message_list.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -32,6 +34,8 @@ void main() {
     WidgetTester tester,
     ChatState state, {
     bool statusLineEnabled = true,
+    DateTime Function()? clockOverride,
+    Locale locale = const Locale('zh'),
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
@@ -58,9 +62,19 @@ void main() {
         overrides: [
           chatApiProvider.overrideWithValue(api),
           chatControllerProvider.overrideWith(() => _FakeChatController(state)),
+          if (clockOverride != null)
+            chatClockProvider.overrideWithValue(clockOverride),
         ],
-        child: const CupertinoApp(
-          home: CupertinoPageScaffold(
+        child: CupertinoApp(
+          locale: locale,
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          localizationsDelegates: const [
+            AppLocalizationsDelegate(),
+            DefaultCupertinoLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: const CupertinoPageScaffold(
             child: ChatMessageList(sessionId: sessionId),
           ),
         ),
@@ -213,6 +227,104 @@ void main() {
       expect(find.text('等待模型响应…'), findsNothing);
       expect(find.text('上下文不可用'), findsNothing);
       expect(find.text('生成中'), findsOneWidget);
+    });
+
+    testWidgets('意见1：发消息后只有一行状态，无「思考中…」指示器', (tester) async {
+      await pumpWithState(
+        tester,
+        ChatState(
+          sessionId: sessionId,
+          phase: ChatPhase.streaming,
+          messages: const [
+            ChatMessage(
+              role: 'user',
+              content: 'Hello',
+              messageId: 'u1',
+            ),
+          ],
+          stream: const ChatStreamState(
+            streamingAssistantMessageId: streamingId,
+          ),
+          prefillStatus: ContextPrefillStatus.loading,
+          turnStartedMillis: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      // 仅有一行状态行（等待模型响应…）
+      expect(find.textContaining('等待模型响应…'), findsOneWidget);
+      // 无思考中文本残留
+      expect(find.text('思考中…'), findsNothing);
+      expect(find.textContaining('思考中'), findsNothing);
+    });
+
+    testWidgets('意见2：状态行 Row 靠左对齐 (MainAxisAlignment.start)', (tester) async {
+      await pumpWithState(tester, baseState(phase: ChatPhase.sending));
+      final rowFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is Row &&
+            widget.mainAxisAlignment == MainAxisAlignment.start &&
+            widget.children.any((child) => child is CupertinoActivityIndicator),
+      );
+      expect(rowFinder, findsOneWidget);
+    });
+
+    testWidgets('意见3：等待态含 MM:SS 耗时文本，随 pump(1s) 推进递增', (tester) async {
+      var now = DateTime(2026, 9, 2, 12, 0, 0);
+      final startMs = now.millisecondsSinceEpoch;
+      await pumpWithState(
+        tester,
+        baseState(phase: ChatPhase.streaming).copyWith(
+          prefillStatus: ContextPrefillStatus.loading,
+          turnStartedMillis: startMs,
+        ),
+        clockOverride: () => now,
+      );
+      expect(find.text('等待模型响应… · 已工作 00:00'), findsOneWidget);
+
+      // 推进 1 秒
+      now = now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('等待模型响应… · 已工作 00:01'), findsOneWidget);
+
+      // 推进 64 秒 (累计 65 秒 -> 01:05)
+      now = now.add(const Duration(seconds: 64));
+      await tester.pump(const Duration(seconds: 64));
+      expect(find.text('等待模型响应… · 已工作 01:05'), findsOneWidget);
+    });
+
+    testWidgets('意见3：生成态含 tps 与 MM:SS 耗时文本', (tester) async {
+      var now = DateTime(2026, 9, 2, 12, 0, 0);
+      final startMs = now.millisecondsSinceEpoch;
+      await pumpWithState(
+        tester,
+        baseState(phase: ChatPhase.streaming).copyWith(
+          turnStartedMillis: startMs,
+          stream: const ChatStreamState(
+            streamingAssistantMessageId: streamingId,
+            liveTokensPerSecond: 85,
+          ),
+        ),
+        clockOverride: () => now,
+      );
+      expect(find.text('生成中 ≈85 tps · 已工作 00:00'), findsOneWidget);
+
+      now = now.add(const Duration(seconds: 23));
+      await tester.pump(const Duration(seconds: 23));
+      expect(find.text('生成中 ≈85 tps · 已工作 00:23'), findsOneWidget);
+    });
+
+    testWidgets('意见3：英文环境状态行耗时显示 Working for MM:SS', (tester) async {
+      final now = DateTime(2026, 9, 2, 12, 0, 0);
+      final startMs = now.millisecondsSinceEpoch;
+      await pumpWithState(
+        tester,
+        baseState(phase: ChatPhase.streaming).copyWith(
+          prefillStatus: ContextPrefillStatus.loading,
+          turnStartedMillis: startMs,
+        ),
+        locale: const Locale('en'),
+        clockOverride: () => now,
+      );
+      expect(find.textContaining('Working for 00:00'), findsOneWidget);
     });
   });
 }

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_extensions.dart';
@@ -980,3 +983,84 @@ final serverEditorApiClientFactoryProvider =
           (baseUrl, headers) =>
               ApiClient(baseUrl: baseUrl, initialHeaders: headers),
     );
+
+// -----------------------------------------------------------------------------
+// 新建会话自动打开上下文指示器弹窗开关与临时会话跟踪
+// -----------------------------------------------------------------------------
+
+/// 新建会话自动打开上下文指示器弹窗偏好设置键。
+const String kAutoOpenContextOnNewSessionKey =
+    'settings.autoOpenContextOnNewSession';
+
+/// 新建会话自动打开上下文指示器弹窗偏好设置 Provider（持久化到 shared_preferences，默认开启）。
+final autoOpenContextOnNewSessionProvider =
+    NotifierProvider<AutoOpenContextOnNewSessionController, bool>(
+      AutoOpenContextOnNewSessionController.new,
+    );
+
+/// 新建会话自动打开上下文指示器弹窗控制器。
+class AutoOpenContextOnNewSessionController extends Notifier<bool> {
+  static const String keyAutoOpenContext = kAutoOpenContextOnNewSessionKey;
+
+  static Future<bool> loadPref({SharedPreferences? customPrefs}) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyAutoOpenContext) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true;
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadPref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+
+  Future<void> load() => _load();
+
+  Future<void> setEnabled(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyAutoOpenContext, value);
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+}
+
+/// 最近新建会话 ID Provider（用于通知 ChatInputBar 首次进入时自动打开上下文弹窗；消费后立即置空）。
+final recentlyCreatedSessionIdProvider =
+    NotifierProvider<RecentlyCreatedSessionIdController, String?>(
+      RecentlyCreatedSessionIdController.new,
+    );
+
+/// 最近新建会话 ID 控制器。
+class RecentlyCreatedSessionIdController extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void markCreated(String sessionId) {
+    state = sessionId;
+  }
+
+  void clear() {
+    state = null;
+  }
+}

@@ -368,6 +368,22 @@ class _ChatSection extends ConsumerWidget {
             },
           ),
         ),
+        CupertinoListTile(
+          key: const ValueKey('settings-auto-open-context'),
+          title: Text(l10n.autoOpenContextTitle),
+          subtitle: Text(l10n.autoOpenContextDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-auto-open-context'),
+            value: ref.watch(autoOpenContextOnNewSessionProvider),
+            onChanged: (value) {
+              unawaited(
+                ref
+                    .read(autoOpenContextOnNewSessionProvider.notifier)
+                    .setEnabled(value),
+              );
+            },
+          ),
+        ),
       ],
     );
   }

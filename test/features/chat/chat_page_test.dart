@@ -87,8 +87,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // 思考中指示器（空流式气泡）
-    expect(find.text('思考中…'), findsOneWidget);
+    // 状态行指示（生成中，空流式气泡不再显示独立思考中指示器）
+    expect(find.textContaining('生成中'), findsOneWidget);
+    expect(find.text('思考中…'), findsNothing);
 
     // token 流式渲染（16ms 合并 + 48ms reveal）
     api.emit(const TokenSseEvent('流式'));

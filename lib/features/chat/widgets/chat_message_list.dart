@@ -1433,7 +1433,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? 0
         : liveTimeline == null
         ? 1
-        : (liveTimeline.isEmpty ? 1 : liveTimeline.length);
+        : liveTimeline.length;
 
     var itemCount = transcript.length + liveItemCount;
     if (showStatusLine) itemCount++;
@@ -1634,34 +1634,29 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     tail--;
                   }
                   if (streaming != null && timelineActive) {
-                    if (liveTimeline.isEmpty) {
-                      if (tail == 0) return const _StreamingThinkingIndicator();
-                      tail--;
-                    } else {
-                      if (tail < liveTimeline.length) {
-                        final liveEntry = liveTimeline[tail];
-                        final liveKey = _itemKeys.putIfAbsent(
-                          liveEntry.renderKey,
-                          () => GlobalKey(),
-                        );
-                        if (liveEntry.toolGroup != null) {
-                          _itemKeys.putIfAbsent(
-                            liveEntry.toolGroup!.id,
-                            () => liveKey,
-                          );
-                        }
-                        return KeyedSubtree(
-                          key: liveKey,
-                          child: _LiveTimelineItem(
-                            sessionId: sessionId,
-                            entry: liveEntry,
-                            streamingMessage: streaming,
-                            hideThinking: hideThinking,
-                          ),
+                    if (tail < liveTimeline.length) {
+                      final liveEntry = liveTimeline[tail];
+                      final liveKey = _itemKeys.putIfAbsent(
+                        liveEntry.renderKey,
+                        () => GlobalKey(),
+                      );
+                      if (liveEntry.toolGroup != null) {
+                        _itemKeys.putIfAbsent(
+                          liveEntry.toolGroup!.id,
+                          () => liveKey,
                         );
                       }
-                      tail -= liveTimeline.length;
+                      return KeyedSubtree(
+                        key: liveKey,
+                        child: _LiveTimelineItem(
+                          sessionId: sessionId,
+                          entry: liveEntry,
+                          streamingMessage: streaming,
+                          hideThinking: hideThinking,
+                        ),
+                      );
                     }
+                    tail -= liveTimeline.length;
                   }
                   if (showStatusLine) {
                     if (tail == 0) {
@@ -1818,47 +1813,15 @@ class _StreamingBubble extends ConsumerWidget {
         ],
       );
     }
-    // 空流式气泡 → 思考中指示器。
-    return const _StreamingThinkingIndicator();
-  }
-}
-
-/// 思考中指示器（空流式气泡 / live 时间线空态共用）。
-class _StreamingThinkingIndicator extends StatelessWidget {
-  const _StreamingThinkingIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            child: Row(
-              children: [
-                const CupertinoActivityIndicator(radius: 8),
-                const SizedBox(width: 8),
-                Text(
-                  l10n.thinkingIndicator,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    // 空流式气泡兜底。
+    return const SizedBox.shrink();
   }
 }
 
 /// #52 统一状态行：聊天列表尾部的连接/回合状态指示。
 /// 取代旧 _ReconnectingIndicator / _SendingIndicator；
 /// 按优先级渲染：prefill error → recovery → sending → 等待 prefill → 已重连 → 生成中；
+/// 所有非空闲状态行统一靠左并附加「已工作 MM:SS」耗时；
 /// 空闲自动隐藏（由外层 showStatusLine 控制占位）。
 class _ChatStatusLine extends ConsumerStatefulWidget {
   const _ChatStatusLine({required this.sessionId});
@@ -1874,6 +1837,7 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
   /// 重连成功「已重连」绿点渐隐控制器（1.5s）。
   late final AnimationController _flashController;
   bool _flashReconnected = false;
+  Timer? _elapsedTimer;
 
   @override
   void initState() {
@@ -1887,12 +1851,41 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
             setState(() => _flashReconnected = false);
           }
         });
+    _startElapsedTimer();
+  }
+
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
     _flashController.dispose();
     super.dispose();
+  }
+
+  DateTime _now() {
+    try {
+      return ref.read(chatClockProvider)();
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
+  String _formatElapsed(int? turnStartedMillis) {
+    if (turnStartedMillis == null) return '00:00';
+    final nowMs = _now().millisecondsSinceEpoch;
+    final elapsedMs = (nowMs - turnStartedMillis).clamp(0, 86400000);
+    final duration = Duration(milliseconds: elapsedMs);
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -1911,6 +1904,9 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
       chatControllerProvider(sessionId)
           .select((s) => s.stream.liveTokensPerSecond),
     );
+    final turnStartedMillis = ref.watch(
+      chatControllerProvider(sessionId).select((s) => s.turnStartedMillis),
+    );
 
     // 重连成功（recovery 非 idle → idle）→ 触发「已重连」绿点 1.5s 渐隐。
     ref.listen<ActiveStreamRecoveryState>(
@@ -1926,30 +1922,35 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
       },
     );
 
+    final elapsedStr = _formatElapsed(turnStartedMillis);
+    final workSuffix = turnStartedMillis != null
+        ? ' · ${l10n.chatStatusWorkingFor(elapsedStr)}'
+        : '';
+
     if (prefillStatus == ContextPrefillStatus.error) {
       return _StatusLineRow(
         color: CupertinoColors.systemRed,
-        label: l10n.chatStatusContextUnavailable,
+        label: l10n.chatStatusContextUnavailable + workSuffix,
       );
     }
     if (recovery == ActiveStreamRecoveryState.checking) {
       return _StatusLineRow(
         color: CupertinoColors.systemOrange,
-        label: l10n.chatStatusInvestigating,
+        label: l10n.chatStatusInvestigating + workSuffix,
         showSpinner: true,
       );
     }
     if (recovery == ActiveStreamRecoveryState.reconnecting) {
       return _StatusLineRow(
         color: CupertinoColors.systemOrange,
-        label: l10n.chatStatusReconnecting,
+        label: l10n.chatStatusReconnecting + workSuffix,
         showSpinner: true,
       );
     }
     if (phase == ChatPhase.sending) {
       return _StatusLineRow(
         color: CupertinoColors.secondaryLabel,
-        label: l10n.chatStatusConnecting,
+        label: l10n.chatStatusConnecting + workSuffix,
         showSpinner: true,
       );
     }
@@ -1957,7 +1958,7 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
         prefillStatus == ContextPrefillStatus.notConfigured) {
       return _StatusLineRow(
         color: CupertinoColors.systemYellow,
-        label: l10n.chatStatusWaitingResponse,
+        label: l10n.chatStatusWaitingResponse + workSuffix,
         showSpinner: true,
       );
     }
@@ -1977,14 +1978,14 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
           : '';
       return _StatusLineRow(
         color: CupertinoColors.systemGreen,
-        label: l10n.chatStatusGenerating + tpsSuffix,
+        label: l10n.chatStatusGenerating + tpsSuffix + workSuffix,
       );
     }
     return const SizedBox.shrink();
   }
 }
 
-/// 状态行单行：状态点/转圈 + 文案（secondaryLabel 13px，居中）。
+/// 状态行单行：状态点/转圈 + 文案（secondaryLabel 13px，靠左对齐）。
 class _StatusLineRow extends StatelessWidget {
   const _StatusLineRow({this.color, this.label = '', this.showSpinner = false});
 
@@ -2003,7 +2004,7 @@ class _StatusLineRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           if (showSpinner || resolved == null)
             CupertinoActivityIndicator(

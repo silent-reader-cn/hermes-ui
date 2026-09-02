@@ -198,17 +198,18 @@ void main() {
     expectVerticalOrder(tester, ['live:text:2', 'live:tools:3', 'live:text:5']);
   });
 
-  testWidgets('reasoning 已到时未 flush：显示思考中指示器，flush 后出卡', (tester) async {
+  testWidgets('reasoning 已到时未 flush：状态行显示生成中，flush 后出卡', (tester) async {
     final api = await pumpStreamingSession(tester);
 
     api.emit(const ReasoningSseEvent('首个思考段'));
     await tester.pump();
-    // 未到 16ms 合并 tick：断点已建但文本未落地 → 时间线空 → 指示器。
+    // 未到 16ms 合并 tick：断点已建但文本未落地 → 时间线空 → 状态行「生成中」。
     expect(
-      find.byType(CupertinoActivityIndicator),
-      findsWidgets,
-      reason: '流式空态显示思考中指示器',
+      find.textContaining('生成中'),
+      findsOneWidget,
+      reason: '流式空态由状态行表达',
     );
+    expect(find.text('思考中…'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 16));
     expect(find.byKey(const ValueKey('live:tools:merged')), findsOneWidget);

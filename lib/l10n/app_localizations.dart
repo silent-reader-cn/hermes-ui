@@ -1409,6 +1409,10 @@ class AppLocalizations {
       ? 'Show real-time status at the bottom of chat message list'
       : '在聊天消息列表底部显示实时连接与生成状态';
 
+  /// 状态行耗时后缀（意见3）：如「已工作 01:05」。
+  String chatStatusWorkingFor(String elapsed) =>
+      isEnglish ? 'Working for $elapsed' : '已工作 $elapsed';
+
   // ---------------------------------------------------------------------------
   // 13. Install Guide (Windows Local Deployment)
   // ---------------------------------------------------------------------------
@@ -1500,6 +1504,11 @@ class AppLocalizations {
       isEnglish ? 'Please select a provider' : '请选择模型服务商';
   String get installGuideApiKeyRequired =>
       isEnglish ? 'API Key is required for this provider' : '该服务商需要填写 API Key';
+  String get autoOpenContextTitle =>
+      isEnglish ? 'Auto-open context on new session' : '新建会话自动打开上下文';
+  String get autoOpenContextDesc => isEnglish
+      ? 'Open the context panel automatically when creating a new session to set workspace and model'
+      : '新建会话时自动打开上下文面板，便于设置工作区和模型';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??

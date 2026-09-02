@@ -359,6 +359,7 @@ class ChatState {
     this.isRevealQueueEmpty = true,
     this.prefillStatus,
     this.prefillLabel,
+    this.turnStartedMillis,
   });
 
   /// 初始状态（会话参数经 family key 传入）。
@@ -483,6 +484,9 @@ class ChatState {
   /// 上下文 prefill 说明标签。
   final String? prefillLabel;
 
+  /// 回合开始时刻（Unix 毫秒，发送/开始流式时记录，状态行耗时 MM:SS 起点）。
+  final int? turnStartedMillis;
+
   /// isStartingChat（sending 相位）。
   bool get isStartingChat => phase == ChatPhase.sending;
 
@@ -541,6 +545,8 @@ class ChatState {
     bool clearPrefillStatus = false,
     String? prefillLabel,
     bool clearPrefillLabel = false,
+    int? turnStartedMillis,
+    bool clearTurnStartedMillis = false,
   }) {
     return ChatState(
       sessionId: sessionId ?? this.sessionId,
@@ -607,6 +613,9 @@ class ChatState {
       prefillLabel: clearPrefillLabel
           ? null
           : (prefillLabel ?? this.prefillLabel),
+      turnStartedMillis: clearTurnStartedMillis
+          ? null
+          : (turnStartedMillis ?? this.turnStartedMillis),
     );
   }
 

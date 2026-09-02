@@ -21,6 +21,7 @@ import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
+import '../settings/settings_providers.dart';
 import '../shared/app_navigation.dart';
 import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
@@ -700,6 +701,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final id = await controller.createSession(workspace: workspace);
     if (!context.mounted) return;
     if (id != null) {
+      ref.read(recentlyCreatedSessionIdProvider.notifier).markCreated(id);
       _openChatRoute(context, id);
     }
   }

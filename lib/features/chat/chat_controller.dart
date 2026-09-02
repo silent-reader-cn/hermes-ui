@@ -1004,6 +1004,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearErrorMessage: true,
       clearPrefillStatus: true,
       clearPrefillLabel: true,
+      turnStartedMillis: _now().millisecondsSinceEpoch,
     );
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
@@ -1036,6 +1037,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         state = state.copyWith(
           phase: ChatPhase.idle,
           sendErrorMessage: response.error ?? '服务器未返回流 ID，发送失败。',
+          clearTurnStartedMillis: true,
         );
         return false;
       }
@@ -1061,6 +1063,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       state = state.copyWith(
         phase: ChatPhase.idle,
         sendErrorMessage: error.message,
+        clearTurnStartedMillis: true,
       );
       return false;
     }
@@ -1168,6 +1171,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearPrefillStatus: true,
       clearPrefillLabel: true,
       liveTimelinePoints: const [],
+      turnStartedMillis:
+          state.turnStartedMillis ?? _now().millisecondsSinceEpoch,
       stream: state.stream.copyWith(
         activeStreamId: streamId,
         isSuspended: false,
@@ -2699,6 +2704,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearSteerHints: true,
       clearPrefillStatus: true,
       clearPrefillLabel: true,
+      clearTurnStartedMillis: true,
       liveTimelinePoints: const [],
       pendingAction: const ChatPendingActionState(),
       stream: state.stream.copyWith(

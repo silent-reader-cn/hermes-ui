@@ -29,6 +29,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
 import '../../settings/chat_send_shortcut_settings.dart';
 import '../../settings/composer_settings.dart';
+import '../../settings/settings_providers.dart';
 import '../../chat/widgets/perf_monitor_panel.dart';
 import '../../desktop/desktop_settings.dart';
 import '../../../core/models/context_window_snapshot.dart';
@@ -76,6 +77,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   late GlobalKey _contextIndicatorKey;
   bool _hasText = false;
   bool _draftApplied = false;
+  bool _pendingAutoOpen = false;
 
   @override
   void initState() {
@@ -84,6 +86,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _contextIndicatorKey = GlobalKey(
       debugLabel: 'chat-context-${widget.sessionId}',
     );
+    _checkRecentlyCreatedOnMount();
     // 挂载后恢复本会话草稿（postFrame 避开 build 期 setState）；挂载时若已有
     // 未消费的 prefill（切换会话等罕见遗留）一并消费。
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -93,7 +96,34 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           .composerPrefill;
       if (current != null) _consumePrefill(current);
       _restoreDraft();
+      _tryAutoOpenContextPopover();
     });
+  }
+
+  void _checkRecentlyCreatedOnMount() {
+    _pendingAutoOpen = false;
+    final recentlyCreated = ref.read(recentlyCreatedSessionIdProvider);
+    if (recentlyCreated == widget.sessionId) {
+      scheduleMicrotask(() {
+        if (mounted) {
+          ref.read(recentlyCreatedSessionIdProvider.notifier).clear();
+        }
+      });
+      final autoOpenEnabled = ref.read(autoOpenContextOnNewSessionProvider);
+      if (autoOpenEnabled) {
+        _pendingAutoOpen = true;
+      }
+    }
+  }
+
+  void _tryAutoOpenContextPopover() {
+    if (!_pendingAutoOpen || !mounted) return;
+    final snapshot = ref
+        .read(chatControllerProvider(widget.sessionId))
+        .contextWindowSnapshot;
+    if (snapshot == null) return;
+    _pendingAutoOpen = false;
+    unawaited(_showContextPopover());
   }
 
   /// 从本会话草稿存储恢复输入框（仅当输入框为空时，避免覆盖 prefill）。
@@ -130,6 +160,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _contextIndicatorKey = GlobalKey(
         debugLabel: 'chat-context-${widget.sessionId}',
       );
+      _checkRecentlyCreatedOnMount();
       // 切会话：清空旧文本，postFrame 恢复新会话草稿（各会话草稿独立）。
       _textController.clear();
       _draftApplied = false;
@@ -138,6 +169,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _restoreDraft();
+        _tryAutoOpenContextPopover();
       });
     }
   }
@@ -157,6 +189,21 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     ref.listen<ChatState>(chatControllerProvider(sessionId), (previous, next) {
       if (sessionId != widget.sessionId) return;
       _consumePrefill(next.composerPrefill);
+    });
+  }
+
+  /// 监听新会话的 contextWindowSnapshot 就绪并在首次进入时自动打开上下文弹窗。
+  void _bindAutoOpenListener(String sessionId) {
+    ref.listen<ChatState>(chatControllerProvider(sessionId), (previous, next) {
+      if (sessionId != widget.sessionId) return;
+      if (_pendingAutoOpen && next.contextWindowSnapshot != null) {
+        _pendingAutoOpen = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            unawaited(_showContextPopover());
+          }
+        });
+      }
     });
   }
 
@@ -534,6 +581,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   Future<void> _showContextPopover() async {
+    if (!mounted) return;
     final snapshot = ref
         .read(chatControllerProvider(widget.sessionId))
         .contextWindowSnapshot;
@@ -562,6 +610,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     // listener / rebuild，不会再次回调 didChangeDependencies —— #25 实证：prefill
     // 已写入 provider 但输入框永不回填，根因即消费逻辑挂错生命周期）。
     _bindPrefillListener(widget.sessionId);
+    _bindAutoOpenListener(widget.sessionId);
     final l10n = AppLocalizations.of(context);
     final phase = ref.watch(chatPhaseProvider(widget.sessionId));
     final isStreaming =
