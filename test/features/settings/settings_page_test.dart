@@ -1901,6 +1901,10 @@ void main() {
         api: buildApi(),
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
         activeId: 'c1',
+        // 注入 fake 通知服务：真实服务 areNotificationsEnabled 会触发
+        // DiagnosticsService 500ms 防抖保存 timer，动画时长变化后
+        // pumpAndSettle 不再天然排空 → Timer still pending（2026-09-02）。
+        notificationService: _FakeTurnNotificationService(),
       );
       await pumpPage(
         tester,

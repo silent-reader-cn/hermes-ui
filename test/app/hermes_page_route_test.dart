@@ -120,8 +120,8 @@ void main() {
     expect(midDx, lessThanOrEqualTo(1.0));
     expect(midDx, greaterThan(earlyDx)); // 向右滑出，dx 递增
 
-    await tester.pump(const Duration(milliseconds: 100));
-    // 深帧（累计 360ms，接近 400ms 动画尾声但 route 未移除）：dx 明显为正且接近 1.0。
+    await tester.pump(const Duration(milliseconds: 20));
+    // 深帧（累计 280ms，接近 300ms 动画尾声但 route 未移除）：dx 明显为正且接近 1.0。
     expect(_slideDx(tester), greaterThan(0.5));
     expect(_slideDx(tester), lessThanOrEqualTo(1.0));
 

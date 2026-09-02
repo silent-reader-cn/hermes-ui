@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../shared/app_navigation.dart';
 import 'session_entry_visibility.dart';
 
 /// 会话列表顶部工具行入口组件（对齐 Hermex SessionSidebarUtilityRows）。
@@ -161,7 +161,7 @@ class SessionListUtilityRows extends ConsumerWidget {
           if (customCallback != null) {
             customCallback();
           } else {
-            context.go(route);
+            openAdaptiveRoute(context, route);
           }
         },
         child: Column(

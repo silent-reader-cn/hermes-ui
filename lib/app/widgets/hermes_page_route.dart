@@ -7,7 +7,9 @@ import 'package:flutter/widgets.dart';
 /// - push 进入：新页从右滑入（x: +1.0 → 0），保持 Cupertino 观感不变；
 /// - pop 返回：当前页向右滑出（x: 0 → +1.0，iOS 标准，「前页从左挪到右
 ///   露出底层」），底层页保持静止、当前页叠轻微淡出；
-/// - 时长 400ms、缓动 `Curves.easeOut`，对齐 Cupertino 风格。
+/// - 时长 300ms、缓动 `Curves.easeOut`（forward）/ `Curves.easeIn`
+///   （reverse，pop 与 push 视觉同步的「先快后慢」），参数 2026-09-02
+///   主人拍板：两侧统一 300ms（原 400ms 感知偏慢）。
 ///
 /// 生成路由复用的 `HermesPage` 供 go_router `pageBuilder` 使用，
 /// 使 `context.push(...)` 的转场与本路由一致。
@@ -17,13 +19,13 @@ class HermesPageRoute<T> extends PageRouteBuilder<T> {
     required WidgetBuilder builder,
     super.settings,
     super.fullscreenDialog,
-    super.transitionDuration = const Duration(milliseconds: 400),
-    super.reverseTransitionDuration = const Duration(milliseconds: 400),
+    super.transitionDuration = const Duration(milliseconds: 300),
+    super.reverseTransitionDuration = const Duration(milliseconds: 300),
   }) : super(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              builder(context),
-          transitionsBuilder: _transitionsBuilder,
-        );
+         pageBuilder: (context, animation, secondaryAnimation) =>
+             builder(context),
+         transitionsBuilder: _transitionsBuilder,
+       );
 
   /// 退出时当前页淡出的最低透明度（轻微淡出，用于 pop 滑出过程）。
   static const double _exitFadeTarget = 0.8;
@@ -67,7 +69,7 @@ class _HermesPageTransition extends StatelessWidget {
     final Animation<double> curved = CurvedAnimation(
       parent: primaryRouteAnimation,
       curve: Curves.easeOut,
-      reverseCurve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
     );
     // SlideTransition 的 Offset 为分数位移（1.0 = 子组件自身宽度）。
     // push（正向，t 0→1）：x +1.0→0 从右滑入；

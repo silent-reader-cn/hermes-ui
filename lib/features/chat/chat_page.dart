@@ -15,6 +15,7 @@ import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../notifications/notification_providers.dart';
 import '../shared/app_back_button.dart';
+import '../shared/app_navigation.dart';
 import 'chat_controller.dart';
 import 'chat_providers.dart';
 import 'chat_state.dart';
@@ -184,7 +185,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final box = key.currentContext?.findRenderObject() as RenderBox?;
     if (overlayBox == null || box == null || !box.attached) return null;
     final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
-    return Rect.fromLTWH(topLeft.dx, topLeft.dy, box.size.width, box.size.height);
+    return Rect.fromLTWH(
+      topLeft.dx,
+      topLeft.dy,
+      box.size.width,
+      box.size.height,
+    );
   }
 
   @override
@@ -230,32 +236,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(state.displayTitle, overflow: TextOverflow.ellipsis),
-            if (state.parentSessionId != null)
-              CupertinoButton(
-                key: const ValueKey('chat-branch-badge'),
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 18),
-                onPressed: () =>
-                    _showParentSessionDialog(context, state.parentSessionId!),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CupertinoIcons.arrow_2_squarepath,
-                      size: 12,
-                      color: secondaryText.resolveFrom(context),
+                if (state.parentSessionId != null)
+                  CupertinoButton(
+                    key: const ValueKey('chat-branch-badge'),
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 18),
+                    onPressed: () => _showParentSessionDialog(
+                      context,
+                      state.parentSessionId!,
                     ),
-                    const SizedBox(width: 3),
-                    Text(
-                      l10n.branchBadge,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryText.resolveFrom(context),
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          CupertinoIcons.arrow_2_squarepath,
+                          size: 12,
+                          color: secondaryText.resolveFrom(context),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          l10n.branchBadge,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secondaryText.resolveFrom(context),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
               ],
             ),
           ),
@@ -404,7 +412,7 @@ Future<void> _showSessionActions(
         label: l10n.archive,
         onPressed: () async {
           if (await controller.setArchived(true)) {
-            if (context.mounted) context.go('/');
+            if (context.mounted) leaveToRoot(context);
           }
         },
       ),
@@ -459,7 +467,7 @@ Future<void> _showSessionActions(
           );
           if (confirmed) {
             if (await controller.deleteSession()) {
-              if (context.mounted) context.go('/');
+              if (context.mounted) leaveToRoot(context);
             }
           }
         },
@@ -1024,10 +1032,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
         onPressed: onPressed,
         child: Text(
           choice,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         ),
       ),
     );

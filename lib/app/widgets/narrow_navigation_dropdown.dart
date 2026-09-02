@@ -52,43 +52,43 @@ class _NarrowNavigationDropdownButtonState
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-tasks'),
           label: l10n.tasks,
-          onPressed: () => context.go('/tasks'),
+          onPressed: () => unawaited(context.push('/tasks')),
         ),
       if (visibility.kanban)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-kanban'),
           label: l10n.kanban,
-          onPressed: () => context.go('/kanban'),
+          onPressed: () => unawaited(context.push('/kanban')),
         ),
       if (visibility.workspaces)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-workspaces'),
           label: l10n.workspacesTitle,
-          onPressed: () => context.go('/workspaces'),
+          onPressed: () => unawaited(context.push('/workspaces')),
         ),
       if (visibility.skills)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-skills'),
           label: l10n.skills,
-          onPressed: () => context.go('/skills'),
+          onPressed: () => unawaited(context.push('/skills')),
         ),
       if (visibility.insights)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-insights'),
           label: l10n.insights,
-          onPressed: () => context.go('/insights'),
+          onPressed: () => unawaited(context.push('/insights')),
         ),
       if (visibility.memory)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-memory'),
           label: l10n.memoryTitle,
-          onPressed: () => context.go('/memory'),
+          onPressed: () => unawaited(context.push('/memory')),
         ),
       if (visibility.downloads)
         AdaptiveMenuItem(
           key: const ValueKey('narrow-nav-downloads'),
           label: l10n.downloadsTitle,
-          onPressed: () => context.go('/downloads'),
+          onPressed: () => unawaited(context.push('/downloads')),
         ),
     ];
 

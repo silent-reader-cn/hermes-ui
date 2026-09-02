@@ -21,6 +21,7 @@ import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
+import '../shared/app_navigation.dart';
 import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
@@ -305,7 +306,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         if (state?.isSelectionMode == true) {
           controller.clearSelection();
         } else {
-          context.go('/settings');
+          openAdaptiveRoute(context, '/settings');
         }
       },
       child: Icon(
