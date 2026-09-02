@@ -2,7 +2,7 @@
 
 > 版本：v1.0 ｜ 领头人：柚子 ｜ 类型：规格先行（编码前置）
 > 产出：`docs/specs/session-auto-refresh-spec.md`
-> 模型：`gemini-3.7-flash-high`（固定）
+> 模型：`gemini-3.8-flash-high`（固定）
 > 约束：不对 `main` 产生 commit；仅落盘规格
 > 蓝本：`.reference/hermex-src/Features/SessionList/SessionListViewModel.swift`（`load()` 仅手动触发）、`lib/features/session_list/*`、`lib/app/shell/adaptive_shell.dart`、`lib/features/desktop/*`
 > 审计基准提交：以落盘时 `git rev-parse HEAD` 为准（见尾注）

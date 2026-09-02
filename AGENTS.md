@@ -288,7 +288,7 @@ python tools/fake_gateway/smoke_test.py
 - 文件级分区（例：`lib/features/chat/*` 归 A，`lib/core/models/*` 归 B，禁止交叉写）
 - 验收标准（具体命令与阈值：`C:/tmp/f.bat analyze` 零告警、`C:/tmp/f.bat test` 全绿 + `--update-goldens`、无 Material 混入）
 - Git 纪律：**不要 commit**，Leader 统一提交
-- 模型固定：`gemini-3.7-flash-high`（禁换）
+- 模型固定：`gemini-3.8-flash-high`（禁换）
 - 产出要求：手写 fromJson/toJson 容错、Cupertino 全量、Riverpod 后缀规范等（同本文第 4-8 节）
 
 ### 12.2 agy 调用
@@ -296,10 +296,10 @@ python tools/fake_gateway/smoke_test.py
 ```bash
 # 探活
 command -v agy && agy --version
-agy models   # 确认 gemini-3.7-flash-high 在列
+agy models   # 确认 gemini-3.8-flash-high 在列
 
 # 一把梭（workdir 必须指到对应 worktree，否则 TASK.md 找不到会空 prompt）
-agy --model "gemini-3.7-flash-high" -p "$(cat TASK.md)" --print-timeout 40m --dangerously-skip-permissions
+agy --model "gemini-3.8-flash-high" -p "$(cat TASK.md)" --print-timeout 40m --dangerously-skip-permissions
 ```
 
 参数：`--model` 必须在 `-p` 前；`-p/--print` 非交互纯文本；`--print-timeout 40m` 起步（默认 5m 太紧）；`--dangerously-skip-permissions` 无人值守；`workdir` 指 worktree。

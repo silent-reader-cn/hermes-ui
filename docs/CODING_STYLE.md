@@ -96,4 +96,4 @@ docs/specs/(11+1 backend-api-details) + docs/PROTOCOL_NOTES.md 等 — 详见 AG
 
 ## 10. 并行治理（摘要）
 
-本仓库由柚子担任 Leader，通过 AGY 并行子代理推进，固定五步闭环：规格先行 → 编码并行（文件级分区）→ 盯场 steer → 独立复验（analyze+test 全量重跑）→ 统一提交。子代理任务书自包含、禁止自行 commit、模型固定 `gemini-3.7-flash-high`，Windows 下 flutter 走封装 bat。完整规范见 `AGENTS.md` §12。
+本仓库由柚子担任 Leader，通过 AGY 并行子代理推进，固定五步闭环：规格先行 → 编码并行（文件级分区）→ 盯场 steer → 独立复验（analyze+test 全量重跑）→ 统一提交。子代理任务书自包含、禁止自行 commit、模型固定 `gemini-3.8-flash-high`，Windows 下 flutter 走封装 bat。完整规范见 `AGENTS.md` §12。

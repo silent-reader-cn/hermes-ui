@@ -1,7 +1,7 @@
 # 选中上下文渲染与交互 + 复制提示优化 规格
 
 > 版本：v1.0 — 2026-08-22
-> 模型：`gemini-3.7-flash-high`（固定，不可换）
+> 模型：`gemini-3.8-flash-high`（固定，不可换）
 > 蓝本：`D:\hermes-webui\static\messages.js` / `D:\hermes-webui\static\ui.js` / `D:\hermes-webui\static\style.css` / `lib/features/chat/widgets/injected_notice_card.dart` / `lib/features/chat/widgets/message_bubble.dart` / `lib/features/chat/widgets/chat_media_parser.dart` / `lib/features/chat/widgets/markdown_styles.dart` / `lib/features/chat/widgets/chat_message_list.dart` / `lib/features/chat/widgets/chat_input_bar.dart` / `lib/features/chat/chat_page.dart` / `lib/features/chat/chat_controller.dart`
 > 用途：后续编码子代理按本文直接实现 `SelectedContext*` 解析/渲染与 composer 待发区及复制提示优化，不再重读 WebUI 源码。关键结论均带源码行号。
 

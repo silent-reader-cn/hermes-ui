@@ -1,6 +1,6 @@
 # Hermes WebUI 后端接口大全参考目录（hermes-webui fork @ :30002）
 
-> 最后更新：2026-08-21 ｜ 生成方式：4×AGY(gemini-3.7-flash-high) 并行静态审计后端 + 客户端 + Leader(routes.py 行号) 独立抽查
+> 最后更新：2026-08-21 ｜ 生成方式：4×AGY(gemini-3.8-flash-high) 并行静态审计后端 + 客户端 + Leader(routes.py 行号) 独立抽查
 > 后端权威源：`D:\hermes-webui\api\routes.py`（26554 行单文件分发）+ `api/` 下 65 个模块 ｜ dispatch 区：routes.py L11982–L16506
 > 详细卡片：`docs/specs/backend-api-details/`（domain_a/b/c 全端点卡片 + client-bound-endpoints 客户端三层链路）
 > 用途：Hermex→Flutter 客户端**后续功能对接的唯一后端索引**。
@@ -728,7 +728,7 @@ Hermes WebUI 后端 routes.py（222 路径 = 后端全部能力）
 ## 8. 附录：审计方法与文件索引
 
 - 后端权威路由表自动提取：`api/routes.py` dispatch 区 236 条（222 唯一路径），行号锚点 robot 校验
-- AGY 并行 4 子代理（gemini-3.7-flash-high）：
+- AGY 并行 4 子代理（gemini-3.8-flash-high）：
   - `docs/specs/backend-api-details/domain_a_system-auth-config.md`（88 卡片：认证/系统/模型/设置/插件/onboarding/profile/指令/仪表盘/MCP/Notes/Rollback/ops）
   - `docs/specs/backend-api-details/domain_b_session-chat-files.md`（98 卡片：session 全系/chat/审批/澄清/终端/分享/上传/文件/媒体 + SSE 陷阱）
   - `docs/specs/backend-api-details/domain_c_tools-kanban-skills.md`（87 卡片：git/workspace/cron/kanban 25 子端点/skills/memory/insights/prompts/wiki/rollback）
