@@ -395,10 +395,16 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         // 任何非触摸手势（新消息到达、键盘/输入栏高度挤压、窗口 resize、程序滚动等）
         // 一律不得置 _userHasScrolled = true；跟随状态的取消与判定全部交由
         // 手势状态机（及大纲跳转/高亮定位等主动导航）处理。
-        final wasNear = _nearBottom;
-        _nearBottom = false;
-        if (wasNear && mounted) {
-          setState(() {});
+        if (!_isUserInteracting && !_userHasScrolled) {
+          // 非用户交互且未主动离底：由图片异步加载、未知高度条目布局撑高或 extent 变化引起。
+          // 保持 _nearBottom = true，触发自动跟底，绝不打断进入时的底部跟随。
+          _scrollToBottom(animated: false);
+        } else {
+          final wasNear = _nearBottom;
+          _nearBottom = false;
+          if (wasNear && mounted) {
+            setState(() {});
+          }
         }
       }
     }
