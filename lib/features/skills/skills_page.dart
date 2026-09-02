@@ -127,6 +127,9 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
       for (final group in groups)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            dividerMargin: 0,
+            additionalDividerMargin: 0,
+
             hasLeading: false,
             header: Text(_skillsGroupTitle(context, group.title)),
             children: [

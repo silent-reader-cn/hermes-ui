@@ -136,3 +136,24 @@
   3. `flutter analyze` 零告警；`flutter test` 全绿（含 6 个 fake 编译 + 既有 `background_keepalive_service_test`/`settings_page_test` 相关用例）
   4. 真机确认项（主人侧）：升级场景在被拒机器上打开保活页可见警示 → 跳系统设置开启 → 保活通知恢复
 - 备注：主因（升级保留系统状态）无代码可逆，本次修复交付「状态可见 + 引导可跳 + 链路去假值」；渠道被关排查路径写入回复备忘（系统设置 → 应用管理 → Hermes → 通知 → 「后台生成保活」渠道）。
+
+---
+
+### #48 [P2] 列表分割线全宽贯穿 — 设置页及全库 CupertinoListSection 同源修复（问题类 · 主人 2026-09-02 指认设置页 + 要求查同源）
+
+- 类型：问题类。主人：「聊天列表分隔符左侧少一截之前修过（#28），现在设置界面各设置项之间也有；检查是否还有类似同源问题一起修复」。
+- 根因（SDK 源码实证 `C:/Users/Admin/flutter/packages/flutter/lib/src/cupertino/list_section.dart`）：行间**短分割线**组装为 `margin: EdgeInsetsDirectional.only(start: dividerMargin + additionalDividerMargin)`——
+  - base 构造（`CupertinoListSection(`，设置页用）默认 `dividerMargin=_kBaseDividerMargin=20`，`hasLeading` 默认 true 时 `additionalDividerMargin=_kBaseAdditionalDividerMargin=44` → 起点 **64px**（分组顶/底全宽 longDivider 除外，故「行间少一截」与框线割裂）
+  - insetGrouped 默认 `_kInsetDividerMargin=14` + (hasLeading ? 42 : 14) → 起点 **56/28px**
+  - #28 只修了会话列表筛选弹层 4 处（`dividerMargin:0 + additionalDividerMargin:0`），其余全库未清
+- 位置（全库 39 处构造点统一注入 `dividerMargin: 0, additionalDividerMargin: 0`，同 #28 写法）：
+  - `lib/features/settings/settings_page.dart` 13 处（外观/对话/二级入口/定时会话/通知/服务器/服务器编辑器×2/模型 loading·error·data/关于×2）
+  - `lib/features/settings/settings_subpages.dart` 3 处（会话列表入口/会话行信息/桌面）
+  - insetGrouped 页面 11 文件 23 处：memory_page×4、insights_page×4、git_page×4、kanban_page×4、git_branch_tree×1、diagnostics_page×1、skills_page×1、tasks_page×1、workspace_page×1、workspace_manager_page×1、scheduled_session_disclosure×1
+- 现状 vs 预期：现状行间分割线左侧缩进起笔（64/56/28px）；预期全长贯穿（起点=容器左缘，与 #28 一致）。
+- 验收：
+  1. `flutter analyze` 零告警；`flutter test` 全绿（+ 新增回归 `test/features/settings/settings_divider_full_width_test.dart` 2 例）
+  2. 新增回归断言：设置页首屏/滚动中段/滚动到底/加载态/错误态下所有已构建 `CupertinoListSection.dividerMargin == additionalDividerMargin == 0`
+  3. 金照 10 张（git/insights/settings/tasks/workspace × light/dark）已 `--update-goldens` 重生成（分割线像素变化同步基准）
+  4. 实机确认项（主人侧）：设置页各设置项之间分隔线从屏幕左缘贯穿到右缘
+- 备注：① `lib/features/notifications/background_keepalive_settings_page.dart`（#44 并行未收口）还有 2 处 base section 同源，收口后须补；② 全宽分割线为主人审美拍板方向（#28 先例），后续新增列表页一律沿用；③ 金照无 memory/kanban/diagnostics/skills 快照覆盖，这几页靠人工复核。

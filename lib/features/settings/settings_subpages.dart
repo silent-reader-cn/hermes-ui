@@ -115,6 +115,9 @@ class SessionListEntriesSection extends ConsumerWidget {
     final controller = ref.read(sessionEntryVisibilityProvider.notifier);
 
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.sessionListEntriesSection),
       children: [
         CupertinoListTile(
@@ -224,6 +227,9 @@ class SessionRowSubtitleSection extends ConsumerWidget {
     final controller = ref.read(sessionRowSubtitleSettingsProvider.notifier);
 
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.sessionRowSubtitleSection),
       children: [
         CupertinoListTile(
@@ -310,6 +316,9 @@ class DesktopSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(desktopSettingsProvider);
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.desktopSection),
       children: [
         CupertinoListTile(

@@ -159,6 +159,9 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     Widget rowsSection({required String header, required List<CronJob> jobs}) {
       return SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           hasLeading: false,
           header: Text('$header（${jobs.length}）'),
           children: [
@@ -268,9 +271,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       ref.read(tasksControllerProvider.notifier).refresh();
 
   void _openEditor(BuildContext context, {CronJob? job}) {
-    Navigator.of(
-      context,
-    ).push(HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
+    Navigator.of(context)
+        .push(HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
   }
 
   void _showRowActions(BuildContext context, CronJob job, GlobalKey anchorKey) {
@@ -500,7 +502,9 @@ class _TaskRowState extends State<_TaskRow> {
                 KeyedSubtree(
                   key: _actionKey,
                   child: AccessibleButton(
-                    key: ValueKey('tasks-actions-${widget.job.jobId ?? widget.job.id}'),
+                    key: ValueKey(
+                      'tasks-actions-${widget.job.jobId ?? widget.job.id}',
+                    ),
                     label: l10n.taskActions,
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(36, 36),

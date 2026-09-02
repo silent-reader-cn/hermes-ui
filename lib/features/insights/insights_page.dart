@@ -112,6 +112,9 @@ class InsightsPage extends ConsumerWidget {
       ),
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           header: _periodHeader(context, response, timeframe),
           children: [
             _MetricTile(
@@ -162,12 +165,14 @@ class InsightsPage extends ConsumerWidget {
       if (_recentDailyTokens(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            dividerMargin: 0,
+            additionalDividerMargin: 0,
+
             header: Text(_dailyChartTitle(context, timeframe, response)),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                child:
-                    _DailyTokensBarChart(days: _recentDailyTokens(response)),
+                child: _DailyTokensBarChart(days: _recentDailyTokens(response)),
               ),
             ],
           ),
@@ -175,6 +180,9 @@ class InsightsPage extends ConsumerWidget {
       if (_hasActivity(response))
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            dividerMargin: 0,
+            additionalDividerMargin: 0,
+
             hasLeading: false,
             header: Text(l10n.activity),
             children: [
@@ -212,6 +220,9 @@ class InsightsPage extends ConsumerWidget {
       if (_modelBreakdowns(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            dividerMargin: 0,
+            additionalDividerMargin: 0,
+
             hasLeading: false,
             header: Text(l10n.models),
             children: [
@@ -438,8 +449,9 @@ class _ModelBreakdownTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final share = model.displayShare;
-    final title =
-        model.model?.isNotEmpty == true ? model.model! : l10n.unknownModel;
+    final title = model.model?.isNotEmpty == true
+        ? model.model!
+        : l10n.unknownModel;
     return CupertinoListTile(
       title: Text(title),
       subtitle: Text(

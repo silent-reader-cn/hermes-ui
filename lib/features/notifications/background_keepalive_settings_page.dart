@@ -43,6 +43,8 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
     return Column(
       children: [
         CupertinoListSection(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
           header: Text(l10n.bgKeepAliveSection),
           children: [
             CupertinoListTile(
@@ -71,6 +73,8 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
         ),
         // 系统保活与权限引导：每项独立一行，跳转对应系统设置页。
         CupertinoListSection(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
           header: Text(l10n.bgHyperOsGuidanceTitle),
           children: [
             // 通知权限状态警示：升级安装后系统保留旧状态且不再弹窗，

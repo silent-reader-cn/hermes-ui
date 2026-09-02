@@ -108,6 +108,9 @@ class _AppearanceSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.appearanceSection),
       children: [
         CupertinoListTile(
@@ -174,6 +177,9 @@ class _ChatSection extends ConsumerWidget {
     final smoothStreaming = ref.watch(smoothStreamingProvider);
     final showPerfMonitor = ref.watch(perfMonitorProvider);
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.chatSection),
       children: [
         CupertinoListTile(
@@ -305,6 +311,9 @@ class _AdvancedSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.advancedSettingsSection),
       children: [
         CupertinoListTile(
@@ -427,6 +436,9 @@ class _CronSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final showCron = ref.watch(cronVisibilityProvider).showCron;
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       children: [
         CupertinoListTile(
           key: const ValueKey('settings-show-cron-sessions'),
@@ -586,6 +598,9 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
     final notifier = ref.read(notificationSettingsProvider.notifier);
 
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.notificationsSection),
       children: [
         CupertinoListTile(
@@ -685,6 +700,9 @@ class _ServerSection extends ConsumerWidget {
     final connections = ref.watch(connectionsProvider);
     final active = ref.watch(activeConnectionProvider);
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(
         active == null ? l10n.serverSectionDisconnected : l10n.serverSection,
       ),
@@ -1061,6 +1079,9 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
         child: ListView(
           children: [
             CupertinoListSection(
+              dividerMargin: 0,
+              additionalDividerMargin: 0,
+
               header: Text(l10n.serverBasicInfoSection),
               children: [
                 Padding(
@@ -1154,6 +1175,9 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
               ],
             ),
             CupertinoListSection(
+              dividerMargin: 0,
+              additionalDividerMargin: 0,
+
               header: Text(l10n.profile),
               children: [
                 CupertinoListTile(
@@ -1205,6 +1229,9 @@ class _ModelSection extends ConsumerWidget {
     final settings = ref.watch(settingsControllerProvider);
     return settings.when(
       loading: () => CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(l10n.models),
         children: [
           CupertinoListTile(
@@ -1214,6 +1241,9 @@ class _ModelSection extends ConsumerWidget {
         ],
       ),
       error: (error, _) => CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(l10n.models),
         children: [
           CupertinoListTile(
@@ -1231,6 +1261,9 @@ class _ModelSection extends ConsumerWidget {
         ],
       ),
       data: (state) => CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(l10n.models),
         children: [
           CupertinoListTile(
@@ -1410,6 +1443,9 @@ class _ModelPickerPage extends ConsumerWidget {
               for (final group in groups)
                 SliverToBoxAdapter(
                   child: CupertinoListSection(
+                    dividerMargin: 0,
+                    additionalDividerMargin: 0,
+
                     header: Text(group.name),
                     children: [
                       for (final model in [
@@ -1469,6 +1505,9 @@ class _AboutSection extends ConsumerWidget {
     // 未就绪/异常回退常量（settings_providers.dart appVersionProvider）。
     final version = ref.watch(appVersionProvider).value ?? appVersionFallback;
     return CupertinoListSection(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.aboutSection),
       children: [
         CupertinoListTile(

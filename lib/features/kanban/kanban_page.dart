@@ -332,7 +332,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(
@@ -358,9 +361,9 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
   }
 
   void _openCreate(BuildContext context) {
-    Navigator.of(context).push(
-      HermesPageRoute<void>(builder: (_) => const KanbanCreateCardPage()),
-    );
+    Navigator.of(
+      context,
+    ).push(HermesPageRoute<void>(builder: (_) => const KanbanCreateCardPage()));
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {
@@ -685,6 +688,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   Widget _buildDescription(KanbanCard card) {
     final l10n = AppLocalizations.of(context);
     return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.description),
       children: [
         Padding(
@@ -719,6 +725,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
         _metadataRow(l10n.updatedAtLabel, Text(card.updatedAt!)),
     ];
     return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       hasLeading: false,
       header: Text(l10n.info),
       children: rows,
@@ -772,6 +781,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
           ),
     ];
     return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       header: Text(l10n.changeStatus),
       children: [
         Padding(
@@ -786,6 +798,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final l10n = AppLocalizations.of(context);
     final comments = state.comments;
     return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       hasLeading: false,
       header: Text(l10n.commentsHeader(comments.length)),
       children: [
@@ -945,7 +960,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   ? error.message
                   : (error?.toString() ?? l10n.unknownError),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(

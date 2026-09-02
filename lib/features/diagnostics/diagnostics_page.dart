@@ -171,6 +171,9 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           children: [
             // 开关区
             CupertinoListSection.insetGrouped(
+              dividerMargin: 0,
+              additionalDividerMargin: 0,
+
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               children: [
                 CupertinoListTile(

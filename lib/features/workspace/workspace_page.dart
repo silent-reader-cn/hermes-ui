@@ -210,6 +210,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     return [
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           children: [
             for (final entry in state.entries)
               _WorkspaceEntryRow(
@@ -353,6 +356,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       ],
     );
   }
+
   Future<void> _onDownload(WorkspaceEntry entry) async {
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)

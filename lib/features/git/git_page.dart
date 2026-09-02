@@ -186,6 +186,9 @@ class _GitPageState extends ConsumerState<GitPage> {
 
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         children: [
           CupertinoListTile(
             leading: const Icon(
@@ -246,6 +249,9 @@ class _GitPageState extends ConsumerState<GitPage> {
     );
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(header),
         children: [
           for (final file in files) ...[
@@ -273,6 +279,9 @@ class _GitPageState extends ConsumerState<GitPage> {
     );
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(l10n.commitSection),
         children: [
           Padding(
@@ -325,6 +334,9 @@ class _GitPageState extends ConsumerState<GitPage> {
     final running = state.isActionRunning;
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+
         header: Text(l10n.remoteOperations),
         children: [
           Padding(
@@ -391,7 +403,10 @@ class _GitPageState extends ConsumerState<GitPage> {
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 13,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
             const SizedBox(height: 20),
             CupertinoButton.filled(

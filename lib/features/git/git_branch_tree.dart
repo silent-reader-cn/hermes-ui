@@ -78,6 +78,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
     final currentList = _mode == GitBranchMode.local ? localList : remoteList;
 
     return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+
       key: const ValueKey('git-branch-tree-section'),
       header: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -415,7 +418,10 @@ class _GitBranchTreeState extends State<GitBranchTree> {
           Expanded(
             child: Text(
               widget.errorMessage ?? l10n.loadFailed,
-              style: TextStyle(fontSize: 12, color: statusRedText.resolveFrom(context)),
+              style: TextStyle(
+                fontSize: 12,
+                color: statusRedText.resolveFrom(context),
+              ),
             ),
           ),
           if (widget.onReload != null)

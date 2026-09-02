@@ -267,6 +267,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.memory:
         final content = response.memory ?? '';
         return CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           header: _MemorySectionHeader(
             section: MemorySection.memory,
             mtime: response.memoryMtime,
@@ -296,6 +299,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.user:
         final content = response.user ?? '';
         return CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           header: _MemorySectionHeader(
             section: MemorySection.user,
             mtime: response.userMtime,
@@ -325,6 +331,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.soul:
         final content = response.soul ?? '';
         return CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           header: _MemorySectionHeader(
             section: MemorySection.soul,
             mtime: response.soulMtime,
@@ -354,6 +363,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.projectContext:
         final content = response.projectContext ?? '';
         return CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           header: _ProjectContextHeader(
             mtime: response.projectContextMtime,
             charCount: content.trim().length,

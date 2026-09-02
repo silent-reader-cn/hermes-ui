@@ -132,6 +132,9 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
     return [
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
           footer: Text(
             l10n.removeWorkspaceFooter,
             style: TextStyle(
@@ -295,6 +298,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
       ],
     );
   }
+
   void _showAddSheet() {
     unawaited(
       showCupertinoModalPopup<void>(
