@@ -8,11 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_input_bar.dart';
 import 'package:hermes_ui/features/chat/widgets/context_window_popover.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 
 import '../../helpers/fake_chat_api.dart';
+import '../../helpers/fake_settings_api.dart';
 
 ApiClient _buildTestClient(
   ResponseBody Function(RequestOptions options) responder,
@@ -986,6 +989,229 @@ void main() {
       expect(
         find.byKey(const ValueKey('context-popover-model-model-v19')),
         findsOneWidget,
+      );
+    });
+  });
+
+  group('ContextWindowPopover 思考强度快捷入口测试', () {
+    final dummyClient = buildClient((_) => ResponseBody.fromString('{}', 200));
+
+    testWidgets('当模型不支持思考强度时，右侧不展示思考强度入口', (tester) async {
+      final fakeChat = FakeChatApi();
+      final fakeSettings = FakeSettingsApi();
+      fakeSettings.reasoningResponse = const ReasoningStatusResponse(
+        supportsReasoningEffort: false,
+        supportedEfforts: [],
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(dummyClient),
+            settingsApiFactoryProvider.overrideWithValue((_) => fakeSettings),
+            chatAvailableModelsProvider.overrideWithValue(const ['gpt-4o']),
+          ],
+          child: ContextWindowPopover(
+            sessionId: 's1',
+            snapshot: testSnapshot,
+            currentModel: 'gpt-4o',
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-trigger')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('当模型支持思考强度时，展示当前思考强度并支持展开选择与保存', (tester) async {
+      final fakeChat = FakeChatApi();
+      final fakeSettings = FakeSettingsApi();
+      fakeSettings.reasoningResponse = const ReasoningStatusResponse(
+        supportsReasoningEffort: true,
+        supportedEfforts: ['low', 'medium', 'high'],
+        reasoningEffort: 'medium',
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(dummyClient),
+            settingsApiFactoryProvider.overrideWithValue((_) => fakeSettings),
+            chatAvailableModelsProvider.overrideWithValue(const ['o3-mini']),
+          ],
+          child: ContextWindowPopover(
+            sessionId: 's1',
+            snapshot: testSnapshot,
+            currentModel: 'o3-mini',
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // 触发器存在并展示当前值 medium
+      final triggerFinder = find.byKey(
+        const ValueKey('context-popover-reasoning-trigger'),
+      );
+      expect(triggerFinder, findsOneWidget);
+      expect(
+        find.descendant(of: triggerFinder, matching: find.text('medium')),
+        findsOneWidget,
+      );
+
+      // 点击展开下拉菜单
+      await tester.tap(triggerFinder);
+      await tester.pumpAndSettle();
+
+      // 选项均展示
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-low')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-medium')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-high')),
+        findsOneWidget,
+      );
+
+      // 点击 high
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-reasoning-high')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证调用了 saveReasoningEffort
+      expect(fakeSettings.reasoningEffortCalls, ['high']);
+      // 下拉菜单自动收起
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-high')),
+        findsNothing,
+      );
+      // 触发器文本更新为 high
+      expect(
+        find.descendant(of: triggerFinder, matching: find.text('high')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('未设置思考强度时展示未设置占位文案', (tester) async {
+      final fakeChat = FakeChatApi();
+      final fakeSettings = FakeSettingsApi();
+      fakeSettings.reasoningResponse = const ReasoningStatusResponse(
+        supportsReasoningEffort: true,
+        supportedEfforts: ['low', 'medium', 'high'],
+        reasoningEffort: '',
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(dummyClient),
+            settingsApiFactoryProvider.overrideWithValue((_) => fakeSettings),
+            chatAvailableModelsProvider.overrideWithValue(const ['o3-mini']),
+          ],
+          child: ContextWindowPopover(
+            sessionId: 's1',
+            snapshot: testSnapshot,
+            currentModel: 'o3-mini',
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      final triggerFinder = find.byKey(
+        const ValueKey('context-popover-reasoning-trigger'),
+      );
+      expect(triggerFinder, findsOneWidget);
+      expect(
+        find.descendant(of: triggerFinder, matching: find.text('未设置')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('互斥测试：打开思考强度菜单时自动收起模型菜单，反之亦然', (tester) async {
+      final fakeChat = FakeChatApi();
+      final fakeSettings = FakeSettingsApi();
+      fakeSettings.reasoningResponse = const ReasoningStatusResponse(
+        supportsReasoningEffort: true,
+        supportedEfforts: ['low', 'medium', 'high'],
+        reasoningEffort: 'medium',
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChat),
+            apiClientProvider.overrideWithValue(dummyClient),
+            settingsApiFactoryProvider.overrideWithValue((_) => fakeSettings),
+            chatAvailableModelsProvider.overrideWithValue(const [
+              'gpt-4o',
+              'o3-mini',
+            ]),
+          ],
+          child: ContextWindowPopover(
+            sessionId: 's1',
+            snapshot: testSnapshot,
+            currentModel: 'o3-mini',
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // 1. 打开模型菜单
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-low')),
+        findsNothing,
+      );
+
+      // 2. 点击外部收起模型菜单
+      await tester.tapAt(const Offset(400, 100));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
+        findsNothing,
+      );
+
+      // 3. 点击思考强度触发器打开思考强度菜单
+      await tester.tap(
+        find.byKey(const ValueKey('context-popover-reasoning-trigger')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-low')),
+        findsOneWidget,
+      );
+
+      // 4. 点击外部屏障收起思考强度菜单
+      await tester.tapAt(const Offset(400, 100));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('context-popover-reasoning-low')),
+        findsNothing,
       );
     });
   });

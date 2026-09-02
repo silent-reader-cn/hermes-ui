@@ -13,6 +13,7 @@ import '../../../core/models/context_window_snapshot.dart';
 import '../../../core/models/workspace.dart';
 import '../../../core/utils/context_window_formatter.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../settings/settings_providers.dart';
 import '../chat_providers.dart';
 
 /// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
@@ -46,7 +47,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   bool _loadingWorkspaces = false;
   bool _workspacesFetched = false;
 
-  /// 模型/工作区下拉悬浮菜单：手动 `OverlayEntry`，位置在打开瞬间按触发器
+  /// 模型/工作区/推理强度下拉悬浮菜单：手动 `OverlayEntry`，位置在打开瞬间按触发器
   /// RenderBox 全局坐标换算（不用 CompositedTransformFollower 固定 offset——
   /// 要做「优先向上 + 顶部越界回落」的动态方向决策，需要触发器的真实几何）。
   /// 不参与 Column 高度流，展开时覆盖在弹层内容之上，
@@ -54,13 +55,16 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   /// OverlayEntry（popover 内）场景下 hit test 不经过覆盖层子项）。
   OverlayEntry? _modelMenuEntry;
   OverlayEntry? _workspaceMenuEntry;
+  OverlayEntry? _reasoningMenuEntry;
   final LayerLink _modelMenuLink = LayerLink();
   final LayerLink _workspaceMenuLink = LayerLink();
+  final LayerLink _reasoningMenuLink = LayerLink();
 
   /// 触发器锚点 GlobalKey：打开下拉时取 RenderBox 全局矩形（换算方式见
   /// [_resolveAnchorRect]），计算向上/向下展开方向与边界 clamp。
   final GlobalKey _modelTriggerKey = GlobalKey();
   final GlobalKey _workspaceTriggerKey = GlobalKey();
+  final GlobalKey _reasoningTriggerKey = GlobalKey();
 
   List<WorkspaceRoot> _workspaces = const [];
   late final TextEditingController _workspaceController;
@@ -96,6 +100,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   void dispose() {
     _modelMenuEntry?.remove();
     _workspaceMenuEntry?.remove();
+    _reasoningMenuEntry?.remove();
     _workspaceController.dispose();
     super.dispose();
   }
@@ -107,8 +112,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   void _removeAllMenus() {
     _removeEntry(_modelMenuEntry);
     _removeEntry(_workspaceMenuEntry);
+    _removeEntry(_reasoningMenuEntry);
     _modelMenuEntry = null;
     _workspaceMenuEntry = null;
+    _reasoningMenuEntry = null;
   }
 
   /// 展开/收起模型下拉（互斥：展开本菜单时收起工作区菜单与手动输入）。
@@ -172,6 +179,39 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       ),
     );
     _workspaceMenuEntry = entry;
+    overlay.insert(entry);
+  }
+
+  /// 展开/收起推理强度下拉（互斥：展开本菜单时收起模型菜单、工作区菜单与手动输入）。
+  void _toggleReasoningMenu() {
+    if (_reasoningMenuEntry != null) {
+      _removeEntry(_reasoningMenuEntry);
+      _reasoningMenuEntry = null;
+      setState(() {});
+      return;
+    }
+    _removeAllMenus();
+    setState(() => _manualInputExpanded = false);
+    final overlay = Overlay.of(context);
+    final anchor = _resolveAnchorRect(_reasoningTriggerKey, overlay);
+    if (anchor == null) return;
+    final settingsState = ref.read(settingsControllerProvider).valueOrNull;
+    final efforts = settingsState?.supportedEfforts ?? const <String>[];
+    final entry = OverlayEntry(
+      builder: (entryContext) => _FloatingMenu(
+        anchorRect: anchor,
+        estimatedHeight: _estimateMenuHeight(efforts.length),
+        menuWidth: 140,
+        alignRight: true,
+        onDismiss: () {
+          _removeEntry(_reasoningMenuEntry);
+          _reasoningMenuEntry = null;
+          if (mounted) setState(() {});
+        },
+        child: _buildReasoningMenu(entryContext),
+      ),
+    );
+    _reasoningMenuEntry = entry;
     overlay.insert(entry);
   }
 
@@ -329,6 +369,43 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     );
   }
 
+  /// 推理强度下拉菜单内容（悬浮卡片，展开时构建）。
+  Widget _buildReasoningMenu(BuildContext menuContext) {
+    final settingsState = ref.watch(settingsControllerProvider).valueOrNull;
+    final efforts = settingsState?.supportedEfforts ?? const <String>[];
+    final currentEffort = settingsState?.reasoningEffort;
+    return PopoverDropdownCard(
+      width: 140,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 200),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final effort in efforts)
+                _ReasoningRow(
+                  key: ValueKey('context-popover-reasoning-$effort'),
+                  label: effort,
+                  selected: effort == currentEffort,
+                  onTap: () {
+                    _removeEntry(_reasoningMenuEntry);
+                    _reasoningMenuEntry = null;
+                    unawaited(
+                      ref
+                          .read(settingsControllerProvider.notifier)
+                          .setReasoningEffort(effort),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _maybeFetchModels() async {
     final existing = ref.read(chatAvailableModelsProvider);
     if (existing.isNotEmpty) return;
@@ -449,6 +526,11 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final workspace = ref.watch(
       chatControllerProvider(widget.sessionId).select((s) => s.workspace),
     );
+    final settingsState = ref.watch(settingsControllerProvider).valueOrNull;
+    final supportsReasoning =
+        (settingsState?.supportsReasoningEffort ?? false) &&
+        (settingsState?.supportedEfforts.isNotEmpty ?? false);
+    final reasoningEffort = settingsState?.reasoningEffort;
     // 保持输入框与外部 workspace 同步（用户未编辑时）
     if (!_savingWorkspace &&
         _workspaceController.text != (workspace ?? '') &&
@@ -559,60 +641,143 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   style: TextStyle(fontSize: 12, color: secondary),
                 ),
                 const SizedBox(height: 6),
-                Semantics(
-                  button: true,
-                  label: l10n.selectModel,
-                  child: CompositedTransformTarget(
-                    key: _modelTriggerKey,
-                    link: _modelMenuLink,
-                    child: CupertinoButton(
-                      key: const ValueKey('context-popover-model-trigger'),
-                      padding: EdgeInsets.zero,
-                      onPressed: _toggleModelMenu,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemBackground.resolveFrom(
-                            context,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: separator),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                (currentModel == null || currentModel.isEmpty)
-                                    ? l10n.contextWindowFollowServerDefault
-                                    : currentModel,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: CupertinoColors.label.resolveFrom(
-                                    context,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        label: l10n.selectModel,
+                        child: CompositedTransformTarget(
+                          key: _modelTriggerKey,
+                          link: _modelMenuLink,
+                          child: CupertinoButton(
+                            key: const ValueKey(
+                              'context-popover-model-trigger',
+                            ),
+                            padding: EdgeInsets.zero,
+                            onPressed: _toggleModelMenu,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.systemBackground
+                                    .resolveFrom(context),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: separator),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      (currentModel == null ||
+                                              currentModel.isEmpty)
+                                          ? l10n
+                                              .contextWindowFollowServerDefault
+                                          : currentModel,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                            CupertinoColors.label.resolveFrom(
+                                              context,
+                                            ),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                                  const SizedBox(width: 8),
+                                  AnimatedRotation(
+                                    turns: _modelMenuEntry != null ? 0.5 : 0.0,
+                                    duration: const Duration(
+                                      milliseconds: 200,
+                                    ),
+                                    child: Icon(
+                                      CupertinoIcons.chevron_down,
+                                      size: 14,
+                                      color: secondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            AnimatedRotation(
-                              turns: _modelMenuEntry != null ? 0.5 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                CupertinoIcons.chevron_down,
-                                size: 14,
-                                color: secondary,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    if (supportsReasoning) ...[
+                      const SizedBox(width: 8),
+                      Semantics(
+                        button: true,
+                        label: l10n.reasoningEffort,
+                        child: CompositedTransformTarget(
+                          key: _reasoningTriggerKey,
+                          link: _reasoningMenuLink,
+                          child: CupertinoButton(
+                            key: const ValueKey(
+                              'context-popover-reasoning-trigger',
+                            ),
+                            padding: EdgeInsets.zero,
+                            onPressed: _toggleReasoningMenu,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.systemBackground
+                                    .resolveFrom(context),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: separator),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 60,
+                                    ),
+                                    child: Text(
+                                      (reasoningEffort == null ||
+                                              reasoningEffort.isEmpty)
+                                          ? l10n.notSet
+                                          : reasoningEffort,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                            CupertinoColors.label.resolveFrom(
+                                              context,
+                                            ),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  AnimatedRotation(
+                                    turns:
+                                        _reasoningMenuEntry != null
+                                            ? 0.5
+                                            : 0.0,
+                                    duration: const Duration(
+                                      milliseconds: 200,
+                                    ),
+                                    child: Icon(
+                                      CupertinoIcons.chevron_down,
+                                      size: 14,
+                                      color: secondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -818,6 +983,8 @@ class _FloatingMenu extends StatelessWidget {
     required this.estimatedHeight,
     required this.onDismiss,
     required this.child,
+    this.menuWidth = _menuWidth,
+    this.alignRight = false,
   });
 
   /// 触发器在 overlay 坐标系中的全局矩形（详见 [_ContextWindowPopoverState
@@ -831,7 +998,13 @@ class _FloatingMenu extends StatelessWidget {
   final VoidCallback onDismiss;
   final Widget child;
 
-  /// 菜单宽度（对齐 `PopoverDropdownCard(width: 228)`）。
+  /// 菜单宽度（默认对齐 `PopoverDropdownCard(width: 228)`）。
+  final double menuWidth;
+
+  /// 是否向右对齐触发器右缘（用于紧靠弹层右侧的快捷入口）。
+  final bool alignRight;
+
+  /// 默认菜单宽度（对齐 `PopoverDropdownCard(width: 228)`）。
   static const double _menuWidth = 228;
 
   /// 向上展开时菜单底边距触发器顶部间隔。
@@ -855,9 +1028,12 @@ class _FloatingMenu extends StatelessWidget {
 
     final maxLeft = math.max(
       _safeMargin,
-      screenWidth - _safeMargin - _menuWidth,
+      screenWidth - _safeMargin - menuWidth,
     );
-    final left = anchorRect.left.clamp(_safeMargin, maxLeft).toDouble();
+    final targetLeft = alignRight
+        ? anchorRect.right - menuWidth
+        : anchorRect.left;
+    final left = targetLeft.clamp(_safeMargin, maxLeft).toDouble();
 
     // 优先向上：菜单底边 = 触发器顶部 − 8。顶部越界则回落向下。
     final upTop = anchorRect.top - estimatedHeight - _gapAbove;
@@ -874,7 +1050,7 @@ class _FloatingMenu extends StatelessWidget {
       positioned = Positioned(
         left: left,
         bottom: screenHeight - anchorRect.top + _gapAbove,
-        width: _menuWidth,
+        width: menuWidth,
         child: _menuShell(maxHeight: maxHeight),
       );
     } else {
@@ -888,7 +1064,7 @@ class _FloatingMenu extends StatelessWidget {
       positioned = Positioned(
         left: left,
         top: downTop,
-        width: _menuWidth,
+        width: menuWidth,
         child: _menuShell(maxHeight: menuHeight),
       );
     }
@@ -1091,3 +1267,53 @@ class _WorkspaceRow extends StatelessWidget {
     );
   }
 }
+
+class _ReasoningRow extends StatelessWidget {
+  const _ReasoningRow({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        alignment: Alignment.centerLeft,
+        onPressed: onTap,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: selected
+                      ? CupertinoColors.activeBlue.resolveFrom(context)
+                      : CupertinoColors.label.resolveFrom(context),
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (selected)
+              Icon(
+                CupertinoIcons.check_mark,
+                size: 16,
+                color: CupertinoColors.activeBlue.resolveFrom(context),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

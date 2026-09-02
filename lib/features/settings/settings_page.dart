@@ -711,55 +711,57 @@ class _BackgroundKeepAliveSection extends ConsumerWidget {
         CupertinoListTile(
           key: const ValueKey('settings-bg-hyperos-guide'),
           title: Text(l10n.bgHyperOsGuidanceTitle),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _buildGuideButton(
-                  key: const ValueKey('settings-bg-guide-autostart'),
-                  label: l10n.bgGuideAutoStart,
-                  onPressed: () => unawaited(
-                    keepalive.openHyperOsSetting(HyperOsSettingType.autoStart),
+          subtitle: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildGuideButton(
+                context,
+                key: const ValueKey('settings-bg-guide-autostart'),
+                label: l10n.bgGuideAutoStart,
+                onPressed: () => unawaited(
+                  keepalive.openHyperOsSetting(HyperOsSettingType.autoStart),
+                ),
+              ),
+              _buildGuideButton(
+                context,
+                key: const ValueKey('settings-bg-guide-battery'),
+                label: l10n.bgGuideBattery,
+                onPressed: () => unawaited(
+                  keepalive.openHyperOsSetting(
+                    HyperOsSettingType.batteryOptimization,
                   ),
                 ),
-                _buildGuideButton(
-                  key: const ValueKey('settings-bg-guide-battery'),
-                  label: l10n.bgGuideBattery,
-                  onPressed: () => unawaited(
-                    keepalive.openHyperOsSetting(
-                      HyperOsSettingType.batteryOptimization,
-                    ),
+              ),
+              _buildGuideButton(
+                context,
+                key: const ValueKey('settings-bg-guide-network'),
+                label: l10n.bgGuideNetwork,
+                onPressed: () => unawaited(
+                  keepalive.openHyperOsSetting(
+                    HyperOsSettingType.networkControl,
                   ),
                 ),
-                _buildGuideButton(
-                  key: const ValueKey('settings-bg-guide-network'),
-                  label: l10n.bgGuideNetwork,
-                  onPressed: () => unawaited(
-                    keepalive.openHyperOsSetting(
-                      HyperOsSettingType.networkControl,
-                    ),
+              ),
+              _buildGuideButton(
+                context,
+                key: const ValueKey('settings-bg-guide-notifications'),
+                label: l10n.bgGuideNotifications,
+                onPressed: () => unawaited(
+                  keepalive.openHyperOsSetting(
+                    HyperOsSettingType.notificationSettings,
                   ),
                 ),
-                _buildGuideButton(
-                  key: const ValueKey('settings-bg-guide-notifications'),
-                  label: l10n.bgGuideNotifications,
-                  onPressed: () => unawaited(
-                    keepalive.openHyperOsSetting(
-                      HyperOsSettingType.notificationSettings,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildGuideButton({
+  Widget _buildGuideButton(
+    BuildContext context, {
     required Key key,
     required String label,
     required VoidCallback onPressed,
@@ -767,15 +769,15 @@ class _BackgroundKeepAliveSection extends ConsumerWidget {
     return CupertinoButton(
       key: key,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      color: CupertinoColors.systemGrey5,
+      color: CupertinoColors.systemGrey5.resolveFrom(context),
       borderRadius: BorderRadius.circular(6),
       minimumSize: const Size(0, 26),
       onPressed: onPressed,
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
-          color: CupertinoColors.label,
+          color: CupertinoColors.label.resolveFrom(context),
         ),
       ),
     );

@@ -1242,7 +1242,7 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // 14. Settings · Extensions/MCP/Auxiliary
   // ---------------------------------------------------------------------------
-  String get extensionsSection => isEnglish ? 'Extensions' : '扩展 (Extensions)';
+  String get extensionsSection => isEnglish ? 'Extensions' : '扩展';
   String get extensionsTitle => isEnglish ? 'Extensions' : '扩展';
   String get installedExtensions =>
       isEnglish ? 'Installed Extensions' : '已安装扩展';

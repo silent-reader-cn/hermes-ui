@@ -128,8 +128,8 @@ class HideReasoningController extends Notifier<bool> {
 
 /// 工具调用按回合聚合控制器。
 ///
-/// 控制工具调用是按回合聚合成单个卡片展示（默认 true），
-/// 还是按 anchorMessageID 穿插在对应 assistant 消息旁展示（false）。
+/// 控制工具调用是按回合聚合成单个卡片展示（开 = true），
+/// 还是按 anchorMessageID 穿插在对应 assistant 消息旁展示（关 = false，默认关）。
 class ToolGroupCoalesceController extends Notifier<bool> {
   /// 持久化 Key。
   static const String keyCoalesceTools = kToolGroupCoalesceKey;
@@ -138,9 +138,9 @@ class ToolGroupCoalesceController extends Notifier<bool> {
   static Future<bool> loadCoalescePref({SharedPreferences? customPrefs}) async {
     try {
       final prefs = customPrefs ?? await SharedPreferences.getInstance();
-      return prefs.getBool(keyCoalesceTools) ?? true;
+      return prefs.getBool(keyCoalesceTools) ?? false;
     } catch (_) {
-      return true;
+      return false;
     }
   }
 
@@ -150,7 +150,7 @@ class ToolGroupCoalesceController extends Notifier<bool> {
   bool build() {
     _hasCustomState = false;
     unawaited(_load());
-    return true;
+    return false;
   }
 
   Future<void> _load() async {

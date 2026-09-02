@@ -27,16 +27,16 @@ void main() {
   });
 
   group('ToolGroupCoalesceController 状态与持久化', () {
-    test('默认值为 true', () {
+    test('默认值为 false', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       final state = container.read(toolGroupCoalesceProvider);
-      expect(state, isTrue);
+      expect(state, isFalse);
     });
 
     test('初始状态从 SharedPreferences 读取', () async {
-      SharedPreferences.setMockInitialValues({kToolGroupCoalesceKey: false});
+      SharedPreferences.setMockInitialValues({kToolGroupCoalesceKey: true});
 
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -45,7 +45,7 @@ void main() {
       await controller.load();
 
       final state = container.read(toolGroupCoalesceProvider);
-      expect(state, isFalse);
+      expect(state, isTrue);
     });
 
     test('setCoalesce 修改配置并写入 SharedPreferences', () async {
@@ -53,16 +53,16 @@ void main() {
       addTearDown(container.dispose);
 
       final controller = container.read(toolGroupCoalesceProvider.notifier);
-      await controller.setCoalesce(false);
+      await controller.setCoalesce(true);
 
-      expect(container.read(toolGroupCoalesceProvider), isFalse);
+      expect(container.read(toolGroupCoalesceProvider), isTrue);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(kToolGroupCoalesceKey), isFalse);
-
-      await controller.setCoalesce(true);
-      expect(container.read(toolGroupCoalesceProvider), isTrue);
       expect(prefs.getBool(kToolGroupCoalesceKey), isTrue);
+
+      await controller.setCoalesce(false);
+      expect(container.read(toolGroupCoalesceProvider), isFalse);
+      expect(prefs.getBool(kToolGroupCoalesceKey), isFalse);
     });
   });
 
@@ -303,23 +303,23 @@ void main() {
       expect(tileFinder, findsOneWidget);
       expect(switchFinder, findsOneWidget);
 
-      // 默认开启
-      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
+      // 默认关闭
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
 
-      // 点击切换为关闭
-      await tester.tap(switchFinder);
-      await tester.pumpAndSettle();
-
-      expect(container.read(toolGroupCoalesceProvider), isFalse);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(kToolGroupCoalesceKey), isFalse);
-
-      // 再次点击恢复开启
+      // 点击切换为开启
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       expect(container.read(toolGroupCoalesceProvider), isTrue);
+      final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool(kToolGroupCoalesceKey), isTrue);
+
+      // 再次点击恢复关闭
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      expect(container.read(toolGroupCoalesceProvider), isFalse);
+      expect(prefs.getBool(kToolGroupCoalesceKey), isFalse);
     });
   });
 
@@ -372,11 +372,23 @@ void main() {
       final element = tester.element(find.byType(ChatMessageList));
       final container = ProviderScope.containerOf(element);
 
-      // 1. 默认 coalesce: true 模式下：同回合多个 assistant 消息的工具聚合为 1 张 ToolCallGroupCard 卡片
+      // 1. 默认 coalesce: false 模式下：中间文本打断相邻聚合 → 2 张独立卡片穿插呈现，绝无 double 副本
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
+      expect(find.text('读取文件 \u00D71'), findsOneWidget);
+      expect(find.text('写入文件 \u00D71'), findsOneWidget);
+      // 确认无聚合卡片残余副本
+      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
+
+      // 2. 切换为 coalesce: true 模式：同回合多个 assistant 消息的工具聚合为 1 张 ToolCallGroupCard 卡片
+      await container
+          .read(toolGroupCoalesceProvider.notifier)
+          .setCoalesce(true);
+      await tester.pumpAndSettle();
+
       expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
 
-      // 2. 切换为 coalesce: false 模式：中间文本打断相邻聚合 → 2 张独立卡片穿插呈现，绝无 double 副本
+      // 3. 再次切换回 coalesce: false 模式：即时恢复为 2 张穿插卡片
       await container
           .read(toolGroupCoalesceProvider.notifier)
           .setCoalesce(false);
@@ -385,17 +397,7 @@ void main() {
       expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
       expect(find.text('读取文件 \u00D71'), findsOneWidget);
       expect(find.text('写入文件 \u00D71'), findsOneWidget);
-      // 确认无聚合卡片残余副本
       expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsNothing);
-
-      // 3. 再次切换回 coalesce: true 模式：即时恢复为 1 张聚合卡片
-      await container
-          .read(toolGroupCoalesceProvider.notifier)
-          .setCoalesce(true);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ToolCallGroupCard), findsNWidgets(1));
-      expect(find.text('读取文件 \u00D71, 写入文件 \u00D71'), findsOneWidget);
 
       // 清理树与 Timer
       await tester.pumpWidget(const SizedBox());
