@@ -178,6 +178,7 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   int clearAllCalls = 0;
   int permissionRequests = 0;
   bool permissionResult = true;
+  bool notificationsEnabled = true;
   String? launchSessionId;
 
   @override
@@ -223,6 +224,9 @@ class _FakeTurnNotificationService implements TurnNotificationService {
     permissionRequests++;
     return permissionResult;
   }
+
+  @override
+  Future<bool> areNotificationsEnabled() async => notificationsEnabled;
 
   @override
   Future<String?> getLaunchSessionId() async => launchSessionId;
@@ -1836,6 +1840,60 @@ void main() {
         HyperOsSettingType.networkControl,
         HyperOsSettingType.notificationSettings,
       ]);
+    });
+
+    testWidgets('通知权限未开启时显示警示行并可跳转通知设置', (tester) async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final fakeNotif = _FakeTurnNotificationService()
+        ..notificationsEnabled = false;
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        keepaliveService: fakeKeepalive,
+        notificationService: fakeNotif,
+      );
+      await pumpPage(tester, container, size: const Size(800, 1400));
+
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
+      final warningRow = find.byKey(
+        const ValueKey('settings-bg-guide-permission-warning'),
+      );
+      await scrollEntryIntoView(tester, warningRow);
+      expect(warningRow, findsOneWidget);
+
+      await tester.tap(warningRow);
+      await tester.pumpAndSettle();
+      expect(fakeKeepalive.openedSettings, [
+        HyperOsSettingType.notificationSettings,
+      ]);
+    });
+
+    testWidgets('通知权限已开启时不显示警示行', (tester) async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final fakeNotif = _FakeTurnNotificationService();
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+        keepaliveService: fakeKeepalive,
+        notificationService: fakeNotif,
+      );
+      await pumpPage(tester, container, size: const Size(800, 1400));
+
+      final entry = find.byKey(const ValueKey('settings-entry-bg-keepalive'));
+      await scrollEntryIntoView(tester, entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('settings-bg-guide-permission-warning')),
+        findsNothing,
+      );
     });
 
     testWidgets('深色/浅色、文本缩放 1.5x、窄屏 320px 不溢出', (tester) async {

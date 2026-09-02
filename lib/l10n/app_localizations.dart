@@ -301,6 +301,11 @@ class AppLocalizations {
   String get bgGuideBattery => isEnglish ? 'No Restrictions' : '省电无限制';
   String get bgGuideNetwork => isEnglish ? 'Network' : '联网控制';
   String get bgGuideNotifications => isEnglish ? 'Notifications' : '通知权限';
+  String get bgPermissionWarningTitle =>
+      isEnglish ? 'Notification permission not granted' : '通知权限未开启';
+  String get bgPermissionWarningSubtitle => isEnglish
+      ? 'Keepalive and turn notifications cannot show until you enable it'
+      : '开启后保活与回合完成通知才能正常显示';
   String get bgGeneratingOngoingNotification =>
       isEnglish ? 'Hermes is generating…' : 'Hermes 正在生成…';
   String get bgGeneratingChannelName =>

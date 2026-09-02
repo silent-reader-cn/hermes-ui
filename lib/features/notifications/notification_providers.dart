@@ -154,6 +154,12 @@ final notificationSettingsProvider =
       NotificationSettingsNotifier.new,
     );
 
+/// 通知权限是否已授予（Android 13+ 需 POST_NOTIFICATIONS；
+/// 升级安装场景系统保留旧状态且不再弹窗，用于设置页状态提示引导）。
+final notificationPermissionProvider = FutureProvider<bool>((ref) {
+  return ref.watch(turnNotificationServiceProvider).areNotificationsEnabled();
+});
+
 /// 后台保活服务 Provider（生产 [BackgroundKeepaliveService.instance]；测试可 override）。
 final backgroundKeepaliveServiceProvider = Provider<BackgroundKeepaliveService>(
   (ref) {

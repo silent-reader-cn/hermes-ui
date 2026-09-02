@@ -59,23 +59,14 @@ class _NotificationLifecycleObserverState
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!mounted) return;
     ref.read(appLifecycleStateProvider.notifier).setState(state);
-    final settings = ref.read(notificationSettingsProvider);
-    final activeSessionId = getActiveSessionId(ref);
-    unawaited(
-      ref
-          .read(backgroundKeepaliveServiceProvider)
-          .onAppLifecycleChanged(
-            state: state,
-            activeSessionId: activeSessionId,
-            activeStreamId: null,
-            isStreaming: false,
-            foregroundServiceEnabled: settings.bgForegroundServiceEnabled,
-          ),
-    );
     if (state == AppLifecycleState.resumed) {
       // 回到 app：通知使命完成，自动清除。
       unawaited(ref.read(turnNotificationServiceProvider).clearAll());
     }
+    // 后台保活联动（前台服务/WorkManager 调度）专由 ChatController 以真值
+    // （activeStreamId / isStreaming / foregroundServiceEnabled）驱动，
+    // 见 chat_controller.dart _handleAppLifecycleChange——此处不做二次调用，
+    // 避免与真值调用竞态覆盖 prefs（keyIsStreaming / keyActiveStreamId）。
   }
 
   /// 冷启动由通知拉起 → 跳转对应会话或下载页并清除通知。

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../settings/settings_subpages.dart';
 import 'background_keepalive_service.dart';
@@ -72,6 +73,43 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
         CupertinoListSection(
           header: Text(l10n.bgHyperOsGuidanceTitle),
           children: [
+            // 通知权限状态警示：升级安装后系统保留旧状态且不再弹窗，
+            // 权限未授予时保活/回合通知会被系统抑制——显式提示并引导跳转。
+            ref
+                .watch(notificationPermissionProvider)
+                .maybeWhen(
+                  data: (enabled) {
+                    if (enabled) return const SizedBox.shrink();
+                    return CupertinoListTile(
+                      key: const ValueKey(
+                        'settings-bg-guide-permission-warning',
+                      ),
+                      leading: Icon(
+                        CupertinoIcons.exclamationmark_triangle_fill,
+                        color: statusOrangeText.resolveFrom(context),
+                        size: 20,
+                      ),
+                      title: Text(
+                        l10n.bgPermissionWarningTitle,
+                        style: TextStyle(
+                          color: statusOrangeText.resolveFrom(context),
+                        ),
+                      ),
+                      subtitle: Text(l10n.bgPermissionWarningSubtitle),
+                      trailing: const Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 18,
+                        color: CupertinoColors.systemGrey,
+                      ),
+                      onTap: () => unawaited(
+                        keepalive.openHyperOsSetting(
+                          HyperOsSettingType.notificationSettings,
+                        ),
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
             CupertinoListTile(
               key: const ValueKey('settings-bg-guide-autostart'),
               title: Text(l10n.bgGuideAutoStart),

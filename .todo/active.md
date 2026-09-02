@@ -81,4 +81,58 @@
   3. 流式中切换档位：当前流式消息下一 tick 即用新速度（无需等完成）
   4. 回归：#20 锁屏四条语义不回归（锁屏暂停 → 解锁铺全文，不爆吐不重复）；`maxRevealQueueUnits` 上限逻辑保留
   5. `flutter analyze` 零告警；`flutter test` 全绿（更新现有引用 static const 的用例 + 新增：档位参数单测、设置页联动 widget 测试、金照刷新）；发布 Android 验收装新包
+
 - 备注：`adaptiveWordUnitsPerTick` 与 `splitIntoWordUnits` 是 `@visibleForTesting` 静态函数，参数化改造需同步改测试签名；现有测试里直接引用 `ChatController.revealInterval` 等常量处一并用 getter 替换（getter 读档位，保留近现有测试兼容或显式更新）。
+
+---
+
+### #46 [P2] Windows 首次运行自安装引导页 — 一键拉取/配置/部署 agent + webui（方向类 · 主人 2026-09-02 拍板）
+
+- 类型：方向类（Windows 端部署体验新功能）。主人指令：「在 Flutter 应用中提供一个自动安装引导页，帮助 Windows 用户一步一步从 GitHub 拉取、配置和安装部署，不用依赖 webui 才能运行我们的项目」。三个决策点已 clarify 拍板：**webui 仓库 = 官方 upstream（nesquena/hermes-webui，非主人 fork）**；**LLM 配置 = 引导页接管**（步骤向导填 provider/key，走 webui onboarding API）；**优先级 = P2**（排在 #44/#45 之后）。
+- 位置（全部为新增，无现有代码可改）：
+  - `lib/features/onboarding/` 新增安装引导页（后续确认承接 onboarding_page 还是独立路由）；复用 `ServerConnection{baseUrl,password}` + `ConnectionStore` 自动写入 `http://127.0.0.1:8787` 本地连接并激活
+  - Windows 进程中转层（新增 `lib/core/install/`）：Dart `Process` 驱动 PowerShell 调官方 `install.ps1 -Stage <name> -NonInteractive -Json`，逐行解析 JSON 事件帧 → 进度条 + 日志流；`-Manifest` 列 stages、`{ok:false,stage,reason}` 错误帧 → 失败页直接展示
+  - webui 部署：官方 upstream clone 后 `python -m pip install -r requirements.txt`（仅 pyyaml+cryptography，超薄）；启动 `server.py` 用 pythonw + DETACHED_PROCESS|CREATE_NO_WINDOW + log 重定向（bootstrap.py:622-658 现成模板语义）；轮询 `/health` 直到 ok（bootstrap.py wait_for_health 语义）
+  - LLM 配置向导：走 webui onboarding API（已有 `/api/onboarding` 契约，参考 onboarding-projects 现有 client 能力）
+- 现状 vs 预期：
+  - 现状：hermes-ui 是纯远程客户端，onboarding 让用户填服务器地址+密码；**没有 webui 服务端就完全不可用**（依赖另装 Hermes Agent + webui 部署），普通 Windows 用户门槛极高。
+  - 预期：Windows 首启检测 `%LOCALAPPDATA%\hermes` 不存在 → 引导页「本机部署」入口 → 分步安装（官方 install.ps1 免交互驱动：prereqs → git clone → venv → deps → PATH）→ 部署 webui → 启动 → 健康轮询 → provider 向导 → 自动建 ServerConnection(localhost) → 直接进聊天。已有连接时跳过（检测 `hermes` 命令 / `%LOCALAPPDATA%\hermes\hermes-agent` 存在）。
+- 范围：
+  - 仅 Windows 平台（Android 不需要自安装——手机连远程服务器是常态；勿扩展到 Android）
+  - **不**动 API 契约（仍走同一套 webui /api/*）、不动远程连接模式（保留，多 ServerConnection 并存）、不改现有 10 个 feature
+  - **不**重复造安装器轮子：官方 install.ps1 已做 git 拉取/venv/deps/PATH/更新标记，引导页只做「驱动 + 展示 + 联调」
+  - webui 用官方 upstream 意味着端口默认 8787（非 fork 30002）——引导页写 localhost 连接一律以实际启动端口为准
+- 验收：
+  1. 全新 Windows（无 hermes-agent）：首启引导页识别「未安装」→ 点「本机部署」→ 分步安装完成（各 stage 有标题/进度/日志，失败有 stage+reason 错误提示与重试）
+  2. 装完自动拉起 webui → /health ok → 自动写入并激活 ServerConnection(baseUrl=http://127.0.0.1:8787) → 进聊天页可对话
+  3. provider 配置向导：填 key/选 provider → onboarding API 保存成功 → 模型列表可见
+  4. 已安装环境：首启直接进连接页/聊天页，不重复安装
+  5. `flutter analyze` 零告警；`flutter test` 全绿（新增安装中转层单测 + 引导页 widget 测试）
+- 备注：实现时机在 #44/#45 收口后；官方 desktop（Electron）已存在同类能力，本项目差异化 = webui 契约 + Flutter 跨端（手机连远程、PC 连本机同一套契约）。可行性已实证：官方 install.ps1（`https://hermes-agent.nousresearch.com/install.ps1`，~245KB）内置 -Stage/-NonInteractive/-Json/-Manifest/-HermesHome 参数，注释明说供 GUI installer 调用。
+
+---
+
+### #47 [P1] 后台保活通知升级后不显示 — 权限状态引导 + observer 假值联动修复（问题类 · 主人 2026-09-02 拍板修复）
+
+- 类型：问题类（升级安装场景保活通知静默丢失 + 代码联动链路假值 bug）。主人复述现象：「重新安装的 APK 前台服务保活通知正常；旧应用 update（覆盖升级）后不能」。
+- 根因判定：
+  1. **系统持久化状态（主因）**：POST_NOTIFICATIONS 与通知渠道状态是 Android 系统级持久化——覆盖升级**保留**旧状态（曾被拒/被关），卸载重装**清零**；Android 13+ 用户拒过一次授权弹窗后 `requestPermissions` 不再弹窗直接 false → 升级后权限静默丢失 → FGS 照常启动但通知被系统抑制（渠道 `hermes_foreground_service`，`background_keepalive_service.dart:163-174` LOW 重要性）。
+  2. **代码假值联动（真实 bug，初版 6b6e8d5 就有）**：`notification_lifecycle_observer.dart:59-79` `didChangeAppLifecycleState` 调 `keepalive.onAppLifecycleChanged` 时硬编码 `activeStreamId: null, isStreaming: false`——该调用在 chat_controller 真值调用（`chat_controller.dart:1387-1404`，resumed 分支 :1413+）之后异步发起，**竞态覆盖 prefs**（`keyIsStreaming=false` / `keyActiveStreamId=''`）→ FGS 启动分支（`background_keepalive_service.dart:228`）被跳过 + WorkManager 兜底 `wasStreaming` 判断（:706-708）失效。
+  3. 保活设置页无权限状态提示 → 升级后权限静默丢失用户无从发现（`background_keepalive_settings_page.dart` 仅 4 项跳转引导，无状态检测）。
+- 位置：
+  - `lib/features/notifications/notification_lifecycle_observer.dart:59-79`：删除对 `onAppLifecycleChanged` 的假值调用（保活联动专由 chat_controller 真值负责；同步删 `getActiveSessionId` 读取与 `background_keepalive_service.dart` import——该符号仅此处用）
+  - `lib/features/notifications/turn_notification_service.dart`：接口 + 生产实现新增 `Future<bool> areNotificationsEnabled()`（Android 走 `plugin.areNotificationsEnabled()`（flutter_local_notifications 22.3.0 有，非 Android 返回 true，异常吞掉返回 false）；`LocalNotificationsTurnNotificationService` 现有 `_ensureInitialized`/`requestPermission` 模式参照）
+  - `lib/features/notifications/notification_providers.dart`：新增 `notificationPermissionProvider = FutureProvider<bool>`（watch `turnNotificationServiceProvider.areNotificationsEnabled`）
+  - `lib/features/notifications/background_keepalive_settings_page.dart`：开关分组下新增权限警示行——`when(data: enabled==false)` 显示「通知权限未开启」警示（key `settings-bg-guide-permission-warning`，statusOrangeText 图标 + 文案 + chevron，tap → `openHyperOsSetting(notificationSettings)`）；已授权/loading/error 均不显示
+  - `lib/l10n/app_localizations.dart`：新增权限警示行标题/副标题 2 条文案
+  - 测试 fake 同步：`test/features/downloads/download_controller_test.dart:17`、`download_page_test.dart:22`、`chat_media_bubble_test.dart:31`、`background_keepalive_service_test.dart:196`、`notification_providers_test.dart:569`、`settings_page_test.dart:174` 六个 `implements TurnNotificationService` 补 `areNotificationsEnabled`（fake 加可配置字段，settings_page_test 用其断言警示行显隐）
+- 现状 vs 预期：
+  - 现状：升级后权限静默丢失无提示；observer 假值调用与 chat_controller 真值调用竞态覆盖 prefs
+  - 预期：① 保活联动唯一真值路径（chat_controller），observer 不写假 prefs；② 保活页能看到权限状态，未授权时显式警示 + 一键跳系统通知设置；③ 授权后保活通知恢复显示
+- 范围：仅上述文件；**不**做自动申请二次弹窗（系统不允许）、**不**做渠道级（getNotificationChannels）检查（用户可自行在系统设置看渠道开关）、**不**改 chat_controller 真值联动逻辑。
+- 验收：
+  1. `notification_lifecycle_observer.dart` 不再调用 `onAppLifecycleChanged`（grep 仅剩 chat_controller 一处调用）
+  2. 保活页 widget 测试：fake `notificationsEnabled=false` → 警示行可见、tap 触发 openHyperOsSetting(notificationSettings)；true → 不可见
+  3. `flutter analyze` 零告警；`flutter test` 全绿（含 6 个 fake 编译 + 既有 `background_keepalive_service_test`/`settings_page_test` 相关用例）
+  4. 真机确认项（主人侧）：升级场景在被拒机器上打开保活页可见警示 → 跳系统设置开启 → 保活通知恢复
+- 备注：主因（升级保留系统状态）无代码可逆，本次修复交付「状态可见 + 引导可跳 + 链路去假值」；渠道被关排查路径写入回复备忘（系统设置 → 应用管理 → Hermes → 通知 → 「后台生成保活」渠道）。

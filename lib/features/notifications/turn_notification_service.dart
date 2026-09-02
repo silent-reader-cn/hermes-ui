@@ -51,6 +51,10 @@ abstract interface class TurnNotificationService {
   /// 请求通知权限（Android 13+ 必需；其他平台视为已授权）。
   Future<bool> requestPermission();
 
+  /// 检查通知权限当前是否已授予（Android 13+ 需 POST_NOTIFICATIONS；
+  /// 升级安装场景系统保留旧状态且不再弹窗——用于设置页状态提示引导）。
+  Future<bool> areNotificationsEnabled();
+
   /// 冷启动来源 payload / sessionId：由通知点击拉起 app 时返回 payload 中的
   /// 内容（非通知启动返回 null）。
   Future<String?> getLaunchSessionId();
@@ -451,6 +455,37 @@ class LocalNotificationsTurnNotificationService
         level: DiagnosticsLogLevel.error,
         tag: 'notifications',
         message: '请求通知权限失败',
+        errorKind: error.toString(),
+      );
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> areNotificationsEnabled() async {
+    await _ensureInitialized();
+    try {
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      // 非 Android 平台无 POST_NOTIFICATIONS 概念，视为已启用。
+      if (android == null) return true;
+      final enabled = await android.areNotificationsEnabled();
+      final result = enabled ?? false;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'notifications',
+        message: '通知权限状态: $result',
+        details: {'enabled': result},
+      );
+      return result;
+    } on Object catch (error) {
+      developer.log('检查通知权限失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '检查通知权限失败',
         errorKind: error.toString(),
       );
       return false;

@@ -622,6 +622,8 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   }
 
   @override
+  Future<bool> areNotificationsEnabled() async => true;
+  @override
   Future<String?> getLaunchSessionId() async => launchSessionId;
 }
 
