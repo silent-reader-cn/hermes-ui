@@ -50,14 +50,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// token 合并延迟（16ms）。
   static const mergeDelay = Duration(milliseconds: 16);
 
-  /// 词级 reveal 间隔（48ms）。
-  static const revealInterval = Duration(milliseconds: 48);
+  /// 词级 reveal 间隔（标准档 64ms）。
+  static const revealInterval = Duration(milliseconds: 64);
 
-  /// 每 tick 最多 reveal 的词单元数。
-  static const maxWordUnitsPerTick = 5;
+  /// 每 tick 最多 reveal 的词单元数（标准档 2）。
+  static const maxWordUnitsPerTick = 2;
 
-  /// reveal 最大滞后（积压超过该时长一次性排空）。
-  static const maxRevealLag = Duration(seconds: 1);
+  /// reveal 最大滞后（标准档 3s；积压超过该时长一次性排空）。
+  static const maxRevealLag = Duration(seconds: 3);
 
   /// reveal 队列词单元硬上限（超限直接落全文，防后台/锁屏积压爆吐卡死）。
   static const maxRevealQueueUnits = 2000;
@@ -130,6 +130,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   bool get _smoothStreaming => ref.read(smoothStreamingProvider);
 
+  SmoothStreamingSpeedPreset get _smoothStreamingSpeed =>
+      ref.read(smoothStreamingSpeedProvider);
+
   List<PersistedToolCall>? _lastPersistedToolCalls;
 
   double _nowSeconds() => _now().millisecondsSinceEpoch / 1000;
@@ -164,6 +167,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _flushPendingRevealToFullText();
       }
     });
+    ref.listen(smoothStreamingSpeedProvider, (prev, next) {
+      if (prev != next) {
+        _handleSpeedPresetChanged();
+      }
+    });
     if (sessionId.isNotEmpty) {
       _startClarifyChannel(sessionId);
       // build 期间 state 未初始化，推迟到微任务再加载（读 state 安全）。
@@ -190,6 +198,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         fallbackGroups: state.completedToolCallGroups,
       );
       state = state.copyWith(completedToolCallGroups: nextToolGroups);
+    }
+  }
+
+  void _handleSpeedPresetChanged() {
+    if (_revealTimer != null) {
+      _revealTimer?.cancel();
+      _revealTimer = null;
+      if (_revealQueue.isNotEmpty && !_appPaused && _smoothStreaming) {
+        _startRevealTimerIfNeeded();
+      }
     }
   }
 
@@ -1506,7 +1524,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           _markProgress();
         }
       } else {
-        final units = splitIntoWordUnits(text);
+        final units = splitIntoWordUnits(
+          text,
+          cjkChunkSize: _smoothStreamingSpeed.cjkChunkSize,
+        );
         _revealQueue.addAll(units);
         if (_revealQueue.length > maxRevealQueueUnits) {
           // 修复②队列硬上限：积压超过阈值直接落全文（一次铺完不再逐词），
@@ -1539,17 +1560,34 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _startRevealTimerIfNeeded() {
     if (_appPaused) return; // 后台/锁屏不启动逐词消费
     if (_revealTimer != null) return;
-    _revealTimer = Timer.periodic(revealInterval, (_) => _drainReveal());
+    _revealTimer = Timer.periodic(
+      _smoothStreamingSpeed.revealInterval,
+      (_) => _drainReveal(),
+    );
   }
 
-  /// 根据积压量自适应每 tick reveal 词单元数（探针：tick count 与 backlog=_revealQueue.length 正相关）。
+  /// 根据积压量与档位配置计算每 tick reveal 词单元数。
+  ///
+  /// - 慢档（1-3 档）：固定每 tick 单元数，不随积压自适应加速。
+  /// - 快档（4-5 档）：保留自适应加速（base=档位单元数，上限 32）。
   @visibleForTesting
-  static int adaptiveWordUnitsPerTick(int backlog) {
+  static int adaptiveWordUnitsPerTick(
+    int backlog, [
+    SmoothStreamingSpeedPreset speed = SmoothStreamingSpeedPreset.standard,
+  ]) {
     if (backlog <= 0) return 0;
-    if (backlog < 5) return backlog;
-    if (backlog <= 8) return 5;
+    if (!speed.isAdaptive) {
+      return backlog < speed.wordUnitsPerTick
+          ? backlog
+          : speed.wordUnitsPerTick;
+    }
+    if (backlog < speed.wordUnitsPerTick) return backlog;
+    if (backlog <= 8) return speed.wordUnitsPerTick;
     // backlog >= 9 时平滑递增，积压越多消耗越快，上限 32
-    return (5 + (backlog - 8) ~/ 12).clamp(5, 32);
+    return (speed.wordUnitsPerTick + (backlog - 8) ~/ 12).clamp(
+      speed.wordUnitsPerTick,
+      32,
+    );
   }
 
   void _drainReveal() {
@@ -1567,7 +1605,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
       return;
     }
-    final count = adaptiveWordUnitsPerTick(_revealQueue.length);
+    final speed = _smoothStreamingSpeed;
+    final count = adaptiveWordUnitsPerTick(_revealQueue.length, speed);
     final effectiveCount = count < _revealQueue.length
         ? count
         : _revealQueue.length;
@@ -1578,11 +1617,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       isRevealQueueEmpty: _revealQueue.isEmpty,
     );
     _markProgress();
-    // 最大滞后 1s：积压超过时限一次性排空。
+    // 最大滞后：积压超过档位时限一次性排空。
     final start = _revealQueueStart;
     if (_revealQueue.isNotEmpty &&
         start != null &&
-        _now().difference(start) >= maxRevealLag) {
+        _now().difference(start) >= speed.maxRevealLag) {
       final rest = _revealQueue.join();
       _revealQueue.clear();
       _revealQueueStart = null;
@@ -3472,10 +3511,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
-  /// 词单元切分：空白携带在单元尾部；无空白的 CJK 长串每 8 字符切一刀。
+  /// 词单元切分：空白携带在单元尾部；无空白的 CJK 长串按 [cjkChunkSize] 切分。
   /// 拼接（join）与原始文本完全一致。
   @visibleForTesting
-  static List<String> splitIntoWordUnits(String text) {
+  static List<String> splitIntoWordUnits(String text, {int cjkChunkSize = 8}) {
     if (text.isEmpty) return const [];
     final units = <String>[];
     final buffer = StringBuffer();
@@ -3483,7 +3522,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final ch = String.fromCharCode(rune);
       buffer.write(ch);
       final isWhitespace = RegExp(r'\s').hasMatch(ch);
-      if (isWhitespace || (isCjkRune(rune) && buffer.length >= 8)) {
+      if (isWhitespace || (isCjkRune(rune) && buffer.length >= cjkChunkSize)) {
         units.add(buffer.toString());
         buffer.clear();
       }
