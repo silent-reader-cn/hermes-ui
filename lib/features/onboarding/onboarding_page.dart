@@ -8,6 +8,7 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
+import '../../core/install/install_detector.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import 'onboarding_providers.dart';
@@ -56,6 +57,26 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   String _loginMessage = '';
   // 提交按钮 loading / 防重入锁：阶段一检查、阶段二验证、保存共用。
   bool _busy = false;
+  // 本机已安装状态（仅在 Windows 下为 false 时展示本地部署入口）。
+  bool _isInstalled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_checkInstalled());
+  }
+
+  Future<void> _checkInstalled() async {
+    final detector = ref.read(installDetectorProvider);
+    if (!detector.isWindows) {
+      if (mounted) setState(() => _isInstalled = true);
+      return;
+    }
+    final installed = await detector.isInstalled();
+    if (mounted) {
+      setState(() => _isInstalled = installed);
+    }
+  }
 
   @override
   void dispose() {
@@ -373,7 +394,74 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           const SizedBox(height: 20),
           _buildAuthSection(),
         ],
+        if (!_isInstalled && ref.read(installDetectorProvider).isWindows) ...[
+          const SizedBox(height: 32),
+          _buildLocalDeployBanner(),
+        ],
       ],
+    );
+  }
+
+  /// Windows 本机一键安装部署入口 Banner（仅未安装且 Windows 平台显示）。
+  Widget _buildLocalDeployBanner() {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground
+            .resolveFrom(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: CupertinoColors.separator.resolveFrom(context),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                CupertinoIcons.desktopcomputer,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                l10n.installGuideLocalDeploy,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l10n.installGuideLocalDeployDesc,
+            style: TextStyle(
+              fontSize: 13,
+              color: secondaryText.resolveFrom(context),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: CupertinoButton(
+              key: const ValueKey('onboarding-local-deploy-btn'),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              color: CupertinoColors.activeBlue,
+              onPressed: () => context.push('/install-guide'),
+              child: Text(
+                l10n.installGuideStartInstall,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: CupertinoColors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

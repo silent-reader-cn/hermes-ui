@@ -13,6 +13,7 @@ import '../features/git/git_page.dart';
 import '../features/insights/insights_page.dart';
 import '../features/kanban/kanban_page.dart';
 import '../features/memory/memory_page.dart';
+import '../features/onboarding/install_guide_page.dart';
 import '../features/onboarding/onboarding_page.dart';
 import '../features/session_list/session_list_page.dart';
 import '../features/settings/settings_page.dart';
@@ -69,14 +70,19 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final hasActive = ref.read(activeConnectionProvider) != null;
       final isOnboarding = state.matchedLocation == '/onboarding';
-      if (!hasActive && !isOnboarding) return '/onboarding';
-      if (hasActive && isOnboarding) return '/';
+      final isInstallGuide = state.matchedLocation == '/install-guide';
+      if (!hasActive && !isOnboarding && !isInstallGuide) return '/onboarding';
+      if (hasActive && (isOnboarding || isInstallGuide)) return '/';
       return null;
     },
     routes: [
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingPage(),
+      ),
+      GoRoute(
+        path: '/install-guide',
+        builder: (context, state) => const InstallGuidePage(),
       ),
       ShellRoute(
         builder: (context, state, child) =>
