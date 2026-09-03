@@ -341,6 +341,253 @@ void main() {
     });
   });
 
+  group('全部与已归档 checkbox 样式及单选互斥', () {
+    testWidgets('全部/已归档行渲染 checkbox 图标（checkmark_square 系）', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '会话一'),
+          session('s2', '会话二', archived: true),
+        ],
+      );
+      await pumpList(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 「全部」行：默认选中，左侧展示 checkmark_square_fill，颜色为 activeBlue
+      final allRow = find.byKey(const ValueKey('sheet-filter-all'));
+      expect(allRow, findsOneWidget);
+      final allIcon = tester.widget<Icon>(
+        find.descendant(of: allRow, matching: find.byType(Icon)),
+      );
+      expect(allIcon.icon, equals(CupertinoIcons.checkmark_square_fill));
+      expect(
+        allIcon.color,
+        equals(CupertinoColors.activeBlue.resolveFrom(tester.element(allRow))),
+      );
+
+      // 「已归档」行：默认未选中，左侧展示 checkmark_square，颜色为 secondaryLabel
+      final archivedRow = find.byKey(const ValueKey('sheet-filter-archived'));
+      expect(archivedRow, findsOneWidget);
+      final archivedIcon = tester.widget<Icon>(
+        find.descendant(of: archivedRow, matching: find.byType(Icon)),
+      );
+      expect(archivedIcon.icon, equals(CupertinoIcons.checkmark_square));
+      expect(
+        archivedIcon.color,
+        equals(
+          CupertinoColors.secondaryLabel.resolveFrom(
+            tester.element(archivedRow),
+          ),
+        ),
+      );
+
+      // 两行右侧均不再展示旧 checkmark（CupertinoIcons.check_mark）
+      expect(
+        find.descendant(
+          of: allRow,
+          matching: find.byIcon(CupertinoIcons.check_mark),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: archivedRow,
+          matching: find.byIcon(CupertinoIcons.check_mark),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('选中互斥：点已归档后全部行为空框，反选全部后已归档为空框', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [
+          session('s1', '普通会话'),
+          session('s2', '已归档会话', archived: true),
+        ],
+      );
+      await pumpList(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. 默认进入：全部为 fill，已归档为 empty
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-all')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square_fill),
+      );
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-archived')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square),
+      );
+
+      // 2. 点击「已归档」
+      await tester.tap(find.byKey(const ValueKey('sheet-filter-archived')));
+      await tester.pumpAndSettle();
+
+      // 3. 重新打开筛选弹层验证互斥状态：已归档为 fill，全部为空框
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-all')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square),
+      );
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-archived')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square_fill),
+      );
+
+      // 4. 反向点击「全部」→ 互斥恢复：全部为 fill，已归档为空框
+      await tester.tap(find.byKey(const ValueKey('sheet-filter-all')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-all')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square_fill),
+      );
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const ValueKey('sheet-filter-archived')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .icon,
+        equals(CupertinoIcons.checkmark_square),
+      );
+    });
+
+    testWidgets('圆角与边框层级：卡片 14pt 圆角 + 1px 分割线边框，弹层顶部 16pt 圆角', (tester) async {
+      final api = FakeSessionListApi(
+        sessions: [session('s1', '普通会话')],
+      );
+      await pumpList(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 弹层顶部大圆角（16pt）
+      final sheetBox = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('session-filter-sheet')),
+      );
+      final sheetDecoration = sheetBox.decoration as BoxDecoration;
+      expect(
+        sheetDecoration.borderRadius,
+        equals(const BorderRadius.vertical(top: Radius.circular(16))),
+      );
+
+      // 裁切组件同步配置 16pt 顶部圆角
+      final clipRRect = tester.widget<ClipRRect>(
+        find.ancestor(
+          of: find.byKey(const ValueKey('session-filter-sheet')),
+          matching: find.byType(ClipRRect),
+        ),
+      );
+      expect(
+        clipRRect.borderRadius,
+        equals(const BorderRadius.vertical(top: Radius.circular(16))),
+      );
+
+      // 分组卡片：14pt 圆角 + 1px separator 边框
+      final section = tester.widget<CupertinoListSection>(
+        find.byKey(const ValueKey('filter-section-sessions')),
+      );
+      final cardDec = section.decoration as BoxDecoration;
+      expect(cardDec.borderRadius, equals(BorderRadius.circular(14)));
+      expect(cardDec.border, isNotNull);
+      expect(cardDec.border!.top.width, equals(1.0));
+      expect(
+        cardDec.border!.top.color,
+        equals(
+          CupertinoColors.separator.resolveFrom(tester.element(
+            find.byKey(const ValueKey('filter-section-sessions')),
+          )),
+        ),
+      );
+    });
+
+    testWidgets('宽屏下居中盒保留圆角且约束最大宽度 480', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final api = FakeSessionListApi(
+        sessions: [session('s1', '普通会话')],
+      );
+      await pumpList(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      final sheet = find.byKey(const ValueKey('session-filter-sheet'));
+      expect(sheet, findsOneWidget);
+      final sheetRect = tester.getRect(sheet);
+      expect(sheetRect.width, equals(480.0));
+      // 居中于 1200 宽屏（left 应为 (1200 - 480) / 2 = 360）
+      expect(sheetRect.left, closeTo(360.0, 1.0));
+
+      // 居中盒自身带有 16pt 顶部圆角裁切
+      final clip = tester.widget<ClipRRect>(
+        find.ancestor(of: sheet, matching: find.byType(ClipRRect)),
+      );
+      expect(
+        clip.borderRadius,
+        equals(const BorderRadius.vertical(top: Radius.circular(16))),
+      );
+    });
+  });
+
   group('subagent 显示开关（默认关闭）', () {
     SessionSummary subagentSession(String id, String title) {
       return SessionSummary(

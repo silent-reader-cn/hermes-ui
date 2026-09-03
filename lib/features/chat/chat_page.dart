@@ -441,6 +441,16 @@ Future<void> _showSessionActions(
       ),
     ],
     AdaptiveMenuItem(
+      key: const ValueKey('chat-action-workspace'),
+      label: l10n.workspaceFilesTitle,
+      onPressed: () => unawaited(context.push('/workspace/$sessionId')),
+    ),
+    AdaptiveMenuItem(
+      key: const ValueKey('chat-action-git'),
+      label: l10n.gitWorkspaceTitle,
+      onPressed: () => unawaited(context.push('/git/$sessionId')),
+    ),
+    AdaptiveMenuItem(
       key: const ValueKey('chat-action-branch'),
       label: l10n.createBranch,
       onPressed: () async {

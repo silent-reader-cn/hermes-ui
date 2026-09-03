@@ -1520,10 +1520,11 @@ Map<String, String> _projectNameMap(WidgetRef ref) {
 /// 筛选底部弹层：显示设置 / 会话 / 渠道 / 项目 四段等宽 insetGrouped 列表。
 ///
 /// 视觉对齐标准 iOS 底部弹层（#27 症状 B）：遮罩/动画走
-/// [showCupertinoModalPopup] 默认（`_showFilterSheet` 打开），顶部圆角 12
-/// 对齐 CupertinoActionSheet 主表（SDK dialog.dart:1312）；四段 uniform
-/// [CupertinoListSection.insetGrouped]、分割线全宽（#28，divider 起点置 0）；
-/// 选中行为系统 checkmark（[_SheetOptionRow]），无自绘 pill。
+/// [showCupertinoModalPopup] 默认（`_showFilterSheet` 打开），顶部圆角 16
+/// 对齐系统 sheet；四段 uniform [CupertinoListSection.insetGrouped]、
+/// 卡片圆角 14pt 配 1px 分割线边框（对齐 adaptive_popover:383）；
+/// 分割线全宽（#28，divider 起点置 0）；
+/// 「全部/已归档」采用左侧 checkbox 单选（[_SheetCheckboxRow]），渠道与项目采用右侧 checkmark 单选。
 class _SessionFilterSheet extends ConsumerWidget {
   const _SessionFilterSheet({required this.state, required this.onSelect});
 
@@ -1545,33 +1546,47 @@ class _SessionFilterSheet extends ConsumerWidget {
       context,
     );
     final screenHeight = MediaQuery.sizeOf(context).height;
-    // 圆角对齐系统（CupertinoActionSheet 主表圆角 12.0，SDK dialog.dart:1312）；
-    // 遮罩/动画由 showCupertinoModalPopup 提供，不再自绘 16 圆角。
-    const sheetRadius = BorderRadius.vertical(top: Radius.circular(12));
+    // 顶部圆角对齐系统 sheet（16pt），内容随圆角裁切干净；
+    // 宽屏居中盒与窄屏全宽两条路径均在 ConstrainedBox 内部裁切，确保不掉角。
+    const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
     final headerStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
       color: secondaryText.resolveFrom(context),
       letterSpacing: 0.3,
     );
+    // 卡片装饰：14pt 圆角对齐 adaptive_popover:383，补 1px separator 边框清晰区分层次。
+    final cardDecoration = BoxDecoration(
+      color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+        context,
+      ),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: CupertinoColors.separator.resolveFrom(context),
+        width: 1.0,
+      ),
+    );
 
-    return ClipRRect(
-      borderRadius: sheetRadius,
-      child: SafeArea(
-        top: false,
-        // 宽屏（桌面双栏）下收窄为居中的 iOS 风格底部弹层，保持纵向可读。
-        // Align 负责居中但不扩容背景盒：DecoratedBox 尺寸跟随内容（min）。
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 480,
-              // 内容超高时滚动而非撑破全屏（约 15% 顶部留白，对齐 iOS 底部弹层）。
-              maxHeight: screenHeight * 0.85,
-            ),
+    return SafeArea(
+      top: false,
+      // 宽屏（桌面双栏）下收窄为居中的 iOS 风格底部弹层，保持纵向可读。
+      // Align 负责居中但不扩容背景盒：DecoratedBox 尺寸跟随内容（min）。
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 480,
+            // 内容超高时滚动而非撑破全屏（约 15% 顶部留白，对齐 iOS 底部弹层）。
+            maxHeight: screenHeight * 0.85,
+          ),
+          child: ClipRRect(
+            borderRadius: sheetRadius,
             child: DecoratedBox(
               key: const ValueKey('session-filter-sheet'),
-              decoration: BoxDecoration(color: sheetBg),
+              decoration: BoxDecoration(
+                color: sheetBg,
+                borderRadius: sheetRadius,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1616,9 +1631,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                               l10n.displaySectionHeader,
                               style: headerStyle,
                             ),
-                            backgroundColor: CupertinoColors
-                                .secondarySystemGroupedBackground
-                                .resolveFrom(context),
+                            backgroundColor: CupertinoColors.transparent,
                             separatorColor: CupertinoColors.separator
                                 .resolveFrom(context),
                             margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -1626,12 +1639,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                             // additionalDividerMargin，置 0 使分割线从容器左缘起笔。
                             dividerMargin: 0,
                             additionalDividerMargin: 0,
-                            decoration: BoxDecoration(
-                              color: CupertinoColors
-                                  .secondarySystemGroupedBackground
-                                  .resolveFrom(context),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            decoration: cardDecoration,
                             children: [
                               CupertinoListTile(
                                 padding: const EdgeInsets.symmetric(
@@ -1663,32 +1671,25 @@ class _SessionFilterSheet extends ConsumerWidget {
                           ),
                           CupertinoListSection.insetGrouped(
                             key: const ValueKey('filter-section-sessions'),
-                            hasLeading: false,
+                            hasLeading: true,
                             header: Text(l10n.sessions, style: headerStyle),
-                            backgroundColor: CupertinoColors
-                                .secondarySystemGroupedBackground
-                                .resolveFrom(context),
+                            backgroundColor: CupertinoColors.transparent,
                             separatorColor: CupertinoColors.separator
                                 .resolveFrom(context),
                             margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                             // #28 分割线全宽
                             dividerMargin: 0,
                             additionalDividerMargin: 0,
-                            decoration: BoxDecoration(
-                              color: CupertinoColors
-                                  .secondarySystemGroupedBackground
-                                  .resolveFrom(context),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            decoration: cardDecoration,
                             children: [
-                              _SheetOptionRow(
+                              _SheetCheckboxRow(
                                 key: const ValueKey('sheet-filter-all'),
                                 label: l10n.all,
                                 selected: mode == SessionListFilterMode.all,
                                 onTap: () =>
                                     onSelect(SessionListFilterMode.all, null),
                               ),
-                              _SheetOptionRow(
+                              _SheetCheckboxRow(
                                 key: const ValueKey('sheet-filter-archived'),
                                 label:
                                     '${l10n.archived}${_archivedCountLabelFor(current)}',
@@ -1715,21 +1716,14 @@ class _SessionFilterSheet extends ConsumerWidget {
                               key: const ValueKey('filter-section-channels'),
                               hasLeading: false,
                               header: Text(l10n.channels, style: headerStyle),
-                              backgroundColor: CupertinoColors
-                                  .secondarySystemGroupedBackground
-                                  .resolveFrom(context),
+                              backgroundColor: CupertinoColors.transparent,
                               separatorColor: CupertinoColors.separator
                                   .resolveFrom(context),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                               // #28 分割线全宽
                               dividerMargin: 0,
                               additionalDividerMargin: 0,
-                              decoration: BoxDecoration(
-                                color: CupertinoColors
-                                    .secondarySystemGroupedBackground
-                                    .resolveFrom(context),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                              decoration: cardDecoration,
                               children: [
                                 for (final label in current.sourceLabels)
                                   _SheetOptionRow(
@@ -1750,21 +1744,14 @@ class _SessionFilterSheet extends ConsumerWidget {
                               key: const ValueKey('filter-section-projects'),
                               hasLeading: false,
                               header: Text(l10n.projects, style: headerStyle),
-                              backgroundColor: CupertinoColors
-                                  .secondarySystemGroupedBackground
-                                  .resolveFrom(context),
+                              backgroundColor: CupertinoColors.transparent,
                               separatorColor: CupertinoColors.separator
                                   .resolveFrom(context),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                               // #28 分割线全宽
                               dividerMargin: 0,
                               additionalDividerMargin: 0,
-                              decoration: BoxDecoration(
-                                color: CupertinoColors
-                                    .secondarySystemGroupedBackground
-                                    .resolveFrom(context),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                              decoration: cardDecoration,
                               children: [
                                 for (final project in projects)
                                   _SheetOptionRow(
@@ -1800,7 +1787,7 @@ class _SessionFilterSheet extends ConsumerWidget {
   }
 }
 
-/// 筛选弹层中的单选行（会话 / 渠道 / 项目 共用）。
+/// 筛选弹层中的单选行（渠道 / 项目 及清除动作共用）。
 ///
 /// 选中态：右侧系统 checkmark（`CupertinoIcons.check_mark`，对齐
 /// CupertinoActionSheet/系统列表视觉），行背景与文字样式不变；去自绘
@@ -1839,6 +1826,54 @@ class _SheetOptionRow extends StatelessWidget {
               color: CupertinoColors.activeBlue.resolveFrom(context),
             )
           : null,
+      onTap: onTap,
+    );
+  }
+}
+
+/// 筛选弹层中的 checkbox 样式单选行（「全部」「已归档」专用）。
+///
+/// 视觉：左侧方框图标（选中为 `CupertinoIcons.checkmark_square_fill` + activeBlue，
+/// 未选中为 `CupertinoIcons.checkmark_square` + secondaryLabel），右侧无 checkmark。
+/// 语义：单选互斥（filterMode 单值）。
+class _SheetCheckboxRow extends StatelessWidget {
+  const _SheetCheckboxRow({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = CupertinoColors.activeBlue.resolveFrom(context);
+    final inactiveColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+
+    return CupertinoListTile(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      backgroundColor: CupertinoColors.secondarySystemGroupedBackground
+          .resolveFrom(context),
+      leading: Icon(
+        selected
+            ? CupertinoIcons.checkmark_square_fill
+            : CupertinoIcons.checkmark_square,
+        size: 20,
+        color: selected ? activeColor : inactiveColor,
+      ),
+      leadingSize: 20,
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 15,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
+      ),
       onTap: onTap,
     );
   }

@@ -82,7 +82,7 @@ void main() {
     expect(titleRect.bottom, lessThanOrEqualTo(44));
   });
 
-  testWidgets('窄屏（<900）：内容区保持系统大标题展开高度（手机样式不变）', (tester) async {
+  testWidgets('窄屏（<900）：内容区保持大标题展开高度（手机样式不变）', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -109,18 +109,63 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 探针法（header-geometry reference）：大标题与收起中标题复用同一
-    // Text 实例 → find.text 命中 2 处，按渲染高度取最高者量大标题行盒。
+    // 2026-09-03 TASK sep03：窄屏改自绘 LargeTitleSliverHeaderDelegate，
+    // 收起态中标题仅 showMiddleOnNarrow 页面渲染——默认页大标题只有 1 份。
     final titleFinder = find.text('技能');
-    expect(titleFinder, findsNWidgets(2));
-    double maxHeight = 0;
-    for (var i = 0; i < 2; i++) {
-      final height = tester.getRect(titleFinder.at(i)).height;
-      if (height > maxHeight) maxHeight = height;
-    }
-    // Ahem 字体下行盒高 == fontSize：34pt 大标题 → 34（±3 覆盖字体差异），
-    // 显著高于 17pt 收起中标题 → 大标题展开模式仍在（96px 条）。
+    expect(titleFinder, findsOneWidget);
+    final maxHeight = tester.getRect(titleFinder).height;
+    // Ahem 字体下行盒高 == fontSize：34pt 大标题 → 34（±3 覆盖字体差异）。
     expect(maxHeight, greaterThanOrEqualTo(31));
     expect(maxHeight, lessThanOrEqualTo(42));
+  });
+
+  testWidgets('窄屏（<900）：▾ 位于大标题右侧而非右上角 trailing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const CupertinoApp(
+        localizationsDelegates: testDelegates,
+        home: ProviderScope(
+          child: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                AdaptiveSliverNavigationBar(
+                  title: '技能',
+                  leading: SizedBox.shrink(),
+                  trailing: SizedBox(
+                    key: ValueKey('page-trailing'),
+                    width: 30,
+                    height: 30,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 1000, width: double.infinity),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final titleRect = tester.getRect(find.text('技能'));
+    final dropdownRect = tester.getRect(
+      find.byKey(const ValueKey('narrow-nav-dropdown')),
+    );
+    final trailingRect = tester.getRect(find.byKey(const ValueKey('page-trailing')));
+
+    // ▾ 紧贴标题右缘（间距约 4px，容忍字体度量差），而不是贴在 trailing 左侧。
+    expect(dropdownRect.left, greaterThan(titleRect.right - 8));
+    expect(dropdownRect.left, lessThan(titleRect.right + 24));
+    // ▾ 垂直中心与大标题行中心一致（展开态同行）。
+    expect(
+      (dropdownRect.center.dy - titleRect.center.dy).abs(),
+      lessThan(12),
+    );
+    // ▾ 明显位于页面 trailing 按钮左侧（不再挤右上角一排）。
+    expect(dropdownRect.right, lessThan(trailingRect.left));
   });
 }

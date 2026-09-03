@@ -1,21 +1,23 @@
 import 'package:flutter/cupertino.dart';
 
 import '../shell/adaptive_shell.dart';
+import 'large_title_sliver_header.dart';
 import 'narrow_navigation_dropdown.dart';
 
 /// 宽屏自动收敛的 Cupertino 导航栏（Sliver 版）。
 ///
-/// - 窄屏（width < 900，手机）：保持系统 `CupertinoSliverNavigationBar`
-///   大标题模式（展开 ~96 / 收起 44），并在 trailing 区域提供快捷导航下拉按钮
-///   （[NarrowNavigationDropdownButton]），保证各个大标题页面间可互相快速切换；
+/// - 窄屏（width < 900，手机）：自绘大标题头部（[LargeTitleSliverHeaderDelegate]，
+///   几何对齐会话列表页 `SessionListHeaderDelegate` 基准），快捷导航下拉按钮
+///   （[NarrowNavigationDropdownButton]）紧贴大标题右侧并随展开/收起平滑移动
+///   （TASK sep03：不再挤在右上角 trailing 区）；
 /// - 宽屏（width >= 900，桌面双栏）：收敛为 44pt 紧凑导航条
 ///   （`CupertinoNavigationBar`，不可随滚动收起），与左侧侧栏顶部的
 ///   [SidebarUtilityToolbar]（44px）高度对齐，消除双栏下内容区 Header
 ///   与侧栏工具条的高度参差。
 ///
 /// 注意：`CupertinoSliverNavigationBar` 断言 largeTitle 不可为 null
-/// （无大标题内容即崩溃），因此宽屏紧凑模式不能走同一组件，改为
-/// `SliverToBoxAdapter` 包裹固定 44pt 的 `CupertinoNavigationBar`。
+/// （无大标题内容即崩溃），且其 largeTitle 行无法在标题旁插入子组件，
+/// 因此窄屏改走自绘 delegate；宽屏固定条亦不能与其共用。
 class AdaptiveSliverNavigationBar extends StatelessWidget {
   const AdaptiveSliverNavigationBar({
     super.key,
@@ -47,10 +49,10 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
   /// 窄屏下是否同时在 44pt 条显示中标题。
   ///
   /// 少数页面原本即「大标题 + 收起态 middle」双模式（workspace 系），
-  /// 传 `true` 保持窄屏行为逐像素不变。
+  /// 传 `true` 保持窄屏行为不变。
   final bool showMiddleOnNarrow;
 
-  /// 窄屏下是否在大标题右侧（trailing 区域）追加快捷导航下拉按钮（TASK W3-2）。
+  /// 窄屏下是否在大标题右侧追加快捷导航下拉按钮（TASK W3-2）。
   ///
   /// 默认为 `true`；可显式传 `false` 关闭。
   final bool showNarrowNavigationDropdown;
@@ -86,31 +88,25 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
       );
     }
 
-    Widget? effectiveTrailing = trailing;
-    if (showNarrowNavigationDropdown) {
-      const dropdown = NarrowNavigationDropdownButton();
-      if (trailing != null) {
-        effectiveTrailing = Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            dropdown,
-            trailing!,
-          ],
-        );
-      } else {
-        effectiveTrailing = dropdown;
-      }
-    }
-
-    return CupertinoSliverNavigationBar(
-      leading: leading,
-      trailing: effectiveTrailing,
-      padding: padding,
-      bottom: bottom,
-      // 窄屏：大标题模式，中标题仅在原页面本就存在时保留。
-      middle: showMiddleOnNarrow ? buildTitle(title) : null,
-      largeTitle: buildTitle(title),
+    // 窄屏：自绘大标题头部，▾ 紧贴大标题右侧（与会话列表页基准一致）。
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: LargeTitleSliverHeaderDelegate(
+        title: title,
+        leading: leading,
+        trailing: trailing,
+        titleTrailing:
+            showNarrowNavigationDropdown
+                ? const NarrowNavigationDropdownButton()
+                : null,
+        showCollapsedTitle: showMiddleOnNarrow,
+        topPadding: MediaQuery.paddingOf(context).top,
+        brightness: CupertinoTheme.of(context).brightness ?? Brightness.light,
+        padding: padding,
+        bottom: bottom,
+        onTitleDoubleTap: onTitleDoubleTap,
+        portrait: MediaQuery.orientationOf(context) == Orientation.portrait,
+      ),
     );
   }
 }

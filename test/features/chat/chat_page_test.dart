@@ -266,6 +266,8 @@ void main() {
       expect(find.byKey(const ValueKey('chat-action-rename')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-pin')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-archive')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-workspace')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-action-git')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-branch')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-export')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-action-delete')), findsOneWidget);
@@ -380,6 +382,58 @@ void main() {
       expect(api.branchCalls, 1);
       // 已跳转到新分支会话路由
       expect(router.routeInformationProvider.value.uri.path, '/chat/branch-s1');
+
+      await _unmount(tester);
+    });
+
+    testWidgets('工作区文件：点击后 push 到工作区路由', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '会话', 'messages': const []},
+      };
+      final router = await _pumpRouted(tester, api);
+      expect(router.routeInformationProvider.value.uri.path, '/chat/s1');
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey('chat-action-workspace')), findsOneWidget);
+      expect(find.text('工作区文件'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chat-action-workspace')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 注：go_router 在测试环境（非 pumpAndSettle 驱动）下，push 会真实压入
+      // Navigator 显示目标页，但 RouteInformation 回写要等转场 settle，路径断言
+      // 不可靠——以页面渲染为准（与 session_action_menu_test 口径一致）。
+      expect(find.text('工作区页:s1'), findsOneWidget);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('Git 工作区：点击后 push 到 Git 工作区路由', (tester) async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {'session_id': 's1', 'title': '会话', 'messages': const []},
+      };
+      final router = await _pumpRouted(tester, api);
+      expect(router.routeInformationProvider.value.uri.path, '/chat/s1');
+
+      await tester.tap(find.byKey(const ValueKey('chat-session-actions')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey('chat-action-git')), findsOneWidget);
+      expect(find.text('Git 工作区'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chat-action-git')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 同上：push 语义以页面渲染为准，路径不 settle 不断言。
+      expect(find.text('Git页:s1'), findsOneWidget);
 
       await _unmount(tester);
     });
@@ -838,6 +892,22 @@ Future<GoRouter> _pumpRouted(WidgetTester tester, _FakeChatApi api) async {
         path: '/chat/:id',
         builder: (context, state) =>
             ChatPage(sessionId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/workspace/:sessionId',
+        builder: (context, state) => CupertinoPageScaffold(
+          child: Center(
+            child: Text('工作区页:${state.pathParameters['sessionId']}'),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/git/:sessionId',
+        builder: (context, state) => CupertinoPageScaffold(
+          child: Center(
+            child: Text('Git页:${state.pathParameters['sessionId']}'),
+          ),
+        ),
       ),
     ],
   );

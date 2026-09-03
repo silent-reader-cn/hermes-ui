@@ -100,12 +100,12 @@ void main() {
   }
 
   group('#52 聊天状态指示行渲染', () {
-    testWidgets('sending 态 → 连接中… 转圈', (tester) async {
+    testWidgets('sending 态 → 连接中 转圈', (tester) async {
       await pumpWithState(tester, baseState(phase: ChatPhase.sending));
-      expect(find.text('连接中…'), findsOneWidget);
+      expect(find.text('连接中'), findsOneWidget);
     });
 
-    testWidgets('prefill loading → 等待模型响应…（含 tps 不显示）', (tester) async {
+    testWidgets('prefill loading → 等待模型响应（含 tps 不显示）', (tester) async {
       await pumpWithState(
         tester,
         baseState(phase: ChatPhase.streaming).copyWith(
@@ -113,17 +113,17 @@ void main() {
           prefillLabel: 'Building context',
         ),
       );
-      expect(find.text('等待模型响应…'), findsOneWidget);
+      expect(find.text('等待模型响应'), findsOneWidget);
       expect(find.textContaining('tps'), findsNothing);
     });
 
-    testWidgets('prefill not_configured → 等待模型响应…', (tester) async {
+    testWidgets('prefill not_configured → 等待模型响应', (tester) async {
       await pumpWithState(
         tester,
         baseState(phase: ChatPhase.streaming)
             .copyWith(prefillStatus: ContextPrefillStatus.notConfigured),
       );
-      expect(find.text('等待模型响应…'), findsOneWidget);
+      expect(find.text('等待模型响应'), findsOneWidget);
     });
 
     testWidgets('prefill error → 上下文不可用', (tester) async {
@@ -162,7 +162,7 @@ void main() {
       expect(find.text('生成中'), findsOneWidget);
     });
 
-    testWidgets('recovery=checking → 连接异常，排查中…', (tester) async {
+    testWidgets('recovery=checking → 连接异常，排查中', (tester) async {
       await pumpWithState(
         tester,
         baseState(phase: ChatPhase.recovering).copyWith(
@@ -172,10 +172,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('连接异常，排查中…'), findsOneWidget);
+      expect(find.text('连接异常，排查中'), findsOneWidget);
     });
 
-    testWidgets('recovery=reconnecting → 正在重新连接…', (tester) async {
+    testWidgets('recovery=reconnecting → 正在重新连接', (tester) async {
       await pumpWithState(
         tester,
         baseState(phase: ChatPhase.recovering).copyWith(
@@ -185,7 +185,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('正在重新连接…'), findsOneWidget);
+      expect(find.text('正在重新连接'), findsOneWidget);
     });
 
     testWidgets('空闲（无流无 sending 无 prefill）→ 状态行隐藏', (tester) async {
@@ -203,8 +203,8 @@ void main() {
           ],
         ),
       );
-      expect(find.text('连接中…'), findsNothing);
-      expect(find.text('等待模型响应…'), findsNothing);
+      expect(find.text('连接中'), findsNothing);
+      expect(find.text('等待模型响应'), findsNothing);
       expect(find.text('生成中'), findsNothing);
     });
 
@@ -214,8 +214,8 @@ void main() {
         baseState(phase: ChatPhase.sending),
         statusLineEnabled: false,
       );
-      expect(find.text('连接中…'), findsNothing);
-      expect(find.text('等待模型响应…'), findsNothing);
+      expect(find.text('连接中'), findsNothing);
+      expect(find.text('等待模型响应'), findsNothing);
     });
 
     testWidgets('prefill loaded（就绪）→ 不显示等待/上下文错误', (tester) async {
@@ -224,7 +224,7 @@ void main() {
         baseState(phase: ChatPhase.streaming)
             .copyWith(prefillStatus: ContextPrefillStatus.loaded),
       );
-      expect(find.text('等待模型响应…'), findsNothing);
+      expect(find.text('等待模型响应'), findsNothing);
       expect(find.text('上下文不可用'), findsNothing);
       expect(find.text('生成中'), findsOneWidget);
     });
@@ -249,8 +249,8 @@ void main() {
           turnStartedMillis: DateTime.now().millisecondsSinceEpoch,
         ),
       );
-      // 仅有一行状态行（等待模型响应…）
-      expect(find.textContaining('等待模型响应…'), findsOneWidget);
+      // 仅有一行状态行（等待模型响应）
+      expect(find.textContaining('等待模型响应'), findsOneWidget);
       // 无思考中文本残留
       expect(find.text('思考中…'), findsNothing);
       expect(find.textContaining('思考中'), findsNothing);
@@ -278,17 +278,17 @@ void main() {
         ),
         clockOverride: () => now,
       );
-      expect(find.text('等待模型响应… · 已工作 00:00'), findsOneWidget);
+      expect(find.text('等待模型响应 · 已工作 00:00'), findsOneWidget);
 
       // 推进 1 秒
       now = now.add(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('等待模型响应… · 已工作 00:01'), findsOneWidget);
+      expect(find.text('等待模型响应 · 已工作 00:01'), findsOneWidget);
 
       // 推进 64 秒 (累计 65 秒 -> 01:05)
       now = now.add(const Duration(seconds: 64));
       await tester.pump(const Duration(seconds: 64));
-      expect(find.text('等待模型响应… · 已工作 01:05'), findsOneWidget);
+      expect(find.text('等待模型响应 · 已工作 01:05'), findsOneWidget);
     });
 
     testWidgets('意见3：生成态含 tps 与 MM:SS 耗时文本', (tester) async {

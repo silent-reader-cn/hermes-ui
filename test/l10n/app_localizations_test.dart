@@ -456,6 +456,7 @@ void main() {
     test('Git strings return Chinese values', () {
       expect(l10n.gitPanel, 'Git 面板');
       expect(l10n.gitPanelTitle, 'Git 面板');
+      expect(l10n.gitWorkspaceTitle, 'Git 工作区');
       expect(l10n.refreshGitStatus, '刷新 Git 状态');
       expect(l10n.notAGitRepo, '不是 Git 仓库');
       expect(l10n.notAGitRepoDetail, '该工作区不是 git 仓库，无法使用 Git 功能。');
@@ -557,11 +558,11 @@ void main() {
       expect(l10n.smoothStreamingSpeedStandard, '标准');
       expect(l10n.smoothStreamingSpeedFast, '快');
       expect(l10n.smoothStreamingSpeedVeryFast, '极快');
-      expect(l10n.chatStatusConnecting, '连接中…');
-      expect(l10n.chatStatusWaitingResponse, '等待模型响应…');
+      expect(l10n.chatStatusConnecting, '连接中');
+      expect(l10n.chatStatusWaitingResponse, '等待模型响应');
       expect(l10n.chatStatusGenerating, '生成中');
-      expect(l10n.chatStatusInvestigating, '连接异常，排查中…');
-      expect(l10n.chatStatusReconnecting, '正在重新连接…');
+      expect(l10n.chatStatusInvestigating, '连接异常，排查中');
+      expect(l10n.chatStatusReconnecting, '正在重新连接');
       expect(l10n.chatStatusReconnected, '已重连');
       expect(l10n.chatStatusContextUnavailable, '上下文不可用');
       expect(l10n.chatStatusLine, '聊天状态指示');
@@ -700,11 +701,14 @@ void main() {
         'unknown_custom_tool',
       );
       expect(l10n.localizeToolName(''), 'Tool');
-      expect(l10n.chatStatusConnecting, 'Connecting…');
-      expect(l10n.chatStatusWaitingResponse, 'Waiting for model response…');
+      expect(l10n.chatStatusConnecting, 'Connecting');
+      expect(l10n.chatStatusWaitingResponse, 'Waiting for model response');
       expect(l10n.chatStatusGenerating, 'Generating');
-      expect(l10n.chatStatusInvestigating, 'Connection anomaly, investigating…');
-      expect(l10n.chatStatusReconnecting, 'Reconnecting…');
+      expect(
+        l10n.chatStatusInvestigating,
+        'Connection anomaly, investigating',
+      );
+      expect(l10n.chatStatusReconnecting, 'Reconnecting');
       expect(l10n.chatStatusReconnected, 'Reconnected');
       expect(l10n.chatStatusContextUnavailable, 'Context unavailable');
       expect(l10n.chatStatusLine, 'Chat Status Line');

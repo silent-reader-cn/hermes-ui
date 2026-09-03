@@ -1011,6 +1011,7 @@ class AppLocalizations {
   String get git => isEnglish ? 'Git' : 'Git';
   String get gitPanel => isEnglish ? 'Git Panel' : 'Git 面板';
   String get gitPanelTitle => isEnglish ? 'Git Panel' : 'Git 面板';
+  String get gitWorkspaceTitle => isEnglish ? 'Git Workspace' : 'Git 工作区';
   String get refreshGitStatus => isEnglish ? 'Refresh Git Status' : '刷新 Git 状态';
   String get notAGitRepo => isEnglish ? 'Not a Git Repository' : '不是 Git 仓库';
   String get notAGitRepoDetail => isEnglish
@@ -1394,13 +1395,13 @@ class AppLocalizations {
             : '$count 个会话正在生成')
       : (isEnglish ? 'No active sessions' : '暂无进行中会话');
 
-  String get chatStatusConnecting => isEnglish ? 'Connecting…' : '连接中…';
+  String get chatStatusConnecting => isEnglish ? 'Connecting' : '连接中';
   String get chatStatusWaitingResponse =>
-      isEnglish ? 'Waiting for model response…' : '等待模型响应…';
+      isEnglish ? 'Waiting for model response' : '等待模型响应';
   String get chatStatusGenerating => isEnglish ? 'Generating' : '生成中';
   String get chatStatusInvestigating =>
-      isEnglish ? 'Connection anomaly, investigating…' : '连接异常，排查中…';
-  String get chatStatusReconnecting => isEnglish ? 'Reconnecting…' : '正在重新连接…';
+      isEnglish ? 'Connection anomaly, investigating' : '连接异常，排查中';
+  String get chatStatusReconnecting => isEnglish ? 'Reconnecting' : '正在重新连接';
   String get chatStatusReconnected => isEnglish ? 'Reconnected' : '已重连';
   String get chatStatusContextUnavailable =>
       isEnglish ? 'Context unavailable' : '上下文不可用';
