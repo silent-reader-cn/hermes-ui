@@ -139,6 +139,9 @@ void main() {
             recentlyCreatedSessionIdProvider.overrideWith(
               () => recentController,
             ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
+            ),
           ],
           child: const CupertinoApp(
             locale: Locale('zh'),
@@ -315,6 +318,9 @@ void main() {
             recentlyCreatedSessionIdProvider.overrideWith(
               () => recentController,
             ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
+            ),
           ],
           child: const CupertinoApp(
             locale: Locale('zh'),
@@ -356,6 +362,9 @@ void main() {
             recentlyCreatedSessionIdProvider.overrideWith(
               () => recentController,
             ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
+            ),
           ],
           child: const CupertinoApp(
             locale: Locale('zh'),
@@ -387,6 +396,9 @@ void main() {
             apiClientProvider.overrideWithValue(client),
             recentlyCreatedSessionIdProvider.overrideWith(
               () => recentController,
+            ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
             ),
           ],
           child: const CupertinoApp(
@@ -439,6 +451,9 @@ void main() {
             apiClientProvider.overrideWithValue(client),
             recentlyCreatedSessionIdProvider.overrideWith(
               () => recentController,
+            ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
             ),
           ],
           child: const CupertinoApp(
@@ -559,6 +574,9 @@ void main() {
               (_) => _StubProjectApi(),
             ),
             chatApiProvider.overrideWithValue(fakeChatApi),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
+            ),
           ],
           child: CupertinoApp.router(
             routerConfig: router,

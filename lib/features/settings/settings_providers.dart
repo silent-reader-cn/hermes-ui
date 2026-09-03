@@ -992,7 +992,7 @@ final serverEditorApiClientFactoryProvider =
 const String kAutoOpenContextOnNewSessionKey =
     'settings.autoOpenContextOnNewSession';
 
-/// 新建会话自动打开上下文指示器弹窗偏好设置 Provider（持久化到 shared_preferences，默认开启）。
+/// 新建会话自动打开上下文指示器弹窗偏好设置 Provider（持久化到 shared_preferences，默认关闭）。
 final autoOpenContextOnNewSessionProvider =
     NotifierProvider<AutoOpenContextOnNewSessionController, bool>(
       AutoOpenContextOnNewSessionController.new,
@@ -1005,9 +1005,9 @@ class AutoOpenContextOnNewSessionController extends Notifier<bool> {
   static Future<bool> loadPref({SharedPreferences? customPrefs}) async {
     try {
       final prefs = customPrefs ?? await SharedPreferences.getInstance();
-      return prefs.getBool(keyAutoOpenContext) ?? true;
+      return prefs.getBool(keyAutoOpenContext) ?? false;
     } catch (_) {
-      return true;
+      return false;
     }
   }
 
@@ -1017,7 +1017,7 @@ class AutoOpenContextOnNewSessionController extends Notifier<bool> {
   bool build() {
     _hasCustomState = false;
     unawaited(_load());
-    return true;
+    return false;
   }
 
   Future<void> _load() async {

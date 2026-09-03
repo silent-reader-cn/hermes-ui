@@ -18,12 +18,12 @@ void main() {
   });
 
   group('AutoOpenContextOnNewSessionController 状态与持久化', () {
-    test('默认值为 true（新建会话默认自动打开上下文弹窗）', () {
+    test('默认值为 false（新建会话默认不自动打开上下文弹窗）', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       final state = container.read(autoOpenContextOnNewSessionProvider);
-      expect(state, isTrue);
+      expect(state, isFalse);
     });
 
     test('初始状态从 SharedPreferences 读取（false）', () async {
@@ -154,19 +154,19 @@ void main() {
       );
       expect(switchFinder, findsOneWidget);
 
-      // 默认开启
+      // 默认关闭
       final switchWidget = tester.widget<CupertinoSwitch>(switchFinder);
-      expect(switchWidget.value, isTrue);
+      expect(switchWidget.value, isFalse);
 
-      // 点击切换为关闭
+      // 点击切换为开启
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       final switchWidgetAfter = tester.widget<CupertinoSwitch>(switchFinder);
-      expect(switchWidgetAfter.value, isFalse);
+      expect(switchWidgetAfter.value, isTrue);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(kAutoOpenContextOnNewSessionKey), isFalse);
+      expect(prefs.getBool(kAutoOpenContextOnNewSessionKey), isTrue);
     });
   });
 }
