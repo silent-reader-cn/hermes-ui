@@ -300,17 +300,11 @@ class _AssistantContent extends StatelessWidget {
     // 不再独立渲染思考卡。
     final distinctTools = _distinctToolGroups(toolGroups);
 
-    // 统一间距模型：各区块（选中上下文卡片 / 工具卡(思考+工具) / 正文 / 速率）
+    // 统一间距模型：各区块（选中上下文卡片 / 正文 / 工具卡(思考+工具) / 速率）
     // 之间固定 [kMessageSectionGap]。
     final sections = <Widget>[];
     if (blocks.isNotEmpty) {
       sections.add(SelectedContextCardGroup(blocks: blocks));
-    }
-    // 真实时序对齐（Hermes 流序：思考 → 工具 → 文本）：工具卡
-    // （含思考子卡行）渲染在正文文本上方——遇 think/tool 建卡吸收连续
-    // think/tool，遇 text 打断为独立正文段。
-    for (final group in distinctTools) {
-      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (parsedContent.isNotEmpty) {
       if (isStreaming && !hasMediaMarker) {
@@ -345,6 +339,11 @@ class _AssistantContent extends StatelessWidget {
           ),
         );
       }
+    }
+    // text 是唯一分隔符：正文之后的非 text 信息（think/tool）合并为工具卡，
+    // 排在文本下方；不预设「思考→工具→文本」之类的固定流序。
+    for (final group in distinctTools) {
+      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
     }
     if (message.turnTps != null) {
       sections.add(
