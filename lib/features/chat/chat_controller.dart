@@ -1782,7 +1782,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   /// 以 messageId == streamingAssistantMessageId 定位，原地替换（content 追加）。
-  void _appendToStreamingMessage(String text, {bool? isRevealQueueEmpty}) {
+  ///
+  /// [establishPoint] = true 时（interim_assistant 新段落路径）在追加前建立
+  /// text 断点（start=缓冲全量）；默认 false —— flush/reveal 只是推进既有
+  /// text 段的 content，不产生新段，若在此建点会用「已 flush 进度」把同一
+  /// 段文本在工具断点之后劈开（「一致性问题」的「一」「致」之间插卡）。
+  void _appendToStreamingMessage(
+    String text, {
+    bool? isRevealQueueEmpty,
+    bool establishPoint = false,
+  }) {
     if (text.isEmpty) return;
     _ensureStreamingAssistantMessage();
     final id = state.stream.streamingAssistantMessageId!;
@@ -1806,9 +1815,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     if (index == -1) return;
     final current = state.messages[index];
-    // 兜底断点：所有直达追加路径（interim_assistant / flush）都保证段落归属
-    // （常规 token 路径已在事件到达时建点，此处因 last.kind==text 会跳过）。
-    _ensureTimelinePoint(LiveSegmentKind.text, current.content?.length ?? 0);
+    // 兜底断点仅限「新段落」追加路径（interim_assistant）：start 取缓冲全量
+    // （含待合并/待揭示），使段边界与最终 content 对齐。常规 flush/reveal
+    // 路径不建点——text 段在 token 事件到达时已定义（_appendAssistantToken），
+    // 这里若按已 flush 长度建点会劈段（「一」「致」之间插工具卡的根因）。
+    if (establishPoint) {
+      _ensureTimelinePoint(
+        LiveSegmentKind.text,
+        _currentStreamingContent().length,
+      );
+    }
     final next = List<ChatMessage>.of(state.messages);
     next[index] = current.copyWith(content: '${current.content ?? ''}$text');
     state = state.copyWith(
@@ -1886,7 +1902,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } else {
       append = currentContent.isEmpty ? text : '\n\n$text';
     }
-    _appendToStreamingMessage(append);
+    // interim 是独立新段落（分隔符 `\n\n` 追加）→ 需建 text 断点；start 由
+    // _appendToStreamingMessage 内部按缓冲全量取，保证段边界对齐最终 content。
+    _appendToStreamingMessage(append, establishPoint: true);
     _markProgress();
     return true;
   }
