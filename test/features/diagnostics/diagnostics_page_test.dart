@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/core/utils/safe_clipboard.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_detail_sheet.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_page.dart';
@@ -39,8 +42,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late DiagnosticsService service;
+  late Directory tempDir;
 
   setUp(() async {
+    tempDir = Directory.systemTemp.createTempSync('diag_page_test_');
+    SafeClipboard.destinationDirOverride = tempDir;
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     service = DiagnosticsService(customPrefs: prefs);
@@ -48,6 +54,10 @@ void main() {
   });
 
   tearDown(() {
+    SafeClipboard.resetOverridesForTesting();
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
     service.clearMemoryOnly();
   });
 
@@ -313,6 +323,188 @@ void main() {
         find.byKey(const ValueKey('diagnostics-enter-selection-btn')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('export logs small text copies to clipboard', (tester) async {
+      tester.view.physicalSize = const Size(1000, 1500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await service.setEnabled(true);
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'export_test',
+        message: 'Small log to export',
+      );
+
+      String? copiedContent;
+      SafeClipboard.clipboardSetterOverride = (text) async {
+        copiedContent = text;
+      };
+
+      await tester.pumpWidget(_buildTestApp(service: service));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      final exportBtn = find.byKey(const ValueKey('diagnostics-export-btn'));
+      await tester.tap(exportBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('导出'), findsWidgets);
+      expect(find.text('诊断日志已导出并复制到剪贴板'), findsOneWidget);
+      expect(copiedContent, isNotNull);
+      expect(copiedContent, contains('Small log to export'));
+    });
+
+    testWidgets('export logs large text saves to file', (tester) async {
+      tester.view.physicalSize = const Size(1000, 1500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await service.setEnabled(true);
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'export_large',
+        message: 'Large log content that will exceed threshold',
+      );
+
+      SafeClipboard.maxBytesOverride = 20;
+      SafeClipboard.clockOverride = () => DateTime(2026, 9, 3, 19, 0, 0);
+
+      await tester.pumpWidget(_buildTestApp(service: service));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      final exportBtn = find.byKey(const ValueKey('diagnostics-export-btn'));
+      await tester.tap(exportBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(find.text('导出'), findsWidgets);
+      expect(find.textContaining('内容过大已保存到文件：'), findsOneWidget);
+      expect(
+        find.textContaining('hermes_logs_export_20260903_190000.txt'),
+        findsOneWidget,
+      );
+
+      final separator = tempDir.path.contains('\\') ? '\\' : '/';
+      final exportedFile = File(
+        '${tempDir.path}${separator}hermes_logs_export_20260903_190000.txt',
+      );
+      expect(exportedFile.existsSync(), isTrue);
+      expect(exportedFile.readAsStringSync(), contains('Large log content'));
+    });
+
+    testWidgets('copy selected logs small text copies to clipboard', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1000, 1500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await service.setEnabled(true);
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'tag1',
+        message: 'Selectable entry 1',
+      );
+
+      String? copiedContent;
+      SafeClipboard.clipboardSetterOverride = (text) async {
+        copiedContent = text;
+      };
+
+      await tester.pumpWidget(_buildTestApp(service: service));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      // 进入多选模式
+      final enterBtn = find.byKey(
+        const ValueKey('diagnostics-enter-selection-btn'),
+      );
+      await tester.tap(enterBtn);
+      await tester.pumpAndSettle();
+
+      // 全选
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+
+      // 复制选中
+      final copyBtn = find.byKey(
+        const ValueKey('diagnostics-copy-selected-btn'),
+      );
+      await tester.tap(copyBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('复制'), findsWidgets);
+      expect(find.text('已复制到剪贴板'), findsOneWidget);
+      expect(copiedContent, isNotNull);
+      expect(copiedContent, contains('Selectable entry 1'));
+    });
+
+    testWidgets('copy selected logs large text saves to file', (tester) async {
+      tester.view.physicalSize = const Size(1000, 1500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await service.setEnabled(true);
+      service.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'tag1',
+        message: 'Selectable large entry that will exceed threshold',
+      );
+
+      SafeClipboard.maxBytesOverride = 20;
+      SafeClipboard.clockOverride = () => DateTime(2026, 9, 3, 19, 10, 0);
+
+      await tester.pumpWidget(_buildTestApp(service: service));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      // 进入多选模式
+      final enterBtn = find.byKey(
+        const ValueKey('diagnostics-enter-selection-btn'),
+      );
+      await tester.tap(enterBtn);
+      await tester.pumpAndSettle();
+
+      // 全选
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+
+      // 复制选中
+      final copyBtn = find.byKey(
+        const ValueKey('diagnostics-copy-selected-btn'),
+      );
+      await tester.tap(copyBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('复制'), findsWidgets);
+      expect(find.textContaining('内容过大已保存到文件：'), findsOneWidget);
+      expect(
+        find.textContaining('hermes_logs_export_20260903_191000.txt'),
+        findsOneWidget,
+      );
+
+      final separator = tempDir.path.contains('\\') ? '\\' : '/';
+      final exportedFile = File(
+        '${tempDir.path}${separator}hermes_logs_export_20260903_191000.txt',
+      );
+      expect(exportedFile.existsSync(), isTrue);
+      expect(exportedFile.readAsStringSync(), contains('Selectable large entry'));
     });
   });
 }

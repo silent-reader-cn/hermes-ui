@@ -1,16 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_page_route.dart';
+import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
 import 'diagnostics_detail_sheet.dart';
 import 'diagnostics_models.dart';
 import 'diagnostics_providers.dart';
 import 'diagnostics_service.dart';
-import '../../app/widgets/hermes_page_route.dart';
 
 /// 诊断日志主页面（纯 Cupertino 风格，零 Material 组件）。
 class DiagnosticsPage extends ConsumerStatefulWidget {
@@ -46,9 +46,17 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     final logs = await service.exportAllLogs();
     if (logs.isEmpty || !mounted) return;
     final exportText = DiagnosticsService.formatExportText(logs);
-    await Clipboard.setData(ClipboardData(text: exportText));
+    final result = await SafeClipboard.copyOrSave(exportText);
     if (!mounted) return;
-    _showAlert(l10n.diagnosticsExport, l10n.diagnosticsExportSuccess);
+    switch (result) {
+      case SafeClipboardSuccess():
+        _showAlert(l10n.diagnosticsExport, l10n.diagnosticsExportSuccess);
+      case SafeClipboardFileSaved(:final filePath):
+        _showAlert(
+          l10n.diagnosticsExport,
+          l10n.diagnosticsExportTooLargeSaved(filePath),
+        );
+    }
   }
 
   Future<void> _copySelectedLogs(
@@ -62,11 +70,19 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     if (selectedEntries.isEmpty) return;
 
     final exportText = DiagnosticsService.formatExportText(selectedEntries);
-    await Clipboard.setData(ClipboardData(text: exportText));
+    final result = await SafeClipboard.copyOrSave(exportText);
     if (!mounted) return;
     ref.read(diagnosticsIsSelectionModeProvider.notifier).setMode(false);
     ref.read(diagnosticsSelectedIdsProvider.notifier).clear();
-    _showAlert(l10n.copy, l10n.copiedToClipboard);
+    switch (result) {
+      case SafeClipboardSuccess():
+        _showAlert(l10n.copy, l10n.copiedToClipboard);
+      case SafeClipboardFileSaved(:final filePath):
+        _showAlert(
+          l10n.copy,
+          l10n.diagnosticsExportTooLargeSaved(filePath),
+        );
+    }
   }
 
   Future<void> _confirmClearLogs() async {

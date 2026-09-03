@@ -1378,6 +1378,9 @@ class AppLocalizations {
   String get diagnosticsExportSuccess => isEnglish
       ? 'Diagnostic logs exported and copied to clipboard'
       : '诊断日志已导出并复制到剪贴板';
+  String diagnosticsExportTooLargeSaved(String path) => isEnglish
+      ? 'Content too large, saved to file: $path'
+      : '内容过大已保存到文件：$path';
   String get diagnosticsSelectMode => isEnglish ? 'Select' : '多选';
   String get diagnosticsExitSelectMode => isEnglish ? 'Done' : '完成';
   String diagnosticsSelectedCount(int count) =>

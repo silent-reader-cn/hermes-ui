@@ -567,6 +567,12 @@ void main() {
       expect(l10n.chatStatusContextUnavailable, '上下文不可用');
       expect(l10n.chatStatusLine, '聊天状态指示');
       expect(l10n.chatStatusLineDesc, '在聊天消息列表底部显示实时连接与生成状态');
+      expect(
+        l10n.diagnosticsExportTooLargeSaved(
+          '/path/to/hermes_logs_export_20260903_190533.txt',
+        ),
+        '内容过大已保存到文件：/path/to/hermes_logs_export_20260903_190533.txt',
+      );
     });
   });
 
@@ -715,6 +721,12 @@ void main() {
       expect(
         l10n.chatStatusLineDesc,
         'Show real-time status at the bottom of chat message list',
+      );
+      expect(
+        l10n.diagnosticsExportTooLargeSaved(
+          '/path/to/hermes_logs_export_20260903_190533.txt',
+        ),
+        'Content too large, saved to file: /path/to/hermes_logs_export_20260903_190533.txt',
       );
     });
   });
