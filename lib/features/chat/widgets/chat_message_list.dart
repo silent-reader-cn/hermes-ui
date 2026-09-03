@@ -366,6 +366,40 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
+  /// extent-only 增长的跟底补跳（图片异步解码撑高盲区）。
+  ///
+  /// 图片解码完成等事件**只增大 maxScrollExtent 而不移动 pixels**：SDK 仅在
+  /// pixels 实际变化时 notifyListeners / 派发 ScrollNotification（见
+  /// scroll_position.dart setPixels/forcePixels），因此 `_onScroll` 与
+  /// [ScrollNotification] 监听族对此完全无感；唯一入口是
+  /// [ScrollMetricsNotification]（applyContentDimensions 在 metrics 变化时经
+  /// microtask 派发，官方文档明确其用途即「内容变化通常不触发 ScrollNotification」）。
+  /// 跟随态（贴底且用户未上滚）→ 走 `_settleJumpToBottom` 轻量收敛链补跳；
+  /// 离底阅读、手势在途、各类程序化定位在途时一律不动。
+  bool _onMetricsChanged(ScrollMetricsNotification notification) {
+        // 气泡内横向滚动器等内层 Scrollable 的 metrics 通知会冒泡到本监听：
+    // 只响应纵向（本列表是唯一纵向滚动器）。
+    if (notification.metrics.axis != Axis.vertical) return false;
+    if (!_nearBottom ||
+        _userHasScrolled ||
+        !_initialPositioned ||
+        _positioningActive ||
+        _restoringOlderPosition ||
+        _isUserInteracting ||
+        _isAnimatingToBottom ||
+        _isOutlineJumping) {
+      return false;
+    }
+    // 仅当 extent 增长（离底）才补跳：收缩/不变时 Clamping 物理会自行拉回
+    // 越界像素，无需干预（也避免视口变化路径与 LayoutBuilder 处理重复动作）。
+    if (notification.metrics.maxScrollExtent - notification.metrics.pixels <=
+        0.5) {
+      return false;
+    }
+    _settleJumpToBottom(attempts: 0);
+    return false;
+  }
+
   void _onScroll() {
     if (!_controller.hasClients) return;
     final position = _controller.position;
@@ -1489,218 +1523,221 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           });
         }
 
-        return NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollStartNotification) {
-              if (notification.dragDetails != null) {
-                _isUserInteracting = true;
-                _isGestureActive = true;
-                _pressFollowed = !_userHasScrolled;
-                _dragDisplacement = 0.0;
-                _dragExceededThreshold = false;
-              }
-            } else if (notification is UserScrollNotification) {
-              if (notification.direction == ScrollDirection.idle) {
+        return NotificationListener<ScrollMetricsNotification>(
+          onNotification: _onMetricsChanged,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollStartNotification) {
+                if (notification.dragDetails != null) {
+                  _isUserInteracting = true;
+                  _isGestureActive = true;
+                  _pressFollowed = !_userHasScrolled;
+                  _dragDisplacement = 0.0;
+                  _dragExceededThreshold = false;
+                }
+              } else if (notification is UserScrollNotification) {
+                if (notification.direction == ScrollDirection.idle) {
+                  if (_isGestureActive) {
+                    _handleGestureEnd();
+                  } else {
+                    _isUserInteracting = false;
+                  }
+                } else {
+                  _isUserInteracting = true;
+                }
+              } else if (notification is ScrollUpdateNotification) {
+                if (notification.dragDetails != null || _isGestureActive) {
+                  _isUserInteracting = true;
+                  final stepDelta =
+                      (notification.scrollDelta != null &&
+                          notification.scrollDelta! != 0)
+                      ? notification.scrollDelta!
+                      : -(notification.dragDetails?.delta.dy ?? 0.0);
+                  _dragDisplacement += stepDelta;
+
+                  if (!_dragExceededThreshold &&
+                      _dragDisplacement.abs() >= _dragSensitivityThreshold) {
+                    _dragExceededThreshold = true;
+                    // 拖动开始超过 8px 敏感阈值即置取消（解锁自由滚动，不滚到离底不算用户离开）
+                    if (_initialPositioned &&
+                        !_initialPositioning &&
+                        !_restoringOlderPosition) {
+                      final wasNotScrolled = !_userHasScrolled;
+                      if (!_userHasScrolled) {
+                        _pinnedTranscriptCount = ref
+                            .read(transcriptMessagesProvider(widget.sessionId))
+                            .length;
+                      }
+                      _userHasScrolled = true;
+                      _nearBottom = false;
+                      if (wasNotScrolled && mounted) {
+                        setState(() {});
+                      }
+                    }
+                  }
+                }
+              } else if (notification is ScrollEndNotification) {
                 if (_isGestureActive) {
                   _handleGestureEnd();
                 } else {
                   _isUserInteracting = false;
                 }
-              } else {
-                _isUserInteracting = true;
               }
-            } else if (notification is ScrollUpdateNotification) {
-              if (notification.dragDetails != null || _isGestureActive) {
-                _isUserInteracting = true;
-                final stepDelta =
-                    (notification.scrollDelta != null &&
-                        notification.scrollDelta! != 0)
-                    ? notification.scrollDelta!
-                    : -(notification.dragDetails?.delta.dy ?? 0.0);
-                _dragDisplacement += stepDelta;
-
-                if (!_dragExceededThreshold &&
-                    _dragDisplacement.abs() >= _dragSensitivityThreshold) {
-                  _dragExceededThreshold = true;
-                  // 拖动开始超过 8px 敏感阈值即置取消（解锁自由滚动，不滚到离底不算用户离开）
-                  if (_initialPositioned &&
-                      !_initialPositioning &&
-                      !_restoringOlderPosition) {
-                    final wasNotScrolled = !_userHasScrolled;
-                    if (!_userHasScrolled) {
-                      _pinnedTranscriptCount = ref
-                          .read(transcriptMessagesProvider(widget.sessionId))
-                          .length;
-                    }
-                    _userHasScrolled = true;
-                    _nearBottom = false;
-                    if (wasNotScrolled && mounted) {
-                      setState(() {});
-                    }
-                  }
-                }
-              }
-            } else if (notification is ScrollEndNotification) {
-              if (_isGestureActive) {
-                _handleGestureEnd();
-              } else {
-                _isUserInteracting = false;
-              }
-            }
-            return false;
-          },
-          child: Stack(
-            children: [
-              ListView.builder(
-                controller: _controller,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                addRepaintBoundaries: true,
-                addAutomaticKeepAlives: false,
-                itemCount: itemCount,
-                itemBuilder: (context, index) {
-                  // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-                  if (index < transcript.length) {
-                    final entry = transcript[index];
-                    final groups =
-                        entryToolGroups[entry.renderId] ??
-                        const <ToolCallGroup>[];
-                    final noticeId = entry.message.id;
-                    final expanded = _expandedNoticeIds.contains(noticeId);
-                    final isHighlightTarget =
-                        _highlightTargetRenderId != null &&
-                        entry.renderId == _highlightTargetRenderId;
-                    final entryKey = _itemKeys.putIfAbsent(
-                      entry.renderId,
-                      () => GlobalKey(),
-                    );
-                    if (entry.message.messageId != null &&
-                        entry.message.messageId!.isNotEmpty) {
-                      _itemKeys.putIfAbsent(
-                        entry.message.messageId!,
-                        () => entryKey,
+              return false;
+            },
+            child: Stack(
+              children: [
+                ListView.builder(
+                  controller: _controller,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  addRepaintBoundaries: true,
+                  addAutomaticKeepAlives: false,
+                  itemCount: itemCount,
+                  itemBuilder: (context, index) {
+                    // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
+                    if (index < transcript.length) {
+                      final entry = transcript[index];
+                      final groups =
+                          entryToolGroups[entry.renderId] ??
+                          const <ToolCallGroup>[];
+                      final noticeId = entry.message.id;
+                      final expanded = _expandedNoticeIds.contains(noticeId);
+                      final isHighlightTarget =
+                          _highlightTargetRenderId != null &&
+                          entry.renderId == _highlightTargetRenderId;
+                      final entryKey = _itemKeys.putIfAbsent(
+                        entry.renderId,
+                        () => GlobalKey(),
                       );
-                    }
-                    for (final g in groups) {
-                      _itemKeys.putIfAbsent(g.id, () => entryKey);
-                    }
+                      if (entry.message.messageId != null &&
+                          entry.message.messageId!.isNotEmpty) {
+                        _itemKeys.putIfAbsent(
+                          entry.message.messageId!,
+                          () => entryKey,
+                        );
+                      }
+                      for (final g in groups) {
+                        _itemKeys.putIfAbsent(g.id, () => entryKey);
+                      }
 
-                    return KeyedSubtree(
-                      key: isHighlightTarget ? _highlightKey : entryKey,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onLongPress: () => _showMessageActions(entry.message),
-                        onSecondaryTapDown: (_) =>
-                            _showMessageActions(entry.message),
-                        child: SearchMessageHighlight(
-                          highlight: isHighlightTarget,
-                          child: RepaintBoundary(
-                            child: ChatMessageBubble(
-                              key: ValueKey(entry.renderId),
-                              message: entry.message,
-                              toolGroups: groups,
-                              hideThinking: hideThinking,
-                              collapseInjectedEnabled: collapseEnabled,
-                              injectedExpanded: expanded,
-                              onToggleInjected: () {
-                                if (!mounted) return;
-                                setState(() {
-                                  if (_expandedNoticeIds.contains(noticeId)) {
-                                    _expandedNoticeIds.remove(noticeId);
-                                  } else {
-                                    _expandedNoticeIds.add(noticeId);
-                                  }
-                                });
-                              },
+                      return KeyedSubtree(
+                        key: isHighlightTarget ? _highlightKey : entryKey,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onLongPress: () => _showMessageActions(entry.message),
+                          onSecondaryTapDown: (_) =>
+                              _showMessageActions(entry.message),
+                          child: SearchMessageHighlight(
+                            highlight: isHighlightTarget,
+                            child: RepaintBoundary(
+                              child: ChatMessageBubble(
+                                key: ValueKey(entry.renderId),
+                                message: entry.message,
+                                toolGroups: groups,
+                                hideThinking: hideThinking,
+                                collapseInjectedEnabled: collapseEnabled,
+                                injectedExpanded: expanded,
+                                onToggleInjected: () {
+                                  if (!mounted) return;
+                                  setState(() {
+                                    if (_expandedNoticeIds.contains(noticeId)) {
+                                      _expandedNoticeIds.remove(noticeId);
+                                    } else {
+                                      _expandedNoticeIds.add(noticeId);
+                                    }
+                                  });
+                                },
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  }
-                  var tail = index - transcript.length;
-                  if (showQueuedBanner) {
-                    if (tail == 0) {
-                      return QueuedBanner(
-                        count: queuedMessages.length,
-                        preview: queuedMessages.first,
                       );
                     }
-                    tail--;
-                  }
-                  if (streaming != null && !timelineActive) {
-                    // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
-                    if (tail == 0) {
-                      return _StreamingBubble(
-                        sessionId: sessionId,
-                        message: streaming,
-                        toolGroups: streamingTools,
-                        hideThinking: hideThinking,
-                      );
-                    }
-                    tail--;
-                  }
-                  if (streaming != null && timelineActive) {
-                    if (tail < liveTimeline.length) {
-                      final liveEntry = liveTimeline[tail];
-                      final liveKey = _itemKeys.putIfAbsent(
-                        liveEntry.renderKey,
-                        () => GlobalKey(),
-                      );
-                      if (liveEntry.toolGroup != null) {
-                        _itemKeys.putIfAbsent(
-                          liveEntry.toolGroup!.id,
-                          () => liveKey,
+                    var tail = index - transcript.length;
+                    if (showQueuedBanner) {
+                      if (tail == 0) {
+                        return QueuedBanner(
+                          count: queuedMessages.length,
+                          preview: queuedMessages.first,
                         );
                       }
-                      return KeyedSubtree(
-                        key: liveKey,
-                        child: _LiveTimelineItem(
+                      tail--;
+                    }
+                    if (streaming != null && !timelineActive) {
+                      // legacy：旧分组式流式气泡（重连归档等无法还原段落边界的场景）。
+                      if (tail == 0) {
+                        return _StreamingBubble(
                           sessionId: sessionId,
-                          entry: liveEntry,
-                          streamingMessage: streaming,
+                          message: streaming,
+                          toolGroups: streamingTools,
                           hideThinking: hideThinking,
-                        ),
-                      );
+                        );
+                      }
+                      tail--;
                     }
-                    tail -= liveTimeline.length;
-                  }
-                  if (showStatusLine) {
-                    if (tail == 0) {
-                      return _ChatStatusLine(sessionId: sessionId);
+                    if (streaming != null && timelineActive) {
+                      if (tail < liveTimeline.length) {
+                        final liveEntry = liveTimeline[tail];
+                        final liveKey = _itemKeys.putIfAbsent(
+                          liveEntry.renderKey,
+                          () => GlobalKey(),
+                        );
+                        if (liveEntry.toolGroup != null) {
+                          _itemKeys.putIfAbsent(
+                            liveEntry.toolGroup!.id,
+                            () => liveKey,
+                          );
+                        }
+                        return KeyedSubtree(
+                          key: liveKey,
+                          child: _LiveTimelineItem(
+                            sessionId: sessionId,
+                            entry: liveEntry,
+                            streamingMessage: streaming,
+                            hideThinking: hideThinking,
+                          ),
+                        );
+                      }
+                      tail -= liveTimeline.length;
                     }
-                    tail--;
-                  }
-                  if (needFallback) {
-                    if (tail == 0) {
-                      return _FallbackToolReasoningCards(
-                        toolGroups: toolGroups,
-                        hideThinking: hideThinking,
-                      );
+                    if (showStatusLine) {
+                      if (tail == 0) {
+                        return _ChatStatusLine(sessionId: sessionId);
+                      }
+                      tail--;
                     }
-                    tail--;
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-              if (showScrollToBottomButton)
-                Positioned(
-                  right: 16,
-                  bottom: 12,
-                  child: _ScrollToBottomButton(
-                    label: buttonLabel,
-                    onPressed: () {
-                      if (!mounted) return;
-                      setState(() {
-                        _userHasScrolled = false;
-                        _nearBottom = true;
-                        _readingAnchor = null;
-                        _pinnedTranscriptCount = 0;
-                      });
-                      _scrollToBottom(animated: true);
-                    },
-                  ),
+                    if (needFallback) {
+                      if (tail == 0) {
+                        return _FallbackToolReasoningCards(
+                          toolGroups: toolGroups,
+                          hideThinking: hideThinking,
+                        );
+                      }
+                      tail--;
+                    }
+                    return const SizedBox.shrink();
+                  },
                 ),
-            ],
+                if (showScrollToBottomButton)
+                  Positioned(
+                    right: 16,
+                    bottom: 12,
+                    child: _ScrollToBottomButton(
+                      label: buttonLabel,
+                      onPressed: () {
+                        if (!mounted) return;
+                        setState(() {
+                          _userHasScrolled = false;
+                          _nearBottom = true;
+                          _readingAnchor = null;
+                          _pinnedTranscriptCount = 0;
+                        });
+                        _scrollToBottom(animated: true);
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },

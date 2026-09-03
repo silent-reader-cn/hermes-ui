@@ -417,9 +417,11 @@ void main() {
       expect(image.image, isA<FileImage>());
     });
 
-    testWidgets('ChatInlineMediaWidget 外层包裹 AnimatedSize 平滑过渡容器', (
+    testWidgets('ChatInlineMediaWidget 不再使用 AnimatedSize（extent 一步到位）', (
       tester,
     ) async {
+      // 尺寸动画（AnimatedSize）会把占位→真图的差异逐帧撑高 maxScrollExtent，
+      // 底部跟随只能逐帧补跳；现改为真实尺寸一步到位 + 出帧淡入。
       await tester.pumpWidget(
         _testApp(
           const ChatInlineMediaWidget(rawUri: _k1x1Png, alt: 'preview.png'),
@@ -427,15 +429,13 @@ void main() {
       );
       await tester.pump();
 
-      final animatedSizeFinder = find.descendant(
-        of: find.byType(ChatInlineMediaWidget),
-        matching: find.byType(AnimatedSize),
+      expect(
+        find.descendant(
+          of: find.byType(ChatInlineMediaWidget),
+          matching: find.byType(AnimatedSize),
+        ),
+        findsNothing,
       );
-      expect(animatedSizeFinder, findsOneWidget);
-
-      final animatedSize = tester.widget<AnimatedSize>(animatedSizeFinder);
-      expect(animatedSize.duration, const Duration(milliseconds: 180));
-      expect(animatedSize.curve, Curves.easeOut);
     });
 
     testWidgets('网络图片 loading 期间渲染指定尺寸 loadingBox 与加载指示器', (tester) async {

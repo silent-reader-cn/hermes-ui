@@ -135,7 +135,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) {
-              return child;
+              return _mediaFadeIn(child);
             }
             return _loadingBox(
               context,
@@ -189,7 +189,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
-            return child;
+            return _mediaFadeIn(child);
           }
           return _loadingBox(
             context,
@@ -234,21 +234,20 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           memoryBytes: memoryBytes,
           altText: alt ?? title,
         ),
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          alignment: Alignment.topLeft,
-          child: Container(
-            constraints: BoxConstraints(
-              minWidth: 32,
-              minHeight: 32,
-              maxWidth: maxWidth,
-              maxHeight: maxHeight,
-            ),
-            decoration: BoxDecoration(borderRadius: borderRadius),
-            clipBehavior: Clip.antiAlias,
-            child: imageWidget,
+        // 注意：不使用 AnimatedSize 做高度过渡——占位→真图的尺寸差异会被
+        // 逐帧撑高 maxScrollExtent，底部跟随只能逐帧补跳（观感「边长边跳」）；
+        // 改为真实尺寸一步到位 + 150ms 淡入，extent 单次变化由
+        // ScrollMetricsNotification 跟底链路一次补跳收敛。
+        child: Container(
+          constraints: BoxConstraints(
+            minWidth: 32,
+            minHeight: 32,
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
           ),
+          decoration: BoxDecoration(borderRadius: borderRadius),
+          clipBehavior: Clip.antiAlias,
+          child: imageWidget,
         ),
       ),
     );
@@ -739,7 +738,7 @@ class _LightboxNetworkImage extends ConsumerWidget {
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
-            return child;
+            return _mediaFadeIn(child);
           }
           return const Center(child: CupertinoActivityIndicator());
         },
@@ -776,6 +775,20 @@ class _LightboxNetworkImage extends ConsumerWidget {
     // 忽略异常格式
   }
   return null;
+}
+
+/// 真图首次出帧的一次性淡入（替代 AnimatedSize 尺寸动画：淡入不改变布局，
+/// extent 单次到位，配合列表 ScrollMetricsNotification 跟底一次补跳）。
+/// const Tween 实例：仅首帧构建一次，后续帧同实例 →
+/// TweenAnimationBuilder 不重启动画。
+Widget _mediaFadeIn(Widget child) {
+  return TweenAnimationBuilder<double>(
+    tween: Tween<double>(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 150),
+    curve: Curves.easeOut,
+    builder: (context, value, child) => Opacity(opacity: value, child: child),
+    child: child,
+  );
 }
 
 /// 计算占位容器尺寸：若 URL 携带尺寸提示则按 contain 计算，否则回退默认 160×120。
