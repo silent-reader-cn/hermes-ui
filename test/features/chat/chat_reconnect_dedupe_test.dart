@@ -54,6 +54,7 @@ void main() {
 
           // 触发传输断开 → 进入恢复重连
           api.emit(const TransportErrorSseEvent('SSE connection lost'));
+          async.elapse(const Duration(seconds: 1));
           async.flushMicrotasks();
 
           expect(api.startStreamCalls, 2);
@@ -127,6 +128,7 @@ void main() {
 
         // 触发断开
         api.emit(const TransportErrorSseEvent('net cut'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
 
         // 回放已有事件 1, 2, 3
@@ -192,6 +194,7 @@ void main() {
 
         // 断开重连
         api.emit(const TransportErrorSseEvent('cut'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
 
         // 无 seq ID 回放（触发 token 粒度去重）
@@ -245,6 +248,7 @@ void main() {
 
         // 模拟断开
         api.emit(const TransportErrorSseEvent('net drop'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
 
         expect(api.startStreamCalls, 2);
@@ -335,6 +339,7 @@ void main() {
 
         // 断开重连（游标错位：matchedPrefixLength 回 0）
         api.emit(const TransportErrorSseEvent('cut'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
 
         // 重放帧 1：完整重复段 → 游标追平（吞噬）
@@ -411,6 +416,7 @@ void main() {
 
         // 断开重连
         api.emit(const TransportErrorSseEvent('cut'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         expect(state.stream.isReplayConnection, isFalse); // 更新前状态
 

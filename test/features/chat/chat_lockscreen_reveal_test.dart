@@ -325,6 +325,7 @@ void main() {
           },
         };
         api.fail('network down');
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         expect(api.startStreamCalls, 2); // fullReconnect
         var state = container.read(chatControllerProvider(''));

@@ -1496,6 +1496,7 @@ void main() {
         async.flushMicrotasks();
 
         api.emit(const TransportErrorSseEvent('连接断开'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         expect(api.statusCalls, greaterThan(0));
         expect(api.streamIds, hasLength(2));
@@ -1519,6 +1520,7 @@ void main() {
         // 记录 SSE 事件 id（lastEventID 语义：事件 id: 字段）
         api.emitId('evt:42');
         api.emit(const TransportErrorSseEvent('断开'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         expect(api.streamIds, hasLength(2));
         expect(api.replaySeqs.last, 42);
@@ -1551,6 +1553,7 @@ void main() {
         async.flushMicrotasks();
 
         api.emit(const TransportErrorSseEvent('断开'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         final state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.idle);
@@ -1799,6 +1802,7 @@ void main() {
         // 断开重连（replay）
         api.emitId('evt:5');
         api.emit(const TransportErrorSseEvent('断开'));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
         expect(api.streamIds, hasLength(2));
         expect(

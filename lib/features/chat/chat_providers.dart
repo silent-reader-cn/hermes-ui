@@ -77,6 +77,15 @@ class ChatWatchdogConfig {
     this.forceReconnectThreshold = const Duration(seconds: 18),
     this.forceReconnectWithRunningToolsThreshold = const Duration(seconds: 25),
     this.statusPollCooldown = const Duration(seconds: 4),
+    this.reconnectBackoffDelays = const [
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+      Duration(seconds: 8),
+      Duration(seconds: 16),
+      Duration(seconds: 30),
+    ],
+    this.maxReconnectAttempts = 6,
   });
 
   /// 前台看门狗心跳间隔。
@@ -96,6 +105,22 @@ class ChatWatchdogConfig {
 
   /// status 轮询冷却。
   final Duration statusPollCooldown;
+
+  /// 传输错误重连退避序列（建议 1s, 2s, 4s, 8s, 16s, 30s 封顶）。
+  final List<Duration> reconnectBackoffDelays;
+
+  /// 传输错误最大自动重连尝试次数（达到后停止自动重连）。
+  final int maxReconnectAttempts;
+
+  /// 实际最大自动重连尝试次数。
+  int get effectiveMaxReconnectAttempts => maxReconnectAttempts;
+
+  /// 获取指定尝试序号的退避等待时长（attempt 从 0 开始）。
+  Duration backoffDelayForAttempt(int attempt) {
+    if (reconnectBackoffDelays.isEmpty) return Duration.zero;
+    final index = attempt.clamp(0, reconnectBackoffDelays.length - 1);
+    return reconnectBackoffDelays[index];
+  }
 }
 
 /// 看门狗配置 Provider（测试可 override）。

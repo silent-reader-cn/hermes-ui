@@ -21,7 +21,7 @@ import '../../helpers/in_memory_secure_storage.dart';
 
 void main() {
   group('ChatWatchdogConfig 默认阈值配置（单一真相源）', () {
-    test('默认配置为 1s/5s/12s/18s/25s/4s', () {
+    test('默认配置为 1s/5s/12s/18s/25s/4s 及退避序列与上限', () {
       const config = ChatWatchdogConfig();
       expect(config.watchdogInterval, const Duration(seconds: 1));
       expect(config.progressStaleThreshold, const Duration(seconds: 5));
@@ -32,6 +32,19 @@ void main() {
         const Duration(seconds: 25),
       );
       expect(config.statusPollCooldown, const Duration(seconds: 4));
+      expect(config.maxReconnectAttempts, 6);
+      expect(config.reconnectBackoffDelays, const [
+        Duration(seconds: 1),
+        Duration(seconds: 2),
+        Duration(seconds: 4),
+        Duration(seconds: 8),
+        Duration(seconds: 16),
+        Duration(seconds: 30),
+      ]);
+      expect(config.backoffDelayForAttempt(0), const Duration(seconds: 1));
+      expect(config.backoffDelayForAttempt(1), const Duration(seconds: 2));
+      expect(config.backoffDelayForAttempt(5), const Duration(seconds: 30));
+      expect(config.backoffDelayForAttempt(10), const Duration(seconds: 30));
     });
   });
 

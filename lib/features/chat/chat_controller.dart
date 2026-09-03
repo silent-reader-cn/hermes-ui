@@ -71,6 +71,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Timer? _watchdogTimer;
   Timer? _transcriptRefreshTimer;
   Timer? _clarifyPollTimer;
+  Timer? _reconnectTimer;
+
+  /// 传输错误重连尝试次数（收到任意成功事件重置为 0）。
+  int _reconnectAttempts = 0;
 
   /// 词级 reveal 队列（合并缓冲产出、逐 tick 消费）。
   final List<String> _revealQueue = [];
@@ -223,6 +227,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer?.cancel();
     _watchdogTimer?.cancel();
     _transcriptRefreshTimer?.cancel();
+    _cancelReconnectTimer();
     _lastContextPollTime = null;
     _isContextPolling = false;
     _stopClarifyChannel();
@@ -247,6 +252,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _setSendError('Reconnect to the server to send a message.');
       return false;
     }
+    _cancelReconnectTimer();
+    _reconnectAttempts = 0;
     final trimmed = text.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return false;
     if (current.stream.activeStreamId != null) {
@@ -1247,6 +1254,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         onEvent: _handleSseEvent,
         onEventId: (id) {
           if (_disposed) return;
+          _resetReconnectBackoff();
           state = state.copyWith(
             stream: state.stream.copyWith(lastEventId: id),
           );
@@ -1272,6 +1280,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _handleSseEvent(SseEvent event) {
     if (_disposed) return;
     _recordTransportActivity();
+    _resetReconnectBackoff();
     final stream = state.stream;
     if (stream.isReplayConnection && stream.replayAfterSeq > 0) {
       final currentSeq = _replayAfterSeq(stream.lastEventId);
@@ -2701,6 +2710,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     _syncSessionStreaming(state.sessionId, false);
     flushPendingStreamingContent();
+    _resetReconnectBackoff();
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
       final notices = state.pinnedLocalNotices
@@ -2884,6 +2894,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   // transportError 断线恢复（chat_spec.md §5.3）
   // -------------------------------------------------------------------------
 
+  /// 取消挂起的重连退避定时器。
+  void _cancelReconnectTimer() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
+
+  /// 任何成功事件重置退避（SSE 连接成功 / 收到任意 event / 收到 status 正常响应）。
+  void _resetReconnectBackoff() {
+    _reconnectAttempts = 0;
+    _cancelReconnectTimer();
+  }
+
   void _handleTransportError(String message) {
     final stream = state.stream;
     if (stream.activeStreamId == null || stream.hasCompletedResponse) {
@@ -2907,7 +2929,33 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       ),
     );
     _api?.stopStream();
-    unawaited(_reconnectIfNeeded());
+
+    final maxAttempts = _watchdogConfig.effectiveMaxReconnectAttempts;
+    if (_reconnectAttempts >= maxAttempts) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat_reconnect',
+        message:
+            'Transport error: max reconnect attempts ($_reconnectAttempts) reached, stopping auto-reconnect',
+      );
+      return;
+    }
+
+    final delay = _watchdogConfig.backoffDelayForAttempt(_reconnectAttempts);
+    _reconnectAttempts++;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_reconnect',
+      message:
+          'Scheduling reconnect attempt $_reconnectAttempts with delay ${delay.inMilliseconds}ms (streamId: ${stream.activeStreamId})',
+    );
+    _cancelReconnectTimer();
+    final gen = _generation;
+    _reconnectTimer = Timer(delay, () {
+      if (_disposed || gen != _generation) return;
+      _reconnectTimer = null;
+      unawaited(_reconnectIfNeeded());
+    });
   }
 
   Future<void> _reconnectIfNeeded() async {
@@ -2922,6 +2970,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     try {
       final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
+      _resetReconnectBackoff();
       if (status.active == true) {
         // 全量重连：loadMessages 后恢复（带 replay 若快照有 lastEventID）。
         await _loadMessagesAndResume(streamId);
@@ -3020,6 +3069,25 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 强制重连（status 失败 / 看门狗超时；带 replay 若可用）。
   void _forceReconnect(String streamId) {
+    if (_disposed) return;
+    if (_reconnectAttempts >= _watchdogConfig.effectiveMaxReconnectAttempts) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat_reconnect',
+        message:
+            'Force reconnect suppressed: max reconnect attempts ($_reconnectAttempts) reached',
+      );
+      return;
+    }
+    if (_reconnectTimer != null && _reconnectTimer!.isActive) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.info,
+        tag: 'chat_reconnect',
+        message:
+            'Force reconnect suppressed: backoff timer is currently pending',
+      );
+      return;
+    }
     final afterSeq = _replayAfterSeq(state.stream.lastEventId);
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.warn,
@@ -3027,6 +3095,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       message:
           'Force reconnecting stream (streamId: $streamId, afterSeq: $afterSeq)',
     );
+    _recordTransportActivity();
     state = state.copyWith(
       stream: state.stream.copyWith(
         isSuspended: true,
@@ -3075,8 +3144,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (state.stream.activeStreamId == null) return;
     if (state.stream.hasCompletedResponse) return;
     if (state.pendingAction.hasPendingPrompt) return; // 卡片期间暂停
-    final now = _now();
     final config = _watchdogConfig;
+    if (_reconnectTimer != null && _reconnectTimer!.isActive) return;
+    if (_reconnectAttempts >= config.effectiveMaxReconnectAttempts) return;
+    final now = _now();
     final lastProgress = _lastProgress;
     final lastTransport = _lastTransportActivity;
     final hasRunningTools = _hasRunningTools;
@@ -3147,6 +3218,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     try {
       final status = await _api!.chatStreamStatus(streamId);
       if (_disposed || gen != _generation) return;
+      _resetReconnectBackoff();
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'chat_resume',
@@ -3467,6 +3539,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   Future<void> _recoverExistingStream(String activeStreamId) async {
+    _resetReconnectBackoff();
     await loadMessages();
     if (_disposed) return;
     if (state.stream.activeStreamId == null) {
