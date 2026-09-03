@@ -12,6 +12,7 @@ import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/utils/accessibility.dart';
+import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
 import '../notifications/notification_providers.dart';
 import '../shared/app_back_button.dart';
@@ -628,13 +629,22 @@ Future<void> _exportSession(
         .read(apiClientProvider)
         .exportSession(sessionId: sessionId, format: 'md');
     final content = utf8.decode(response.data, allowMalformed: true);
-    await Clipboard.setData(ClipboardData(text: content));
+    // 同源修复：长会话 markdown 无界，剪贴板事务超限会崩（TransactionTooLarge
+    // Exception）——走 SafeClipboard，超限/异常自动落盘文件并提示路径。
+    final result = await SafeClipboard.copyOrSave(
+      content,
+      fileNamePrefix: 'hermes_session_export',
+    );
     if (context.mounted) {
       await showCupertinoDialog<void>(
         context: context,
         builder: (dialogContext) => CupertinoAlertDialog(
           title: Text(l10n.exportSuccessDialogTitle),
-          content: Text(l10n.markdownCopiedToClipboard),
+          content: Text(
+            result.isFileSaved
+                ? l10n.diagnosticsExportTooLargeSaved(result.filePath!)
+                : l10n.markdownCopiedToClipboard,
+          ),
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(dialogContext),

@@ -13,6 +13,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../core/utils/safe_clipboard.dart';
 import '../../app/shell/adaptive_shell.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -1025,8 +1026,30 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           actions: [
             CupertinoDialogAction(
               onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: content));
+                // 同源修复：导出内容无界，超限/剪贴板异常走 SafeClipboard
+                // 落盘文件；提示弹窗沿用 diagnosticsExportTooLargeSaved。
+                final result = await SafeClipboard.copyOrSave(
+                  content,
+                  fileNamePrefix: 'hermes_session_export',
+                );
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (result.isFileSaved && context.mounted) {
+                  await showCupertinoDialog<void>(
+                    context: context,
+                    builder: (alertContext) => CupertinoAlertDialog(
+                      title: Text(l10n.exportSuccessDialogTitle),
+                      content: Text(
+                        l10n.diagnosticsExportTooLargeSaved(result.filePath!),
+                      ),
+                      actions: [
+                        CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(alertContext),
+                          child: Text(l10n.ok),
+                        ),
+                      ],
+                    ),
+                  );
+                }
               },
               child: Text(l10n.copyContent),
             ),
