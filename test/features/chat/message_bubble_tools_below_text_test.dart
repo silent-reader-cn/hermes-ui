@@ -1,8 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hermes_ui/core/api/sse_client.dart';
-import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
@@ -11,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
-/// 探针：完成态渲染时工具折叠卡应排在正文文本「下方」而非「上方」。
+/// 回归：完成态渲染时工具折叠卡应排在正文文本「下方」而非「上方」。
 ///
 /// 背景（2026-09-03 会话 7ea92838441b 消息 #160298 实证）：assistant 消息
 /// content（「好喵，这是个新的方向/一致性问题。…」）与 tool_calls（2×read_file）

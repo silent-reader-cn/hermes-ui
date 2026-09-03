@@ -210,7 +210,6 @@ final transcriptMessagesProvider =
       final offset = state.messagesOffset;
       final streamingId = state.stream.streamingAssistantMessageId;
       final completedToolGroups = state.completedToolCallGroups;
-      final completedReasoningGroups = state.completedReasoningGroups;
       final result = <TranscriptMessage>[];
       for (var i = 0; i < messages.length; i++) {
         final message = messages[i];
@@ -235,15 +234,12 @@ final transcriptMessagesProvider =
               group.anchorMessageID == message.messageId ||
               group.anchorMessageID == anchorId,
         );
-        final hasReasoningGroups = completedReasoningGroups.any(
-          (group) =>
-              group.anchorMessageId == message.messageId ||
-              group.anchorMessageId == anchorId,
-        );
-        if (!hasVisibleContent &&
-            !hasAttachments &&
-            !hasToolGroups &&
-            !hasReasoningGroups) {
+        // 空内容消息仅当挂载工具组/思考组/附件时才保留为可见行；纯 reasoning
+        // 挂载不保留——思考已由 withThinkingRows 融进工具组（think 子卡行，纯
+        // 思考消息会补 persisted-think- 工具组走 hasToolGroups），独立
+        // ReasoningGroup 不再渲染，仅靠 reasoning 挂载会导致「空气泡」
+        //（agy 纯工具回合 c='' 消息被保留却渲染成 0 高度气泡 + padding 占位）。
+        if (!hasVisibleContent && !hasAttachments && !hasToolGroups) {
           continue;
         }
         result.add(
