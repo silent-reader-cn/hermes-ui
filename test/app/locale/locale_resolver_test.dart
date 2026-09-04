@@ -63,7 +63,7 @@ void main() {
   group('LocaleResolver onChange 触发时序与 provider 联动', () {
     test('updateMode 仅在模式变更时触发 onChange', () {
       var callCount = 0;
-      LocaleResolver.setOnChange(() => callCount++);
+      LocaleResolver.addListener(() => callCount++);
 
       // 初始为 system，切换到 zh
       LocaleResolver.updateMode(AppLocaleMode.zh);
@@ -82,7 +82,7 @@ void main() {
 
     test('localeModeProvider 变更时联动更新 LocaleResolver 并触发 onChange', () async {
       var callCount = 0;
-      LocaleResolver.setOnChange(() => callCount++);
+      LocaleResolver.addListener(() => callCount++);
 
       final container = ProviderContainer();
       addTearDown(container.dispose);

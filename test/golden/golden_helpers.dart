@@ -15,6 +15,10 @@ const Size goldenSurfaceSize = Size(780, 1688);
 /// 截图物理像素比（2x 保证放大查对比度/溢出时文字清晰）。
 const double goldenDevicePixelRatio = 2.0;
 
+/// 横屏桌面档截图物理像素尺寸（逻辑 1280×800 @2x，Windows 桌面常用窗口档；
+/// 逻辑宽 1280 ≥ kAdaptiveBreakpoint=900，触发宽屏双栏形态）。
+const Size goldenLandscapeSize = Size(2560, 1600);
+
 /// 注册真实字体：flutter_test 默认全部走 Ahem 方块字，截图无法人工核对。
 ///
 /// - [loadAppFonts]：应用 FontManifest（MaterialIcons + CupertinoIcons）；
@@ -43,6 +47,12 @@ Future<void> loadHermesGoldenFonts() async {
   await _registerFontFile('MiSans', 'assets/fonts/MiSans-Regular.ttf');
   await _registerFontFile('MiSans', 'assets/fonts/MiSans-Medium.ttf');
   // 注册等宽字体 monospace（用于代码块、git diff 等）
+  // 已知坑：flutter_tester 同族多注册按「先注册者胜」解析、无按字形族内回退，
+  // consola/cour 无 CJK 字形 → monospace 族里的中文文本（如安装向导日志台
+  // 「等待安装启动...」）在金照环境渲染为豆腐块。把 simhei 提到族首可修豆腐
+  // 块，但会改变 chat 等既有金照的拉丁等宽字形基线，故全局维持 consola 族首；
+  // 含中文等宽文本的新金照文件可在自身 setUpAll 里先于本函数注册
+  // monospace→CJK 字体做局部修复（见 golden_onboarding_wide_test.dart）。
   await _registerFontFile('monospace', r'C:\Windows\Fonts\consola.ttf');
   await _registerFontFile('monospace', r'C:\Windows\Fonts\cour.ttf');
   await _registerFontFile('monospace', 'assets/fonts/MiSans-Regular.ttf');
