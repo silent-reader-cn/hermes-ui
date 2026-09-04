@@ -17,6 +17,15 @@ void main() {
     });
   });
 
+  group('DownloadSourceType', () {
+    test('fromString 正确解析 url 与 bytes', () {
+      expect(DownloadSourceType.fromString('url'), DownloadSourceType.url);
+      expect(DownloadSourceType.fromString('bytes'), DownloadSourceType.bytes);
+      expect(DownloadSourceType.fromString('other'), DownloadSourceType.url);
+      expect(DownloadSourceType.fromString(null), DownloadSourceType.url);
+    });
+  });
+
   group('DownloadTask 模型', () {
     test('基本属性与 copyWith', () {
       const task = DownloadTask(
@@ -35,12 +44,14 @@ void main() {
       expect(task.progress, 0.5);
       expect(task.isActive, isTrue);
       expect(task.isTerminal, isFalse);
+      expect(task.sourceType, DownloadSourceType.url);
 
       final updated = task.copyWith(
         receivedBytes: 1000,
         status: DownloadStatus.completed,
         savedPath: '/downloads/test.zip',
         completedAt: 12000,
+        sourceType: DownloadSourceType.bytes,
       );
 
       expect(updated.receivedBytes, 1000);
@@ -50,6 +61,7 @@ void main() {
       expect(updated.progress, 1.0);
       expect(updated.isActive, isFalse);
       expect(updated.isTerminal, isTrue);
+      expect(updated.sourceType, DownloadSourceType.bytes);
     });
 
     test('progress 边界情况（expectedBytes 为 null 或 <= 0 时返回 null）', () {

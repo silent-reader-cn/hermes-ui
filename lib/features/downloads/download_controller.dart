@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -81,6 +82,7 @@ class DownloadController extends Notifier<DownloadState> {
   bool _isWorkerRunning = false;
   bool _isInitialized = false;
   final Set<String> _cancelledTaskIds = {};
+  final Map<String, Uint8List> _pendingBytes = {};
   Completer<void>? _initCompleter;
 
   @override
@@ -93,6 +95,7 @@ class DownloadController extends Notifier<DownloadState> {
     _isWorkerRunning = false;
     _isInitialized = false;
     _cancelledTaskIds.clear();
+    _pendingBytes.clear();
     _initCompleter = null;
 
     unawaited(Future.microtask(_ensureInitialized));
@@ -139,12 +142,18 @@ class DownloadController extends Notifier<DownloadState> {
 
   /// 将新下载任务加入队列。
   ///
+  /// 支持两种来源模式：
+  /// - URL 模式：传入 [sourceUrl]，由 worker 通过网络下载；
+  /// - bytes 模式：传入内存字节 [bytes]（如已解码 Data URI 或内存图），worker 跳过网络直接落盘。
+  ///
   /// 幂等与去重契约：
   /// 1. 若同 `sourceUrl` 已存在完成记录且本地文件仍然存在，直接返回已有任务 ID；
   /// 2. 若队列中已存在同 `sourceUrl` 的 queued/downloading 任务，合并返回已有任务 ID；
-  /// 3. 否则创建新任务加入队列，启动 FIFO worker 并返回新任务 ID。
+  /// 3. bytes 模式若无独立 sourceUrl，则按 `bytes:$fileName` 参与查重或直接入队；
+  /// 4. 否则创建新任务加入队列，启动 FIFO worker 并返回新任务 ID。
   Future<String> enqueue({
-    required String sourceUrl,
+    String? sourceUrl,
+    Uint8List? bytes,
     required String fileName,
     String? mimeType,
     int? expectedBytes,
@@ -152,9 +161,26 @@ class DownloadController extends Notifier<DownloadState> {
   }) async {
     await _ensureInitialized();
 
+    final isBytes =
+        bytes != null || (sourceUrl != null && sourceUrl.startsWith('data:'));
+    final effectiveUrl = sourceUrl ?? (isBytes ? 'bytes:$fileName' : '');
+    if (!isBytes && effectiveUrl.isEmpty) {
+      throw ArgumentError('必须提供 sourceUrl 或 bytes');
+    }
+
+    final effectiveExpectedBytes = expectedBytes ?? bytes?.length;
+    final sourceType = isBytes
+        ? DownloadSourceType.bytes
+        : DownloadSourceType.url;
+
     // 1. 已完成且文件仍在检查
     final existingCompleted = state.tasks.where((t) {
-      return t.status == DownloadStatus.completed && t.sourceUrl == sourceUrl;
+      if (t.status != DownloadStatus.completed) return false;
+      if (isBytes && (sourceUrl == null || sourceUrl.isEmpty)) {
+        return t.sourceType == DownloadSourceType.bytes &&
+            t.fileName == fileName;
+      }
+      return t.sourceUrl == effectiveUrl;
     }).firstOrNull;
 
     if (existingCompleted != null && existingCompleted.savedPath != null) {
@@ -167,7 +193,7 @@ class DownloadController extends Notifier<DownloadState> {
             message: '命中已完成任务且本地文件存在，跳过重复下载: ${existingCompleted.id}',
             details: {
               'id': existingCompleted.id,
-              'sourceUrl': sourceUrl,
+              'sourceUrl': effectiveUrl,
               'savedPath': existingCompleted.savedPath,
             },
           );
@@ -178,9 +204,12 @@ class DownloadController extends Notifier<DownloadState> {
 
     // 2. 队列中活跃同 URL 合并
     final existingActive = state.tasks.where((t) {
-      return (t.status == DownloadStatus.queued ||
-              t.status == DownloadStatus.downloading) &&
-          t.sourceUrl == sourceUrl;
+      if (!t.isActive) return false;
+      if (isBytes && (sourceUrl == null || sourceUrl.isEmpty)) {
+        return t.sourceType == DownloadSourceType.bytes &&
+            t.fileName == fileName;
+      }
+      return t.sourceUrl == effectiveUrl;
     }).firstOrNull;
 
     if (existingActive != null) {
@@ -190,7 +219,7 @@ class DownloadController extends Notifier<DownloadState> {
         message: '队列中已存在同 sourceUrl 任务，合并至: ${existingActive.id}',
         details: {
           'id': existingActive.id,
-          'sourceUrl': sourceUrl,
+          'sourceUrl': effectiveUrl,
           'status': existingActive.status.name,
         },
       );
@@ -200,15 +229,20 @@ class DownloadController extends Notifier<DownloadState> {
     // 3. 创建新任务加入队列
     final newTask = DownloadTask(
       id: uuidV4(),
-      sourceUrl: sourceUrl,
+      sourceUrl: effectiveUrl,
       fileName: fileName,
       mimeType: mimeType,
-      expectedBytes: expectedBytes,
+      expectedBytes: effectiveExpectedBytes,
       receivedBytes: 0,
       status: DownloadStatus.queued,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       sessionId: sessionId,
+      sourceType: sourceType,
     );
+
+    if (bytes != null) {
+      _pendingBytes[newTask.id] = bytes;
+    }
 
     _updateTask(newTask);
     await _repository.saveRecord(newTask);
@@ -221,6 +255,7 @@ class DownloadController extends Notifier<DownloadState> {
         'id': newTask.id,
         'sourceUrl': newTask.sourceUrl,
         'fileName': newTask.fileName,
+        'sourceType': newTask.sourceType.name,
       },
     );
 
@@ -235,6 +270,7 @@ class DownloadController extends Notifier<DownloadState> {
     if (task == null || task.isTerminal) return;
 
     _cancelledTaskIds.add(id);
+    _pendingBytes.remove(id);
 
     final cancelledTask = task.copyWith(
       status: DownloadStatus.cancelled,
@@ -290,6 +326,8 @@ class DownloadController extends Notifier<DownloadState> {
     final task = state.taskById(id);
     if (task == null) return;
 
+    _pendingBytes.remove(id);
+
     if (task.isActive) {
       await cancel(id);
     }
@@ -309,6 +347,7 @@ class DownloadController extends Notifier<DownloadState> {
   /// 清空所有已终态的任务记录（completed / failed / cancelled）。
   Future<void> clearTerminalRecords() async {
     await _ensureInitialized();
+    _pendingBytes.clear();
     final terminalTasks = state.tasks.where((t) => t.isTerminal).toList();
     for (final t in terminalTasks) {
       await _repository.deleteRecord(t.id);
@@ -335,6 +374,7 @@ class DownloadController extends Notifier<DownloadState> {
 
         if (_cancelledTaskIds.contains(currentTask.id)) {
           _cancelledTaskIds.remove(currentTask.id);
+          _pendingBytes.remove(currentTask.id);
           final cancelled = currentTask.copyWith(
             status: DownloadStatus.cancelled,
             completedAt: DateTime.now().millisecondsSinceEpoch,
@@ -360,11 +400,31 @@ class DownloadController extends Notifier<DownloadState> {
               'sourceUrl': currentTask.sourceUrl,
               'fileName': currentTask.fileName,
               'expectedBytes': currentTask.expectedBytes,
+              'sourceType': currentTask.sourceType.name,
             },
           );
 
-          final uri = Uri.parse(currentTask.sourceUrl);
-          final bytes = await _downloader(uri);
+          final Uint8List bytes;
+          if (currentTask.sourceType == DownloadSourceType.bytes) {
+            final memoryBytes = _pendingBytes.remove(currentTask.id);
+            if (memoryBytes != null) {
+              bytes = memoryBytes;
+            } else if (currentTask.sourceUrl.startsWith('data:')) {
+              final commaIdx = currentTask.sourceUrl.indexOf(',');
+              if (commaIdx != -1) {
+                bytes = base64Decode(
+                  currentTask.sourceUrl.substring(commaIdx + 1),
+                );
+              } else {
+                throw Exception('内存数据丢失且无效的 Data URI');
+              }
+            } else {
+              throw Exception('内存数据已失效，无法重新下载');
+            }
+          } else {
+            final uri = Uri.parse(currentTask.sourceUrl);
+            bytes = await _downloader(uri);
+          }
 
           if (_cancelledTaskIds.contains(currentTask.id)) {
             _cancelledTaskIds.remove(currentTask.id);

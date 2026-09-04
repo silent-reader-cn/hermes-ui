@@ -6,16 +6,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cache/cache_providers.dart';
+import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../diagnostics/diagnostics_models.dart';
 import '../../diagnostics/diagnostics_service.dart';
+import '../../downloads/download_confirm_dialog.dart';
 import '../../downloads/download_models.dart';
 import '../../downloads/download_page.dart';
 import '../../downloads/download_providers.dart';
 import '../../downloads/download_save_service.dart';
 import 'chat_media_parser.dart';
 import '../../../app/widgets/hermes_page_route.dart';
+
+export '../../downloads/download_confirm_dialog.dart';
 
 /// 单个网络媒体 URL → 本地缓存文件。
 ///
@@ -271,64 +275,6 @@ class ChatInlineMediaWidget extends ConsumerWidget {
   }
 }
 
-/// 弹出 Cupertino 下载确认对话框。
-///
-/// 展示：文件名、文件分类、文件大小（或未知大小）、来源会话（若有）。
-/// 返回 true 表示用户确认开始下载，返回 false 或 null 表示取消。
-Future<bool?> showDownloadConfirmationDialog(
-  BuildContext context, {
-  required String fileName,
-  String? mimeType,
-  int? expectedBytes,
-  String? sessionId,
-}) {
-  final l10n = AppLocalizations.of(context);
-  final fileType = getDownloadFileType(fileName: fileName, mimeType: mimeType);
-  final typeName = localizeDownloadFileType(fileType, l10n);
-  final sizeText = expectedBytes != null && expectedBytes > 0
-      ? formatDownloadByteSize(expectedBytes)
-      : l10n.downloadUnknownSize;
-  final sessionText = (sessionId != null && sessionId.isNotEmpty)
-      ? (sessionId.length > 12 ? '${sessionId.substring(0, 12)}…' : sessionId)
-      : null;
-
-  return showCupertinoDialog<bool>(
-    context: context,
-    builder: (dialogCtx) => CupertinoAlertDialog(
-      title: Text(l10n.downloadConfirmTitle),
-      content: Padding(
-        padding: const EdgeInsets.only(top: 8.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${l10n.name}：$fileName'),
-            const SizedBox(height: 4),
-            Text('${l10n.info}：$typeName'),
-            const SizedBox(height: 4),
-            Text('${l10n.value}：$sizeText'),
-            if (sessionText != null) ...[
-              const SizedBox(height: 4),
-              Text('${l10n.downloadFromSession}：$sessionText'),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        CupertinoDialogAction(
-          child: Text(l10n.downloadConfirmCancel),
-          onPressed: () => Navigator.of(dialogCtx).pop(false),
-        ),
-        CupertinoDialogAction(
-          isDefaultAction: true,
-          child: Text(l10n.downloadConfirmStart),
-          onPressed: () => Navigator.of(dialogCtx).pop(true),
-        ),
-      ],
-    ),
-  );
-}
-
 /// 打开附件预览全屏弹窗（图片走 Lightbox 大图，非图展示文档信息与下载操作）。
 void showAttachmentPreview(
   BuildContext context, {
@@ -441,12 +387,30 @@ class AttachmentLightbox extends StatelessWidget {
         );
       }
 
-      body = Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 4.0,
-          child: viewerContent,
-        ),
+      body = Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: viewerContent,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24, top: 12),
+            child: _AttachmentDownloadButton(
+              resolvedUrl: resolvedUrl,
+              bytes: bytes,
+              filename: titleText.isNotEmpty ? titleText : 'image.png',
+              sessionId: sessionId,
+              expectedBytes: expectedBytes ?? bytes?.length,
+              mimeType: mimeType ?? 'image/png',
+              onOpenFile: onOpenFile,
+            ),
+          ),
+        ],
       );
     } else {
       final kind = MessageAttachment.mediaKindForName(titleText);
@@ -557,33 +521,92 @@ class _AttachmentDownloadButton extends ConsumerWidget {
   final String? mimeType;
   final Future<void> Function(String path)? onOpenFile;
 
+  String? _effectiveUrl(WidgetRef ref) {
+    var url = resolvedUrl;
+    if (url != null && url.isNotEmpty) {
+      if (!url.startsWith('http://') &&
+          !url.startsWith('https://') &&
+          !url.startsWith('data:')) {
+        // 无激活连接（如测试环境/未引导）时容错：不抛，按原值返回。
+        String baseUrl = '';
+        try {
+          baseUrl = ref.read(apiClientProvider).baseUrl;
+        } catch (_) {
+          baseUrl = '';
+        }
+        if (baseUrl.isNotEmpty) {
+          url = ChatMediaResolver.resolveMediaUrl(
+            url,
+            baseUrl: baseUrl,
+            sessionId: sessionId,
+          );
+        }
+      }
+    }
+    return url;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final downloadState = ref.watch(downloadControllerProvider);
     final controller = ref.read(downloadControllerProvider.notifier);
 
-    final url = resolvedUrl;
-    final task = url != null
+    final url = _effectiveUrl(ref);
+    final cleanName = DownloadSaveService.sanitizeFileName(
+      filename?.isNotEmpty == true ? filename! : (url ?? 'download'),
+      mimeType: mimeType,
+    );
+
+    final task = (url != null && url.isNotEmpty)
         ? downloadState.tasks.where((t) => t.sourceUrl == url).firstOrNull
-        : null;
+        : downloadState.tasks
+              .where(
+                (t) =>
+                    t.sourceType == DownloadSourceType.bytes &&
+                    t.fileName == cleanName,
+              )
+              .firstOrNull;
 
     final bool isLocalAvailable =
-        bytes != null || (url != null && !kIsWeb && File(url).existsSync());
+        url != null && !kIsWeb && File(url).existsSync();
+
+    // 不可解析来源（既无内存字节、URL 又非 http/data/本地文件）：禁用态 + 可见提示，
+    // 不再静默禁用「点了没反应」（#53 A-2）。
+    final bool hasResolvableUrl =
+        url != null &&
+        url.isNotEmpty &&
+        (url.startsWith('http://') ||
+            url.startsWith('https://') ||
+            url.startsWith('data:') ||
+            (!kIsWeb && File(url).existsSync()));
+    if (bytes == null && !hasResolvableUrl) {
+      return CupertinoButton.filled(
+        key: const ValueKey('attachment-download-button'),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        onPressed: null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.cloud_download, size: 16),
+            const SizedBox(width: 6),
+            Text(l10n.dl53CannotDownload),
+          ],
+        ),
+      );
+    }
 
     if (isLocalAvailable) {
       return CupertinoButton.filled(
         key: const ValueKey('attachment-download-button'),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         onPressed: () async {
-          if (url != null && File(url).existsSync()) {
-            await openDownloadedFile(
-              context,
-              url,
-              mimeType: mimeType,
-              customOpener: onOpenFile,
-            );
-          }
+          await openDownloadedFile(
+            context,
+            url,
+            mimeType: mimeType,
+            customOpener: onOpenFile,
+          );
         },
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -675,10 +698,47 @@ class _AttachmentDownloadButton extends ConsumerWidget {
       }
     }
 
+    final hasBytes = bytes != null;
+    final canDownload =
+        hasBytes ||
+        (url != null &&
+            (url.startsWith('http://') ||
+                url.startsWith('https://') ||
+                url.startsWith('data:')));
+
+    if (!canDownload) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoButton.filled(
+            key: const ValueKey('attachment-download-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            onPressed: null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(CupertinoIcons.cloud_download, size: 16),
+                const SizedBox(width: 6),
+                Text(l10n.mediaDownload),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.dl53CannotDownload,
+            style: const TextStyle(
+              fontSize: 12,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
+      );
+    }
+
     return CupertinoButton.filled(
       key: const ValueKey('attachment-download-button'),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      onPressed: url != null ? () => _triggerDownload(context, ref) : null,
+      onPressed: () => _triggerDownload(context, ref),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -691,20 +751,39 @@ class _AttachmentDownloadButton extends ConsumerWidget {
   }
 
   Future<void> _triggerDownload(BuildContext context, WidgetRef ref) async {
-    final url = resolvedUrl;
-    if (url == null || url.isEmpty) return;
+    final url = _effectiveUrl(ref);
+    final hasBytes = bytes != null;
+    if (!hasBytes && (url == null || url.isEmpty)) return;
 
+    final displayName = filename?.isNotEmpty == true
+        ? filename!
+        : (url?.split('/').last.split('?').first ?? 'download');
     final cleanName = DownloadSaveService.sanitizeFileName(
-      filename?.isNotEmpty == true ? filename! : url,
+      displayName,
       mimeType: mimeType,
     );
+
+    Uint8List? dataBytes = bytes;
+    if (dataBytes == null && url != null && url.startsWith('data:')) {
+      final comma = url.indexOf(',');
+      if (comma != -1) {
+        try {
+          dataBytes = base64Decode(url.substring(comma + 1));
+        } catch (_) {}
+      }
+    }
 
     final confirmed = await showDownloadConfirmationDialog(
       context,
       fileName: cleanName,
       mimeType: mimeType,
-      expectedBytes: expectedBytes ?? bytes?.length,
+      expectedBytes: expectedBytes ?? dataBytes?.length,
       sessionId: sessionId,
+      sourceDescription: sessionId != null && sessionId!.isNotEmpty
+          ? (sessionId!.length > 12
+                ? '${sessionId!.substring(0, 12)}…'
+                : sessionId!)
+          : null,
     );
 
     if (confirmed == true && context.mounted) {
@@ -712,9 +791,10 @@ class _AttachmentDownloadButton extends ConsumerWidget {
           .read(downloadControllerProvider.notifier)
           .enqueue(
             sourceUrl: url,
+            bytes: dataBytes,
             fileName: cleanName,
             mimeType: mimeType,
-            expectedBytes: expectedBytes ?? bytes?.length,
+            expectedBytes: expectedBytes ?? dataBytes?.length,
             sessionId: sessionId,
           );
     }
@@ -1089,6 +1169,8 @@ class ChatAttachmentChipView extends StatelessWidget {
           altText: name,
           isImage: isImage || kind == MessageMediaKind.image,
           sessionId: sessionId,
+          expectedBytes: attachment.size,
+          mimeType: attachment.mime,
         ),
         child: chipWidget,
       ),

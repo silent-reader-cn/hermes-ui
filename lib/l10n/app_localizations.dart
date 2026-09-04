@@ -1653,3 +1653,11 @@ class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
   @override
   bool shouldReload(AppLocalizationsDelegate old) => false;
 }
+
+// ---------------------------------------------------------------------------
+// #53 Download center unification extensions
+// ---------------------------------------------------------------------------
+extension AppLocalizationsDl53 on AppLocalizations {
+  String get dl53CannotDownload =>
+      isEnglish ? 'Cannot download from this source' : '无法从此来源下载';
+}

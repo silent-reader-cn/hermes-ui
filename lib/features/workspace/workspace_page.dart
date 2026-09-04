@@ -171,7 +171,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 unawaited(ref.read(provider.notifier).navigateToRoot()),
             onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
             onDownloadFolder: () =>
-                unawaited(ref.read(provider.notifier).downloadFolder()),
+                unawaited(ref.read(provider.notifier).downloadFolder(context: context)),
             onRetry: () =>
                 unawaited(ref.read(provider.notifier).retryLastLoad()),
             onCrumbTap: (crumb) =>
@@ -360,7 +360,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _onDownload(WorkspaceEntry entry) async {
     await ref
         .read(workspaceControllerProvider(widget.sessionId).notifier)
-        .download(entry);
+        .download(entry, context: context);
   }
 
   /// 打开文件预览页（文本/图片走 /api/file、/api/file/raw）。

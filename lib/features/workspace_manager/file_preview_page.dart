@@ -9,12 +9,15 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/endpoints.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
-import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/widgets/markdown_styles.dart';
+import '../downloads/download_confirm_dialog.dart';
+import '../downloads/download_providers.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
 import '../workspace/workspace_providers.dart';
@@ -678,20 +681,37 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     if (_downloading) return;
     final path = widget.entry.path;
     if (path == null || path.isEmpty) return;
+
+    final fileName = widget.entry.name ?? path.split('/').last;
+
+    final confirmed = await showDownloadConfirmationDialog(
+      context,
+      fileName: fileName,
+      mimeType: widget.entry.type,
+      expectedBytes: widget.entry.size,
+      sessionId: widget.sessionId,
+      sourceDescription: '${widget.sessionId}/$path',
+    );
+    if (confirmed != true || !mounted) return;
+
     final l10n = AppLocalizations.of(context);
     setState(() => _downloading = true);
     try {
-      final bytes = await _api.downloadFile(
+      final client = ref.read(apiClientProvider);
+      final rawUrl = Endpoint.rawFile(
         sessionId: widget.sessionId,
         path: path,
+      ).url(client.baseUrl).toString();
+
+      await ref.read(downloadControllerProvider.notifier).enqueue(
+        sourceUrl: rawUrl,
+        fileName: fileName,
+        mimeType: widget.entry.type,
+        expectedBytes: widget.entry.size,
+        sessionId: widget.sessionId,
       );
       if (!mounted) return;
       setState(() => _downloading = false);
-      await _showInfoDialog(
-        l10n.download,
-        '已下载「${widget.entry.name ?? path}」（${bytes.length} 字节），'
-        '保存到本地待平台通道接入。',
-      );
     } on Exception catch (error) {
       if (!mounted) return;
       setState(() => _downloading = false);

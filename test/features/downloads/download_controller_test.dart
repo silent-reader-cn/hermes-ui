@@ -71,6 +71,20 @@ class _FakeNotificationService implements TurnNotificationService {
   Future<String?> getLaunchSessionId() async => null;
 }
 
+class _FailingSaveService extends DownloadSaveService {
+  _FailingSaveService({required this.error});
+  final Object error;
+
+  @override
+  Future<String> save({
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  }) async {
+    throw error;
+  }
+}
+
 void main() {
   late AppDatabase db;
   late Directory tempSaveDir;
@@ -101,11 +115,14 @@ void main() {
 
   ProviderContainer createContainer({
     Future<Uint8List> Function(Uri)? customDownloader,
+    DownloadSaveService? customSaveService,
   }) {
     return ProviderContainer(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
-        downloadSaveServiceProvider.overrideWithValue(saveService),
+        downloadSaveServiceProvider.overrideWithValue(
+          customSaveService ?? saveService,
+        ),
         turnNotificationServiceProvider.overrideWithValue(notificationService),
         downloadDownloaderProvider.overrideWithValue(
           customDownloader ??
@@ -425,6 +442,152 @@ void main() {
 
       await controller.clearTerminalRecords();
       expect(container.read(downloadControllerProvider).tasks, isEmpty);
+    });
+
+    test('内存字节模式：直接保存文件，不经过网络下载器，sourceType 为 bytes', () async {
+      var networkCalled = false;
+      final container = createContainer(
+        customDownloader: (url) async {
+          networkCalled = true;
+          return Uint8List(0);
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final rawBytes = Uint8List.fromList([10, 20, 30, 40, 50]);
+      final id = await controller.enqueue(
+        bytes: rawBytes,
+        fileName: 'memory_image.png',
+        mimeType: 'image/png',
+        expectedBytes: 5,
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.sourceType, DownloadSourceType.bytes);
+      expect(task.status, DownloadStatus.completed);
+      expect(task.receivedBytes, 5);
+      expect(task.savedPath, isNotNull);
+      expect(File(task.savedPath!).existsSync(), isTrue);
+      expect(File(task.savedPath!).readAsBytesSync(), rawBytes);
+      expect(networkCalled, isFalse);
+
+      expect(notificationService.downloadCompletedCalls, hasLength(1));
+      expect(notificationService.downloadCompletedCalls.single, (
+        id,
+        'memory_image.png',
+        5,
+      ));
+    });
+
+    test('Data URI 模式：解码 base64 直接落盘，sourceType 为 bytes 且不调下载器', () async {
+      var networkCalled = false;
+      final container = createContainer(
+        customDownloader: (url) async {
+          networkCalled = true;
+          return Uint8List(0);
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      // "hello" in base64: aGVsbG8=
+      final id = await controller.enqueue(
+        sourceUrl: 'data:text/plain;base64,aGVsbG8=',
+        fileName: 'hello.txt',
+        mimeType: 'text/plain',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.sourceType, DownloadSourceType.bytes);
+      expect(task.status, DownloadStatus.completed);
+      expect(task.savedPath, isNotNull);
+      expect(File(task.savedPath!).existsSync(), isTrue);
+      expect(File(task.savedPath!).readAsStringSync(), 'hello');
+      expect(networkCalled, isFalse);
+    });
+
+    test('内存字节去重：本地文件仍存在直接返回已存在任务 ID；删除后重新落盘', () async {
+      final container = createContainer();
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final rawBytes = Uint8List.fromList([1, 2, 3]);
+
+      final id1 = await controller.enqueue(
+        bytes: rawBytes,
+        fileName: 'dup_test.bin',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      // 再次 enqueue 相同 fileName 与 bytes：文件存在 → 返回 id1
+      final id2 = await controller.enqueue(
+        bytes: rawBytes,
+        fileName: 'dup_test.bin',
+      );
+      expect(id2, equals(id1));
+
+      // 删除本地文件
+      final task1 = container.read(downloadControllerProvider).taskById(id1)!;
+      File(task1.savedPath!).deleteSync();
+
+      // 文件被删后再次 enqueue：重新创建并落盘
+      final id3 = await controller.enqueue(
+        bytes: rawBytes,
+        fileName: 'dup_test.bin',
+      );
+      expect(id3, isNotEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final task3 = container.read(downloadControllerProvider).taskById(id3)!;
+      expect(task3.status, DownloadStatus.completed);
+      expect(File(task3.savedPath!).existsSync(), isTrue);
+    });
+
+    test('平台保存异常透传（Area D）：DownloadSaveService 抛错捕获置 failed 并记录诊断日志', () async {
+      final container = createContainer(
+        customSaveService: _FailingSaveService(
+          error: const FileSystemException(
+            'Permission denied (Scoped Storage)',
+          ),
+        ),
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/scoped_storage_test.apk',
+        fileName: 'scoped_storage_test.apk',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.failed);
+      expect(task.failureMessage, contains('Permission denied'));
+
+      // 验证诊断日志包含错误
+      final logs = DiagnosticsService.instance.logs
+          .where((l) => l.tag == 'downloads')
+          .toList();
+      expect(
+        logs.any(
+          (l) => l.message.contains('保存失败') || l.message.contains('下载失败'),
+        ),
+        isTrue,
+      );
     });
   });
 }

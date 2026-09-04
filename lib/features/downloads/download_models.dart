@@ -18,6 +18,18 @@ enum DownloadStatus {
   }
 }
 
+/// 下载来源类型。
+enum DownloadSourceType {
+  url,
+  bytes;
+
+  /// 从字符串安全解析（容错未知/null）。
+  static DownloadSourceType fromString(String? value) {
+    if (value == 'bytes') return DownloadSourceType.bytes;
+    return DownloadSourceType.url;
+  }
+}
+
 /// 下载任务数据模型。
 class DownloadTask {
   const DownloadTask({
@@ -33,16 +45,20 @@ class DownloadTask {
     this.completedAt,
     this.failureMessage,
     this.sessionId,
+    this.sourceType = DownloadSourceType.url,
   });
 
   /// 任务唯一标识符（UUID）。
   final String id;
 
-  /// 远程下载源 URL。
+  /// 远程下载源 URL（或 bytes 占位源）。
   final String sourceUrl;
 
   /// 目标文件名。
   final String fileName;
+
+  /// 来源类型（URL 或直接内存字节）。
+  final DownloadSourceType sourceType;
 
   /// MIME 内容类型。
   final String? mimeType;
@@ -105,6 +121,7 @@ class DownloadTask {
     Object? completedAt = _sentinel,
     Object? failureMessage = _sentinel,
     Object? sessionId = _sentinel,
+    DownloadSourceType? sourceType,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -125,6 +142,7 @@ class DownloadTask {
           ? this.failureMessage
           : failureMessage as String?,
       sessionId: sessionId == _sentinel ? this.sessionId : sessionId as String?,
+      sourceType: sourceType ?? this.sourceType,
     );
   }
 
@@ -152,6 +170,8 @@ class DownloadTask {
 
     final rawStatus =
         lossyString(map, 'status') ?? lossyString(map, 'download_status');
+    final rawSourceType =
+        lossyString(map, 'source_type') ?? lossyString(map, 'sourceType');
     return DownloadTask(
       id: lossyString(map, 'id') ?? '',
       sourceUrl:
@@ -176,6 +196,7 @@ class DownloadTask {
           lossyString(map, 'failureMessage'),
       sessionId:
           lossyString(map, 'session_id') ?? lossyString(map, 'sessionId'),
+      sourceType: DownloadSourceType.fromString(rawSourceType),
     );
   }
 
@@ -185,6 +206,7 @@ class DownloadTask {
       'id': id,
       'source_url': sourceUrl,
       'file_name': fileName,
+      'source_type': sourceType.name,
       if (mimeType != null) 'mime_type': mimeType,
       if (expectedBytes != null) 'expected_bytes': expectedBytes,
       'received_bytes': receivedBytes,
@@ -213,7 +235,8 @@ class DownloadTask {
           createdAt == other.createdAt &&
           completedAt == other.completedAt &&
           failureMessage == other.failureMessage &&
-          sessionId == other.sessionId;
+          sessionId == other.sessionId &&
+          sourceType == other.sourceType;
 
   @override
   int get hashCode => Object.hash(
@@ -229,12 +252,14 @@ class DownloadTask {
     completedAt,
     failureMessage,
     sessionId,
+    sourceType,
   );
 
   @override
   String toString() =>
       'DownloadTask(id: $id, fileName: $fileName, status: ${status.name}, '
-      'received: $receivedBytes, expected: $expectedBytes, savedPath: $savedPath)';
+      'sourceType: ${sourceType.name}, received: $receivedBytes, '
+      'expected: $expectedBytes, savedPath: $savedPath)';
 }
 
 /// 文件类型分类。
