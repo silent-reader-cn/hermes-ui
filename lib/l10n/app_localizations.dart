@@ -1625,6 +1625,13 @@ class AppLocalizations {
   String get notifClarifyBody => isEnglish ? 'The agent needs clarification — tap to view' : 'Agent 需要你澄清，点击查看';
   String get notifErrorBody => isEnglish ? 'Generation was interrupted — tap to view' : '会话生成异常中断，点击查看';
   String get notifTurnFallbackBody => isEnglish ? 'Agent turn completed — tap to view' : 'Agent 回合已生成完毕，点击查看';
+  String get webuiDetailTakeover =>
+      isEnglish
+          ? 'Takeover: reusing an already-running instance'
+          : '接管模式：复用已运行实例';
+  String webuiDetailRestarting(int attempt) => isEnglish
+      ? 'Restarting (attempt $attempt)…'
+      : '重启中（第 $attempt 次尝试）…';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
