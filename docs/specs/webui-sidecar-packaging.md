@@ -94,8 +94,11 @@
 Embeddable Python 发行版默认隔离系统环境，且 `#import site` 处于注释状态。  
 构建流水线中通过脚本自动修改 `python311._pth`：
 1. 插入 `Lib\site-packages` 路径条目；
-2. 取消 `#import site` 注释，改写为 `import site`。  
+2. 取消 `#import site` 注释，改写为 `import site`；
+3. 追加 `..\server` 路径条目。  
 这使得 `python.exe` 启动时能够自动发现并加载 `Lib\site-packages` 下的第三方轮子包。
+
+> **为何必须追加 `..\server`（2026-09-04 冒烟实证）**：带 `._pth` 文件的 embeddable python 运行在**隔离模式**——`sys.path` 完全由 `._pth` 决定，`PYTHONPATH` 与环境变量注入均被忽略，且脚本所在目录也不自动入 path。若不写入 `..\server`（相对 python 目录，即内置包的 `webui\server`），`server.py` 首行 `from api.auth import ...` 直接 `ModuleNotFoundError: No module named 'api'`，sidecar 无法启动。脚本对 `._pth` 的改写具备幂等性（重复执行不产生重复条目）。
 
 ### 3.3 构建期预装与「运行时零 pip」硬约束
 Hermes WebUI 本体依赖极度轻量（仅 `pyyaml>=6.0` 与 `cryptography>=42.0`）。为了确保生产分发包的极度精简、纯净与安全，执行严格的**构建期安装 + 剥离流水线**：

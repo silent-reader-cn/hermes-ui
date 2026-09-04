@@ -147,6 +147,17 @@ try {
 
     foreach ($line in $pthLines) {
         $trimmed = $line.Trim()
+        # Idempotency: keep exactly one Lib\site-packages entry, drop dupes
+        if ($trimmed -eq "Lib\site-packages") {
+            if (-not $sitePackagesAdded) {
+                $newPthLines += "Lib\site-packages"
+                $sitePackagesAdded = $true
+            }
+            continue
+        }
+        if ($trimmed -eq "..\server") {
+            continue
+        }
         if ($trimmed -eq "#import site") {
             if (-not $sitePackagesAdded) {
                 $newPthLines += "Lib\site-packages"
@@ -168,6 +179,13 @@ try {
         $newPthLines += "Lib\site-packages"
         $newPthLines += "import site"
     }
+
+    # Embeddable python with a ._pth file runs in isolated mode (sys.path is
+    # fixed, PYTHONPATH is ignored). The server dir must be on sys.path so
+    # `import api` works; S1 starts the process with cwd=server dir but that
+    # does not add it to sys.path under isolated mode. Path is relative to the
+    # python dir, i.e. ..\server.
+    $newPthLines += "..\server"
 
     $newPthLines | Set-Content $pthFile -Encoding ASCII
     Log-Success "Updated $pthFile successfully"
