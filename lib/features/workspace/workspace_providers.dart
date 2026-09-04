@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/locale/locale_resolver.dart';
+import '../../l10n/app_localizations.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -14,6 +16,10 @@ typedef WorkspaceApiFactory = WorkspaceApi Function(ApiClient client);
 final workspaceApiFactoryProvider = Provider<WorkspaceApiFactory>(
   (ref) => WorkspaceApiClient.new,
 );
+
+/// 「根目录」面包屑标题（按 LocaleResolver 当前语言解析）。
+String _rootCrumbTitle() =>
+    AppLocalizations(LocaleResolver.resolve()).rootDir;
 
 /// 面包屑（对齐 Swift `FileBreadcrumb`：title + path，path 即跳转目标）。
 class WorkspaceBreadcrumb {
@@ -99,11 +105,11 @@ class WorkspaceState {
   /// 面包屑链（恒以「根目录」开头，逐级到当前目录）。
   List<WorkspaceBreadcrumb> get breadcrumbs {
     if (isAtRoot) {
-      return const [WorkspaceBreadcrumb(title: '根目录', path: '.')];
+      return [WorkspaceBreadcrumb(title: _rootCrumbTitle(), path: '.')];
     }
     final parts = currentPath.split('/');
     final crumbs = <WorkspaceBreadcrumb>[
-      const WorkspaceBreadcrumb(title: '根目录', path: '.'),
+      WorkspaceBreadcrumb(title: _rootCrumbTitle(), path: '.'),
     ];
     for (var i = 0; i < parts.length; i++) {
       crumbs.add(
@@ -480,7 +486,7 @@ final workspaceBreadcrumbsProvider =
               .watch(workspaceControllerProvider(sessionId))
               .valueOrNull
               ?.breadcrumbs ??
-          const [WorkspaceBreadcrumb(title: '根目录', path: '.')];
+          [WorkspaceBreadcrumb(title: _rootCrumbTitle(), path: '.')];
     });
 
 /// 当前目录的父路径（null = 已在根目录）。

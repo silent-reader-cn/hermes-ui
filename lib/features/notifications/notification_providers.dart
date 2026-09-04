@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app/locale/locale_resolver.dart';
 import '../../app/router.dart';
+import '../../l10n/app_localizations.dart';
 import '../../core/utils/uuid.dart';
 import '../chat/chat_providers.dart';
 import '../desktop/window_title_service.dart';
@@ -303,7 +305,10 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
             .state = InAppNotificationItem(
           id: uuidV4(),
           sessionId: sessionId,
-          title: title.isNotEmpty ? title : '回合完成',
+          title: title.isNotEmpty
+              ? title
+              : AppLocalizations(LocaleResolver.resolve())
+                  .notifTurnCompleted,
           message: preview,
           type: InAppNotificationType.turnCompleted,
         );
@@ -338,7 +343,8 @@ final clarificationNotificationHookProvider =
                 .state = InAppNotificationItem(
               id: uuidV4(),
               sessionId: sessionId,
-              title: '需要澄清',
+              title: AppLocalizations(LocaleResolver.resolve())
+                  .clarificationNeeded,
               message: question,
               type: InAppNotificationType.clarificationNeeded,
             );
@@ -372,7 +378,10 @@ final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
               .state = InAppNotificationItem(
             id: uuidV4(),
             sessionId: sessionId,
-            title: title.isNotEmpty ? title : '会话异常',
+            title: title.isNotEmpty
+                ? title
+                : AppLocalizations(LocaleResolver.resolve())
+                    .sessionErrorTitle,
             message: preview,
             type: InAppNotificationType.sessionError,
           );

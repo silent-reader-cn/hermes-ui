@@ -314,7 +314,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       showCupertinoModalPopup<void>(
         context: context,
         builder: (ctx) => CupertinoActionSheet(
-        title: const Text('选择模型服务商'),
+        title: Text(AppLocalizations.of(ctx).installGuideSelectProvider),
         actions: LlmProviderOption.builtinProviders.map((p) {
           return CupertinoActionSheetAction(
             onPressed: () {
@@ -359,7 +359,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         cancelButton: CupertinoActionSheetAction(
           isDefaultAction: true,
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(ctx).cancel),
         ),
       ),
     ),

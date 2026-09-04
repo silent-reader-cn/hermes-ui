@@ -6,6 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
+import 'package:hermes_ui/app/locale/locale_resolver.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     hide NotificationVisibility;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -218,8 +221,33 @@ class ProductionBackgroundKeepaliveService
   static const String keyLastNotifiedStreamPrefix = 'bg_last_notified_stream_';
   static const String keyLastNotifiedSessionPrefix = 'bg_last_notified_session_';
 
+  Object? _localeListenerToken;
+
   bool _fgTaskReady = false;
   bool _workmanagerReady = false;
+
+  /// 语言切换时刷新常驻通知（读流状态重算 activeCount，非运行时静默跳过）。
+  Future<void> _refreshNotificationForLocale() async {
+    if (!_isAndroid) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('bg_foreground_service_enabled') ?? false;
+      if (!enabled) return;
+      final isStreaming = prefs.getBool(keyIsStreaming) ?? false;
+      final activeStreamId = prefs.getString(keyActiveStreamId);
+      final activeCount =
+          (isStreaming || (activeStreamId != null && activeStreamId.isNotEmpty))
+              ? 1
+              : 0;
+      await updateNotification(activeCount: activeCount);
+    } catch (e, st) {
+      developer.log(
+        '_refreshNotificationForLocale error: $e',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
 
   /// ForegroundTask 是否已初始化就绪。
   bool get fgTaskReady => _fgTaskReady;
@@ -276,6 +304,10 @@ class ProductionBackgroundKeepaliveService
           ),
         );
         _fgTaskReady = true;
+        // L2：语言模式变化 -> 按当前流状态重算并刷新常驻通知文案。
+        _localeListenerToken ??= LocaleResolver.addListener(() {
+          unawaited(_refreshNotificationForLocale());
+        });
       } catch (e, st) {
         developer.log(
           'FlutterForegroundTask.init 失败: $e',
@@ -455,7 +487,7 @@ class ProductionBackgroundKeepaliveService
       }
       final count = activeCount ??
           ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
-      final text = formatNotificationText(count);
+      final text = formatNotificationText(count, isEnglish: LocaleResolver.isEnglish);
 
       final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (isRunning) {
@@ -506,7 +538,7 @@ class ProductionBackgroundKeepaliveService
     try {
       final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (!isRunning) return;
-      final text = formatNotificationText(activeCount);
+      final text = formatNotificationText(activeCount, isEnglish: LocaleResolver.isEnglish);
       final result = await _foregroundTaskWrapper.updateService(
         notificationTitle: 'Hermes',
         notificationText: text,
@@ -777,6 +809,16 @@ class ProductionBackgroundKeepaliveService
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // L2/L3：后台 Isolate 无法继承主 Isolate 的 LocaleResolver 状态，
+      // 从持久化配置恢复语言模式，通知标题/正文按语言本地化。
+      final localeRaw = prefs.getString('app_locale_mode');
+      for (final m in AppLocaleMode.values) {
+        if (m.name == localeRaw) {
+          LocaleResolver.updateMode(m);
+          break;
+        }
+      }
+      final bgL10n = AppLocalizations(LocaleResolver.resolve());
       final notifyTurns = prefs.getBool('notify_turns_enabled') ?? true;
       final notifyClarify = prefs.getBool('notify_clarify_enabled') ?? true;
       final notifyErrors = prefs.getBool('notify_errors_enabled') ?? true;
@@ -812,7 +854,7 @@ class ProductionBackgroundKeepaliveService
                 (healthData['active_streams'] as num?)?.toInt() ?? 0;
             final isRunning = await FlutterForegroundTask.isRunningService;
             if (isRunning) {
-              final text = formatNotificationText(activeStreams);
+              final text = formatNotificationText(activeStreams, isEnglish: LocaleResolver.isEnglish);
               await FlutterForegroundTask.updateService(
                 notificationTitle: 'Hermes',
                 notificationText: text,
@@ -875,8 +917,8 @@ class ProductionBackgroundKeepaliveService
                         .channelClarifyName,
                     channelDesc: LocalNotificationsTurnNotificationService
                         .channelClarifyDescription,
-                    title: '需要澄清',
-                    body: 'Agent 需要你澄清，点击查看',
+                    title: bgL10n.clarificationNeeded,
+                    body: bgL10n.notifClarifyBody,
                     payload: sessionId,
                   );
                 } else if (isError && notifyErrors) {
@@ -889,13 +931,13 @@ class ProductionBackgroundKeepaliveService
                         .channelErrorsName,
                     channelDesc: LocalNotificationsTurnNotificationService
                         .channelErrorsDescription,
-                    title: '会话异常',
-                    body: '会话生成异常中断，点击查看',
+                    title: bgL10n.sessionErrorTitle,
+                    body: bgL10n.notifErrorBody,
                     payload: sessionId,
                   );
                 } else if (notifyTurns) {
                   // 补拉会话最新内容作为预览
-                  String preview = 'Agent 回合已生成完毕，点击查看';
+                  String preview = bgL10n.notifTurnFallbackBody;
                   try {
                     final sessionRes = await dio.get<Map<String, dynamic>>(
                       '/api/session',
@@ -934,7 +976,7 @@ class ProductionBackgroundKeepaliveService
                         .channelTurnsName,
                     channelDesc: LocalNotificationsTurnNotificationService
                         .channelTurnsDescription,
-                    title: '回合完成',
+                    title: bgL10n.notifTurnCompleted,
                     body: preview,
                     payload: sessionId,
                   );
@@ -960,7 +1002,7 @@ class ProductionBackgroundKeepaliveService
                   if (isRunning) {
                     await FlutterForegroundTask.updateService(
                       notificationTitle: 'Hermes',
-                      notificationText: formatNotificationText(0),
+                      notificationText: formatNotificationText(0, isEnglish: LocaleResolver.isEnglish),
                     );
                   }
                 } catch (e) {
@@ -1006,7 +1048,7 @@ class ProductionBackgroundKeepaliveService
             final wasStreaming = prefs.getBool(keyIsStreaming) ?? false;
 
             if (wasStreaming && lastNotified == null && notifyTurns) {
-              String preview = 'Agent 回合已生成完毕，点击查看';
+              String preview = bgL10n.notifTurnFallbackBody;
               final msgs = sDetail?['messages'] as List?;
               if (msgs != null && msgs.isNotEmpty) {
                 for (final m in msgs.reversed) {
@@ -1030,7 +1072,7 @@ class ProductionBackgroundKeepaliveService
                     .channelTurnsName,
                 channelDesc: LocalNotificationsTurnNotificationService
                     .channelTurnsDescription,
-                title: '回合完成',
+                title: bgL10n.notifTurnCompleted,
                 body: preview,
                 payload: sessionId,
               );
@@ -1046,7 +1088,7 @@ class ProductionBackgroundKeepaliveService
                   if (isRunning) {
                     await FlutterForegroundTask.updateService(
                       notificationTitle: 'Hermes',
-                      notificationText: formatNotificationText(0),
+                      notificationText: formatNotificationText(0, isEnglish: LocaleResolver.isEnglish),
                     );
                   }
                 } catch (e) {

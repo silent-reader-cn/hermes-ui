@@ -2,6 +2,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../app/locale/locale_resolver.dart';
+import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 import '../downloads/download_models.dart';
@@ -283,7 +285,8 @@ class LocalNotificationsTurnNotificationService
       );
       await _plugin.show(
         id: notificationClarifyId,
-        title: '需要澄清',
+        title: AppLocalizations(LocaleResolver.resolve())
+            .clarificationNeeded,
         body: formatPreview(question),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
@@ -384,7 +387,8 @@ class LocalNotificationsTurnNotificationService
       );
       await _plugin.show(
         id: notificationDownloadsId,
-        title: '下载完成',
+        title: AppLocalizations(LocaleResolver.resolve())
+            .notifDownloadComplete,
         body: formatPreview(body),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
