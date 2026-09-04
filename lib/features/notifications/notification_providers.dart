@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,18 +38,25 @@ class NotificationSettings {
     this.notifyClarifyEnabled = true,
     this.notifyErrorsEnabled = true,
     this.bgForegroundServiceEnabled = false,
+    this.error,
   });
 
   final bool notifyTurnsEnabled;
   final bool notifyClarifyEnabled;
   final bool notifyErrorsEnabled;
   final bool bgForegroundServiceEnabled;
+  final String? error;
+
+  String? get keepaliveError => error;
+
+  static const Object _sentinel = Object();
 
   NotificationSettings copyWith({
     bool? notifyTurnsEnabled,
     bool? notifyClarifyEnabled,
     bool? notifyErrorsEnabled,
     bool? bgForegroundServiceEnabled,
+    Object? error = _sentinel,
   }) {
     return NotificationSettings(
       notifyTurnsEnabled: notifyTurnsEnabled ?? this.notifyTurnsEnabled,
@@ -56,6 +64,7 @@ class NotificationSettings {
       notifyErrorsEnabled: notifyErrorsEnabled ?? this.notifyErrorsEnabled,
       bgForegroundServiceEnabled:
           bgForegroundServiceEnabled ?? this.bgForegroundServiceEnabled,
+      error: error == _sentinel ? this.error : (error as String?),
     );
   }
 
@@ -67,7 +76,8 @@ class NotificationSettings {
           notifyTurnsEnabled == other.notifyTurnsEnabled &&
           notifyClarifyEnabled == other.notifyClarifyEnabled &&
           notifyErrorsEnabled == other.notifyErrorsEnabled &&
-          bgForegroundServiceEnabled == other.bgForegroundServiceEnabled;
+          bgForegroundServiceEnabled == other.bgForegroundServiceEnabled &&
+          error == other.error;
 
   @override
   int get hashCode => Object.hash(
@@ -75,6 +85,7 @@ class NotificationSettings {
     notifyClarifyEnabled,
     notifyErrorsEnabled,
     bgForegroundServiceEnabled,
+    error,
   );
 }
 
@@ -108,7 +119,9 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
             prefs.getBool(keyBgForegroundService) ??
             state.bgForegroundServiceEnabled,
       );
-    } catch (_) {}
+    } catch (e) {
+      developer.log('Failed to load notification settings from prefs: $e');
+    }
   }
 
   Future<void> setNotifyTurnsEnabled(bool value) async {
@@ -117,7 +130,9 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyTurns, value);
-    } catch (_) {}
+    } catch (e) {
+      developer.log('Failed to save notify turns to prefs: $e');
+    }
   }
 
   Future<void> setNotifyClarifyEnabled(bool value) async {
@@ -126,7 +141,9 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyClarify, value);
-    } catch (_) {}
+    } catch (e) {
+      developer.log('Failed to save notify clarify to prefs: $e');
+    }
   }
 
   Future<void> setNotifyErrorsEnabled(bool value) async {
@@ -135,25 +152,47 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyErrors, value);
-    } catch (_) {}
+    } catch (e) {
+      developer.log('Failed to save notify errors to prefs: $e');
+    }
   }
 
   Future<void> setBgForegroundServiceEnabled(bool value) async {
     _loaded = true;
-    state = state.copyWith(bgForegroundServiceEnabled: value);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(keyBgForegroundService, value);
-    } catch (_) {}
+    state = state.copyWith(
+      bgForegroundServiceEnabled: value,
+      error: null,
+    );
 
     try {
       final keepalive = ref.read(backgroundKeepaliveServiceProvider);
       if (value) {
-        await keepalive.startForegroundService();
+        await keepalive.startForegroundService(
+          callback: foregroundTaskCallback,
+        );
       } else {
         await keepalive.stopForegroundService(force: true);
       }
-    } catch (_) {}
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyBgForegroundService, value);
+    } catch (e, st) {
+      developer.log(
+        'setBgForegroundServiceEnabled error: $e',
+        error: e,
+        stackTrace: st,
+      );
+      state = state.copyWith(
+        bgForegroundServiceEnabled: false,
+        error: e.toString(),
+      );
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(keyBgForegroundService, false);
+      } catch (prefsErr) {
+        developer.log('Failed to persist rollback state: $prefsErr');
+      }
+    }
   }
 }
 
@@ -205,7 +244,8 @@ final inAppNotificationProvider = StateProvider<InAppNotificationItem?>(
 String? getActiveSessionId(dynamic ref) {
   try {
     return ref.read(activeSessionIdProvider);
-  } catch (_) {
+  } catch (e) {
+    developer.log('getActiveSessionId error: $e');
     return null;
   }
 }

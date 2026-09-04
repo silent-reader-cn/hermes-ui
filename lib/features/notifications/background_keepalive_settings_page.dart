@@ -59,6 +59,27 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
                 },
               ),
             ),
+            if (settings.error != null)
+              CupertinoListTile(
+                key: const ValueKey('settings-bg-foreground-service-error'),
+                leading: Icon(
+                  CupertinoIcons.exclamationmark_circle_fill,
+                  color: statusRedText.resolveFrom(context),
+                  size: 20,
+                ),
+                title: Text(
+                  l10n.keepaliveStartFailed,
+                  style: TextStyle(
+                    color: statusRedText.resolveFrom(context),
+                  ),
+                ),
+                subtitle: Text(
+                  settings.error!,
+                  style: TextStyle(
+                    color: statusRedText.resolveFrom(context),
+                  ),
+                ),
+              ),
             CupertinoListTile(
               key: const ValueKey('settings-bg-workmanager-status'),
               title: Text(l10n.bgWorkManagerStatusTitle),

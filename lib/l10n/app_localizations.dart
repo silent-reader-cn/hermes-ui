@@ -1547,6 +1547,18 @@ class AppLocalizations {
       isEnglish ? 'Failed to start' : '启动失败';
   String get webuiOpenLogs => isEnglish ? 'Open Log Directory' : '打开日志目录';
 
+  // Keepalive error messages (keepalive* prefix)
+  String get keepaliveStartFailed =>
+      isEnglish ? 'Failed to start keepalive service' : '前台保活服务启动失败';
+  String keepaliveStartFailedWithReason(String reason) => isEnglish
+      ? 'Failed to start keepalive service: $reason'
+      : '前台保活服务启动失败：$reason';
+  String get keepaliveNotInitialized =>
+      isEnglish ? 'Keepalive service not initialized' : '保活服务未完成初始化';
+  String get keepalivePermissionRequired => isEnglish
+      ? 'Notification permission is required for keepalive service'
+      : '前台保活服务需要通知权限';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));

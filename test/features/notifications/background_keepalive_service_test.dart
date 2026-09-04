@@ -1,14 +1,23 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/features/notifications/background_keepalive_service.dart';
+import 'package:hermes_ui/features/notifications/background_keepalive_settings_page.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+    registerFallbackValue(workmanagerCallbackDispatcher);
+    registerFallbackValue(const Duration(minutes: 15));
+    registerFallbackValue(ExistingPeriodicWorkPolicy.keep);
+    registerFallbackValue(BackoffPolicy.exponential);
+    registerFallbackValue(Constraints(networkType: NetworkType.connected));
   });
 
   setUp(() {
@@ -201,7 +210,12 @@ void main() {
 
     test('setBgForegroundServiceEnabled 切换并保存至 SharedPreferences', () async {
       SharedPreferences.setMockInitialValues({});
-      final container = ProviderContainer();
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      final container = ProviderContainer(
+        overrides: [
+          backgroundKeepaliveServiceProvider.overrideWithValue(fakeKeepalive),
+        ],
+      );
       addTearDown(container.dispose);
 
       final notifier = container.read(notificationSettingsProvider.notifier);
@@ -278,6 +292,291 @@ void main() {
       },
     );
   });
+
+  group('TASK K: 安卓前台服务保活修复（init 顺序/标志位 + callback + 失败可见化）', () {
+    late MockWorkmanager mockWm;
+    late FakeForegroundTaskWrapper fakeFg;
+    late ProductionBackgroundKeepaliveService service;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      mockWm = MockWorkmanager();
+      fakeFg = FakeForegroundTaskWrapper();
+      service = ProductionBackgroundKeepaliveService(
+        workmanager: mockWm,
+        foregroundTaskWrapper: fakeFg,
+      );
+
+      when(() => mockWm.initialize(any())).thenAnswer((_) async {});
+      when(
+        () => mockWm.registerPeriodicTask(
+          any(),
+          any(),
+          tag: any(named: 'tag'),
+          frequency: any(named: 'frequency'),
+          constraints: any(named: 'constraints'),
+          existingWorkPolicy: any(named: 'existingWorkPolicy'),
+          backoffPolicy: any(named: 'backoffPolicy'),
+          backoffPolicyDelay: any(named: 'backoffPolicyDelay'),
+        ),
+      ).thenAnswer((_) async {});
+    });
+
+    test('1. init 顺序与分步标志：WorkManager 失败时 fgTask.init 仍完成且 fgTaskReady=true, wmReady=false', () async {
+      when(() => mockWm.initialize(any())).thenThrow(
+        Exception('WorkManager initialize failed on device'),
+      );
+
+      expect(service.fgTaskReady, isFalse);
+      expect(service.wmReady, isFalse);
+      expect(service.isInitialized, isFalse);
+
+      await service.initialize();
+
+      // FlutterForegroundTask.init 作为第一步已完成
+      expect(fakeFg.initCallCount, 1);
+      expect(
+        fakeFg.capturedAndroidNotificationOptions?.channelId,
+        'hermes_foreground_service',
+      );
+      expect(
+        fakeFg.capturedAndroidNotificationOptions?.channelName,
+        '后台生成保活',
+      );
+      expect(service.fgTaskReady, isTrue);
+      expect(service.wmReady, isFalse);
+      expect(service.isInitialized, isFalse);
+
+      // 再次调用 initialize：WorkManager 恢复后完成重试，且 fgTask 不重复 init
+      when(() => mockWm.initialize(any())).thenAnswer((_) async {});
+      await service.initialize();
+
+      expect(fakeFg.initCallCount, 1);
+      expect(service.fgTaskReady, isTrue);
+      expect(service.wmReady, isTrue);
+      expect(service.isInitialized, isTrue);
+    });
+
+    test('2. startForegroundService 收到非空 callback 参数（foregroundTaskCallback）', () async {
+      await service.initialize();
+      await service.startForegroundService(activeCount: 1);
+
+      expect(fakeFg.startServiceCallCount, 1);
+      expect(fakeFg.lastCallback, isNotNull);
+      expect(fakeFg.lastCallback, equals(foregroundTaskCallback));
+      expect(fakeFg.lastNotificationTitle, 'Hermes');
+      expect(fakeFg.lastNotificationText, contains('1 个会话正在生成'));
+    });
+
+    test('3. startForegroundService 失败异常向上冒泡（ServiceRequestFailure 时 throw）', () async {
+      await service.initialize();
+      fakeFg.startServiceResult = ServiceRequestFailure(
+        error: Exception('ServiceTimeoutException: service failed to start within 5s'),
+      );
+
+      expect(
+        () => service.startForegroundService(activeCount: 1),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('4. 开关失败 → provider 状态回滚 false + error 字段可读', () async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      fakeKeepalive.shouldFailStartForegroundServiceWith = Exception(
+        'ServiceNotInitializedException: ForegroundTask not ready',
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          backgroundKeepaliveServiceProvider.overrideWithValue(fakeKeepalive),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(notificationSettingsProvider.notifier);
+      expect(
+        container.read(notificationSettingsProvider).bgForegroundServiceEnabled,
+        isFalse,
+      );
+      expect(
+        container.read(notificationSettingsProvider).error,
+        isNull,
+      );
+
+      // 打开开关触发异常
+      await notifier.setBgForegroundServiceEnabled(true);
+
+      final settings = container.read(notificationSettingsProvider);
+      // 状态回滚为 false
+      expect(settings.bgForegroundServiceEnabled, isFalse);
+      // error 字段可读
+      expect(settings.error, isNotNull);
+      expect(
+        settings.error,
+        contains('ServiceNotInitializedException'),
+      );
+      expect(settings.keepaliveError, equals(settings.error));
+
+      // 持久化保存也回滚为 false
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('bg_foreground_service_enabled'), isFalse);
+    });
+
+    test('5. 冷启动条件拉起路径回归（开关为 true 时拉起，文本根据流状态动态计算）', () async {
+      // 开启开关 + 正在流式生成
+      SharedPreferences.setMockInitialValues({
+        'bg_foreground_service_enabled': true,
+        ProductionBackgroundKeepaliveService.keyIsStreaming: true,
+      });
+
+      await service.initialize();
+
+      expect(fakeFg.startServiceCallCount, 1);
+      expect(fakeFg.lastCallback, equals(foregroundTaskCallback));
+      expect(fakeFg.lastNotificationText, '1 个会话正在生成');
+    });
+
+    test('6. 冷启动条件拉起路径回归（开关为 false 时不拉起）', () async {
+      SharedPreferences.setMockInitialValues({
+        'bg_foreground_service_enabled': false,
+        ProductionBackgroundKeepaliveService.keyIsStreaming: true,
+      });
+
+      await service.initialize();
+
+      expect(fakeFg.startServiceCallCount, 0);
+    });
+
+    test('7. HermesKeepaliveTaskHandler 契约各方法健全性验证', () async {
+      final handler = HermesKeepaliveTaskHandler();
+      await handler.onStart(DateTime.now(), TaskStarter.developer);
+      handler.onRepeatEvent(DateTime.now());
+      await handler.onDestroy(DateTime.now());
+      handler.onStop();
+    });
+
+    testWidgets('8. UI 就地错误提示展示（开关失败后显示红色错误 Tile）', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          notificationSettingsProvider.overrideWith(
+            () => _ErrorMockNotificationSettingsNotifier(
+              'ServiceNotInitializedException: ForegroundTask not ready',
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: BackgroundKeepAliveSection(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final errorTile = find.byKey(
+        const ValueKey('settings-bg-foreground-service-error'),
+      );
+      expect(errorTile, findsOneWidget);
+      expect(find.text('前台保活服务启动失败'), findsOneWidget);
+      expect(
+        find.text('ServiceNotInitializedException: ForegroundTask not ready'),
+        findsOneWidget,
+      );
+    });
+  });
+}
+
+class MockWorkmanager extends Mock implements Workmanager {}
+
+class FakeForegroundTaskWrapper implements ForegroundTaskWrapper {
+  int initCallCount = 0;
+  AndroidNotificationOptions? capturedAndroidNotificationOptions;
+  IOSNotificationOptions? capturedIosNotificationOptions;
+  ForegroundTaskOptions? capturedForegroundTaskOptions;
+
+  bool isRunning = false;
+  int startServiceCallCount = 0;
+  String? lastNotificationTitle;
+  String? lastNotificationText;
+  Function? lastCallback;
+  ServiceRequestResult startServiceResult = const ServiceRequestSuccess();
+
+  int updateServiceCallCount = 0;
+  ServiceRequestResult updateServiceResult = const ServiceRequestSuccess();
+
+  int stopServiceCallCount = 0;
+  ServiceRequestResult stopServiceResult = const ServiceRequestSuccess();
+
+  @override
+  void init({
+    required AndroidNotificationOptions androidNotificationOptions,
+    required IOSNotificationOptions iosNotificationOptions,
+    required ForegroundTaskOptions foregroundTaskOptions,
+  }) {
+    initCallCount++;
+    capturedAndroidNotificationOptions = androidNotificationOptions;
+    capturedIosNotificationOptions = iosNotificationOptions;
+    capturedForegroundTaskOptions = foregroundTaskOptions;
+  }
+
+  @override
+  Future<bool> get isRunningService async => isRunning;
+
+  @override
+  Future<ServiceRequestResult> startService({
+    required String notificationTitle,
+    required String notificationText,
+    Function? callback,
+  }) async {
+    startServiceCallCount++;
+    lastNotificationTitle = notificationTitle;
+    lastNotificationText = notificationText;
+    lastCallback = callback;
+    if (startServiceResult is ServiceRequestSuccess) {
+      isRunning = true;
+    }
+    return startServiceResult;
+  }
+
+  @override
+  Future<ServiceRequestResult> updateService({
+    required String notificationTitle,
+    required String notificationText,
+  }) async {
+    updateServiceCallCount++;
+    lastNotificationTitle = notificationTitle;
+    lastNotificationText = notificationText;
+    return updateServiceResult;
+  }
+
+  @override
+  Future<ServiceRequestResult> stopService() async {
+    stopServiceCallCount++;
+    if (stopServiceResult is ServiceRequestSuccess) {
+      isRunning = false;
+    }
+    return stopServiceResult;
+  }
+}
+
+class _ErrorMockNotificationSettingsNotifier
+    extends NotificationSettingsNotifier {
+  _ErrorMockNotificationSettingsNotifier(this.initialError);
+  final String initialError;
+
+  @override
+  NotificationSettings build() {
+    return NotificationSettings(
+      bgForegroundServiceEnabled: false,
+      error: initialError,
+    );
+  }
 }
 
 class _FakeTurnNotificationService implements TurnNotificationService {

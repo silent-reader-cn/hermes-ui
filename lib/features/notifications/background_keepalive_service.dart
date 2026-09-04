@@ -54,6 +54,7 @@ abstract interface class BackgroundKeepaliveService {
     String sessionId = '',
     String? streamId,
     int? activeCount,
+    Function? callback,
   });
 
   /// 停止前台服务（force 为 true 时无条件停止；force 为 false 且开关开启时仅刷新通知文本为 0）。
@@ -109,14 +110,99 @@ void workmanagerCallbackDispatcher() {
   });
 }
 
+/// 前台任务顶层回调入口（由 flutter_foreground_task 在前台任务 Isolate 执行）。
+@pragma('vm:entry-point')
+void foregroundTaskCallback() {
+  FlutterForegroundTask.setTaskHandler(HermesKeepaliveTaskHandler());
+}
+
+/// Hermes 前台保活服务任务处理器（实现 TaskHandler 契约）。
+class HermesKeepaliveTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    developer.log(
+      'HermesKeepaliveTaskHandler onStart: $timestamp, starter: $starter',
+    );
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    developer.log('HermesKeepaliveTaskHandler onRepeatEvent: $timestamp');
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp) async {
+    developer.log('HermesKeepaliveTaskHandler onDestroy: $timestamp');
+  }
+
+  /// 别名/诊断回调（对齐规格说明）。
+  void onStop() {
+    developer.log('HermesKeepaliveTaskHandler onStop');
+  }
+}
+
+/// [FlutterForegroundTask] 静态 API 的包装抽象，便于测试注入与 Mock。
+class ForegroundTaskWrapper {
+  const ForegroundTaskWrapper();
+
+  /// 初始化前台任务配置。
+  void init({
+    required AndroidNotificationOptions androidNotificationOptions,
+    required IOSNotificationOptions iosNotificationOptions,
+    required ForegroundTaskOptions foregroundTaskOptions,
+  }) {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: androidNotificationOptions,
+      iosNotificationOptions: iosNotificationOptions,
+      foregroundTaskOptions: foregroundTaskOptions,
+    );
+  }
+
+  /// 检查前台服务是否正在运行。
+  Future<bool> get isRunningService => FlutterForegroundTask.isRunningService;
+
+  /// 启动前台服务。
+  Future<ServiceRequestResult> startService({
+    required String notificationTitle,
+    required String notificationText,
+    Function? callback,
+  }) {
+    return FlutterForegroundTask.startService(
+      notificationTitle: notificationTitle,
+      notificationText: notificationText,
+      callback: callback,
+    );
+  }
+
+  /// 更新前台服务通知。
+  Future<ServiceRequestResult> updateService({
+    required String notificationTitle,
+    required String notificationText,
+  }) {
+    return FlutterForegroundTask.updateService(
+      notificationTitle: notificationTitle,
+      notificationText: notificationText,
+    );
+  }
+
+  /// 停止前台服务。
+  Future<ServiceRequestResult> stopService() {
+    return FlutterForegroundTask.stopService();
+  }
+}
+
 /// 生产级后台保活实现（基于 WorkManager + flutter_foreground_task + android_intent_plus）。
 class ProductionBackgroundKeepaliveService
     implements BackgroundKeepaliveService {
   ProductionBackgroundKeepaliveService({
     Workmanager? workmanager,
-  }) : _workmanager = workmanager ?? Workmanager();
+    ForegroundTaskWrapper? foregroundTaskWrapper,
+  })  : _workmanager = workmanager ?? Workmanager(),
+        _foregroundTaskWrapper =
+            foregroundTaskWrapper ?? const ForegroundTaskWrapper();
 
   final Workmanager _workmanager;
+  final ForegroundTaskWrapper _foregroundTaskWrapper;
 
   static const String periodicTaskTag = 'hermes-bg-poll';
   static const String periodicTaskUniqueName = 'hermes-bg-poll-periodic';
@@ -132,7 +218,17 @@ class ProductionBackgroundKeepaliveService
   static const String keyLastNotifiedStreamPrefix = 'bg_last_notified_stream_';
   static const String keyLastNotifiedSessionPrefix = 'bg_last_notified_session_';
 
-  bool _initialized = false;
+  bool _fgTaskReady = false;
+  bool _workmanagerReady = false;
+
+  /// ForegroundTask 是否已初始化就绪。
+  bool get fgTaskReady => _fgTaskReady;
+
+  /// WorkManager 是否已初始化并注册周期任务。
+  bool get wmReady => _workmanagerReady;
+
+  /// 全部关键步骤是否就绪。
+  bool get isInitialized => _fgTaskReady && _workmanagerReady;
 
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -149,83 +245,131 @@ class ProductionBackgroundKeepaliveService
 
   @override
   Future<void> initialize() async {
-    if (_initialized || !_isAndroid) return;
-    _initialized = true;
+    if (!_isAndroid) return;
+    if (_fgTaskReady && _workmanagerReady) return;
 
-    try {
-      // 1. 初始化 WorkManager
-      await _workmanager.initialize(
-        workmanagerCallbackDispatcher,
-      );
-
-      // 2. 注册周期性轮询（15min 系统最小周期，约束：联网）
-      await _workmanager.registerPeriodicTask(
-        periodicTaskUniqueName,
-        periodicTaskName,
-        tag: periodicTaskTag,
-        frequency: const Duration(minutes: 15),
-        constraints: Constraints(
-          networkType: NetworkType.connected,
-        ),
-        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-        backoffPolicy: BackoffPolicy.exponential,
-        backoffPolicyDelay: const Duration(seconds: 30),
-      );
-
-      // 3. 初始化 Foreground Task
-      // 注：flutter_foreground_task 8.x 的 AndroidNotificationOptions 无 foregroundServiceType 参数，
-      // 依 Android 14+ 规范在 AndroidManifest.xml 中显式声明 foregroundServiceType="specialUse"
-      // 及 PROPERTY_SPECIAL_USE_FGS_SUBTYPE 为 "hermes_keepalive"。
-      FlutterForegroundTask.init(
-        androidNotificationOptions: AndroidNotificationOptions(
-          channelId: 'hermes_foreground_service',
-          channelName: '后台生成保活',
-          channelDescription: '后台流式生成进行中常驻通知',
-          channelImportance: NotificationChannelImportance.LOW,
-          priority: NotificationPriority.LOW,
-          enableVibration: false,
-          playSound: false,
-          showWhen: false,
-          visibility: NotificationVisibility.VISIBILITY_PUBLIC,
-        ),
-        iosNotificationOptions: const IOSNotificationOptions(
-          showNotification: false,
-          playSound: false,
-        ),
-        foregroundTaskOptions: ForegroundTaskOptions(
-          eventAction: ForegroundTaskEventAction.nothing(),
-          autoRunOnBoot: false,
-          autoRunOnMyPackageReplaced: false,
-          allowWakeLock: true,
-          allowWifiLock: true,
-        ),
-      );
-
-      // 4. 若保活开关已开启，冷启动直启常驻服务
-      final prefs = await SharedPreferences.getInstance();
-      final enabled = prefs.getBool('bg_foreground_service_enabled') ?? false;
-      if (enabled) {
-        final isStreaming = prefs.getBool(keyIsStreaming) ?? false;
-        final activeStreamId = prefs.getString(keyActiveStreamId);
-        final hasActive =
-            isStreaming ||
-            (activeStreamId != null && activeStreamId.isNotEmpty);
-        await startForegroundService(activeCount: hasActive ? 1 : 0);
+    // 1. 首先初始化 Foreground Task（纯内存静态配置，无外部依赖，防 WorkManager 阻断）
+    if (!_fgTaskReady) {
+      try {
+        _foregroundTaskWrapper.init(
+          androidNotificationOptions: AndroidNotificationOptions(
+            channelId: 'hermes_foreground_service',
+            channelName: '后台生成保活',
+            channelDescription: '后台流式生成进行中常驻通知',
+            channelImportance: NotificationChannelImportance.LOW,
+            priority: NotificationPriority.LOW,
+            enableVibration: false,
+            playSound: false,
+            showWhen: false,
+            visibility: NotificationVisibility.VISIBILITY_PUBLIC,
+          ),
+          iosNotificationOptions: const IOSNotificationOptions(
+            showNotification: false,
+            playSound: false,
+          ),
+          foregroundTaskOptions: ForegroundTaskOptions(
+            eventAction: ForegroundTaskEventAction.nothing(),
+            autoRunOnBoot: false,
+            autoRunOnMyPackageReplaced: false,
+            allowWakeLock: true,
+            allowWifiLock: true,
+          ),
+        );
+        _fgTaskReady = true;
+      } catch (e, st) {
+        developer.log(
+          'FlutterForegroundTask.init 失败: $e',
+          error: e,
+          stackTrace: st,
+        );
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'keepalive',
+          message: 'ForegroundTask 初始化失败',
+          errorKind: e.toString(),
+        );
       }
+    }
 
+    // 2. 初始化 WorkManager 与周期性轮询（15min 系统最小周期，约束：联网）
+    if (!_workmanagerReady) {
+      try {
+        await _workmanager.initialize(
+          workmanagerCallbackDispatcher,
+        );
+
+        await _workmanager.registerPeriodicTask(
+          periodicTaskUniqueName,
+          periodicTaskName,
+          tag: periodicTaskTag,
+          frequency: const Duration(minutes: 15),
+          constraints: Constraints(
+            networkType: NetworkType.connected,
+          ),
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+          backoffPolicy: BackoffPolicy.exponential,
+          backoffPolicyDelay: const Duration(seconds: 30),
+        );
+        _workmanagerReady = true;
+      } catch (e, st) {
+        developer.log(
+          'WorkManager 初始化失败: $e',
+          error: e,
+          stackTrace: st,
+        );
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'keepalive',
+          message: 'WorkManager 初始化失败',
+          errorKind: e.toString(),
+        );
+      }
+    }
+
+    // 3. 记录诊断状态
+    if (_fgTaskReady && _workmanagerReady) {
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'keepalive',
         message: '后台保活服务初始化成功（WorkManager + ForegroundTask）',
       );
-    } catch (e, st) {
-      developer.log('后台保活服务初始化失败: $e', error: e, stackTrace: st);
+    } else if (_fgTaskReady) {
       DiagnosticsService.instance.log(
-        level: DiagnosticsLogLevel.error,
+        level: DiagnosticsLogLevel.warn,
         tag: 'keepalive',
-        message: '后台保活服务初始化失败',
-        errorKind: e.toString(),
+        message: '后台保活服务部分就绪（ForegroundTask 就绪，WorkManager 失败）',
       );
+    }
+
+    // 4. 若保活开关已开启且 ForegroundTask 已就绪，冷启动直启常驻服务
+    if (_fgTaskReady) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final enabled = prefs.getBool('bg_foreground_service_enabled') ?? false;
+        if (enabled) {
+          final isStreaming = prefs.getBool(keyIsStreaming) ?? false;
+          final activeStreamId = prefs.getString(keyActiveStreamId);
+          final hasActive =
+              isStreaming ||
+              (activeStreamId != null && activeStreamId.isNotEmpty);
+          await startForegroundService(
+            activeCount: hasActive ? 1 : 0,
+            callback: foregroundTaskCallback,
+          );
+        }
+      } catch (e, st) {
+        developer.log(
+          '冷启动拉起前台服务失败: $e',
+          error: e,
+          stackTrace: st,
+        );
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'keepalive',
+          message: '冷启动拉起前台服务失败',
+          errorKind: e.toString(),
+        );
+      }
     }
   }
 
@@ -252,7 +396,7 @@ class ProductionBackgroundKeepaliveService
               ? 1
               : 0;
       if (foregroundServiceEnabled) {
-        final isRunning = await FlutterForegroundTask.isRunningService;
+        final isRunning = await _foregroundTaskWrapper.isRunningService;
         if (isRunning) {
           await updateNotification(activeCount: activeCount);
         } else {
@@ -260,6 +404,7 @@ class ProductionBackgroundKeepaliveService
             sessionId: activeSessionId ?? '',
             streamId: activeStreamId,
             activeCount: activeCount,
+            callback: foregroundTaskCallback,
           );
         }
       }
@@ -281,8 +426,14 @@ class ProductionBackgroundKeepaliveService
           }
         }
       }
-    } catch (e) {
-      developer.log('onAppLifecycleChanged error: $e');
+    } catch (e, st) {
+      developer.log('onAppLifecycleChanged error: $e', error: e, stackTrace: st);
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'keepalive',
+        message: '生命周期保活联动失败',
+        errorKind: e.toString(),
+      );
     }
   }
 
@@ -291,30 +442,42 @@ class ProductionBackgroundKeepaliveService
     String sessionId = '',
     String? streamId,
     int? activeCount,
+    Function? callback,
   }) async {
     if (!_isAndroid) return;
 
     try {
-      if (!_initialized) {
+      if (!_fgTaskReady) {
         await initialize();
+      }
+      if (!_fgTaskReady) {
+        throw StateError('ForegroundTask not initialized');
       }
       final count = activeCount ??
           ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
       final text = formatNotificationText(count);
 
-      final isRunning = await FlutterForegroundTask.isRunningService;
+      final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (isRunning) {
-        await FlutterForegroundTask.updateService(
+        final updateResult = await _foregroundTaskWrapper.updateService(
           notificationTitle: 'Hermes',
           notificationText: text,
         );
+        if (updateResult is ServiceRequestFailure) {
+          throw updateResult.error;
+        }
         return;
       }
 
-      await FlutterForegroundTask.startService(
+      final result = await _foregroundTaskWrapper.startService(
         notificationTitle: 'Hermes',
         notificationText: text,
+        callback: callback ?? foregroundTaskCallback,
       );
+      if (result is ServiceRequestFailure) {
+        throw result.error;
+      }
+
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'keepalive',
@@ -325,14 +488,15 @@ class ProductionBackgroundKeepaliveService
           'activeCount': count,
         },
       );
-    } catch (e) {
-      developer.log('startForegroundService error: $e');
+    } catch (e, st) {
+      developer.log('startForegroundService error: $e', error: e, stackTrace: st);
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.error,
         tag: 'keepalive',
         message: '启动前台保活服务失败',
         errorKind: e.toString(),
       );
+      rethrow;
     }
   }
 
@@ -340,21 +504,24 @@ class ProductionBackgroundKeepaliveService
   Future<void> updateNotification({int activeCount = 0}) async {
     if (!_isAndroid) return;
     try {
-      final isRunning = await FlutterForegroundTask.isRunningService;
+      final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (!isRunning) return;
       final text = formatNotificationText(activeCount);
-      await FlutterForegroundTask.updateService(
+      final result = await _foregroundTaskWrapper.updateService(
         notificationTitle: 'Hermes',
         notificationText: text,
       );
+      if (result is ServiceRequestFailure) {
+        throw result.error;
+      }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.debug,
         tag: 'keepalive',
         message: '更新前台服务常驻通知文本',
         details: {'activeCount': activeCount, 'text': text},
       );
-    } catch (e) {
-      developer.log('updateNotification error: $e');
+    } catch (e, st) {
+      developer.log('updateNotification error: $e', error: e, stackTrace: st);
     }
   }
 
@@ -373,17 +540,20 @@ class ProductionBackgroundKeepaliveService
         }
       }
 
-      final isRunning = await FlutterForegroundTask.isRunningService;
+      final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (isRunning) {
-        await FlutterForegroundTask.stopService();
+        final result = await _foregroundTaskWrapper.stopService();
+        if (result is ServiceRequestFailure) {
+          throw result.error;
+        }
       }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
         tag: 'keepalive',
         message: '停止前台保活服务',
       );
-    } catch (e) {
-      developer.log('stopForegroundService error: $e');
+    } catch (e, st) {
+      developer.log('stopForegroundService error: $e', error: e, stackTrace: st);
     }
   }
 
@@ -489,7 +659,8 @@ class ProductionBackgroundKeepaliveService
       try {
         final pkgInfo = await PackageInfo.fromPlatform();
         packageName = pkgInfo.packageName;
-      } catch (_) {
+      } catch (e) {
+        developer.log('PackageInfo.fromPlatform fallback error: $e');
         packageName = 'com.silentreader.hermes_ui';
       }
 
@@ -592,7 +763,8 @@ class ProductionBackgroundKeepaliveService
       try {
         await intent.launch();
         return;
-      } catch (_) {
+      } catch (e) {
+        developer.log('Candidate intent launch failed, trying next: $e');
         // 尝试下一个候选 intent
       }
     }
@@ -749,7 +921,9 @@ class ProductionBackgroundKeepaliveService
                         }
                       }
                     }
-                  } catch (_) {}
+                  } catch (e) {
+                    developer.log('WorkManager fetch session preview error: $e');
+                  }
 
                   await _showBackgroundNotification(
                     id: LocalNotificationsTurnNotificationService
@@ -789,11 +963,15 @@ class ProductionBackgroundKeepaliveService
                       notificationText: formatNotificationText(0),
                     );
                   }
-                } catch (_) {}
+                } catch (e) {
+                  developer.log('WorkManager updateService error: $e');
+                }
               }
               try {
                 await Workmanager().cancelByUniqueName('hermes-bg-oneoff-$sessionId');
-              } catch (_) {}
+              } catch (e) {
+                developer.log('WorkManager cancelByUniqueName error: $e');
+              }
               return true;
             }
           }
@@ -871,7 +1049,9 @@ class ProductionBackgroundKeepaliveService
                       notificationText: formatNotificationText(0),
                     );
                   }
-                } catch (_) {}
+                } catch (e) {
+                  developer.log('WorkManager updateService error: $e');
+                }
               }
             }
           }
@@ -934,14 +1114,20 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
   final List<String> cancelledOneOffPolls = [];
   final List<(String sessionId, String? streamId)> notifiedRecords = [];
   final List<HyperOsSettingType> openedSettings = [];
+  final List<Function?> receivedCallbacks = [];
 
   bool isInitialized = false;
+  bool fgTaskReady = false;
+  bool wmReady = false;
   bool isForegroundServiceRunning = false;
   int currentActiveCount = 0;
+  Object? shouldFailStartForegroundServiceWith;
 
   @override
   Future<void> initialize() async {
     isInitialized = true;
+    fgTaskReady = true;
+    wmReady = true;
   }
 
   @override
@@ -964,6 +1150,7 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
           sessionId: activeSessionId ?? '',
           streamId: activeStreamId,
           activeCount: activeCount,
+          callback: foregroundTaskCallback,
         );
       }
     }
@@ -990,8 +1177,13 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
     String sessionId = '',
     String? streamId,
     int? activeCount,
+    Function? callback,
   }) async {
+    if (shouldFailStartForegroundServiceWith != null) {
+      throw shouldFailStartForegroundServiceWith!;
+    }
     startedForegroundServices.add(sessionId);
+    receivedCallbacks.add(callback ?? foregroundTaskCallback);
     isForegroundServiceRunning = true;
     currentActiveCount = activeCount ??
         ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
