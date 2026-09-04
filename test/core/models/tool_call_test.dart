@@ -151,17 +151,18 @@ void main() {
       expect(coalesced.single.toolCalls[0].id, 'call_1');
       expect(coalesced.single.toolCalls[1].id, 'call_2');
 
-      // coalesce=false ≠ 完全不聚合：m1/m2 相邻（间隔内无 text/think）→ 合并为 1 组
+      // coalesce=false 时间线新语义：m2 自身带可见正文，事件序 =
+      // text(m1) → call_1 → text(m2) → call_2，正文是分隔符 → 拆两组穿插。
       final separated = ToolCallGroup.groups(
         persistedToolCalls: persisted,
         messages: messages,
         coalesce: false,
       );
-      expect(separated, hasLength(1));
-      expect(separated.single.anchorMessageID, 'm1');
-      expect(separated.single.toolCalls, hasLength(2));
-      expect(separated.single.toolCalls[0].id, 'call_1');
-      expect(separated.single.toolCalls[1].id, 'call_2');
+      expect(separated, hasLength(2));
+      expect(separated[0].anchorMessageID, 'm1');
+      expect(separated[0].toolCalls.single.id, 'call_1');
+      expect(separated[1].anchorMessageID, 'm2');
+      expect(separated[1].toolCalls.single.id, 'call_2');
     });
 
     test('coalesce=false 时被 text 打断的相邻工具拆分为两组（穿插呈现）', () {
@@ -212,7 +213,7 @@ void main() {
           messageId: 'm_think',
           reasoning: '我先思考一下再继续',
         ),
-        const ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
+        const ChatMessage(role: 'assistant', messageId: 'm2'),
       ];
       // 关闭聚合语义：仅「可见文本」打断（text 才是分隔符），思考段不
       // 打断工具调用——think/tool 互相穿插时工具调用照常相邻合并。
@@ -229,6 +230,108 @@ void main() {
       expect(broken.single.toolCalls[1].isThinking, isTrue);
       expect(broken.single.toolCalls[1].thinking, '我先思考一下再继续');
       expect(broken.single.toolCalls[2].id, 'call_2');
+    });
+
+    test('coalesce=false 时正文打断工具与后续调用 → 正文前后分为两组（时间线穿插）', () {
+      const persisted = [
+        PersistedToolCall(
+          name: 'write_file',
+          tid: 'call_1',
+          assistantMsgIdx: 1,
+        ),
+        PersistedToolCall(name: 'read_file', tid: 'call_2', assistantMsgIdx: 3),
+      ];
+      final messages = [
+        const ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
+        const ChatMessage(role: 'assistant', content: 'a', messageId: 'm1'),
+        const ChatMessage(
+          role: 'assistant',
+          messageId: 'm_think',
+          reasoning: '我先思考一下再继续',
+        ),
+        const ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
+      ];
+      final groups = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: messages,
+        coalesce: false,
+      );
+      // text 是分隔符：call_1 与 think 夹在 a 与 b 之间（挂 m1 下方），call_2 位于 b 之后（挂 m2 下方）
+      expect(groups, hasLength(2));
+      expect(groups[0].anchorMessageID, 'm1');
+      expect(groups[0].isAboveContent, false);
+      expect(groups[0].toolCalls, hasLength(2));
+      expect(groups[0].toolCalls[0].id, 'call_1');
+      expect(groups[0].toolCalls[1].isThinking, true);
+      expect(groups[1].anchorMessageID, 'm2');
+      expect(groups[1].isAboveContent, false);
+      expect(groups[1].toolCalls.single.id, 'call_2');
+    });
+
+    test('新语义时间线：首段思考在上、中间工具+思考在两正文之间（tools在前think在后）、末段工具在下', () {
+      final messages = [
+        const ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'text 1',
+          messageId: 'm1',
+          reasoning: 'think 1',
+        ),
+        const ChatMessage(
+          role: 'assistant',
+          content: 'text 2',
+          messageId: 'm2',
+          reasoning: 'think 2',
+        ),
+      ];
+      final persisted = [
+        const PersistedToolCall(name: 'tool_1', tid: 't1', assistantMsgIdx: 1),
+        const PersistedToolCall(name: 'tool_2', tid: 't2', assistantMsgIdx: 2),
+      ];
+
+      // 聚合关：按正文切分区间
+      final groups = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: messages,
+        coalesce: false,
+      );
+
+      // 结果为 3 组：
+      // 1. 首段文本之前的 think(m1) → isAboveContent=true，anchor=m1
+      // 2. tools(m1)+think(m2) → isAboveContent=false，anchor=m1，行序 tools 在前、think 在后
+      // 3. tools(m2) → isAboveContent=false，anchor=m2
+      expect(groups, hasLength(3));
+
+      expect(groups[0].anchorMessageID, 'm1');
+      expect(groups[0].isAboveContent, true);
+      expect(groups[0].toolCalls.single.isThinking, true);
+      expect(groups[0].toolCalls.single.thinking, 'think 1');
+
+      expect(groups[1].anchorMessageID, 'm1');
+      expect(groups[1].isAboveContent, false);
+      expect(groups[1].toolCalls, hasLength(2));
+      expect(groups[1].toolCalls[0].id, 't1');
+      expect(groups[1].toolCalls[1].isThinking, true);
+      expect(groups[1].toolCalls[1].thinking, 'think 2');
+
+      expect(groups[2].anchorMessageID, 'm2');
+      expect(groups[2].isAboveContent, false);
+      expect(groups[2].toolCalls.single.id, 't2');
+
+      // 聚合开：整回合合并为一张大卡，钉在首条正文上方
+      final coalesced = ToolCallGroup.groups(
+        persistedToolCalls: persisted,
+        messages: messages,
+        coalesce: true,
+      );
+      expect(coalesced, hasLength(1));
+      expect(coalesced.single.anchorMessageID, 'm1');
+      expect(coalesced.single.isAboveContent, true);
+      expect(coalesced.single.toolCalls, hasLength(4));
+      expect(coalesced.single.toolCalls[0].thinking, 'think 1');
+      expect(coalesced.single.toolCalls[1].id, 't1');
+      expect(coalesced.single.toolCalls[2].thinking, 'think 2');
+      expect(coalesced.single.toolCalls[3].id, 't2');
     });
 
     test('无持久化调用时从消息元数据派生（OpenAI tool_calls）', () {
