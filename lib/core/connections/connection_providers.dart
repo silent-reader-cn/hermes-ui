@@ -94,6 +94,15 @@ class ConnectionsController extends Notifier<List<ServerConnection>> {
     return target;
   }
 
+  /// 新增或更新内置连接并将其设为激活连接。
+  Future<ServerConnection> upsertBuiltinAndActivate(
+    ServerConnection connection,
+  ) async {
+    final saved = await upsertBuiltin(connection);
+    await ref.read(activeConnectionProvider.notifier).setActive(saved.id);
+    return saved;
+  }
+
   /// 启用或停用内置连接。
   ///
   /// 若停用对象当前处于激活状态，同时执行 [ActiveConnectionController.clear]（风险②裁定）。

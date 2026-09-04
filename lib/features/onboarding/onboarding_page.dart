@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
@@ -10,8 +12,13 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import '../webui_sidecar/webui_sidecar_providers.dart';
 import 'onboarding_providers.dart';
+import 'widgets/builtin_tab.dart';
 import 'widgets/wide_dual_pane.dart';
+
+/// 引导页 Tab 枚举（形态 A 两段：内置服务 | 连接服务器）。
+enum OnboardingTab { builtin, remote }
 
 /// 健康检查状态（提交按钮阶段一触发，随后刷新认证模式）。
 enum _HealthState { idle, checking, ok, failed }
@@ -57,6 +64,43 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   String _loginMessage = '';
   // 提交按钮 loading / 防重入锁：阶段一检查、阶段二验证、保存共用。
   bool _busy = false;
+
+  // 默认选中记忆上次选择（shared_preferences 键 onboarding_last_tab，无记录→内置）
+  OnboardingTab _currentTab = OnboardingTab.builtin;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSavedTab());
+  }
+
+  Future<void> _loadSavedTab() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('onboarding_last_tab');
+      if (saved == OnboardingTab.remote.name && mounted) {
+        setState(() {
+          _currentTab = OnboardingTab.remote;
+        });
+      }
+    } catch (_) {
+      // 忽略持久化异常
+    }
+  }
+
+  void _onTabChanged(OnboardingTab tab) {
+    setState(() => _currentTab = tab);
+    unawaited(_saveTabPreference(tab));
+  }
+
+  Future<void> _saveTabPreference(OnboardingTab tab) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('onboarding_last_tab', tab.name);
+    } catch (_) {
+      // 忽略持久化异常
+    }
+  }
 
   @override
   void dispose() {
@@ -317,25 +361,140 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isBundled = ref.watch(bundledWebuiAvailableProvider);
+    final useBuiltinPane = Platform.isWindows && isBundled;
+
+    // 停用回退（风险②）：active 从 builtin 被清 → 停留内置 Tab
+    if (useBuiltinPane) {
+      ref.listen<ServerConnection?>(activeConnectionProvider,
+          (previous, current) {
+        if (previous?.id == ServerConnection.builtinId && current == null) {
+          if (mounted) {
+            setState(() {
+              _currentTab = OnboardingTab.builtin;
+            });
+          }
+        }
+      });
+    }
+
+    if (!useBuiltinPane) {
+      // 形态 B（非 Windows / dev 无内置包）：现状远程表单逐像素不变
+      return CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
+        child: SafeArea(
+          child: WideDualPane(
+            wideChild: _buildWideForm(l10n),
+            child: Column(
+              children: [
+                Expanded(child: _buildForm()),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: _buildSubmitButton(l10n),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 形态 A（Windows 打包版）：标题下 CupertinoSlidingSegmentedControl 两段「内置服务 | 连接服务器」
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
       child: SafeArea(
         child: WideDualPane(
-          wideChild: _buildWideForm(l10n),
-          child: Column(
-            children: [
-              Expanded(child: _buildForm()),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: _buildSubmitButton(l10n),
+          child: _buildFormA(l10n),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormA(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
+          child: Text(
+            l10n.connectYourHermexServer,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: CupertinoSlidingSegmentedControl<OnboardingTab>(
+              key: const ValueKey('onboarding-segmented-control'),
+              groupValue: _currentTab,
+              onValueChanged: (tab) {
+                if (tab != null) _onTabChanged(tab);
+              },
+              children: {
+                OnboardingTab.builtin: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(l10n.onboardingTabBuiltin),
                 ),
-              ),
+                OnboardingTab.remote: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(l10n.onboardingTabRemote),
+                ),
+              },
+            ),
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _currentTab == OnboardingTab.builtin ? 0 : 1,
+            children: [
+              const BuiltinTab(),
+              _buildRemoteFormA(l10n),
             ],
           ),
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _buildRemoteFormA(AppLocalizations l10n) {
+    return ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      children: [
+        Text(
+          l10n.inputServerAddressHint,
+          style: TextStyle(
+            fontSize: 15,
+            color: secondaryText.resolveFrom(context),
+          ),
+        ),
+        const SizedBox(height: 24),
+        CupertinoTextField(
+          key: const ValueKey('onboarding-url'),
+          controller: _urlController,
+          placeholder: 'https://hermes.example.com:30002',
+          autocorrect: false,
+          keyboardType: TextInputType.url,
+          padding: const EdgeInsets.all(12),
+        ),
+        const SizedBox(height: 8),
+        _buildHealthStatus(),
+        if (_health == _HealthState.ok) ...[
+          const SizedBox(height: 20),
+          _buildAuthSection(),
+        ],
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: _buildSubmitButton(l10n),
+        ),
+      ],
     );
   }
 

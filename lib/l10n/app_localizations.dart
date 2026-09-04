@@ -1559,6 +1559,44 @@ class AppLocalizations {
       ? 'Notification permission is required for keepalive service'
       : '前台保活服务需要通知权限';
 
+  // ---------------------------------------------------------------------------
+  // Onboarding U2 Built-in Tab and Segmentation (onboarding* prefix)
+  // ---------------------------------------------------------------------------
+  String get onboardingTabBuiltin => isEnglish ? 'Built-in Service' : '内置服务';
+  String get onboardingTabRemote => isEnglish ? 'Connect Server' : '连接服务器';
+  String get onboardingBuiltinTitle =>
+      isEnglish ? 'Hermes Built-in Service' : 'Hermes 内置服务';
+  String get onboardingBuiltinSubtitle => isEnglish
+      ? 'Built-in Hermes WebUI service, ready with one click'
+      : '应用随附的本地 Hermes WebUI 服务，一键启动即可使用';
+  String get onboardingStartAndConnect =>
+      isEnglish ? 'Start & Connect' : '启动并连接';
+  String get onboardingEnterSessionList =>
+      isEnglish ? 'Enter Sessions' : '进入会话列表';
+  String get onboardingStarting =>
+      isEnglish ? 'Starting…' : '启动中…';
+  String get onboardingRestarting =>
+      isEnglish ? 'Restarting…' : '重启中';
+  String get onboardingRetry => isEnglish ? 'Retry' : '重试';
+  String get onboardingNeedInstallAgent =>
+      isEnglish ? 'Hermes engine required' : '需先安装 Hermes 引擎';
+  String get onboardingNeedInstallAgentDesc => isEnglish
+      ? 'The built-in service requires the Hermes engine. Please install it first.'
+      : '内置服务需要 Hermes 引擎支持，请先完成安装。';
+  String get onboardingGoToInstallGuide =>
+      isEnglish ? 'Install Engine' : '安装引擎';
+  String get onboardingAdvancedSettings =>
+      isEnglish ? 'Advanced Settings' : '高级设置';
+  String get onboardingStartOnLoginTitle =>
+      isEnglish ? 'Launch at Login' : '开机自启';
+  String get onboardingStartOnLoginSubtitle => isEnglish
+      ? 'Start Hermes automatically when logging in'
+      : '登录 Windows 时自动启动应用';
+  String get onboardingBuiltinNotStarted =>
+      isEnglish ? 'Not Started' : '未启动';
+  String get onboardingBuiltinRunning =>
+      isEnglish ? 'Running' : '运行中';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));
