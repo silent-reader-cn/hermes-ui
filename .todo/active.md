@@ -82,3 +82,44 @@
 **备注**：同根因并一条（下载中心已存在但入口未接 + 工作区假下载），勿拆成多个 issue 重复描述。区 B-2 流式进度可 P2 分期，不阻塞 A/C 主链接线。
 
 ---
+
+### #54 [P1] 工具/思考卡卡位撤销固定干预，忠实事件时间线（规格修正：推翻 b0db568「卡恒在正文下方」，亦不恢复 ecf850e「卡恒在上方」）
+
+**主人拍板（2026-09-04）**：「应该忠实于原顺序，我撤销所有这类卡和文本顺序的干预。」
+
+**一句话**：完成态（transcript）的工具卡/思考卡位置目前被两条「一刀切」规则钉死——b0db568 把卡恒压在锚定消息正文**下方**、更早 ecf850e 恒放**上方**——都不看事件真实先后。本条撤销一切卡位干预：卡的位置 = 组内第一个事件在时间线上的实际位置。live 时间线（断点序）本来就忠实事件序，不动；主战场是完成态渲染链。
+
+**规格修正声明**：推翻 `b0db568`（2026-09-03 拍板「正文在上、工具卡在下」，已归档 `.todo/20260903.md` 与 skill `tool-aggregation-anchoring-map` 段）与 `ecf850e`（2026-08-26「Hermes 流序：思考→工具→文本」假设，已被 b0db568 推翻过一次）。归档条目保留作历史，本条为新裁决。**保留不变的**：19c9bd3 聚合语义（text 是唯一分隔符、相邻非 text 事件并为一张卡、think 为卡内子行、纯思考自动成卡、隐藏思考开关）——主人撤销的是「位置干预」，不是「合并分组」。
+
+**事件时间线模型（新语义的权威定义）**：
+服务端每条 assistant 消息 = `reasoning`（思考，先于正文）→ `content`（正文）→ `tool_calls`（工具，正文吐完后才发起；后端 `conversation_loop.py` 先 emit 完整文本、关流、才 `_execute_tool_calls`，DB 实证消息 163759 正文 19:47:01 落库、工具结果 19:47:04 返回）。因此一个回合的真实时序：
+
+```
+think(msg1) → text(msg1) → tools(msg1) → think(msg2) → text(msg2) → tools(msg2) → … → tools(msgN)
+```
+
+按「text 是唯一分隔符」分组后，各组卡位 = 事件实际位置：
+- **首段文本之前**的 think（= msg1 的思考）→ 思考卡渲染在**第一条正文上方**；
+- **两段文本之间**的 tools(msg_i)+think(msg_{i+1})（中间无 text）→ 合并为一张卡，渲染在两段文本**之间**；
+- **末段文本之后**的 tools(msgN) → 卡渲染在**最后一条正文下方**。
+
+现状偏差：`withThinkingRows`（`tool_call.dart:297-350`）把 msg_i 的 reasoning 插到**同消息工具组组首**（:330 `toolCalls: [ToolCall.thinking(reason), ...group.toolCalls]`），think 与 tool 被正文隔开仍强并一组；`_AssistantContent`（`message_bubble.dart:343-346`）把整组卡恒放正文下方 → 本该在正文上方的思考被压到下方，卡位失真。
+
+**范围（分区）**：
+- 区 A 分组与归属 `lib/core/models/tool_call.dart`：`withThinkingRows` 改「think 行按时间线区间归属」——msg_i 的 reasoning 并入「text_{i-1} 与 text_i 之间」的组（即挂到前一条消息的工具组尾部，行序=事件序 tools→think）；msg1 的思考（前面无 text）独立成组、锚在首条正文之前；纯思考消息（content=''）的补组机制（`persisted-think-`）保留但锚定同样按区间。
+- 区 B 卡位渲染 `lib/features/chat/widgets/message_bubble.dart` `_AssistantContent`（:305-360）：sections 不再固定「正文→卡」；卡按锚定区间插到对应正文的上方/之间/下方。多组卡分属不同区间时逐组归位。
+- 区 C 整回合聚合 `coalescingByAssistantTurn`（`tool_call.dart:391-481`）：聚合开关开启时整回合并为一张大卡，卡位 = 回合第一个事件（= 思考，回合开头）→ 大卡锚到**首条正文上方**（现状 :474-481 锚到最早消息、b0db568 又压到其正文下方）。聚合关闭走区 A/B 区间语义。
+- 区 D live 链 `liveTimelineProvider`/断点机制：**不改**（事件到达序渲染，29992f4 后已忠实）；本条改完后 live 与完成态语义统一为同一时间线模型。
+- 区 E 测试与金照：`test/features/chat/message_bubble_tools_below_text_test.dart`（b0db568 的回归卡位断言）**整体推翻重写**为时间线断言（首组思考卡在首条正文上方、中间组卡在两正文之间、末组工具卡在最后正文下方）；`tool_call_group_merging_test.dart`、`history_reasoning_and_tools_test.dart`、`empty_tool_message_air_bubble_test.dart`（cd0e28a 空消息不顶低——该行为保留）、`tool_call_test.dart` 同步核对；金照 `--update-goldens`。
+
+**复现（主人截图 2026-09-04 19:55，会话 b9184526115a）**：回合 19:47-19:50 共 8 条消息，渲染只见「思考 ×1, 终端 ×1」卡悬在上一轮图文之后、无任何正文伴随——其中「卡与文字无正文对应」的部分即本条卡位失真 + 下述丢文 bug 的叠加现象。
+
+**验收口径**：
+1. `C:/tmp/f.bat analyze` 零告警 + `C:/tmp/f.bat test` 全绿（含区 E 重写断言）。
+2. 金照 `--update-goldens` 后人工目检一张含「思考→正文→工具→思考→正文」多消息回合的截图：首张思考卡在第一条正文**上方**，工具+后续思考卡在两段正文**之间**，末工具卡在最后正文**下方**。
+3. 聚合开关开/关两态各验一次（开=大卡在首条正文上方；关=逐区间卡）。
+4. 与 live 一致性：同一回合流式中 vs 完成后，卡的相对文本位置不再跳变（现状 b0db568 完成瞬间卡从文字上方跳到下方 = 本条修正后应消除）。
+
+**备注（关联 bug，非本条范围）**：主人截图还暴露**回合正文整体丢失**（回合 19:50:14 已结束、截图 19:55:39 仍只见卡不见 8 条正文）——疑为后台/锁屏 SSE 丢事件 + transcript 恢复失败。待主人重进该会话验证：若文字回来 = 恢复时机缺口另立 #55；若仍缺失 = transcript 拉取链 bug 优先立案。勿与本条混改。
+
+---
