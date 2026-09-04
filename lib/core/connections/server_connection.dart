@@ -1,5 +1,10 @@
 import '../utils/uuid.dart';
 
+enum ConnectionKind {
+  builtin,
+  remote,
+}
+
 /// 服务器连接（app_shell_spec.md §5.1）。
 ///
 /// 对应 Hermex 的 ServerAccount + 认证信息：一条记录描述一个可连接的
@@ -17,7 +22,12 @@ class ServerConnection {
     this.password,
     this.customHeaders = const {},
     required this.createdAt,
-  });
+    this.kind = ConnectionKind.remote,
+    bool enabled = true,
+  }) : enabled = (kind == ConnectionKind.builtin) ? enabled : true;
+
+  /// 内置连接的固定 ID（U2 将按此 ID upsert）。
+  static const String builtinId = 'builtin-sidecar';
 
   /// 本地生成 uuid（[uuidV4]）。
   final String id;
@@ -40,9 +50,16 @@ class ServerConnection {
   /// 创建时间（本地持久化用 ISO8601）。
   final DateTime createdAt;
 
+  /// 连接类别：builtin（内置 sidecar）或 remote（远程服务器），默认 remote。
+  final ConnectionKind kind;
+
+  /// 是否启用：builtin 专用语义；remote 恒为 true。
+  final bool enabled;
+
   /// 容错解码：字段缺失/类型不符给安全默认值，绝不 crash（CODING_STYLE §5）。
   ///
   /// 密码不在此 JSON 中（由 [ConnectionStore] 从单独 key 读出后注入）。
+  /// 存量 JSON 缺失 kind 字段时默认兼容为 [ConnectionKind.remote]。
   factory ServerConnection.fromJson(
     Map<String, Object?> json, {
     String? password,
@@ -52,6 +69,13 @@ class ServerConnection {
     final baseUrl = json['base_url'] is String ? json['base_url'] as String : '';
     final username = json['username'] is String ? json['username'] as String : null;
     final headers = _decodeHeaders(json['custom_headers']);
+    final kindRaw = json['kind'];
+    final kind = (kindRaw is String && kindRaw == ConnectionKind.builtin.name)
+        ? ConnectionKind.builtin
+        : ConnectionKind.remote;
+    final enabledRaw = json['enabled'];
+    final enabled = enabledRaw is bool ? enabledRaw : true;
+
     return ServerConnection(
       id: id.isEmpty ? uuidV4() : id,
       name: name,
@@ -60,6 +84,8 @@ class ServerConnection {
       password: password,
       customHeaders: headers,
       createdAt: _parseDate(json['created_at']),
+      kind: kind,
+      enabled: enabled,
     );
   }
 
@@ -72,6 +98,8 @@ class ServerConnection {
       if (username != null) 'username': username,
       'custom_headers': customHeaders,
       'created_at': createdAt.toUtc().toIso8601String(),
+      'kind': kind.name,
+      'enabled': enabled,
     };
   }
 
@@ -83,7 +111,10 @@ class ServerConnection {
     String? password,
     Map<String, String>? customHeaders,
     DateTime? createdAt,
+    ConnectionKind? kind,
+    bool? enabled,
   }) {
+    final resolvedKind = kind ?? this.kind;
     return ServerConnection(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -92,6 +123,8 @@ class ServerConnection {
       password: password ?? this.password,
       customHeaders: customHeaders ?? this.customHeaders,
       createdAt: createdAt ?? this.createdAt,
+      kind: resolvedKind,
+      enabled: enabled ?? this.enabled,
     );
   }
 
@@ -124,12 +157,22 @@ class ServerConnection {
         other.username == username &&
         other.password == password &&
         _mapEquals(other.customHeaders, customHeaders) &&
-        other.createdAt == createdAt;
+        other.createdAt == createdAt &&
+        other.kind == kind &&
+        other.enabled == enabled;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, baseUrl, username, password, createdAt);
+  int get hashCode => Object.hash(
+        id,
+        name,
+        baseUrl,
+        username,
+        password,
+        createdAt,
+        kind,
+        enabled,
+      );
 
   static bool _mapEquals(Map<String, String> a, Map<String, String> b) {
     if (a.length != b.length) return false;

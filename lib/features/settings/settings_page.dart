@@ -826,10 +826,21 @@ class _ServerSection extends ConsumerWidget {
     bool isActive,
   ) {
     final l10n = AppLocalizations.of(context);
-    final name = connection.name.isEmpty ? connection.baseUrl : connection.name;
+    final isBuiltin = connection.kind == ConnectionKind.builtin;
+    final defaultName = isBuiltin ? l10n.builtinWebuiName : connection.baseUrl;
+    final name = connection.name.isEmpty ? defaultName : connection.name;
+    final canActivate = !isActive && !(isBuiltin && !connection.enabled);
+
     return CupertinoListTile(
       key: ValueKey('server-row-${connection.id}'),
-      title: Text(name),
+      title: Text(
+        name,
+        style: TextStyle(
+          color: (isBuiltin && !connection.enabled)
+              ? CupertinoColors.secondaryLabel.resolveFrom(context)
+              : null,
+        ),
+      ),
       subtitle: Text(connection.baseUrl),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -839,38 +850,62 @@ class _ServerSection extends ConsumerWidget {
               CupertinoIcons.checkmark_circle_fill,
               color: CupertinoColors.systemBlue,
             ),
-          AccessibleButton(
-            key: ValueKey('server-edit-${connection.id}'),
-            label: l10n.editServer,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(32, 32),
-            onPressed: () => unawaited(
-              _openServerEditor(context, ref, connection: connection),
+          if (isBuiltin)
+            CupertinoButton(
+              key: const ValueKey('server-toggle-builtin'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: const Size(0, 28),
+              onPressed: () => unawaited(
+                ref
+                    .read(connectionsProvider.notifier)
+                    .setBuiltinEnabled(!connection.enabled),
+              ),
+              child: Text(
+                connection.enabled
+                    ? l10n.disableConnection
+                    : l10n.enableConnection,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: connection.enabled
+                      ? CupertinoColors.systemRed.resolveFrom(context)
+                      : CupertinoColors.activeBlue.resolveFrom(context),
+                ),
+              ),
+            )
+          else ...[
+            AccessibleButton(
+              key: ValueKey('server-edit-${connection.id}'),
+              label: l10n.editServer,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(32, 32),
+              onPressed: () => unawaited(
+                _openServerEditor(context, ref, connection: connection),
+              ),
+              child: const Icon(CupertinoIcons.pencil, size: 18),
             ),
-            child: const Icon(CupertinoIcons.pencil, size: 18),
-          ),
-          AccessibleButton(
-            key: ValueKey('server-delete-${connection.id}'),
-            label: l10n.deleteServer,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(32, 32),
-            onPressed: () =>
-                unawaited(_confirmDeleteServer(context, ref, connection)),
-            child: const Icon(
-              CupertinoIcons.trash,
-              size: 18,
-              color: CupertinoColors.systemRed,
+            AccessibleButton(
+              key: ValueKey('server-delete-${connection.id}'),
+              label: l10n.deleteServer,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(32, 32),
+              onPressed: () =>
+                  unawaited(_confirmDeleteServer(context, ref, connection)),
+              child: const Icon(
+                CupertinoIcons.trash,
+                size: 18,
+                color: CupertinoColors.systemRed,
+              ),
             ),
-          ),
+          ],
         ],
       ),
-      onTap: isActive
-          ? null
-          : () => unawaited(
+      onTap: canActivate
+          ? () => unawaited(
               ref
                   .read(activeConnectionProvider.notifier)
                   .setActive(connection.id),
-            ),
+            )
+          : null,
     );
   }
 
@@ -1103,17 +1138,23 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
         return;
       }
     }
-    final connection = ServerConnection(
-      id: existing?.id ?? uuidV4(),
-      name: _nameController.text.trim().isEmpty
-          ? (host == null || host.isEmpty ? url : host)
-          : _nameController.text.trim(),
-      baseUrl: url,
-      username: existing?.username,
-      password: password,
-      customHeaders: existing?.customHeaders ?? const {},
-      createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
-    );
+    final resolvedName = _nameController.text.trim().isEmpty
+        ? (host == null || host.isEmpty ? url : host)
+        : _nameController.text.trim();
+    final connection = (existing != null)
+        ? existing.copyWith(
+            name: resolvedName,
+            baseUrl: url,
+            password: password,
+          )
+        : ServerConnection(
+            id: uuidV4(),
+            name: resolvedName,
+            baseUrl: url,
+            password: password,
+            createdAt: DateTime.now().toUtc(),
+            kind: ConnectionKind.remote,
+          );
     await ref.read(connectionsProvider.notifier).upsert(connection);
     if (!mounted) return;
     Navigator.of(context).pop();

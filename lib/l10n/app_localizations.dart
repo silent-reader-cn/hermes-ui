@@ -1171,6 +1171,9 @@ class AppLocalizations {
   String get deleteServer => isEnglish ? 'Delete Server' : '删除服务器';
   String confirmDeleteServer(String name) =>
       isEnglish ? 'Are you sure you want to delete "$name"?' : '确定删除「$name」吗？';
+  String get builtinWebuiName => isEnglish ? 'Built-in WebUI' : '内置 WebUI';
+  String get disableConnection => isEnglish ? 'Disable' : '停用';
+  String get enableConnection => isEnglish ? 'Enable' : '启用';
   String get serverNamePlaceholder =>
       isEnglish ? 'Name (optional, defaults to host)' : '名称（可选，默认使用主机名）';
   String get serverNameOptionalPlaceholder =>

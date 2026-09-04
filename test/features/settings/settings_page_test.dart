@@ -709,6 +709,156 @@ void main() {
       expect(container.read(activeConnectionProvider)?.id, 'c1');
       expect(find.text('Office'), findsNothing);
     });
+
+    testWidgets('builtin 行渲染「停用/启用」按钮，无删除与编辑按钮；remote 行维持编辑与删除', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [
+          buildConn('c1', 'Remote Server', 'http://remote.example.com:30002'),
+          ServerConnection(
+            id: ServerConnection.builtinId,
+            name: '', // 缺省空名称 → 展示「内置 WebUI」
+            baseUrl: 'http://127.0.0.1:8787',
+            kind: ConnectionKind.builtin,
+            enabled: true,
+            createdAt: DateTime.utc(2026, 9, 4),
+          ),
+        ],
+        activeId: 'c1',
+      );
+      await pumpPage(tester, container);
+
+      // 1. builtin 行断言
+      final builtinRow = find.byKey(
+        const ValueKey('server-row-builtin-sidecar'),
+      );
+      expect(builtinRow, findsOneWidget);
+
+      // name 缺省显示「内置 WebUI」
+      expect(
+        find.descendant(of: builtinRow, matching: find.text('内置 WebUI')),
+        findsOneWidget,
+      );
+      // subtitle 展示 baseUrl
+      expect(
+        find.descendant(
+          of: builtinRow,
+          matching: find.text('http://127.0.0.1:8787'),
+        ),
+        findsOneWidget,
+      );
+
+      // builtin 行有停用按钮（key: server-toggle-builtin）
+      final toggleBtn = find.descendant(
+        of: builtinRow,
+        matching: find.byKey(const ValueKey('server-toggle-builtin')),
+      );
+      expect(toggleBtn, findsOneWidget);
+      expect(
+        find.descendant(of: toggleBtn, matching: find.text('停用')),
+        findsOneWidget,
+      );
+
+      // builtin 行完全不出现编辑和删除按钮
+      expect(
+        find.descendant(
+          of: builtinRow,
+          matching: find.byKey(const ValueKey('server-edit-builtin-sidecar')),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: builtinRow,
+          matching: find.byKey(const ValueKey('server-delete-builtin-sidecar')),
+        ),
+        findsNothing,
+      );
+
+      // 2. remote 行照常有编辑和删除按钮，无停用按钮
+      final remoteRow = find.byKey(const ValueKey('server-row-c1'));
+      expect(remoteRow, findsOneWidget);
+      expect(
+        find.descendant(
+          of: remoteRow,
+          matching: find.byKey(const ValueKey('server-edit-c1')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: remoteRow,
+          matching: find.byKey(const ValueKey('server-delete-c1')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: remoteRow,
+          matching: find.byKey(const ValueKey('server-toggle-builtin')),
+        ),
+        findsNothing,
+      );
+
+      // 3. 点击「停用」→ 切换为已停用（enabled=false），按钮文案变为「启用」
+      await tester.tap(toggleBtn);
+      await tester.pumpAndSettle();
+
+      final updatedBuiltin = container
+          .read(connectionsProvider)
+          .firstWhere((c) => c.id == ServerConnection.builtinId);
+      expect(updatedBuiltin.enabled, isFalse);
+      expect(
+        find.descendant(of: toggleBtn, matching: find.text('启用')),
+        findsOneWidget,
+      );
+
+      // 4. 点击「启用」→ 恢复 enabled=true，按钮文案变回「停用」
+      await tester.tap(toggleBtn);
+      await tester.pumpAndSettle();
+
+      final reenabledBuiltin = container
+          .read(connectionsProvider)
+          .firstWhere((c) => c.id == ServerConnection.builtinId);
+      expect(reenabledBuiltin.enabled, isTrue);
+      expect(
+        find.descendant(of: toggleBtn, matching: find.text('停用')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('停用正在激活的 builtin 连接：clearActive 回未连接态', (tester) async {
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [
+          ServerConnection(
+            id: ServerConnection.builtinId,
+            name: 'Sidecar',
+            baseUrl: 'http://127.0.0.1:8787',
+            kind: ConnectionKind.builtin,
+            enabled: true,
+            createdAt: DateTime.utc(2026, 9, 4),
+          ),
+        ],
+        activeId: ServerConnection.builtinId,
+      );
+      await pumpPage(tester, container);
+
+      // 当前处于激活状态
+      expect(
+        container.read(activeConnectionProvider)?.id,
+        ServerConnection.builtinId,
+      );
+      expect(find.text('服务器'), findsOneWidget);
+
+      // 点击停用
+      await tester.tap(find.byKey(const ValueKey('server-toggle-builtin')));
+      await tester.pumpAndSettle();
+
+      // 激活连接被清除
+      expect(container.read(activeConnectionProvider), isNull);
+      expect(find.text('服务器（未连接）'), findsOneWidget);
+    });
   });
 
   group('服务器编辑页 Profile 集成', () {

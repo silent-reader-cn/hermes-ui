@@ -84,6 +84,122 @@ void main() {
       // 删除的是 active → active 经 watch 自动重算为 null
       expect(container.read(activeConnectionProvider), isNull);
     });
+
+    test('upsertBuiltin 幂等置首', () async {
+      final container = buildContainer();
+      final controller = container.read(connectionsProvider.notifier);
+
+      await controller.upsert(buildConn('r1', 'http://r1.local'));
+      await controller.upsert(buildConn('r2', 'http://r2.local'));
+      expect(container.read(connectionsProvider), hasLength(2));
+
+      final builtin = ServerConnection(
+        id: ServerConnection.builtinId,
+        name: 'Builtin Sidecar',
+        baseUrl: 'http://127.0.0.1:8787',
+        createdAt: DateTime.utc(2026, 9, 4),
+        kind: ConnectionKind.builtin,
+      );
+      await controller.upsertBuiltin(builtin);
+
+      var list = container.read(connectionsProvider);
+      expect(list, hasLength(3));
+      expect(list.first.id, ServerConnection.builtinId);
+      expect(list.first.kind, ConnectionKind.builtin);
+
+      // 再次 upsertBuiltin（更新属性），依然位于首位且不重复
+      final updated = builtin.copyWith(baseUrl: 'http://127.0.0.1:9000');
+      await controller.upsertBuiltin(updated);
+
+      list = container.read(connectionsProvider);
+      expect(list, hasLength(3));
+      expect(list.first.id, ServerConnection.builtinId);
+      expect(list.first.baseUrl, 'http://127.0.0.1:9000');
+    });
+
+    test('delete(builtin) 与 remove(builtin) 抛错防护', () async {
+      final container = buildContainer();
+      final controller = container.read(connectionsProvider.notifier);
+
+      final builtin = ServerConnection(
+        id: ServerConnection.builtinId,
+        name: 'Builtin Sidecar',
+        baseUrl: 'http://127.0.0.1:8787',
+        createdAt: DateTime.utc(2026, 9, 4),
+        kind: ConnectionKind.builtin,
+      );
+      await controller.upsertBuiltin(builtin);
+
+      await expectLater(
+        () => controller.remove(ServerConnection.builtinId),
+        throwsStateError,
+      );
+      await expectLater(
+        () => controller.delete(ServerConnection.builtinId),
+        throwsStateError,
+      );
+      expect(container.read(connectionsProvider), hasLength(1));
+    });
+
+    test('setBuiltinEnabled 切换状态，停用 active builtin → clearActive', () async {
+      final container = buildContainer();
+      final controller = container.read(connectionsProvider.notifier);
+      final activeController = container.read(activeConnectionProvider.notifier);
+
+      final builtin = ServerConnection(
+        id: ServerConnection.builtinId,
+        name: 'Builtin Sidecar',
+        baseUrl: 'http://127.0.0.1:8787',
+        createdAt: DateTime.utc(2026, 9, 4),
+        kind: ConnectionKind.builtin,
+        enabled: true,
+      );
+      await controller.upsertBuiltin(builtin);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await activeController.setActive(ServerConnection.builtinId);
+      expect(container.read(activeConnectionProvider)?.id, ServerConnection.builtinId);
+
+      // 停用 active builtin → 触发 clearActive，active 变为 null
+      await controller.setBuiltinEnabled(false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(container.read(connectionsProvider).first.enabled, isFalse);
+      expect(container.read(activeConnectionProvider), isNull);
+
+      // 等待事件循环，确认不会被 watch 重建逻辑复活
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(container.read(activeConnectionProvider), isNull);
+
+      // 重新启用，active 仍为 null（不自动激活）
+      await controller.setBuiltinEnabled(true);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(container.read(connectionsProvider).first.enabled, isTrue);
+      expect(container.read(activeConnectionProvider), isNull);
+    });
+
+    test('switchableConnectionsProvider 排除已停用的 builtin', () async {
+      final container = buildContainer();
+      final controller = container.read(connectionsProvider.notifier);
+
+      await controller.upsert(buildConn('r1', 'http://r1.local'));
+      final builtin = ServerConnection(
+        id: ServerConnection.builtinId,
+        name: 'Builtin',
+        baseUrl: 'http://127.0.0.1:8787',
+        createdAt: DateTime.utc(2026, 9, 4),
+        kind: ConnectionKind.builtin,
+        enabled: true,
+      );
+      await controller.upsertBuiltin(builtin);
+
+      // enabled 时包含在 switchable 列表
+      expect(container.read(switchableConnectionsProvider), hasLength(2));
+
+      // 停用后不出现在可切换集合
+      await controller.setBuiltinEnabled(false);
+      final switchable = container.read(switchableConnectionsProvider);
+      expect(switchable, hasLength(1));
+      expect(switchable.single.id, 'r1');
+    });
   });
 
   group('activeConnectionProvider', () {
@@ -209,6 +325,29 @@ void main() {
       final ok = await client.autoReauth!();
       expect(ok, isFalse);
       expect(loginApi.loginCalls, 0);
+    });
+
+    test('setActive 拒绝已停用的 builtin 连接', () async {
+      final container = buildContainer();
+      final controller = container.read(connectionsProvider.notifier);
+      final activeController = container.read(activeConnectionProvider.notifier);
+
+      final builtin = ServerConnection(
+        id: ServerConnection.builtinId,
+        name: 'Builtin Sidecar',
+        baseUrl: 'http://127.0.0.1:8787',
+        createdAt: DateTime.utc(2026, 9, 4),
+        kind: ConnectionKind.builtin,
+        enabled: false,
+      );
+      await controller.upsertBuiltin(builtin);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await expectLater(
+        () => activeController.setActive(ServerConnection.builtinId),
+        throwsStateError,
+      );
+      expect(container.read(activeConnectionProvider), isNull);
     });
   });
 

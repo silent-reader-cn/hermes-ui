@@ -68,14 +68,82 @@ class ConnectionsController extends Notifier<List<ServerConnection>> {
     return target;
   }
 
-  /// 删除连接；若删的是激活连接，store.delete 已连带清 active 指向，
+  /// 新增或更新内置连接（总是落在列表首位、幂等）。
+  Future<ServerConnection> upsertBuiltin(ServerConnection connection) async {
+    final target = (connection.id == ServerConnection.builtinId &&
+            connection.kind == ConnectionKind.builtin)
+        ? connection
+        : connection.copyWith(
+            id: ServerConnection.builtinId,
+            kind: ConnectionKind.builtin,
+          );
+    final store = ref.read(connectionStoreProvider);
+    await store.save(target);
+    var currentList = List<ServerConnection>.of(state);
+    if (currentList.isEmpty) {
+      final loaded = await store.loadAll();
+      if (loaded.isNotEmpty) {
+        currentList = List<ServerConnection>.of(loaded);
+      }
+    }
+    currentList.removeWhere(
+      (c) => c.id == target.id || c.kind == ConnectionKind.builtin,
+    );
+    currentList.insert(0, target);
+    state = currentList;
+    return target;
+  }
+
+  /// 启用或停用内置连接。
+  ///
+  /// 若停用对象当前处于激活状态，同时执行 [ActiveConnectionController.clear]（风险②裁定）。
+  Future<void> setBuiltinEnabled(bool enabled) async {
+    final store = ref.read(connectionStoreProvider);
+    var all = List<ServerConnection>.of(state);
+    var index = all.indexWhere((c) => c.kind == ConnectionKind.builtin);
+    if (index < 0) {
+      final loaded = await store.loadAll();
+      index = loaded.indexWhere((c) => c.kind == ConnectionKind.builtin);
+      if (index >= 0) {
+        all = List<ServerConnection>.of(loaded);
+      }
+    }
+    if (index < 0) return;
+    final current = all[index];
+    final updated = current.copyWith(enabled: enabled);
+    await store.save(updated);
+
+    all[index] = updated;
+    state = all;
+  }
+
+  /// 删除连接；对 kind==builtin 抛 [StateError] 防护（模型层兜底）。
+  /// 若删的是激活连接，store.delete 已连带清 active 指向，
   /// activeConnectionProvider 经 watch 自动重算。
   Future<void> remove(String id) async {
+    if (id == ServerConnection.builtinId) {
+      throw StateError('不能删除内置连接：$id');
+    }
+    final index = state.indexWhere((c) => c.id == id);
+    if (index >= 0 && state[index].kind == ConnectionKind.builtin) {
+      throw StateError('不能删除内置连接：$id');
+    }
     final store = ref.read(connectionStoreProvider);
     await store.delete(id);
     state = state.where((c) => c.id != id).toList();
   }
+
+  /// 别名方法，对齐 delete(id) 契约。
+  Future<void> delete(String id) => remove(id);
 }
+
+/// 可切换/可激活的服务器连接列表（排除已停用的 builtin）。
+final switchableConnectionsProvider = Provider<List<ServerConnection>>((ref) {
+  final connections = ref.watch(connectionsProvider);
+  return connections
+      .where((c) => c.kind != ConnectionKind.builtin || c.enabled)
+      .toList();
+});
 
 /// 当前激活连接（app_shell_spec.md §5.3）。
 ///
@@ -98,10 +166,17 @@ class ActiveConnectionController extends Notifier<ServerConnection?> {
 
   Future<void> _load(int seq) async {
     final active = await ref.read(connectionStoreProvider).getActive();
+    if (active != null &&
+        active.kind == ConnectionKind.builtin &&
+        !active.enabled) {
+      if (seq >= _userActionSeq) state = null;
+      return;
+    }
     if (seq >= _userActionSeq) state = active;
   }
 
   /// 切换激活连接（先落盘再更新内存态，保证路由守卫立即生效）。
+  /// 若尝试激活已停用的内置连接，由 store.setActive 抛出 [StateError]。
   Future<void> setActive(String id) async {
     _userActionSeq++;
     final store = ref.read(connectionStoreProvider);
