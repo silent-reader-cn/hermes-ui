@@ -1604,6 +1604,27 @@ class AppLocalizations {
   String get languageAuto => isEnglish ? 'Auto' : '自动';
   String get languageZh => '中文';
   String get languageEn => 'English';
+  // ---------------------------------------------------------------------------
+  // Tray menu / keepalive (service-layer, resolved via LocaleResolver)
+  // ---------------------------------------------------------------------------
+  String get trayShowWindow => isEnglish ? 'Show Main Window' : '显示主窗口';
+  String get trayNewSession => isEnglish ? 'New Session' : '新建会话';
+  String get trayOpenWebui => isEnglish ? 'Open WebUI' : '打开 WebUI';
+  String get trayNoRecentSessions => isEnglish ? 'No Recent Sessions' : '暂无最近会话';
+  String get trayQuitApp => isEnglish ? 'Quit App' : '退出应用';
+  String get trayWebuiRunning => isEnglish ? 'WebUI: Running' : 'WebUI 服务：运行中';
+  String get trayWebuiStarting => isEnglish ? 'WebUI: Starting' : 'WebUI 服务：启动中';
+  String get trayWebuiFailed => isEnglish ? 'WebUI: Failed' : 'WebUI 服务：失败';
+  String get trayWebuiStopped => isEnglish ? 'WebUI: Stopped' : 'WebUI 服务：已停止';
+  String get trayStatusRunning => isEnglish ? 'Running' : '运行中';
+  String get trayStatusQueued => isEnglish ? 'Queued' : '排队中';
+  String get trayStatusArchived => isEnglish ? 'Archived' : '已归档';
+  String get trayStatusReadOnly => isEnglish ? 'Read-only' : '只读';
+  String get notifTurnCompleted => isEnglish ? 'Turn Completed' : '回合完成';
+  String get notifDownloadComplete => isEnglish ? 'Download Completed' : '下载完成';
+  String get notifClarifyBody => isEnglish ? 'The agent needs clarification — tap to view' : 'Agent 需要你澄清，点击查看';
+  String get notifErrorBody => isEnglish ? 'Generation was interrupted — tap to view' : '会话生成异常中断，点击查看';
+  String get notifTurnFallbackBody => isEnglish ? 'Agent turn completed — tap to view' : 'Agent 回合已生成完毕，点击查看';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??

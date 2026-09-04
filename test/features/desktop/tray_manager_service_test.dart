@@ -5,6 +5,8 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
+import 'package:hermes_ui/app/locale/locale_resolver.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/desktop/tray_manager_service.dart';
 import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
@@ -86,6 +88,11 @@ class _FakeSidecarService implements WebuiSidecarService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // 托盘菜单 label 经 LocaleResolver 取语言（L2）；钉死中文保住既有断言语义。
+  setUp(() {
+    LocaleResolver.reset(mode: AppLocaleMode.zh);
+  });
 
   group('prepareTrayIconFile 临时图标落盘测试', () {
     test('从 assetBundle 读取字节并成功写入指定临时文件', () async {

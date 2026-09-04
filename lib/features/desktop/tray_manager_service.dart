@@ -10,7 +10,9 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../app/locale/locale_resolver.dart';
 import '../../app/router.dart';
+import '../../l10n/app_localizations.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../session_list/session_list_providers.dart';
@@ -46,18 +48,19 @@ Future<String> prepareTrayIconFile({
 
 /// 会话状态映射为托盘显示文案（运行中 / 排队中 / 已归档 / 只读 / null）。
 String? formatSessionStatus(SessionSummary session) {
+  final l10n = AppLocalizations(LocaleResolver.resolve());
   if (session.isStreaming == true ||
       (session.activeStreamId != null && session.activeStreamId!.isNotEmpty)) {
-    return '运行中';
+    return l10n.trayStatusRunning;
   }
   if (session.hasPendingUserMessage == true) {
-    return '排队中';
+    return l10n.trayStatusQueued;
   }
   if (session.archived == true) {
-    return '已归档';
+    return l10n.trayStatusArchived;
   }
   if (session.isSessionReadOnly) {
-    return '只读';
+    return l10n.trayStatusReadOnly;
   }
   return null;
 }
@@ -85,15 +88,16 @@ String formatRecentSessionLabel(
 
 /// 格式化 WebUI Sidecar 服务状态在托盘菜单中的展示文案。
 String formatWebuiStatusLabel(SidecarStatus status) {
+  final l10n = AppLocalizations(LocaleResolver.resolve());
   switch (status) {
     case SidecarStatus.running:
-      return 'WebUI 服务：运行中';
+      return l10n.trayWebuiRunning;
     case SidecarStatus.starting:
-      return 'WebUI 服务：启动中';
+      return l10n.trayWebuiStarting;
     case SidecarStatus.failed:
-      return 'WebUI 服务：失败';
+      return l10n.trayWebuiFailed;
     case SidecarStatus.stopped:
-      return 'WebUI 服务：已停止';
+      return l10n.trayWebuiStopped;
   }
 }
 
@@ -154,6 +158,9 @@ class TrayManagerService with TrayListener {
   final bool isDesktop;
 
   bool _initialized = false;
+
+  /// 语言变化监听 token（initialize 注册、disposeLocaleListener 注销）。
+  Object? _localeListenerToken;
   List<SessionSummary> _cachedSessions = const [];
   SidecarState _cachedSidecarState = SidecarState.initial;
   SidecarConfig _cachedSidecarConfig = const SidecarConfig();
@@ -193,6 +200,9 @@ class TrayManagerService with TrayListener {
           scheduleThrottledUpdateContextMenu();
         });
       }
+      // L2：语言模式变化 -> 节流重建托盘菜单（菜单 label 经 LocaleResolver 取语言）。
+      _localeListenerToken ??=
+          LocaleResolver.addListener(scheduleThrottledUpdateContextMenu);
       await _setupTrayIcon();
       await updateContextMenu();
       _initialized = true;
@@ -258,21 +268,23 @@ class TrayManagerService with TrayListener {
     final isWebuiEnabled =
         effectiveEnabled && effectiveStatus == SidecarStatus.running;
 
+    final l10n = AppLocalizations(LocaleResolver.resolve());
+
     final items = <MenuItem>[
       MenuItem(
         key: menuItemShowWindow,
-        label: '显示主窗口',
+        label: l10n.trayShowWindow,
         onClick: onShowWindow != null ? (_) => onShowWindow() : null,
       ),
       MenuItem(
         key: menuItemNewSession,
-        label: '新建会话',
+        label: l10n.trayNewSession,
         onClick: onNewSession != null ? (_) => onNewSession() : null,
       ),
       MenuItem.separator(),
       MenuItem(
         key: menuItemOpenWebui,
-        label: '打开 WebUI',
+        label: l10n.trayOpenWebui,
         disabled: !isWebuiEnabled,
         onClick: onOpenWebui != null ? (_) => onOpenWebui() : null,
       ),
@@ -298,7 +310,7 @@ class TrayManagerService with TrayListener {
       items.add(
         MenuItem(
           key: menuItemNoRecentSessions,
-          label: '暂无最近会话',
+          label: l10n.trayNoRecentSessions,
           disabled: true,
         ),
       );
@@ -319,7 +331,7 @@ class TrayManagerService with TrayListener {
     items.add(
       MenuItem(
         key: menuItemQuitApp,
-        label: '退出应用',
+        label: l10n.trayQuitApp,
         onClick: onQuit != null ? (_) => onQuit() : null,
       ),
     );

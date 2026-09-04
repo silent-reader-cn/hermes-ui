@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
+import 'package:hermes_ui/app/locale/locale_resolver.dart';
 import 'package:hermes_ui/features/notifications/background_keepalive_service.dart';
 import 'package:hermes_ui/features/notifications/background_keepalive_settings_page.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
@@ -22,6 +24,8 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // 通知文本随 LocaleResolver 取语言（L2）；钉死中文。
+    LocaleResolver.reset(mode: AppLocaleMode.zh);
   });
 
   group('FakeBackgroundKeepaliveService 生命周期与保活逻辑', () {
