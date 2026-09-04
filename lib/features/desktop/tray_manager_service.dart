@@ -7,12 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/router.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../session_list/session_list_providers.dart';
+import '../webui_sidecar/webui_sidecar_providers.dart';
 import 'desktop_settings.dart';
 
 /// 从 asset 加载托盘图标并写入临时文件，返回临时文件的绝对路径。
@@ -81,17 +83,33 @@ String formatRecentSessionLabel(
   return title;
 }
 
+/// 格式化 WebUI Sidecar 服务状态在托盘菜单中的展示文案。
+String formatWebuiStatusLabel(SidecarStatus status) {
+  switch (status) {
+    case SidecarStatus.running:
+      return 'WebUI 服务：运行中';
+    case SidecarStatus.starting:
+      return 'WebUI 服务：启动中';
+    case SidecarStatus.failed:
+      return 'WebUI 服务：失败';
+    case SidecarStatus.stopped:
+      return 'WebUI 服务：已停止';
+  }
+}
+
 /// 系统托盘服务。
 ///
 /// 职责：
 /// 1. 创建并维护系统托盘图标（Windows 下写出真实临时文件）；
-/// 2. 设置右键上下文菜单（显示主窗口 / 新建会话 / 最近会话列表 / 退出应用）；
+/// 2. 设置右键上下文菜单（显示主窗口 / 新建会话 / 打开 WebUI / WebUI 状态 / 最近会话列表 / 退出应用）；
 /// 3. 处理托盘点击恢复窗口与最近会话跳转；
 /// 4. 非桌面平台安全降级 no-op。
 class TrayManagerService with TrayListener {
   /// 菜单项 Key 常量
   static const String menuItemShowWindow = 'show_window';
   static const String menuItemNewSession = 'new_session';
+  static const String menuItemOpenWebui = 'open_webui';
+  static const String menuItemWebuiStatus = 'webui_status';
   static const String menuItemNoRecentSessions = 'no_recent_sessions';
   static const String menuItemQuitApp = 'quit_app';
   static const String recentSessionPrefix = 'recent_';
@@ -105,8 +123,23 @@ class TrayManagerService with TrayListener {
   /// 打开指定会话回调（可自定义用于测试）。
   final FutureOr<void> Function(String sessionId)? onOpenSession;
 
+  /// 打开 WebUI 回调（可自定义用于测试）。
+  final FutureOr<void> Function()? onOpenWebui;
+
   /// 退出应用回调（可自定义用于测试）。
   final FutureOr<void> Function()? onQuit;
+
+  /// 停止 Sidecar 回调（可自定义用于测试）。
+  final Future<void> Function()? onStopSidecar;
+
+  /// WebUI Sidecar 服务（测试可注入 fake sidecar）。
+  final WebuiSidecarService? sidecarService;
+
+  /// 获取 WebUI Sidecar 即时状态函数。
+  final SidecarState Function()? getSidecarState;
+
+  /// 获取 WebUI Sidecar 即时配置函数。
+  final SidecarConfig Function()? getSidecarConfig;
 
   /// 获取最近会话列表函数（同步读取，用于刷新菜单）。
   final List<SessionSummary>? Function()? getRecentSessions;
@@ -114,20 +147,34 @@ class TrayManagerService with TrayListener {
   /// 异步拉取最近会话列表函数。
   final Future<List<SessionSummary>?> Function()? fetchRecentSessions;
 
+  /// 托盘菜单刷新节流时长（默认 500ms，防 Windows 托盘狂刷抖动）。
+  final Duration throttleDuration;
+
   /// 是否为桌面平台。
   final bool isDesktop;
 
   bool _initialized = false;
   List<SessionSummary> _cachedSessions = const [];
+  SidecarState _cachedSidecarState = SidecarState.initial;
+  SidecarConfig _cachedSidecarConfig = const SidecarConfig();
+  Timer? _menuUpdateThrottleTimer;
+  bool _pendingMenuUpdate = false;
+  StreamSubscription<SidecarState>? _sidecarSubscription;
 
   /// 构造系统托盘服务。
   TrayManagerService({
     this.onShowWindow,
     this.onNewSession,
     this.onOpenSession,
+    this.onOpenWebui,
     this.onQuit,
+    this.onStopSidecar,
+    this.sidecarService,
+    this.getSidecarState,
+    this.getSidecarConfig,
     this.getRecentSessions,
     this.fetchRecentSessions,
+    this.throttleDuration = const Duration(milliseconds: 500),
     bool? isDesktop,
   }) : isDesktop = isDesktop ?? isDesktopPlatform();
 
@@ -140,6 +187,12 @@ class TrayManagerService with TrayListener {
 
     try {
       trayManager.addListener(this);
+      final sidecar = sidecarService;
+      if (sidecar != null) {
+        _sidecarSubscription = sidecar.states.listen((_) {
+          scheduleThrottledUpdateContextMenu();
+        });
+      }
       await _setupTrayIcon();
       await updateContextMenu();
       _initialized = true;
@@ -187,8 +240,24 @@ class TrayManagerService with TrayListener {
     void Function(String sessionId)? onOpenSession,
     void Function()? onShowWindow,
     void Function()? onNewSession,
+    void Function()? onOpenWebui,
     void Function()? onQuit,
+    SidecarStatus? sidecarStatus,
+    bool? sidecarEnabled,
+    SidecarState? sidecarState,
+    SidecarConfig? sidecarConfig,
   }) {
+    final effectiveStatus = sidecarState?.status ??
+        sidecarStatus ??
+        SidecarStatus.stopped;
+
+    final effectiveEnabled = sidecarConfig?.enabled ??
+        sidecarEnabled ??
+        (sidecarStatus == SidecarStatus.running);
+
+    final isWebuiEnabled =
+        effectiveEnabled && effectiveStatus == SidecarStatus.running;
+
     final items = <MenuItem>[
       MenuItem(
         key: menuItemShowWindow,
@@ -199,6 +268,18 @@ class TrayManagerService with TrayListener {
         key: menuItemNewSession,
         label: '新建会话',
         onClick: onNewSession != null ? (_) => onNewSession() : null,
+      ),
+      MenuItem.separator(),
+      MenuItem(
+        key: menuItemOpenWebui,
+        label: '打开 WebUI',
+        disabled: !isWebuiEnabled,
+        onClick: onOpenWebui != null ? (_) => onOpenWebui() : null,
+      ),
+      MenuItem(
+        key: menuItemWebuiStatus,
+        label: formatWebuiStatusLabel(effectiveStatus),
+        disabled: true,
       ),
       MenuItem.separator(),
     ];
@@ -246,8 +327,39 @@ class TrayManagerService with TrayListener {
     return items;
   }
 
+  /// 节流刷新托盘上下文菜单（500ms 窗口防抖/节流，避免 Windows 托盘闪烁）。
+  void scheduleThrottledUpdateContextMenu() {
+    if (!isDesktop) return;
+
+    if (_menuUpdateThrottleTimer?.isActive ?? false) {
+      _pendingMenuUpdate = true;
+      return;
+    }
+    _pendingMenuUpdate = false;
+    unawaited(updateContextMenu());
+    _menuUpdateThrottleTimer = Timer(throttleDuration, () {
+      if (_pendingMenuUpdate) {
+        _pendingMenuUpdate = false;
+        unawaited(updateContextMenu());
+      }
+    });
+  }
+
+  /// 刷新托盘菜单接口（测试或外部触发用）。
+  Future<void> refreshMenu({bool throttled = true}) async {
+    if (throttled) {
+      scheduleThrottledUpdateContextMenu();
+    } else {
+      await updateContextMenu();
+    }
+  }
+
   /// 构建并设置托盘上下文菜单。
-  Future<void> updateContextMenu({List<SessionSummary>? sessions}) async {
+  Future<void> updateContextMenu({
+    List<SessionSummary>? sessions,
+    SidecarStatus? sidecarStatus,
+    bool? sidecarEnabled,
+  }) async {
     if (!isDesktop) return;
 
     try {
@@ -270,12 +382,27 @@ class TrayManagerService with TrayListener {
       }
       _cachedSessions = sessionList;
 
+      final currentSidecarState = sidecarStatus != null
+          ? SidecarState(status: sidecarStatus)
+          : (getSidecarState?.call() ??
+              sidecarService?.currentState ??
+              _cachedSidecarState);
+      _cachedSidecarState = currentSidecarState;
+
+      final currentSidecarConfig = sidecarEnabled != null
+          ? _cachedSidecarConfig.copyWith(enabled: sidecarEnabled)
+          : (getSidecarConfig?.call() ?? _cachedSidecarConfig);
+      _cachedSidecarConfig = currentSidecarConfig;
+
       final items = buildMenuItems(
         sessions: sessionList,
+        sidecarStatus: currentSidecarState.status,
+        sidecarEnabled: currentSidecarConfig.enabled,
         onOpenSession: (sid) => unawaited(handleOpenSession(sid)),
         onShowWindow: () => unawaited(handleShowWindow()),
         onNewSession: () => unawaited(handleNewSession()),
         onQuit: () => unawaited(handleQuit()),
+        onOpenWebui: () => unawaited(handleOpenWebui()),
       );
 
       final menu = Menu(items: items);
@@ -347,8 +474,65 @@ class TrayManagerService with TrayListener {
     }
   }
 
+  /// 处理「打开 WebUI」操作。
+  Future<void> handleOpenWebui() async {
+    final state = getSidecarState?.call() ??
+        sidecarService?.currentState ??
+        _cachedSidecarState;
+    final config = getSidecarConfig?.call() ?? _cachedSidecarConfig;
+
+    // Windows 托盘已知坑：disabled 菜单项在 Windows 原生侧仍可能触发点击事件，
+    // 此处必须二次判断 enabled 与 running 状态。
+    final isRunning = config.enabled && state.status == SidecarStatus.running;
+    if (!isRunning) {
+      developer.log(
+        'WebUI is not running or disabled, ignoring open_webui click',
+        name: 'TrayManagerService',
+      );
+      return;
+    }
+
+    if (onOpenWebui != null) {
+      await onOpenWebui!();
+      return;
+    }
+
+    final host = config.host == '0.0.0.0' ? '127.0.0.1' : config.host;
+    final port = config.port;
+    final url = 'http://$host:$port';
+
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e, st) {
+      developer.log(
+        'Failed to launch WebUI url: $url',
+        name: 'TrayManagerService',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
   /// 处理「退出应用」操作。
   Future<void> handleQuit() async {
+    // 退出前先停止内置 WebUI Sidecar（5s 超时兜底防挂死）
+    try {
+      final stopFuture = onStopSidecar != null
+          ? onStopSidecar!()
+          : sidecarService?.stop();
+      if (stopFuture != null) {
+        await stopFuture.timeout(const Duration(seconds: 5));
+      }
+    } catch (e, st) {
+      developer.log(
+        'Failed or timed out stopping sidecar on quit (fallback to proceed with quit)',
+        name: 'TrayManagerService',
+        error: e,
+        stackTrace: st,
+      );
+    }
+
     if (onQuit != null) {
       await onQuit!();
       return;
@@ -392,6 +576,8 @@ class TrayManagerService with TrayListener {
       unawaited(handleShowWindow());
     } else if (key == menuItemNewSession) {
       unawaited(handleNewSession());
+    } else if (key == menuItemOpenWebui) {
+      unawaited(handleOpenWebui());
     } else if (key == menuItemQuitApp) {
       unawaited(handleQuit());
     } else if (key.startsWith(recentSessionPrefix)) {
@@ -402,6 +588,11 @@ class TrayManagerService with TrayListener {
 
   /// 销毁托盘服务。
   Future<void> dispose() async {
+    _menuUpdateThrottleTimer?.cancel();
+    _menuUpdateThrottleTimer = null;
+    await _sidecarSubscription?.cancel();
+    _sidecarSubscription = null;
+
     if (!isDesktop) return;
 
     try {
@@ -489,6 +680,21 @@ final trayManagerServiceProvider = Provider<TrayManagerService>((ref) {
         );
       }
     },
+    onStopSidecar: () async {
+      try {
+        await ref.read(webuiSidecarControllerProvider.notifier).stop();
+      } catch (e, st) {
+        developer.log(
+          'Failed to stop sidecar from tray service',
+          name: 'TrayManagerService',
+          error: e,
+          stackTrace: st,
+        );
+      }
+    },
+    sidecarService: ref.read(webuiSidecarServiceProvider),
+    getSidecarState: () => ref.read(webuiSidecarControllerProvider),
+    getSidecarConfig: () => ref.read(webuiSidecarConfigProvider),
   );
   ref.onDispose(() {
     unawaited(service.dispose());

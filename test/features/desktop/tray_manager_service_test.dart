@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/desktop/tray_manager_service.dart';
+import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 class _FakeAssetBundle extends CachingAssetBundle {
   _FakeAssetBundle(this.bytes);
@@ -15,6 +19,68 @@ class _FakeAssetBundle extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async {
     return ByteData.view(bytes.buffer);
+  }
+}
+
+class _FakeUrlLauncher extends UrlLauncherPlatform {
+  String? launchedUrl;
+  LaunchOptions? lastOptions;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launchedUrl = url;
+    lastOptions = options;
+    return true;
+  }
+}
+
+class _FakeSidecarService implements WebuiSidecarService {
+  _FakeSidecarService({
+    this.onStop,
+    SidecarState initialState = SidecarState.initial,
+  }) : _state = initialState;
+
+  final Future<void> Function()? onStop;
+  SidecarState _state;
+  final StreamController<SidecarState> _controller =
+      StreamController<SidecarState>.broadcast();
+
+  int stopCallCount = 0;
+  int startCallCount = 0;
+
+  @override
+  SidecarState get currentState => _state;
+
+  @override
+  Stream<SidecarState> get states => _controller.stream;
+
+  @override
+  Future<void> start() async {
+    startCallCount++;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCallCount++;
+    if (onStop != null) await onStop!();
+  }
+
+  @override
+  Future<void> restart() async {
+    await stop();
+    await start();
+  }
+
+  void emitState(SidecarState newState) {
+    _state = newState;
+    _controller.add(newState);
+  }
+
+  void dispose() {
+    unawaited(_controller.close());
   }
 }
 
@@ -109,14 +175,110 @@ void main() {
   group('buildMenuItems 菜单构建纯函数测试', () {
     test('空会话列表展示 "暂无最近会话" 禁用项', () {
       final items = TrayManagerService.buildMenuItems(sessions: const []);
-      expect(items.length, 6);
+      expect(items.length, 9);
       expect(items[0].key, TrayManagerService.menuItemShowWindow);
       expect(items[1].key, TrayManagerService.menuItemNewSession);
       // items[2] is separator
-      expect(items[3].key, TrayManagerService.menuItemNoRecentSessions);
-      expect(items[3].label, '暂无最近会话');
-      expect(items[3].disabled, isTrue);
-      // items[4] is separator, items[5] is quit
+      expect(items[3].key, TrayManagerService.menuItemOpenWebui);
+      expect(items[4].key, TrayManagerService.menuItemWebuiStatus);
+      // items[5] is separator
+      expect(items[6].key, TrayManagerService.menuItemNoRecentSessions);
+      expect(items[6].label, '暂无最近会话');
+      expect(items[6].disabled, isTrue);
+      // items[7] is separator
+      expect(items[8].key, TrayManagerService.menuItemQuitApp);
+    });
+
+    test('running 状态下 open_webui 启用且状态显示 "WebUI 服务：运行中"', () {
+      final items = TrayManagerService.buildMenuItems(
+        sidecarStatus: SidecarStatus.running,
+        sidecarEnabled: true,
+      );
+
+      final openItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemOpenWebui,
+      );
+      final statusItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemWebuiStatus,
+      );
+
+      expect(openItem.label, '打开 WebUI');
+      expect(openItem.disabled, isFalse);
+      expect(statusItem.label, 'WebUI 服务：运行中');
+      expect(statusItem.disabled, isTrue);
+    });
+
+    test('failed 状态下 open_webui 置灰且状态显示 "WebUI 服务：失败"', () {
+      final items = TrayManagerService.buildMenuItems(
+        sidecarStatus: SidecarStatus.failed,
+        sidecarEnabled: true,
+      );
+
+      final openItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemOpenWebui,
+      );
+      final statusItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemWebuiStatus,
+      );
+
+      expect(openItem.label, '打开 WebUI');
+      expect(openItem.disabled, isTrue);
+      expect(statusItem.label, 'WebUI 服务：失败');
+      expect(statusItem.disabled, isTrue);
+    });
+
+    test('stopped 状态下 open_webui 置灰且状态显示 "WebUI 服务：已停止"', () {
+      final items = TrayManagerService.buildMenuItems(
+        sidecarStatus: SidecarStatus.stopped,
+        sidecarEnabled: false,
+      );
+
+      final openItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemOpenWebui,
+      );
+      final statusItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemWebuiStatus,
+      );
+
+      expect(openItem.label, '打开 WebUI');
+      expect(openItem.disabled, isTrue);
+      expect(statusItem.label, 'WebUI 服务：已停止');
+      expect(statusItem.disabled, isTrue);
+    });
+
+    test('starting 状态下 open_webui 置灰且状态显示 "WebUI 服务：启动中"', () {
+      final items = TrayManagerService.buildMenuItems(
+        sidecarStatus: SidecarStatus.starting,
+        sidecarEnabled: true,
+      );
+
+      final openItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemOpenWebui,
+      );
+      final statusItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemWebuiStatus,
+      );
+
+      expect(openItem.label, '打开 WebUI');
+      expect(openItem.disabled, isTrue);
+      expect(statusItem.label, 'WebUI 服务：启动中');
+      expect(statusItem.disabled, isTrue);
+    });
+
+    test('running 但 enabled=false 时 open_webui 仍置灰', () {
+      final items = TrayManagerService.buildMenuItems(
+        sidecarStatus: SidecarStatus.running,
+        sidecarEnabled: false,
+      );
+
+      final openItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemOpenWebui,
+      );
+      expect(openItem.disabled, isTrue);
+      final statusItem = items.firstWhere(
+        (it) => it.key == TrayManagerService.menuItemWebuiStatus,
+      );
+      expect(statusItem.label, 'WebUI 服务：运行中');
     });
 
     test('会话列表渲染最近会话项并截取上限', () {
@@ -241,6 +403,135 @@ void main() {
       expect(quitCalled, isTrue);
     });
 
+    test('handleQuit: stop 先于 window destroy 被调用', () async {
+      final calls = <String>[];
+      final fakeSidecar = _FakeSidecarService(
+        onStop: () async {
+          calls.add('sidecar.stop');
+        },
+      );
+      final service = TrayManagerService(
+        isDesktop: false,
+        sidecarService: fakeSidecar,
+        onQuit: () async {
+          calls.add('window.destroy');
+        },
+      );
+
+      await service.handleQuit();
+
+      expect(calls, ['sidecar.stop', 'window.destroy']);
+      expect(fakeSidecar.stopCallCount, 1);
+    });
+
+    test('handleQuit: sidecar.stop 挂死 5s 时仍兜底继续退出', () {
+      fakeAsync((async) {
+        final calls = <String>[];
+        final completer = Completer<void>();
+        final fakeSidecar = _FakeSidecarService(
+          onStop: () => completer.future,
+        );
+        final service = TrayManagerService(
+          isDesktop: false,
+          sidecarService: fakeSidecar,
+          onQuit: () async {
+            calls.add('window.destroy');
+          },
+        );
+
+        bool quitFinished = false;
+        unawaited(service.handleQuit().then((_) {
+          quitFinished = true;
+        }));
+
+        async.elapse(const Duration(seconds: 4));
+        expect(quitFinished, isFalse);
+        expect(calls, isEmpty);
+
+        async.elapse(const Duration(seconds: 1)); // 达到 5 秒超时
+        async.flushMicrotasks();
+        expect(quitFinished, isTrue);
+        expect(calls, ['window.destroy']);
+      });
+    });
+
+    test('handleOpenWebui: running 状态下通过 url_launcher 打开有效 URL', () async {
+      final fakeLauncher = _FakeUrlLauncher();
+      final oldLauncher = UrlLauncherPlatform.instance;
+      UrlLauncherPlatform.instance = fakeLauncher;
+      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+
+      final service = TrayManagerService(
+        isDesktop: false,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.running),
+        getSidecarConfig: () => const SidecarConfig(
+          enabled: true,
+          host: '127.0.0.1',
+          port: 8787,
+        ),
+      );
+
+      await service.handleOpenWebui();
+
+      expect(fakeLauncher.launchedUrl, 'http://127.0.0.1:8787');
+      expect(
+        fakeLauncher.lastOptions?.mode,
+        PreferredLaunchMode.externalApplication,
+      );
+    });
+
+    test('handleOpenWebui: host 为 0.0.0.0 时自动转为 127.0.0.1 打开', () async {
+      final fakeLauncher = _FakeUrlLauncher();
+      final oldLauncher = UrlLauncherPlatform.instance;
+      UrlLauncherPlatform.instance = fakeLauncher;
+      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+
+      final service = TrayManagerService(
+        isDesktop: false,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.running),
+        getSidecarConfig: () => const SidecarConfig(
+          enabled: true,
+          host: '0.0.0.0',
+          port: 9090,
+        ),
+      );
+
+      await service.handleOpenWebui();
+
+      expect(fakeLauncher.launchedUrl, 'http://127.0.0.1:9090');
+    });
+
+    test('handleOpenWebui: stopped 或 failed 状态下点击不调 url_launcher（防 Windows 托盘 bug）', () async {
+      final fakeLauncher = _FakeUrlLauncher();
+      final oldLauncher = UrlLauncherPlatform.instance;
+      UrlLauncherPlatform.instance = fakeLauncher;
+      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+
+      final stoppedService = TrayManagerService(
+        isDesktop: false,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.stopped),
+        getSidecarConfig: () => const SidecarConfig(enabled: true),
+      );
+      await stoppedService.handleOpenWebui();
+      expect(fakeLauncher.launchedUrl, isNull);
+
+      final failedService = TrayManagerService(
+        isDesktop: false,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.failed),
+        getSidecarConfig: () => const SidecarConfig(enabled: true),
+      );
+      await failedService.handleOpenWebui();
+      expect(fakeLauncher.launchedUrl, isNull);
+
+      final disabledService = TrayManagerService(
+        isDesktop: false,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.running),
+        getSidecarConfig: () => const SidecarConfig(enabled: false),
+      );
+      await disabledService.handleOpenWebui();
+      expect(fakeLauncher.launchedUrl, isNull);
+    });
+
     test('onTrayIconMouseDown 触发 handleShowWindow', () async {
       bool showCalled = false;
       final service = TrayManagerService(
@@ -255,7 +546,12 @@ void main() {
       expect(showCalled, isTrue);
     });
 
-    test('onTrayMenuItemClick 菜单项分发（包含最近会话分发）', () async {
+    test('onTrayMenuItemClick 菜单项分发（包含最近会话分发与 open_webui）', () async {
+      final fakeLauncher = _FakeUrlLauncher();
+      final oldLauncher = UrlLauncherPlatform.instance;
+      UrlLauncherPlatform.instance = fakeLauncher;
+      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+
       bool showCalled = false;
       bool newSessionCalled = false;
       String? openedSessionId;
@@ -267,6 +563,12 @@ void main() {
         onNewSession: () => newSessionCalled = true,
         onOpenSession: (sid) => openedSessionId = sid,
         onQuit: () => quitCalled = true,
+        getSidecarState: () => const SidecarState(status: SidecarStatus.running),
+        getSidecarConfig: () => const SidecarConfig(
+          enabled: true,
+          host: '127.0.0.1',
+          port: 8787,
+        ),
       );
 
       service.onTrayMenuItemClick(
@@ -280,6 +582,12 @@ void main() {
       );
       await pumpEventQueue();
       expect(newSessionCalled, isTrue);
+
+      service.onTrayMenuItemClick(
+        MenuItem(key: TrayManagerService.menuItemOpenWebui, label: '打开 WebUI'),
+      );
+      await pumpEventQueue();
+      expect(fakeLauncher.launchedUrl, 'http://127.0.0.1:8787');
 
       service.onTrayMenuItemClick(
         MenuItem(key: 'recent_sess_abc', label: '会话 ABC'),
