@@ -96,6 +96,9 @@ final webuiSidecarControllerProvider =
 
 /// WebUI Sidecar 控制器（包装 service 的 states 流，管理生命周期与配置变更联动）。
 class WebuiSidecarController extends Notifier<SidecarState> {
+  /// 默认日志子目录相对路径（`%LOCALAPPDATA%\hermes\webui-bundled\logs`）。
+  static const String defaultLogSubdirectory = r'hermes\webui-bundled\logs';
+
   StreamSubscription<SidecarState>? _subscription;
 
   @override

@@ -1446,14 +1446,6 @@ class AppLocalizations {
   String get installGuideStageDepsDesc => isEnglish
       ? 'Set up Python virtual environment and dependencies'
       : '配置 Python 虚拟环境并安装核心依赖';
-  String get installGuideStageWebui => isEnglish ? 'Deploy WebUI' : '部署 WebUI';
-  String get installGuideStageWebuiDesc => isEnglish
-      ? 'Clone official WebUI repository and install packages'
-      : '克隆官方 WebUI 仓库并安装依赖';
-  String get installGuideStageServer => isEnglish ? 'Start Service' : '启动服务';
-  String get installGuideStageServerDesc => isEnglish
-      ? 'Launch backend server and verify /health endpoint'
-      : '启动后台服务并验证 /health 健康状态';
   String get installGuideStageModel => isEnglish ? 'Configure Model' : '配置模型';
   String get installGuideStageModelDesc =>
       isEnglish ? 'Set up LLM provider and API key' : '选择大模型服务商并配置 API Key';
@@ -1504,9 +1496,6 @@ class AppLocalizations {
   String get installGuideDownloadScriptFailed => isEnglish
       ? 'Failed to download install.ps1. Please check network connection.'
       : '下载 install.ps1 失败，请检查网络连接';
-  String get installGuideWebuiStartFailed => isEnglish
-      ? 'Failed to start WebUI server or health check timed out.'
-      : 'WebUI 服务启动失败或健康检查超时';
   String get installGuideProviderRequired =>
       isEnglish ? 'Please select a provider' : '请选择模型服务商';
   String get installGuideApiKeyRequired =>
@@ -1516,6 +1505,47 @@ class AppLocalizations {
   String get autoOpenContextDesc => isEnglish
       ? 'Open the context panel automatically when creating a new session to set workspace and model'
       : '新建会话时自动打开上下文面板，便于设置工作区和模型';
+  String get onboardingBrandSlogan => isEnglish
+      ? 'Your self-hosted AI companion'
+      : '随时随地的自建 AI 智能体助手';
+
+  // ---------------------------------------------------------------------------
+  // Built-in WebUI Sidecar
+  // ---------------------------------------------------------------------------
+  String get webuiSectionTitle => isEnglish ? 'Built-in WebUI' : '内置 WebUI 服务';
+  String get webuiBundleMissingHint =>
+      isEnglish ? 'Built-in WebUI bundle not found' : '未检测到内置 WebUI 包';
+  String get webuiEnableTitle =>
+      isEnglish ? 'Enable Built-in Service' : '启用内置服务';
+  String get webuiEnableSubtitle => isEnglish
+      ? 'Run Hermes WebUI in background with the app'
+      : '随应用启动并在后台运行 Hermes WebUI';
+  String get webuiListeningHost => isEnglish ? 'Listening IP' : '监听 IP';
+  String get webuiListeningPort => isEnglish ? 'Listening Port' : '监听端口';
+  String get webuiInvalidHost =>
+      isEnglish ? 'Please enter a valid IPv4 address' : '请输入合法的 IPv4 地址';
+  String get webuiInvalidPort => isEnglish
+      ? 'Port must be between 1 and 65535'
+      : '端口号必须在 1-65535 之间';
+  String get webuiPassword => isEnglish ? 'WebUI Password' : 'WebUI 密码';
+  String get webuiPasswordEmpty =>
+      isEnglish ? 'Password cannot be empty' : '密码不能为空';
+  String get webuiPasswordPlaceholder =>
+      isEnglish ? 'Enter password' : '输入密码';
+  String get webuiStatusTitle => isEnglish ? 'Service Status' : '服务状态';
+  String get webuiStatusRunning => isEnglish ? 'Running' : '运行中';
+  String get webuiStatusStarting => isEnglish ? 'Starting…' : '启动中…';
+  String get webuiStatusStopped => isEnglish ? 'Stopped' : '已停止';
+  String get webuiStatusFailed => isEnglish ? 'Failed' : '启动失败';
+  String get webuiFailurePortOccupied =>
+      isEnglish ? 'Port occupied' : '端口占用';
+  String get webuiFailureMissingBundle =>
+      isEnglish ? 'Missing built-in bundle' : '缺内置包';
+  String get webuiFailureHealthTimeout =>
+      isEnglish ? 'Health check timed out' : '健康超时';
+  String get webuiFailureStartFailed =>
+      isEnglish ? 'Failed to start' : '启动失败';
+  String get webuiOpenLogs => isEnglish ? 'Open Log Directory' : '打开日志目录';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??

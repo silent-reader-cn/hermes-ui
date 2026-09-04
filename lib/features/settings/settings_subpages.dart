@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../session_list/session_row_subtitle_settings.dart';
 import 'auxiliary_models_section.dart';
 import 'extensions_section.dart';
 import 'mcp_section.dart';
+import 'webui_sidecar_section.dart';
 
 /// 返回按钮：显式 [CupertinoNavigationBarBackButton.onPressed]，
 /// 避免框架「仅可用于可 pop 路由」断言在首帧/测试环境误触发。
@@ -302,7 +304,12 @@ class DesktopSettingsPage extends StatelessWidget {
         leading: const PopBackButton(),
         middle: Text(l10n.desktopSection),
       ),
-      child: ListView(children: const [DesktopSection()]),
+      child: ListView(
+        children: [
+          const DesktopSection(),
+          if (Platform.isWindows) const WebuiSidecarSection(),
+        ],
+      ),
     );
   }
 }
