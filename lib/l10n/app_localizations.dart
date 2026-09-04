@@ -1597,6 +1597,14 @@ class AppLocalizations {
   String get onboardingBuiltinRunning =>
       isEnglish ? 'Running' : '运行中';
 
+  // ---------------------------------------------------------------------------
+  // Language Settings (多语言设置)
+  // ---------------------------------------------------------------------------
+  String get languageSectionTitle => isEnglish ? 'Language' : '语言';
+  String get languageAuto => isEnglish ? 'Auto' : '自动';
+  String get languageZh => '中文';
+  String get languageEn => 'English';
+
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
         const AppLocalizations(Locale('zh'));

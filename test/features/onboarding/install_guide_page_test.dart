@@ -128,7 +128,7 @@ void main() {
     psInstaller = _FakePowershellInstaller();
     webuiBootstrap = _FakeWebuiBootstrap();
     llmApi = _FakeLlmOnboardingApi();
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'app_locale_mode': 'zh'});
   });
 
   Widget buildTestApp(WidgetTester tester, {bool isWindows = true}) {

@@ -2,11 +2,14 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/app/theme/theme_provider.dart';
 import 'package:hermes_ui/app/widgets/adaptive_sliver_navigation_bar.dart';
+import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -1600,6 +1603,10 @@ void main() {
       expect(turnsSwitch.value, isTrue);
 
       // 切换 turns 开关
+      await scrollEntryIntoView(
+        tester,
+        find.byKey(const ValueKey('settings-switch-notify-turns')),
+      );
       await tester.tap(
         find.byKey(const ValueKey('settings-switch-notify-turns')),
       );
@@ -2079,6 +2086,80 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('外观组语言切换', () {
+    testWidgets(
+        '三态 segmented 渲染（key settings-locale-mode）、点 English → provider 变 + 页面文案切英',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = await makeContainer(
+        api: buildApi(),
+        connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
+        activeId: 'c1',
+      );
+
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              final mode = ref.watch(localeModeProvider);
+              final locale = switch (mode) {
+                AppLocaleMode.system => const Locale('zh'), // 初始中文
+                AppLocaleMode.zh => const Locale('zh'),
+                AppLocaleMode.en => const Locale('en'),
+              };
+              return CupertinoApp(
+                theme: const CupertinoThemeData(brightness: Brightness.light),
+                locale: locale,
+                localizationsDelegates: const [
+                  AppLocalizationsDelegate(),
+                  DefaultCupertinoLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                ],
+                supportedLocales: const [Locale('zh'), Locale('en')],
+                home: const SettingsPage(),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final segmentedFinder =
+          find.byKey(const ValueKey('settings-locale-mode'));
+      expect(segmentedFinder, findsOneWidget);
+
+      // 验证初始文案为中文
+      expect(find.text('外观'), findsOneWidget);
+      expect(find.text('语言'), findsOneWidget);
+      expect(find.text('自动'), findsOneWidget);
+      expect(find.text('中文'), findsOneWidget);
+      expect(find.text('English'), findsOneWidget);
+
+      // 点击 English 分段
+      await tester.tap(find.descendant(
+        of: segmentedFinder,
+        matching: find.text('English'),
+      ));
+      await tester.pumpAndSettle();
+
+      // provider 变
+      expect(container.read(localeModeProvider), AppLocaleMode.en);
+
+      // 页面文案切英
+      expect(find.text('Appearance'), findsOneWidget);
+      expect(find.text('Language'), findsOneWidget);
+      expect(find.text('Auto'), findsOneWidget);
+      expect(find.text('外观'), findsNothing);
     });
   });
 }

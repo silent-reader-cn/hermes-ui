@@ -6,6 +6,7 @@ import '../features/desktop/desktop_lifecycle_observer.dart';
 import '../features/notifications/notification_lifecycle_observer.dart';
 import '../features/session_list/session_auto_refresh.dart';
 import '../l10n/app_localizations.dart';
+import 'locale/locale_provider.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
 import 'theme/theme_provider.dart';
@@ -23,11 +24,17 @@ class HermesApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final localeMode = ref.watch(localeModeProvider);
     final router = ref.watch(routerProvider);
     final brightness = switch (themeMode) {
       AppThemeMode.light => Brightness.light,
       AppThemeMode.dark => Brightness.dark,
       AppThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    };
+    final locale = switch (localeMode) {
+      AppLocaleMode.system => null,
+      AppLocaleMode.zh => const Locale('zh'),
+      AppLocaleMode.en => const Locale('en'),
     };
     return DesktopLifecycleObserver(
       child: WindowFocusObserver(
@@ -36,7 +43,7 @@ class HermesApp extends ConsumerWidget {
           title: 'Hermes',
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,
-          locale: const Locale('zh'),
+          locale: locale,
           localizationsDelegates: const [
             AppLocalizationsDelegate(),
             DefaultCupertinoLocalizations.delegate,

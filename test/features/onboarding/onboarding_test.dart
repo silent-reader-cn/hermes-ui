@@ -22,7 +22,7 @@ void main() {
   setUp(() {
     storage = InMemorySecureStorage();
     api = _FakeOnboardingApi();
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'app_locale_mode': 'zh'});
   });
 
   /// 组装完整 App（真实 router + 守卫），override 存储与 onboarding API。

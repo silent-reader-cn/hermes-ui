@@ -44,7 +44,7 @@ void main() {
   setUp(() {
     storage = InMemorySecureStorage();
     detector = _FakeInstallDetector();
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'app_locale_mode': 'zh'});
   });
 
   Widget buildApp() {

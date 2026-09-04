@@ -15,7 +15,7 @@ import 'helpers/in_memory_secure_storage.dart';
 /// App 壳冒烟测试（替换模板 Counter 测试）。
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'app_locale_mode': 'zh'});
     enableSessionAutoRefresh = false;
   });
   tearDown(() {

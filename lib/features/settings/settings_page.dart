@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/locale/locale_provider.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -108,6 +109,7 @@ class _AppearanceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
+    final localeMode = ref.watch(localeModeProvider);
     return CupertinoListSection(
       dividerMargin: 0,
       additionalDividerMargin: 0,
@@ -133,6 +135,31 @@ class _AppearanceSection extends ConsumerWidget {
                   AppThemeMode.system: Text(l10n.themeSystem),
                   AppThemeMode.light: Text(l10n.themeLight),
                   AppThemeMode.dark: Text(l10n.themeDark),
+                },
+              ),
+            ),
+          ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.languageSectionTitle),
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: CupertinoSlidingSegmentedControl<AppLocaleMode>(
+                key: const ValueKey('settings-locale-mode'),
+                groupValue: localeMode,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref.read(localeModeProvider.notifier).setMode(value),
+                    );
+                  }
+                },
+                children: {
+                  AppLocaleMode.system: Text(l10n.languageAuto),
+                  AppLocaleMode.zh: Text(l10n.languageZh),
+                  AppLocaleMode.en: Text(l10n.languageEn),
                 },
               ),
             ),
