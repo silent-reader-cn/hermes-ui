@@ -225,3 +225,54 @@
 ### 与前两条的关系
 
 本条为 U2（引导页分段+内置 Tab）、U3（向导瘦身）的**布局层强制规格**；拆任务书时：U2/U3 的任务描述合并本条铁律，宽屏金照归 U4。上两条若先拆分，须携本条一并下发。
+
+---
+
+## [问题·待取证定稿] 安卓前台服务保活开关打开后无常驻通知、系统通知类别无对应渠道（服务从未启动，失败被三层静默吞）
+
+**类型**：问题类（Android 后台保活 / flutter_foreground_task 插件契约）
+
+**测试机**：HyperOS（小米/红米），Android 14+（主人确认）。
+
+**位置**：
+- `lib/features/notifications/background_keepalive_service.dart:151-228` — `initialize()`：`_initialized=true` 在 try 之前（:153）；步骤顺序 ①WorkManager.initialize ②registerPeriodicTask ③`FlutterForegroundTask.init()`（:179-192）④冷启动条件拉起（:199-207）；整段 try/catch 仅写诊断日志。
+- `lib/features/notifications/background_keepalive_service.dart:290-340` — `startForegroundService()`：`FlutterForegroundTask.startService()`（:314-316）**未传 `callback` 参数**。
+- `lib/features/notifications/notification_providers.dart:145-156` — `setBgForegroundServiceEnabled()`：`state.copyWith` 先乐观置 true，再 `startForegroundService()`，外层 `catch (_) {}` 全吞。
+- `lib/main.dart:421-423` — 冷启动 `unawaited(initialize())`。
+- 渠道创建方（插件原生）：`flutter_foreground_task-8.17.0/android/.../ForegroundService.kt:249-251` — `startForegroundService()` 内 `createNotificationChannel()`，**服务不启动则渠道必不存在**。
+- 插件抛点：`flutter_foreground_task-8.17.0/lib/flutter_foreground_task.dart:107-108` — `startService()` 首行 `if (!isInitialized) throw ServiceNotInitializedException()`。
+
+**范围**：Android 前台服务保活链路（常驻通知 + WakeLock/WifiLock + 渠道）。不涉及：WorkManager 周期轮询本身（独立链路，可能正常）、`flutter_local_notifications` 的 4 个业务渠道（截图证实存在：需要澄清/下载完成/异常中断/回合完成）、回合完成通知推送、iOS/桌面。
+
+**复现**（主人实机 2026-09-04 截图 `Screenshot_2026-09-04-11-03-06-226`）：设置→后台保活→打开「前台服务保活」开关（UI 显示开启）→ ①下拉通知栏无常驻通知；②系统设置→应用→Hermes→通知权限设置：「常驻通知」权限开关系统级已开（蓝），但「通知类别」列表**无「后台生成保活」渠道**（channelId `hermes_foreground_service`）。
+
+**现状 vs 预期**：
+- 现状：开关乐观置 true、无报错无通知无渠道——服务从未启动，失败三层静默（init catch 只进诊断日志 / 开关 catch 全吞 / 插件异常无 UI 反馈）。
+- 预期：开关打开 → 数秒内通知栏出现常驻通知（「Hermes / N 个会话正在生成」）+ 系统通知类别出现「后台生成保活」渠道；任何一步失败 → 开关回滚 + 就地错误提示，绝不假成功。
+
+**根因（两分支，待诊断日志取证定稿）**：
+- **分支 A（首要嫌疑）**：`initialize()` 在 ①② 步（WorkManager initialize / registerPeriodicTask）抛异常 → ③ `FlutterForegroundTask.init()` 从未执行 → 插件 `isInitialized=false`；又因 `_initialized=true` 先置位，后续调用**永不重试 init**。开关触发 `startForegroundService()` → 插件抛 `ServiceNotInitializedException` → `catch (_) {}` 吞 → 症状完全吻合。**取证点**：诊断页 tag=keepalive 应有「后台保活服务初始化失败」+「启动前台保活服务失败」两条（errorKind 含 ServiceNotInitializedException）。
+- **分支 B（契约违约，独立成立）**：全工程无 `setTaskHandler`/TaskHandler 实现，`startService()` 未传 `callback`（插件 README:353 明确 callback 为调 setTaskHandler 的顶层函数）。即使分支 A 排除、服务侥幸启动，任务 isolate 无 handler → `eventAction` 事件循环与任务生命周期全废（插件源码 `ForegroundTask.kt:63-69`：callbackHandle==null 时不执行 Dart 回调）。本 app 的 handler 无业务逻辑需求（`eventAction: nothing()`），但**契约上必须注册**，否则行为不受插件支持。
+- 排除项：HyperOS 通知拦截概率低——拦截场景渠道仍会注册，与"渠道不存在"不符。
+
+**取证状态**：主人正在 App 内诊断页（设置→诊断，drift 持久化）搜 `keepalive` 取条目；结果贴回后本条根因定稿、状态改 [已定稿]。若两条失败日志皆无 → 需补查 initialize 是否被调用（`main.dart:422` 平台判定）。
+
+**修复规格（主人已拍板两项，取证定稿后转任务书）**：
+1. **init 顺序/标志位修复 + 失败可见化**：
+   - `FlutterForegroundTask.init()` 提前为第一步（纯 Dart 静态赋值，无依赖，不该排在易抛的 WorkManager 之后）；`_initialized=true` 移到全部关键步骤成功之后，或分步标志位（fgTaskReady / wmReady 独立，互不阻塞）。
+   - `setBgForegroundServiceEnabled`：失败 → `state` 回滚 false + 就地红字/toast 显示具体原因（复用 l10n 错误文案模式），**禁 `catch (_) {}` 静默**；诊断日志照写。
+   - `startForegroundService` 的 catch 同理：向上冒泡返回值或异常，供调用方回滚。
+2. **按插件契约补 TaskHandler + callback**：
+   - 顶层 `@pragma('vm:entry-point') void foregroundTaskCallback() { FlutterForegroundTask.setTaskHandler(HermesKeepaliveTaskHandler()); }`（对齐 `workmanagerCallbackDispatcher` 既有模式）。
+   - `HermesKeepaliveTaskHandler extends TaskHandler`：onStart/onRepeatEvent/onStop 空实现或仅诊断日志（当前 eventAction=nothing()，无周期逻辑）。
+   - 三处 `startService()` 调用（冷启动 :206、开关 :152、生命周期 :260）统一传 `callback: foregroundTaskCallback`。
+
+**验收**：
+1. HyperOS/Android14+ 实机：开关打开 → 通知栏出常驻通知；系统通知类别出现「后台生成保活」渠道。
+2. 杀掉 app 重开（开关已开）→ 冷启动自动拉起，通知恢复（:199-207 路径）。
+3. 故障注入（测试）：mock 插件 startService 抛异常 → 开关回滚 false + 错误提示可见，无假成功态。
+4. 常驻通知文本随流状态更新（复用既有 `updateNotification`/`onAppLifecycleChanged` 链路回归）。
+5. 单测：init 步骤部分失败后 fgTask init 仍完成、重试语义正确；widget/unit 测开关回滚路径。
+6. `flutter analyze` 零告警 + 全量测试绿。
+
+**备注**：本条为独立 bug 修复线，与 sidecar/引导页三条无文件交集，可并行开 worktree。取证结果若指向分支 A 之外的第三种异常（如 WorkManager 步骤本身在 HyperOS 抛错），修复面 ① 的顺序调整已天然覆盖；若日志显示 initialize 从未运行（无「初始化失败」条目），则根因上移至 `main.dart:422` 调用时机，届时修订本条。
