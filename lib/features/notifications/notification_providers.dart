@@ -184,13 +184,16 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
         error: e,
         stackTrace: st,
       );
+      // 回滚到操作前态：开失败→false；关失败（stop rethrow）→true，
+      // 绝不假成功也不假失败。
+      final rollback = !value;
       state = state.copyWith(
-        bgForegroundServiceEnabled: false,
+        bgForegroundServiceEnabled: rollback,
         error: e.toString(),
       );
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool(keyBgForegroundService, false);
+        await prefs.setBool(keyBgForegroundService, rollback);
       } catch (prefsErr) {
         developer.log('Failed to persist rollback state: $prefsErr');
       }
@@ -291,7 +294,11 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
     unawaited(
       keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
     );
-    unawaited(keepalive.stopForegroundService());
+    unawaited(keepalive
+          .stopForegroundService()
+          // 停止失败仅诊断日志（K 修复规格：仅开关路径需回滚，见
+          // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
+          .catchError((Object _) {}));
     unawaited(keepalive.cancelOneOffPoll(sessionId));
 
     final settings = ref.read(notificationSettingsProvider);
@@ -329,7 +336,11 @@ final clarificationNotificationHookProvider =
         unawaited(
           keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
         );
-        unawaited(keepalive.stopForegroundService());
+        unawaited(keepalive
+          .stopForegroundService()
+          // 停止失败仅诊断日志（K 修复规格：仅开关路径需回滚，见
+          // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
+          .catchError((Object _) {}));
         unawaited(keepalive.cancelOneOffPoll(sessionId));
 
         final settings = ref.read(notificationSettingsProvider);
@@ -364,7 +375,11 @@ final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
       unawaited(
         keepalive.recordTurnNotified(sessionId: sessionId, streamId: null),
       );
-      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive
+          .stopForegroundService()
+          // 停止失败仅诊断日志（K 修复规格：仅开关路径需回滚，见
+          // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
+          .catchError((Object _) {}));
       unawaited(keepalive.cancelOneOffPoll(sessionId));
 
       final settings = ref.read(notificationSettingsProvider);

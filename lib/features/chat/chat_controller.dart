@@ -1467,7 +1467,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     try {
       final keepalive = ref.read(backgroundKeepaliveServiceProvider);
-      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive
+          .stopForegroundService()
+          // 停止失败仅诊断日志（K 修复规格：仅开关路径需回滚，见
+          // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
+          .catchError((Object _) {}));
       if (state.sessionId.isNotEmpty) {
         unawaited(keepalive.cancelOneOffPoll(state.sessionId));
       }
@@ -2756,7 +2760,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _markProgress();
     try {
       final keepalive = ref.read(backgroundKeepaliveServiceProvider);
-      unawaited(keepalive.stopForegroundService());
+      unawaited(keepalive
+          .stopForegroundService()
+          // 停止失败仅诊断日志（K 修复规格：仅开关路径需回滚，见
+          // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
+          .catchError((Object _) {}));
       if (state.sessionId.isNotEmpty) {
         unawaited(keepalive.cancelOneOffPoll(state.sessionId));
       }

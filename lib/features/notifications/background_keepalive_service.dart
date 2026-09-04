@@ -586,6 +586,16 @@ class ProductionBackgroundKeepaliveService
       );
     } catch (e, st) {
       developer.log('stopForegroundService error: $e', error: e, stackTrace: st);
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'keepalive',
+        message: '停止前台保活服务失败',
+        errorKind: e.toString(),
+      );
+      // 修复规格①「stopForegroundService 同检返回值」：失败向上冒泡，
+      // 供 setBgForegroundServiceEnabled 回滚开关；fire-and-forget 调用方
+      // （unawaited）自吞不影响主流程。
+      rethrow;
     }
   }
 
