@@ -11,6 +11,7 @@ import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/features/workspace_manager/file_preview_page.dart';
 import 'package:hermes_ui/features/workspace/workspace_providers.dart';
 
+import '../../helpers/fake_download_service.dart';
 import '../../helpers/fake_workspace_api.dart';
 
 /// 1x1 透明 PNG（widget 测试用可解码位图）。
@@ -99,6 +100,7 @@ Future<void> pumpPreview(
           ApiClient(baseUrl: 'http://test.local:30002'),
         ),
         workspaceApiFactoryProvider.overrideWithValue((_) => api),
+        ...createDownloadTestOverrides(),
       ],
       child: CupertinoApp(
         home: FilePreviewPage(sessionId: 's1', entry: file),
@@ -211,20 +213,21 @@ void main() {
       expect(find.text('recovered'), findsOneWidget);
     });
 
-    testWidgets('下载：导航栏下载按钮 → 字节数提示', (tester) async {
+    testWidgets('下载：导航栏下载按钮 → 确认后入队下载中心', (tester) async {
       final api = FakeWorkspaceApi()..downloadBytes = kPngBytes;
       await pumpPreview(tester, api, entry('pic.png'));
 
       await tester.tap(find.byKey(const ValueKey('preview-download')));
       await tester.pumpAndSettle();
 
-      expect(api.downloadCalls, ['s1|pic.png', 's1|pic.png']);
-      expect(
-        find.textContaining('已下载「pic.png」（${kPngBytes.length} 字节）'),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const ValueKey('preview-dialog-ok')));
+      expect(find.text('下载文件'), findsOneWidget);
+      expect(find.text('pic.png'), findsWidgets);
+      expect(find.text('开始下载'), findsOneWidget);
+
+      await tester.tap(find.text('开始下载'));
       await tester.pumpAndSettle();
+
+      expect(find.text('下载文件'), findsNothing);
     });
 
     testWidgets('音视频预览：video/audio 进入可预览分支（非兜底）', (tester) async {
@@ -234,19 +237,22 @@ void main() {
       expect(find.text('无法预览该文件'), findsNothing);
     });
 
-    testWidgets('下载失败：操作失败弹窗', (tester) async {
+    testWidgets('不可预览文件兜底：下载按钮弹出确认框并入队下载中心', (tester) async {
       final api = FakeWorkspaceApi()
-        ..fetchFileError = HttpException(404, null, message: 'gone')
-        ..downloadError = HttpException(500, null, message: 'boom');
+        ..fetchFileError = HttpException(404, null, message: 'gone');
       await pumpPreview(tester, api, entry('x.bin'));
 
       await tester.tap(find.byKey(const ValueKey('preview-download-fallback')));
       await tester.pumpAndSettle();
 
-      expect(find.text('操作失败'), findsOneWidget);
-      expect(find.text('boom'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('preview-dialog-ok')));
+      expect(find.text('下载文件'), findsOneWidget);
+      expect(find.text('x.bin'), findsWidgets);
+      expect(find.text('开始下载'), findsOneWidget);
+
+      await tester.tap(find.text('开始下载'));
       await tester.pumpAndSettle();
+
+      expect(find.text('下载文件'), findsNothing);
     });
   });
 }

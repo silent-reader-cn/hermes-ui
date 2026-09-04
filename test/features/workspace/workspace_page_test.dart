@@ -12,6 +12,7 @@ import 'package:hermes_ui/features/shared/app_back_button.dart';
 import 'package:hermes_ui/features/workspace/workspace_page.dart';
 import 'package:hermes_ui/features/workspace/workspace_providers.dart';
 
+import '../../helpers/fake_download_service.dart';
 import '../../helpers/fake_workspace_api.dart';
 
 /// 构造测试条目（path 缺省 = name）。
@@ -46,6 +47,7 @@ Future<void> pumpWorkspace(
           ApiClient(baseUrl: 'http://test.local:30002'),
         ),
         workspaceApiFactoryProvider.overrideWithValue((_) => api),
+        ...createDownloadTestOverrides(),
       ],
       child: CupertinoApp(
         home: WorkspacePage(sessionId: 's1', filePicker: picker),
@@ -242,13 +244,12 @@ void main() {
       expect(find.text('下载'), findsNothing);
     });
 
-    testWidgets('下载：行菜单 → 下载 → 调 API → 提示字节数', (tester) async {
+    testWidgets('下载：行菜单 → 下载 → 弹出确认框 → 确认后入队下载中心', (tester) async {
       final api = FakeWorkspaceApi(
         directories: {
-          '.': [buildEntry('a.txt')],
+          '.': [buildEntry('a.txt', size: 1024, type: 'text/plain')],
         },
       );
-      api.downloadBytes = Uint8List.fromList(List.filled(1024, 1));
       await pumpWorkspace(tester, api);
 
       await tester.tap(find.byKey(const ValueKey('workspace-actions-a.txt')));
@@ -256,12 +257,17 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('workspace-action-download')));
       await tester.pumpAndSettle();
 
-      expect(api.downloadCalls, ['s1|a.txt']);
-      expect(find.text('提示'), findsOneWidget);
-      expect(find.textContaining('1024'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('workspace-dialog-ok')));
+      // 验证弹出统一下载确认框
+      expect(find.text('下载文件'), findsOneWidget);
+      expect(find.text('a.txt'), findsWidgets);
+      expect(find.text('开始下载'), findsOneWidget);
+
+      // 点击开始下载
+      await tester.tap(find.text('开始下载'));
       await tester.pumpAndSettle();
-      expect(find.text('提示'), findsNothing);
+
+      // 对话框已关闭
+      expect(find.text('下载文件'), findsNothing);
     });
 
     testWidgets('删除：行菜单 → 删除 → 确认 → 移除行；取消不调 API', (tester) async {
@@ -378,17 +384,20 @@ void main() {
           '.': [buildEntry('a.txt')],
         },
       );
-      api.downloadError = HttpException(500, null, message: '下载服务不可用');
+      api.deleteError = HttpException(500, null, message: '删除服务不可用');
       await pumpWorkspace(tester, api);
 
       await tester.tap(find.byKey(const ValueKey('workspace-actions-a.txt')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('workspace-action-download')));
+      await tester.tap(find.byKey(const ValueKey('workspace-action-delete')));
+      await tester.pumpAndSettle();
+      // 删除有二次确认弹窗，点「删除」确认后才真正调 API
+      await tester.tap(find.byKey(const ValueKey('workspace-delete-confirm')));
       await tester.pumpAndSettle();
 
       expect(find.text('操作失败'), findsOneWidget);
       // 错误同时显示在路径头横幅与弹窗中（2 处）
-      expect(find.textContaining('下载服务不可用'), findsNWidgets(2));
+      expect(find.textContaining('删除服务不可用'), findsNWidgets(2));
       await tester.tap(find.byKey(const ValueKey('workspace-dialog-ok')));
       await tester.pumpAndSettle();
       expect(find.text('操作失败'), findsNothing);
@@ -467,24 +476,27 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('目录打包下载：头部按钮 → /api/folder/download → 字节数提示', (tester) async {
+    testWidgets('目录打包下载：头部按钮 → 弹出确认框 → 确认后入队下载中心', (tester) async {
       final api = FakeWorkspaceApi(
         directories: {
           '.': [buildEntry('a.txt')],
         },
       );
-      api.downloadFolderBytes = Uint8List.fromList(List.filled(2048, 2));
       await pumpWorkspace(tester, api);
 
       await tester.tap(find.byKey(const ValueKey('workspace-download-folder')));
       await tester.pumpAndSettle();
 
-      expect(api.downloadFolderCalls, ['s1|.']);
-      expect(find.text('提示'), findsOneWidget);
-      expect(find.textContaining('2048'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('workspace-dialog-ok')));
+      // 验证弹出统一下载确认框（名称行为「名称：xxx」拼接串，用 contains）
+      expect(find.text('下载文件'), findsOneWidget);
+      expect(find.textContaining('workspace_s1.zip'), findsWidgets);
+      expect(find.text('开始下载'), findsOneWidget);
+
+      // 点击开始下载
+      await tester.tap(find.text('开始下载'));
       await tester.pumpAndSettle();
-      expect(find.text('提示'), findsNothing);
+
+      expect(find.text('下载文件'), findsNothing);
     });
 
     testWidgets('导航栏返回按钮 fallback 为 /（窄屏直进回会话列表，非 /chat/:sid）', (

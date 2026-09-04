@@ -114,6 +114,7 @@ Widget _testApp(Widget home, {FakeMediaCacheRig? rig}) {
         () => _FakeActiveConnectionController(null),
       ),
       mediaCacheOverride(service),
+      ...buildDownloadOverrides(),
     ],
     child: CupertinoApp(home: CupertinoPageScaffold(child: home)),
   );
@@ -515,7 +516,10 @@ void main() {
       addTearDown(rig.dispose);
 
       final container = ProviderContainer(
-        overrides: [mediaCacheOverride(rig.service)],
+        overrides: [
+          mediaCacheOverride(rig.service),
+          ...buildDownloadOverrides(),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -880,6 +884,161 @@ void main() {
       // 验证没有未捕获异常崩溃，按钮回到可重试状态
       expect(tester.takeException(), isNull);
       expect(find.text('重试'), findsOneWidget);
+    });
+
+    testWidgets('图片 Lightbox 底部包含下载按钮且点击可触发下载落盘', (tester) async {
+      final tmpDir = Directory.systemTemp.createTempSync('lightbox_dl_');
+      addTearDown(() {
+        try {
+          tmpDir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+
+      const message = ChatMessage(
+        role: 'user',
+        content: '看这张图片',
+        attachments: [
+          MessageAttachment(name: 'photo.png', path: _k1x1Png, isImage: true),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(null),
+            ),
+            ...buildDownloadOverrides(tempDir: tmpDir),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageBubble(message: message),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 点击附件芯片打开 Lightbox
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-chip-preview-photo.png')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证大图与底部的下载按钮均展示
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      final downloadBtn = find.byKey(
+        const ValueKey('attachment-download-button'),
+      );
+      expect(downloadBtn, findsOneWidget);
+      expect(find.text('下载'), findsOneWidget);
+
+      // 点击下载，弹出确认对话框
+      await tester.tap(downloadBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('开始下载'), findsOneWidget);
+
+      // 点击开始下载
+      await tester.tap(find.text('开始下载'));
+      // 推进真实异步
+      for (var i = 0; i < 50; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+        if (find.text('已下载').evaluate().isNotEmpty) break;
+      }
+
+      expect(find.text('已下载'), findsOneWidget);
+    });
+
+    testWidgets('内存字节（未保存为本地文件）不应误判为「已下载/已保存」', (tester) async {
+      final attachment = PendingAttachment(
+        id: 'att-mem-1',
+        name: 'memory_doc.pdf',
+        path: 'memory_doc.pdf',
+        mime: 'application/pdf',
+        isImage: false,
+        thumbnailData: Uint8List.fromList([1, 2, 3]),
+      );
+
+      final container = ProviderContainer(
+        overrides: [...buildDownloadOverrides()],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(pendingAttachmentsProvider('session-mem').notifier)
+          .add(attachment);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: AttachmentPendingBar(sessionId: 'session-mem'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-preview-att-mem-1')),
+      );
+      await tester.pumpAndSettle();
+
+      // 初始状态下虽有内存 bytes，但不是本地已有文件，应显示「下载」而非「已保存」或「已下载」
+      final downloadBtn = find.byKey(
+        const ValueKey('attachment-download-button'),
+      );
+      expect(downloadBtn, findsOneWidget);
+      expect(find.text('下载'), findsOneWidget);
+      expect(find.text('已保存'), findsNothing);
+      expect(find.text('已下载'), findsNothing);
+    });
+
+    testWidgets('不可解析来源的附件显示禁用态并呈现「无法从此来源下载」', (tester) async {
+      const message = ChatMessage(
+        role: 'user',
+        content: '无效附件',
+        attachments: [
+          MessageAttachment(
+            name: 'bad_file.bin',
+            path: 'invalid_scheme://not_real',
+            isImage: false,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWith(
+              () => _FakeActiveConnectionController(null),
+            ),
+            ...buildDownloadOverrides(),
+          ],
+          child: const CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: ChatMessageBubble(message: message),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.byKey(const ValueKey('attachment-chip-preview-bad_file.bin')),
+      );
+      await tester.pumpAndSettle();
+
+      // 验证禁用态文案与不可点击
+      expect(find.text('无法从此来源下载'), findsOneWidget);
+      final downloadBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('attachment-download-button')),
+      );
+      expect(downloadBtn.onPressed, isNull);
     });
   });
 }

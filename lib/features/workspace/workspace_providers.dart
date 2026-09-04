@@ -1,13 +1,17 @@
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/locale/locale_resolver.dart';
-import '../../l10n/app_localizations.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/endpoints.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
+import '../../l10n/app_localizations.dart';
+import '../downloads/download_confirm_dialog.dart';
+import '../downloads/download_providers.dart';
 import 'workspace_api.dart';
 
 /// 构建 [WorkspaceApi] 的工厂（测试可 override 注入 fake）。
@@ -288,64 +292,85 @@ class WorkspaceController extends FamilyAsyncNotifier<WorkspaceState, String> {
     }
   }
 
-  /// 下载文件原始字节；磁盘保存待平台通道接入，当前仅提示字节数。
-  Future<bool> download(WorkspaceEntry entry) async {
+  /// 下载文件原始字节；统一接入下载中心（弹确认框后 enqueue）。
+  Future<bool> download(WorkspaceEntry entry, {BuildContext? context}) async {
     final path = entry.path;
     if (path == null || path.isEmpty) {
       await _setActionError('服务器未提供该条目路径');
       return false;
     }
-    final current = state.valueOrNull;
-    if (current == null) return false;
-    state = AsyncData(
-      current.copyWith(busyPaths: {...current.busyPaths, path}),
-    );
+
+    final fileName = entry.name ?? path.split('/').last;
+    if (context != null) {
+      final confirmed = await showDownloadConfirmationDialog(
+        context,
+        fileName: fileName,
+        mimeType: entry.type,
+        expectedBytes: entry.size,
+        sessionId: sessionId,
+        sourceDescription: '$sessionId/$path',
+      );
+      if (confirmed != true) return false;
+    }
+
     try {
-      final bytes = await _api.downloadFile(sessionId: sessionId, path: path);
-      final after = state.valueOrNull;
-      if (after != null) {
-        state = AsyncData(
-          after.copyWith(
-            busyPaths: {...after.busyPaths}..remove(path),
-            notice: () =>
-                '已下载「${entry.name ?? path}」（${bytes.length} 字节），保存到本地待平台通道接入。',
-          ),
-        );
-      }
+      final client = ref.read(apiClientProvider);
+      final rawUrl = Endpoint.rawFile(
+        sessionId: sessionId,
+        path: path,
+      ).url(client.baseUrl).toString();
+
+      await ref.read(downloadControllerProvider.notifier).enqueue(
+        sourceUrl: rawUrl,
+        fileName: fileName,
+        mimeType: entry.type,
+        expectedBytes: entry.size,
+        sessionId: sessionId,
+      );
       return true;
     } on Exception catch (error) {
-      await _clearBusy(path);
       await _setActionError(_messageOf(error));
       return false;
     }
   }
 
-  /// 下载当前目录打包 zip；磁盘保存待平台通道接入，当前仅提示字节数。
-  Future<bool> downloadFolder() async {
+  /// 下载当前目录打包 zip；统一接入下载中心（弹确认框后 enqueue）。
+  Future<bool> downloadFolder({BuildContext? context}) async {
     final current = state.valueOrNull;
     if (current == null) return false;
-    state = AsyncData(current.copyWith(isFolderDownloading: true));
-    try {
-      final bytes = await _api.downloadFolder(
+
+    final targetPath = current.currentPath;
+    final folderName = (current.isAtRoot || targetPath == '.')
+        ? (sessionId.isNotEmpty ? 'workspace_$sessionId' : 'workspace')
+        : targetPath.split('/').last;
+    final zipFileName = '$folderName.zip';
+
+    if (context != null) {
+      final confirmed = await showDownloadConfirmationDialog(
+        context,
+        fileName: zipFileName,
+        mimeType: 'application/zip',
         sessionId: sessionId,
-        path: current.currentPath,
+        sourceDescription: '$sessionId/$targetPath',
       );
-      final after = state.valueOrNull;
-      if (after != null) {
-        final name = after.isAtRoot ? '根目录' : after.currentPath;
-        state = AsyncData(
-          after.copyWith(
-            isFolderDownloading: false,
-            notice: () => '已下载「$name.zip」（${bytes.length} 字节），保存到本地待平台通道接入。',
-          ),
-        );
-      }
+      if (confirmed != true) return false;
+    }
+
+    try {
+      final client = ref.read(apiClientProvider);
+      final folderUrl = Endpoint.folderDownload(
+        sessionId: sessionId,
+        path: (current.isAtRoot || targetPath == '.') ? null : targetPath,
+      ).url(client.baseUrl).toString();
+
+      await ref.read(downloadControllerProvider.notifier).enqueue(
+        sourceUrl: folderUrl,
+        fileName: zipFileName,
+        mimeType: 'application/zip',
+        sessionId: sessionId,
+      );
       return true;
     } on Exception catch (error) {
-      final after = state.valueOrNull;
-      if (after != null) {
-        state = AsyncData(after.copyWith(isFolderDownloading: false));
-      }
       await _setActionError(_messageOf(error));
       return false;
     }

@@ -6,8 +6,10 @@ import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/features/downloads/download_providers.dart';
 import 'package:hermes_ui/features/workspace/workspace_providers.dart';
 
+import '../../helpers/fake_download_service.dart';
 import '../../helpers/fake_workspace_api.dart';
 
 /// 构造测试条目（path 缺省 = name，适配根目录场景）。
@@ -38,6 +40,7 @@ ProviderContainer makeContainer(FakeWorkspaceApi api) {
         ApiClient(baseUrl: 'http://test.local:30002'),
       ),
       workspaceApiFactoryProvider.overrideWithValue((_) => api),
+      ...createDownloadTestOverrides(),
     ],
   );
   addTearDown(container.dispose);
@@ -361,52 +364,58 @@ void main() {
       );
     });
 
-    test('下载：API 调用 + notice 提示字节数；clearNotice 清除', () async {
+    test('下载：构造 Endpoint.rawFile URL 并 enqueue 到下载中心', () async {
       final api = FakeWorkspaceApi(
         directories: {
-          '.': [buildEntry('a.txt')],
+          '.': [buildEntry('a.txt', size: 2048, type: 'text/plain')],
         },
       );
-      api.downloadBytes = Uint8List.fromList(List.filled(2048, 1));
       final container = makeContainer(api);
       await container.read(workspaceControllerProvider('s1').future);
       final notifier = container.read(
         workspaceControllerProvider('s1').notifier,
       );
 
-      final ok = await notifier.download(buildEntry('a.txt'));
+      final ok = await notifier.download(
+        buildEntry('a.txt', size: 2048, type: 'text/plain'),
+      );
       expect(ok, isTrue);
-      expect(api.downloadCalls, ['s1|a.txt']);
-      var state = container
-          .read(workspaceControllerProvider('s1'))
-          .valueOrNull!;
-      expect(state.notice, contains('2048'));
-      expect(state.busyPaths, isEmpty);
 
-      await notifier.clearNotice();
-      state = container.read(workspaceControllerProvider('s1')).valueOrNull!;
-      expect(state.notice, isNull);
+      final tasks = container.read(downloadControllerProvider).tasks;
+      expect(tasks, hasLength(1));
+      final task = tasks.single;
+      expect(task.fileName, 'a.txt');
+      expect(task.mimeType, 'text/plain');
+      expect(task.expectedBytes, 2048);
+      expect(task.sessionId, 's1');
+      expect(task.sourceUrl, contains('/api/file/raw?'));
+      expect(task.sourceUrl, contains('session_id=s1'));
+      expect(task.sourceUrl, contains('path=a.txt'));
     });
 
-    test('下载失败：actionError + busyPaths 复位', () async {
+    test('打包下载目录：构造 Endpoint.folderDownload URL 并 enqueue 到下载中心', () async {
       final api = FakeWorkspaceApi(
         directories: {
           '.': [buildEntry('a.txt')],
         },
       );
-      api.downloadError = NetworkException(NetworkExceptionKind.timedOut);
       final container = makeContainer(api);
       await container.read(workspaceControllerProvider('s1').future);
+      final notifier = container.read(
+        workspaceControllerProvider('s1').notifier,
+      );
 
-      final ok = await container
-          .read(workspaceControllerProvider('s1').notifier)
-          .download(buildEntry('a.txt'));
-      expect(ok, isFalse);
-      final state = container
-          .read(workspaceControllerProvider('s1'))
-          .valueOrNull!;
-      expect(state.actionError, contains('服务器响应超时'));
-      expect(state.busyPaths, isEmpty);
+      final ok = await notifier.downloadFolder();
+      expect(ok, isTrue);
+
+      final tasks = container.read(downloadControllerProvider).tasks;
+      expect(tasks, hasLength(1));
+      final task = tasks.single;
+      expect(task.fileName, 'workspace_s1.zip');
+      expect(task.mimeType, 'application/zip');
+      expect(task.sessionId, 's1');
+      expect(task.sourceUrl, contains('/api/folder/download?'));
+      expect(task.sourceUrl, contains('session_id=s1'));
     });
 
     test('条目无路径：删除/下载 → actionError 且不调 API', () async {
