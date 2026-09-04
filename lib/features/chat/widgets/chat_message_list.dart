@@ -1438,6 +1438,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     : ToolCallGroup(
                         id: g.id,
                         anchorMessageID: g.anchorMessageID,
+                        precedingMessageID: g.precedingMessageID,
+                        isAboveContent: g.isAboveContent,
                         toolCalls: [
                           ToolCall.thinking(liveReasoningText.trim()),
                           ...g.toolCalls,

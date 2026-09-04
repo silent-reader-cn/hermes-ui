@@ -174,12 +174,40 @@ class PersistedToolCall {
 
 /// 工具调用组（Swift: ToolCall.swift `ToolCallGroup`）。纯客户端模型，无 JSON。
 class ToolCallGroup {
-  ToolCallGroup({String? id, this.anchorMessageID, required this.toolCalls})
-    : id = id ?? uuidV4();
+  ToolCallGroup({
+    String? id,
+    this.anchorMessageID,
+    this.precedingMessageID,
+    this.isAboveContent = false,
+    required this.toolCalls,
+  }) : id = id ?? uuidV4();
 
   final String id;
   final String? anchorMessageID;
+
+  /// 前驱正文消息 ID（若本组位于首段正文之前，为 null；若位于某正文之后，为该正文消息 ID）。
+  final String? precedingMessageID;
+
+  /// 是否渲染在该消息正文「上方」（首段文本之前的思考/工具组，或聚合开关开启时的整回合大卡）。
+  final bool isAboveContent;
+
   final List<ToolCall> toolCalls;
+
+  ToolCallGroup copyWith({
+    String? id,
+    String? anchorMessageID,
+    String? precedingMessageID,
+    bool? isAboveContent,
+    List<ToolCall>? toolCalls,
+  }) {
+    return ToolCallGroup(
+      id: id ?? this.id,
+      anchorMessageID: anchorMessageID ?? this.anchorMessageID,
+      precedingMessageID: precedingMessageID ?? this.precedingMessageID,
+      isAboveContent: isAboveContent ?? this.isAboveContent,
+      toolCalls: toolCalls ?? this.toolCalls,
+    );
+  }
 
   /// Hermex 风格的活动摘要：显示少量工具名，其余折叠为 +N。
   String get activityTitle {
@@ -234,11 +262,15 @@ class ToolCallGroup {
   /// 实时组：id = `live-tools-<anchor ?? unanchored>`。
   static ToolCallGroup live({
     String? anchorMessageID,
+    String? precedingMessageID,
+    bool isAboveContent = false,
     required List<ToolCall> toolCalls,
   }) {
     return ToolCallGroup(
       id: 'live-tools-${anchorMessageID ?? 'unanchored'}',
       anchorMessageID: anchorMessageID,
+      precedingMessageID: precedingMessageID,
+      isAboveContent: isAboveContent,
       toolCalls: toolCalls,
     );
   }
@@ -287,88 +319,243 @@ class ToolCallGroup {
     );
   }
 
-  /// 思考融合：把消息里的 reasoning 转成「思考子卡行」并入工具组。
+  /// 思考融合：把消息里的 reasoning 与工具调用按事件时间线区间归入工具组。
   ///
-  /// 思考降级为工具卡的子卡后，think/tool 穿插调用合并为同一张卡：
-  /// - 组 anchor 消息带 reasoning → think 行插在组首（同消息内思考先于工具）；
-  /// - 只有思考没有工具的消息 → 补一个纯思考组（[ToolCall.thinking] 单行）。
-  /// 聚合（adjacent/byTurn）合并组时 think 行随 [toolCalls] 顺序保留，
-  /// 组内行序即事件时间线。
+  /// 时间线模型（真实事件序）：
+  /// think(m1) → text(m1) → tools(m1) → think(m2) → text(m2) → tools(m2) → …
+  /// text 是唯一分隔符：
+  /// - 首段 text 之前的 think(m1) → 独立组，isAboveContent = true，挂首条正文上方；
+  /// - text(m1) 与 text(m2) 之间的 tools(m1) + think(m2) → 合并一张卡，isAboveContent = false，
+  ///   锚到 m1 下方，组内行序为 tools(m1) 在前、think(m2) 在后；
+  /// - 末段 text 之后的 tools(mN) → 独立组，isAboveContent = false，挂末条正文下方。
   static List<ToolCallGroup> withThinkingRows({
     required List<ToolCallGroup> groups,
     required List<ChatMessage> messages,
     int? messageOffset,
     bool hideThinking = false,
   }) {
-    if (hideThinking) return groups;
-    final reasoningByAnchor = <String, String>{};
+    if (messages.isEmpty) return groups;
+
+    final turnKeysByAssistantAnchor =
+        TranscriptTurnClassifier.assistantTurnKeysByAnchorID(
+          messages,
+          messageOffset: messageOffset,
+        );
+
+    // 索引各 assistant 消息与其关联的 raw groups
+    final rawGroupsByAnchor = <String, List<ToolCallGroup>>{};
+    for (final group in groups) {
+      final anchor = group.anchorMessageID;
+      if (anchor != null) {
+        rawGroupsByAnchor.putIfAbsent(anchor, () => []).add(group);
+      }
+    }
+
+    final turns = <String, List<_AssistantMsgInfo>>{};
     for (var i = 0; i < messages.length; i++) {
       final message = messages[i];
       if (message.role != 'assistant') continue;
-      final reasoning = message.reasoning?.trim();
-      if (reasoning == null || reasoning.isEmpty) continue;
       final anchor = TranscriptTurnClassifier.anchorID(
         message,
         at: i,
         messageOffset: messageOffset,
       );
-      reasoningByAnchor[anchor] = reasoning;
+      final turnKey = turnKeysByAssistantAnchor[anchor] ?? 'turn:default';
+      final hasText = message.content?.trim().isNotEmpty == true;
+      final reasoning = message.reasoning?.trim();
+      final msgToolGroups = [
+        ...?rawGroupsByAnchor[anchor],
+        if (message.messageId != null && message.messageId != anchor)
+          ...?rawGroupsByAnchor[message.messageId!],
+      ];
+
+      turns
+          .putIfAbsent(turnKey, () => [])
+          .add(
+            _AssistantMsgInfo(
+              index: i,
+              message: message,
+              anchor: anchor,
+              turnKey: turnKey,
+              hasText: hasText,
+              reasoning: (reasoning != null && reasoning.isNotEmpty)
+                  ? reasoning
+                  : null,
+              toolGroups: msgToolGroups,
+            ),
+          );
     }
-    if (reasoningByAnchor.isEmpty) return groups;
 
     final result = <ToolCallGroup>[];
-    final anchorsWithToolGroups = <String>{};
+    final handledRawGroupIds = <String>{};
+
+    for (final turnMessages in turns.values) {
+      final textMessages = turnMessages.where((m) => m.hasText).toList();
+
+      if (textMessages.isEmpty) {
+        // 回合内无任何可见文本：全部非文本事件进入同一区间（Interval 0）
+        final calls = <ToolCall>[];
+        String? preferredId;
+        final targetAnchor = turnMessages.first.anchor;
+
+        for (final m in turnMessages) {
+          if (!hideThinking && m.reasoning != null) {
+            calls.add(ToolCall.thinking(m.reasoning!));
+          }
+          for (final tg in m.toolGroups) {
+            handledRawGroupIds.add(tg.id);
+            preferredId ??= tg.id;
+            calls.addAll(tg.toolCalls);
+          }
+        }
+
+        if (calls.isNotEmpty) {
+          result.add(
+            ToolCallGroup(
+              id: preferredId ?? 'persisted-think-$targetAnchor',
+              anchorMessageID: targetAnchor,
+              precedingMessageID: null,
+              isAboveContent: true,
+              toolCalls: _uniqueToolCalls(calls),
+            ),
+          );
+        }
+        continue;
+      }
+
+      // 回合内存在可见文本：按文本切分区间
+      // Interval 0: 首段文本之前
+      // Interval j (1..textMessages.length - 1): textMessages[j-1] 与 textMessages[j] 之间
+      // Interval last: textMessages.last 之后
+      final intervalCount = textMessages.length + 1;
+      final intervalCalls = List.generate(intervalCount, (_) => <ToolCall>[]);
+      final intervalPreferredIds = List<String?>.filled(intervalCount, null);
+
+      final firstTextIdx = textMessages.first.index;
+      final lastTextIdx = textMessages.last.index;
+
+      for (final m in turnMessages) {
+        // 1) reasoning：在 m 自身文本之前
+        if (!hideThinking && m.reasoning != null) {
+          final int thinkInterval;
+          if (m.index <= firstTextIdx) {
+            thinkInterval = 0;
+          } else {
+            var prevTextIdx = 0;
+            for (var j = 0; j < textMessages.length; j++) {
+              if (textMessages[j].index < m.index) {
+                prevTextIdx = j;
+              } else {
+                break;
+              }
+            }
+            thinkInterval = prevTextIdx + 1;
+          }
+          intervalCalls[thinkInterval].add(ToolCall.thinking(m.reasoning!));
+        }
+
+        // 2) tools：在 m 自身文本之后
+        if (m.toolGroups.isNotEmpty) {
+          final int toolsInterval;
+          if (m.index < firstTextIdx) {
+            toolsInterval = 0;
+          } else if (m.index >= lastTextIdx) {
+            toolsInterval = textMessages.length;
+          } else {
+            var prevTextIdx = 0;
+            for (var j = 0; j < textMessages.length; j++) {
+              if (textMessages[j].index <= m.index) {
+                prevTextIdx = j;
+              } else {
+                break;
+              }
+            }
+            toolsInterval = prevTextIdx + 1;
+          }
+
+          for (final tg in m.toolGroups) {
+            handledRawGroupIds.add(tg.id);
+            intervalPreferredIds[toolsInterval] ??= tg.id;
+            intervalCalls[toolsInterval].addAll(tg.toolCalls);
+          }
+        }
+      }
+
+      // 组装生成的区间组
+      for (var intervalIdx = 0; intervalIdx < intervalCount; intervalIdx++) {
+        final calls = intervalCalls[intervalIdx];
+        if (calls.isEmpty) continue;
+
+        if (intervalIdx == 0) {
+          final targetAnchor = textMessages.first.anchor;
+          result.add(
+            ToolCallGroup(
+              id: intervalPreferredIds[0] ?? 'persisted-think-$targetAnchor',
+              anchorMessageID: targetAnchor,
+              precedingMessageID: null,
+              isAboveContent: true,
+              toolCalls: _uniqueToolCalls(calls),
+            ),
+          );
+        } else {
+          final prevText = textMessages[intervalIdx - 1];
+          // 若本区间有 raw 工具组，保留其原始锚点（渲染位置等价：卡片仍在前段
+          // 正文之后，且 metadata 路径的空正文携带消息行得以按既有契约保留）。
+          final preferredId = intervalPreferredIds[intervalIdx];
+          final rawAnchor = preferredId == null
+              ? null
+              : groups.firstWhere((g) => g.id == preferredId).anchorMessageID;
+          final targetAnchor = rawAnchor ?? prevText.anchor;
+          result.add(
+            ToolCallGroup(
+              id:
+                  preferredId ??
+                  (intervalIdx < textMessages.length
+                      ? 'persisted-tools-${prevText.anchor}'
+                      : 'persisted-tools-trailing-${prevText.anchor}'),
+              anchorMessageID: targetAnchor,
+              precedingMessageID: prevText.anchor,
+              isAboveContent: false,
+              toolCalls: _uniqueToolCalls(calls),
+            ),
+          );
+        }
+      }
+    }
+
+    // 保留未被 assistant 消息映射到的 raw groups
     for (final group in groups) {
-      final anchor = group.anchorMessageID;
-      if (anchor != null) anchorsWithToolGroups.add(anchor);
-      final reason = anchor == null ? null : reasoningByAnchor[anchor];
-      if (reason != null && reason.isNotEmpty) {
-        result.add(
-          ToolCallGroup(
-            id: group.id,
-            anchorMessageID: group.anchorMessageID,
-            toolCalls: [ToolCall.thinking(reason), ...group.toolCalls],
-          ),
-        );
-      } else {
+      if (!handledRawGroupIds.contains(group.id)) {
         result.add(group);
       }
     }
-    // 纯思考消息（无工具调用）→ 补纯思考组（think 行单行）。
-    for (final entry in reasoningByAnchor.entries) {
-      if (!anchorsWithToolGroups.contains(entry.key)) {
-        result.add(
-          ToolCallGroup(
-            id: 'persisted-think-${entry.key}',
-            anchorMessageID: entry.key,
-            toolCalls: [ToolCall.thinking(entry.value)],
-          ),
-        );
-      }
-    }
+
     return result;
   }
 
-  /// 主组 + 兜底组按 anchor 合并（Swift `merging`）。
+  /// 主组 + 兜底组按 anchor 及区间方向合并（Swift `merging`）。
   static List<ToolCallGroup> merging({
     required List<ToolCallGroup> primaryGroups,
     required List<ToolCallGroup> fallbackGroups,
   }) {
     final merged = List<ToolCallGroup>.from(primaryGroups);
-    final groupIndexesByAnchor = <String, int>{};
+    final groupIndexesByKey = <String, int>{};
     for (var i = 0; i < primaryGroups.length; i++) {
-      final anchor = primaryGroups[i].anchorMessageID;
-      if (anchor != null) groupIndexesByAnchor[anchor] = i;
+      final g = primaryGroups[i];
+      if (g.anchorMessageID != null) {
+        groupIndexesByKey['${g.anchorMessageID}:${g.isAboveContent}'] = i;
+      }
     }
 
     for (final fallbackGroup in fallbackGroups) {
       final anchorMessageID = fallbackGroup.anchorMessageID;
-      final groupIndex = anchorMessageID == null
+      final key = anchorMessageID == null
           ? null
-          : groupIndexesByAnchor[anchorMessageID];
+          : '$anchorMessageID:${fallbackGroup.isAboveContent}';
+      final groupIndex = key == null ? null : groupIndexesByKey[key];
       if (groupIndex == null) {
-        if (anchorMessageID != null) {
-          groupIndexesByAnchor[anchorMessageID] = merged.length;
+        if (key != null) {
+          groupIndexesByKey[key] = merged.length;
         }
         merged.add(fallbackGroup);
         continue;
@@ -378,6 +565,8 @@ class ToolCallGroup {
       merged[groupIndex] = ToolCallGroup(
         id: existingGroup.id,
         anchorMessageID: existingGroup.anchorMessageID,
+        precedingMessageID: existingGroup.precedingMessageID,
+        isAboveContent: existingGroup.isAboveContent,
         toolCalls: _mergingToolCalls(
           primaryToolCalls: existingGroup.toolCalls,
           fallbackToolCalls: fallbackGroup.toolCalls,
@@ -398,6 +587,8 @@ class ToolCallGroup {
         return ToolCallGroup(
           id: group.id,
           anchorMessageID: group.anchorMessageID,
+          precedingMessageID: group.precedingMessageID,
+          isAboveContent: group.isAboveContent,
           toolCalls: _uniqueToolCalls(group.toolCalls),
         );
       }).toList();
@@ -418,9 +609,8 @@ class ToolCallGroup {
           messageOffset: messageOffset,
         );
 
-    // 聚合组统一锚到「回合内最早出现的 assistant 消息」（而非各自类别的首条），
-    // 使同回合的思考组与工具组挂到同一条消息 → 气泡内思考卡渲染在工具卡上方。
     final earliestAssistantAnchorByTurnKey = <String, String>{};
+    final firstTextAssistantAnchorByTurnKey = <String, String>{};
     for (var i = 0; i < messages.length; i++) {
       final message = messages[i];
       if (message.role != 'assistant') continue;
@@ -432,6 +622,9 @@ class ToolCallGroup {
       final turnKey = turnKeysByAssistantMessageID[anchor];
       if (turnKey != null) {
         earliestAssistantAnchorByTurnKey.putIfAbsent(turnKey, () => anchor);
+        if (message.content?.trim().isNotEmpty == true) {
+          firstTextAssistantAnchorByTurnKey.putIfAbsent(turnKey, () => anchor);
+        }
       }
     }
 
@@ -472,10 +665,23 @@ class ToolCallGroup {
     });
 
     return mergedGroups.map((builder) {
-      final turnAnchor = earliestAssistantAnchorByTurnKey[builder.turnKey];
+      final firstTextAnchor =
+          firstTextAssistantAnchorByTurnKey[builder.turnKey];
+      final earliestAnchor = earliestAssistantAnchorByTurnKey[builder.turnKey];
+      final turnAnchor =
+          firstTextAnchor ?? earliestAnchor ?? builder.anchorMessageID;
+
+      // 卡位 = 组内第一个事件在时间线上的实际位置
+      // 聚合开关开启时，若回合首个事件为思考或首组位于正文上方，大卡钉在首条正文上方。
+      final isAbove =
+          builder.isAboveContent ||
+          (builder.toolCalls.isNotEmpty && builder.toolCalls.first.isThinking);
+
       return ToolCallGroup(
         id: builder.id,
-        anchorMessageID: turnAnchor ?? builder.anchorMessageID,
+        anchorMessageID: turnAnchor,
+        precedingMessageID: isAbove ? null : turnAnchor,
+        isAboveContent: isAbove,
         toolCalls: _uniqueToolCalls(builder.toolCalls),
       );
     }).toList();
@@ -483,9 +689,8 @@ class ToolCallGroup {
 
   /// 相邻聚合（聚合开关关闭时的语义：不等于完全不聚合）。
   ///
-  /// 同一回合内，仅当相邻两组之间**没有**带可见文本或推理的 assistant 消息
-  /// （text/think 打断）时才合并为一张卡；被打断则保持分离，
-  /// 最终呈现 text / think / tools 穿插布局。
+  /// 同一回合内，仅当相邻两组之间**没有**带可见文本的 assistant 消息打断
+  /// 且卡位方向一致时才合并为一张卡；被打断则保持分离，呈现穿插布局。
   static List<ToolCallGroup> coalescingAdjacent(
     List<ToolCallGroup> groups, {
     required List<ChatMessage> messages,
@@ -496,6 +701,8 @@ class ToolCallGroup {
         return ToolCallGroup(
           id: group.id,
           anchorMessageID: group.anchorMessageID,
+          precedingMessageID: group.precedingMessageID,
+          isAboveContent: group.isAboveContent,
           toolCalls: _uniqueToolCalls(group.toolCalls),
         );
       }).toList();
@@ -511,10 +718,7 @@ class ToolCallGroup {
           i;
     }
 
-    // 不打断（可视作“相邻”）的辅助判定：区间 (prev, cur) 内是否存在
-    // 带可见文本的 assistant 消息（仅 text 打断：思考段不打断工具组，
-    // think/tool 互相穿插时工具调用照常合并，与关闭聚合语义一致）。
-    bool hasTextOrThinkBetween(int prevIndex, int curIndex) {
+    bool hasTextBetween(int prevIndex, int curIndex) {
       for (var k = prevIndex + 1; k < curIndex; k++) {
         if (k < 0 || k >= messages.length) continue;
         final message = messages[k];
@@ -522,6 +726,23 @@ class ToolCallGroup {
         if (message.content?.trim().isNotEmpty == true) return true;
       }
       return false;
+    }
+
+    // 时间线新语义：后组锚点消息**自身**带可见正文时，该正文位于两组之间
+    // （组钉在「该段正文之后」），同样是分隔符，不得合并。
+    final textAnchorIDs = <String>{};
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      if (message.content?.trim().isNotEmpty == true) {
+        textAnchorIDs.add(
+          TranscriptTurnClassifier.anchorID(
+            message,
+            at: i,
+            messageOffset: messageOffset,
+          ),
+        );
+      }
     }
 
     final merged = <ToolCallGroup>[];
@@ -542,6 +763,11 @@ class ToolCallGroup {
         final ib = anchorIndexes[b] ?? (1 << 62) - groupOrderIndexes[b]!;
         final cmp = ia.compareTo(ib);
         if (cmp != 0) return cmp;
+        final ga = groups.firstWhere((g) => g.id == a);
+        final gb = groups.firstWhere((g) => g.id == b);
+        if (ga.isAboveContent != gb.isAboveContent) {
+          return ga.isAboveContent ? -1 : 1;
+        }
         return (groupOrderIndexes[a] ?? 0).compareTo(groupOrderIndexes[b] ?? 0);
       });
 
@@ -559,7 +785,10 @@ class ToolCallGroup {
           currentAnchorIndex != null &&
           currentAnchorIndex >= 0 &&
           anchorIndex >= 0 &&
-          !hasTextOrThinkBetween(currentAnchorIndex, anchorIndex);
+          current.isAboveContent == group.isAboveContent &&
+          !hasTextBetween(currentAnchorIndex, anchorIndex) &&
+          !(anchorIndex != currentAnchorIndex &&
+              textAnchorIDs.contains(group.anchorMessageID));
       if (canMerge) {
         current = _mergingToolCallGroup(current, group);
         continue;
@@ -574,6 +803,8 @@ class ToolCallGroup {
       return ToolCallGroup(
         id: group.id,
         anchorMessageID: group.anchorMessageID,
+        precedingMessageID: group.precedingMessageID,
+        isAboveContent: group.isAboveContent,
         toolCalls: _uniqueToolCalls(group.toolCalls),
       );
     }).toList();
@@ -922,6 +1153,8 @@ class ToolCallGroup {
     return ToolCallGroup(
       id: base.id,
       anchorMessageID: base.anchorMessageID,
+      precedingMessageID: base.precedingMessageID,
+      isAboveContent: base.isAboveContent,
       toolCalls: _mergingToolCalls(
         primaryToolCalls: base.toolCalls,
         fallbackToolCalls: other.toolCalls,
@@ -1115,15 +1348,24 @@ class ToolCallGroup {
     return other is ToolCallGroup &&
         other.id == id &&
         other.anchorMessageID == anchorMessageID &&
+        other.precedingMessageID == precedingMessageID &&
+        other.isAboveContent == isAboveContent &&
         deepEquals(other.toolCalls, toolCalls);
   }
 
   @override
-  int get hashCode => Object.hash(id, anchorMessageID, deepHash(toolCalls));
+  int get hashCode => Object.hash(
+    id,
+    anchorMessageID,
+    precedingMessageID,
+    isAboveContent,
+    deepHash(toolCalls),
+  );
 
   @override
   String toString() {
     return 'ToolCallGroup(id: $id, anchorMessageID: $anchorMessageID, '
+        'preceding: $precedingMessageID, isAbove: $isAboveContent, '
         'toolCalls: ${toolCalls.length})';
   }
 }
@@ -1143,6 +1385,26 @@ class ToolCallGroupAnchorLookup {
   }
 }
 
+class _AssistantMsgInfo {
+  const _AssistantMsgInfo({
+    required this.index,
+    required this.message,
+    required this.anchor,
+    required this.turnKey,
+    required this.hasText,
+    required this.reasoning,
+    required this.toolGroups,
+  });
+
+  final int index;
+  final ChatMessage message;
+  final String anchor;
+  final String turnKey;
+  final bool hasText;
+  final String? reasoning;
+  final List<ToolCallGroup> toolGroups;
+}
+
 /// 回合组构建器（Swift 私有 `TurnGroupBuilder`）。
 class _TurnGroupBuilder {
   _TurnGroupBuilder({
@@ -1151,18 +1413,27 @@ class _TurnGroupBuilder {
     required this.anchorIndex,
   }) : id = group.id,
        anchorMessageID = group.anchorMessageID,
+       precedingMessageID = group.precedingMessageID,
+       isAboveContent = group.isAboveContent,
        toolCalls = List<ToolCall>.from(group.toolCalls);
 
   final String turnKey;
   String id;
   String? anchorMessageID;
+  String? precedingMessageID;
+  bool isAboveContent;
   int anchorIndex;
   List<ToolCall> toolCalls;
 
   void append(ToolCallGroup group, {required int anchorIndex}) {
-    if (anchorIndex < this.anchorIndex) {
+    if (anchorIndex < this.anchorIndex ||
+        (anchorIndex == this.anchorIndex &&
+            group.isAboveContent &&
+            !isAboveContent)) {
       id = group.id;
       anchorMessageID = group.anchorMessageID;
+      precedingMessageID = group.precedingMessageID;
+      isAboveContent = group.isAboveContent;
       this.anchorIndex = anchorIndex;
     }
     toolCalls += group.toolCalls;

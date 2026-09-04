@@ -141,30 +141,29 @@ void main() {
         '首先读取 readme.md 文件，然后整理核心要点。',
       );
 
-      expect(state.completedToolCallGroups, hasLength(1));
-      expect(state.completedToolCallGroups.single.anchorMessageID, 'a1');
-      // 新语义：思考融合为工具卡子卡（think 行前置 + 工具行）。
-      expect(state.completedToolCallGroups.single.toolCalls, hasLength(2));
+      // #54 时间线语义（聚合关）：思考段钉在正文上方独立成卡，
+      // 工具在其所属正文下方——同消息的 think/tool 不再强并一组。
+      expect(state.completedToolCallGroups, hasLength(2));
+      expect(state.completedToolCallGroups[0].anchorMessageID, 'a1');
+      expect(state.completedToolCallGroups[0].isAboveContent, isTrue);
       expect(
-        state.completedToolCallGroups.single.toolCalls.first.isThinking,
+        state.completedToolCallGroups[0].toolCalls.single.isThinking,
         isTrue,
       );
+      expect(state.completedToolCallGroups[1].anchorMessageID, 'a1');
+      expect(state.completedToolCallGroups[1].isAboveContent, isFalse);
       expect(
-        state.completedToolCallGroups.single.toolCalls.last.name,
+        state.completedToolCallGroups[1].toolCalls.single.name,
         'read_file',
       );
 
-      // 新语义：思考融合为工具卡子卡（think 行前置）。
       final toolGroups = container.read(toolGroupsProvider('sess-history-1'));
-      expect(toolGroups, hasLength(1));
-      expect(toolGroups.single.anchorMessageID, 'a1');
-      expect(toolGroups.single.toolCalls, hasLength(2));
-      expect(toolGroups.single.toolCalls.first.isThinking, isTrue);
+      expect(toolGroups, hasLength(2));
       expect(
-        toolGroups.single.toolCalls.first.thinking,
+        toolGroups[0].toolCalls.single.thinking,
         '首先读取 readme.md 文件，然后整理核心要点。',
       );
-      expect(toolGroups.single.toolCalls.last.name, 'read_file');
+      expect(toolGroups[1].toolCalls.single.name, 'read_file');
     });
   });
 
@@ -267,15 +266,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 历史消息正文、工具卡片已渲染（思考已融合为工具卡子卡行）。
+      // 历史消息正文、工具卡片已渲染。#54 时间线语义（聚合关）：
+      // 思考卡钉在正文上方 + 工具卡在正文下方 = 两张折叠卡。
       expect(find.text('帮我分析代码'), findsOneWidget);
       expect(find.text('分析完毕，无任何错误。'), findsOneWidget);
-      expect(find.text('思考'), findsNothing); // 工具卡默认收起，think 行未渲染
-      expect(find.byType(ToolCallGroupCard), findsOneWidget);
+      expect(find.text('思考'), findsNothing); // 两卡默认收起，think 行未渲染
+      expect(find.byType(ToolCallGroupCard), findsNWidgets(2));
       expect(find.text(fullThinking), findsNothing);
 
-      // 展开工具卡 → think 行出现
-      await tester.tap(find.byType(ToolCallGroupCard));
+      // 展开首张卡（思考卡，位于正文上方）→ think 行出现
+      await tester.tap(find.byType(ToolCallGroupCard).first);
       await tester.pumpAndSettle();
       expect(find.text('思考'), findsOneWidget);
       expect(find.text(fullThinking), findsNothing); // think 行默认收起（预览）

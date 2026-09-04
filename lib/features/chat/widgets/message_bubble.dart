@@ -300,12 +300,25 @@ class _AssistantContent extends StatelessWidget {
     // 不再独立渲染思考卡。
     final distinctTools = _distinctToolGroups(toolGroups);
 
-    // 统一间距模型：各区块（选中上下文卡片 / 正文 / 工具卡(思考+工具) / 速率）
+    // 统一间距模型：各区块（选中上下文卡片 / 正文上方工具思考卡 / 正文 / 正文下方工具思考卡 / 速率）
     // 之间固定 [kMessageSectionGap]。
+    // 忠实事件时间线（推翻 b0db568「卡恒在正文下方」与 ecf850e「卡恒在上方」）：
+    // - 首段 text 之前的 think(m1) 或聚合大卡：isAboveContent=true，渲染在正文上方；
+    // - text 之后的 tools(m_i) + think(m_{i+1})：isAboveContent=false，渲染在正文下方。
     final sections = <Widget>[];
     if (blocks.isNotEmpty) {
       sections.add(SelectedContextCardGroup(blocks: blocks));
     }
+
+    // 正文上方卡片（首段文本之前的思考/工具，或开启聚合开关时的整回合大卡）
+    for (final group in distinctTools) {
+      if (group.isAboveContent) {
+        sections.add(
+          ToolCallGroupCard(group: group, hideThinking: hideThinking),
+        );
+      }
+    }
+
     if (parsedContent.isNotEmpty) {
       if (isStreaming && !hasMediaMarker) {
         sections.add(
@@ -340,11 +353,16 @@ class _AssistantContent extends StatelessWidget {
         );
       }
     }
-    // text 是唯一分隔符：正文之后的非 text 信息（think/tool）合并为工具卡，
-    // 排在文本下方；不预设「思考→工具→文本」之类的固定流序。
+
+    // 正文下方卡片（正文之后的工具调用及相邻思考）
     for (final group in distinctTools) {
-      sections.add(ToolCallGroupCard(group: group, hideThinking: hideThinking));
+      if (!group.isAboveContent) {
+        sections.add(
+          ToolCallGroupCard(group: group, hideThinking: hideThinking),
+        );
+      }
     }
+
     if (message.turnTps != null) {
       sections.add(
         Text(
@@ -373,7 +391,7 @@ class _AssistantContent extends StatelessWidget {
     final out = <ToolCallGroup>[];
     for (final g in groups) {
       final key =
-          '${g.anchorMessageID ?? ''}:${g.toolCalls.map((t) => t.id).join(',')}';
+          '${g.anchorMessageID ?? ''}:${g.isAboveContent}:${g.toolCalls.map((t) => t.id).join(',')}';
       if (seen.add(key)) out.add(g);
     }
     return out;
