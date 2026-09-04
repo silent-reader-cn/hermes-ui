@@ -71,6 +71,7 @@ abstract interface class FileSystemAdapter {
   Future<String> readString(String path);
   String get localAppData;
   bool get isWindows;
+  String get executablePath;
 }
 
 /// 生产环境默认文件系统适配器。
@@ -104,11 +105,20 @@ class SystemFileSystemAdapter implements FileSystemAdapter {
 
   @override
   bool get isWindows => Platform.isWindows;
+
+  @override
+  String get executablePath => Platform.resolvedExecutable;
 }
 
 /// 本机已安装检测接口。
 abstract interface class InstallDetector {
-  /// 是否已安装 Hermes（满足 hermes 命令在 PATH 中或 %LOCALAPPDATA%\hermes\hermes-agent 存在）。
+  /// 是否已安装 Hermes Agent（满足 hermes 命令在 PATH 中或 %LOCALAPPDATA%\hermes\hermes-agent 存在）。
+  Future<bool> agentInstalled();
+
+  /// 探测内置 WebUI 是否可用（`<exe目录>\webui\server\server.py` 存在）。
+  bool bundledWebuiAvailable();
+
+  /// 兼容旧方法：等同于 [agentInstalled]。
   Future<bool> isInstalled();
 
   /// %LOCALAPPDATA% 基础路径。
@@ -157,7 +167,17 @@ class DefaultInstallDetector implements InstallDetector {
   String get webuiPath => '$hermesHomePath\\webui';
 
   @override
-  Future<bool> isInstalled() async {
+  bool bundledWebuiAvailable() {
+    if (!isWindows) return false;
+    final exe = fileSystem.executablePath;
+    if (exe.isEmpty) return false;
+    final exeDir = File(exe).parent.path;
+    final serverPy = '$exeDir\\webui\\server\\server.py';
+    return fileSystem.fileExists(serverPy);
+  }
+
+  @override
+  Future<bool> agentInstalled() async {
     // 1. 优先检查 %LOCALAPPDATA%\hermes\hermes-agent 目录是否存在
     if (fileSystem.directoryExists(hermesAgentPath)) {
       return true;
@@ -176,6 +196,9 @@ class DefaultInstallDetector implements InstallDetector {
 
     return false;
   }
+
+  @override
+  Future<bool> isInstalled() => agentInstalled();
 }
 
 /// [InstallDetector] 全局 Provider（测试中可通过 override 注入 fake）。

@@ -11,18 +11,15 @@ import '../../core/connections/server_connection.dart';
 import '../../core/install/install_detector.dart';
 import '../../core/install/llm_onboarding.dart';
 import '../../core/install/powershell_installer.dart';
-import '../../core/install/webui_bootstrap.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import 'widgets/wide_dual_pane.dart';
 
 /// 安装步骤定义。
 enum InstallStageKey {
   prereqs,
   agent,
   agentDeps,
-  webuiDeploy,
-  webuiDeps,
-  webuiServer,
   llmConfig,
 }
 
@@ -116,12 +113,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         return l10n.installGuideStageAgent;
       case InstallStageKey.agentDeps:
         return l10n.installGuideStageDeps;
-      case InstallStageKey.webuiDeploy:
-        return l10n.installGuideStageWebui;
-      case InstallStageKey.webuiDeps:
-        return '${l10n.installGuideStageWebui} 依赖';
-      case InstallStageKey.webuiServer:
-        return l10n.installGuideStageServer;
       case InstallStageKey.llmConfig:
         return l10n.installGuideStageModel;
     }
@@ -135,12 +126,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         return l10n.installGuideStageAgentDesc;
       case InstallStageKey.agentDeps:
         return l10n.installGuideStageDepsDesc;
-      case InstallStageKey.webuiDeploy:
-        return l10n.installGuideStageWebuiDesc;
-      case InstallStageKey.webuiDeps:
-        return '安装 pyyaml 及 cryptography 等基础库';
-      case InstallStageKey.webuiServer:
-        return l10n.installGuideStageServerDesc;
       case InstallStageKey.llmConfig:
         return l10n.installGuideStageModelDesc;
     }
@@ -197,12 +182,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
 
   Future<bool> _executeStage(InstallStageKey stage) async {
     final psInstaller = ref.read(powershellInstallerProvider);
-    final webuiBootstrap = ref.read(webuiBootstrapProvider);
 
     try {
       switch (stage) {
         case InstallStageKey.prereqs:
-          _appendLog('===> [1/6] 检查安装环境与下载官方 install.ps1 ...');
+          _appendLog('===> [1/4] 检查安装环境与下载官方 install.ps1 ...');
           await psInstaller.ensureScriptCached();
           await for (final event in psInstaller.runStage('prereqs')) {
             _handleInstallerEvent(event);
@@ -214,7 +198,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           return true;
 
         case InstallStageKey.agent:
-          _appendLog('===> [2/6] 拉取与安装 Hermes Agent 源码 ...');
+          _appendLog('===> [2/4] 拉取与安装 Hermes Agent 源码 ...');
           await for (final event in psInstaller.runStage('agent')) {
             _handleInstallerEvent(event);
             if (event.type == InstallerEventType.stageFailure) {
@@ -225,7 +209,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           return true;
 
         case InstallStageKey.agentDeps:
-          _appendLog('===> [3/6] 安装 Agent Python 虚拟环境及依赖 ...');
+          _appendLog('===> [3/4] 安装 Agent Python 虚拟环境及依赖 ...');
           await for (final event in psInstaller.runStage('deps')) {
             _handleInstallerEvent(event);
             if (event.type == InstallerEventType.stageFailure) {
@@ -233,43 +217,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               return false;
             }
           }
-          return true;
-
-        case InstallStageKey.webuiDeploy:
-          _appendLog('===> [4/6] 克隆官方 WebUI (nesquena/hermes-webui) ...');
-          await for (final event in webuiBootstrap.cloneOrPull()) {
-            _handleInstallerEvent(event);
-            if (event.type == InstallerEventType.stageFailure) {
-              _failureReason = event.reason ?? '克隆 WebUI 失败';
-              return false;
-            }
-          }
-          return true;
-
-        case InstallStageKey.webuiDeps:
-          _appendLog('===> [5/6] 安装 WebUI requirements.txt 依赖 ...');
-          await for (final event in webuiBootstrap.installDependencies()) {
-            _handleInstallerEvent(event);
-            if (event.type == InstallerEventType.stageFailure) {
-              _failureReason = event.reason ?? '安装 WebUI 依赖失败';
-              return false;
-            }
-          }
-          return true;
-
-        case InstallStageKey.webuiServer:
-          _appendLog('===> [6/6] 启动 WebUI server.py 后台服务并轮询 /health ...');
-          await webuiBootstrap.startServer(port: 8787);
-          _appendLog('服务进程已在后台拉起，正在等待 http://127.0.0.1:8787/health 就绪...');
-          final isHealthy = await webuiBootstrap.waitForHealth(
-            baseUrl: 'http://127.0.0.1:8787',
-            timeout: const Duration(seconds: 30),
-          );
-          if (!isHealthy) {
-            _failureReason = '健康检查超时，WebUI 未能正常响应 /health';
-            return false;
-          }
-          _appendLog('WebUI 服务健康检查通过！(http://127.0.0.1:8787)');
           return true;
 
         case InstallStageKey.llmConfig:
@@ -475,31 +422,55 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
   }
 
   Widget _buildMainContent(AppLocalizations l10n) {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              _buildHeader(l10n),
-              const SizedBox(height: 16),
-              _buildProgressBar(),
-              const SizedBox(height: 20),
-              if (_phase == GuidePhase.configuringModel)
-                _buildModelConfigForm(l10n)
-              else
-                _buildStageList(l10n),
-              if (_phase == GuidePhase.failed) ...[
+    return WideDualPane(
+      wideChild: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.all(24),
+        children: [
+          _buildHeader(l10n),
+          const SizedBox(height: 16),
+          _buildProgressBar(),
+          const SizedBox(height: 20),
+          if (_phase == GuidePhase.configuringModel)
+            _buildModelConfigForm(l10n)
+          else
+            _buildStageList(l10n),
+          if (_phase == GuidePhase.failed) ...[
+            const SizedBox(height: 16),
+            _buildErrorCard(l10n),
+          ],
+          const SizedBox(height: 20),
+          _buildLogConsole(l10n),
+          const SizedBox(height: 20),
+          _buildBottomBar(l10n),
+        ],
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                _buildHeader(l10n),
                 const SizedBox(height: 16),
-                _buildErrorCard(l10n),
+                _buildProgressBar(),
+                const SizedBox(height: 20),
+                if (_phase == GuidePhase.configuringModel)
+                  _buildModelConfigForm(l10n)
+                else
+                  _buildStageList(l10n),
+                if (_phase == GuidePhase.failed) ...[
+                  const SizedBox(height: 16),
+                  _buildErrorCard(l10n),
+                ],
+                const SizedBox(height: 20),
+                _buildLogConsole(l10n),
               ],
-              const SizedBox(height: 20),
-              _buildLogConsole(l10n),
-            ],
+            ),
           ),
-        ),
-        _buildBottomBar(l10n),
-      ],
+          _buildBottomBar(l10n),
+        ],
+      ),
     );
   }
 

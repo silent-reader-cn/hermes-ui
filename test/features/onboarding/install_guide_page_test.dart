@@ -34,7 +34,13 @@ class _FakeInstallDetector implements InstallDetector {
   String get webuiPath => r'C:\Users\Admin\AppData\Local\hermes\webui';
 
   @override
-  Future<bool> isInstalled() async => false;
+  Future<bool> agentInstalled() async => false;
+
+  @override
+  bool bundledWebuiAvailable() => false;
+
+  @override
+  Future<bool> isInstalled() async => agentInstalled();
 }
 
 class _FakePowershellInstaller implements PowershellInstaller {
@@ -83,25 +89,6 @@ class _FakeWebuiBootstrap implements WebuiBootstrap {
   _FakeWebuiBootstrap();
 
   final List<String> executed = [];
-
-  @override
-  Stream<InstallerEvent> cloneOrPull({String? repoUrl, String? webuiPath}) async* {
-    executed.add('clone');
-    yield InstallerEvent.stageStart('webui_clone', title: 'Clone');
-    yield InstallerEvent.stageSuccess('webui_clone');
-  }
-
-  @override
-  Stream<InstallerEvent> installDependencies({String? webuiPath, String? pythonPath}) async* {
-    executed.add('deps');
-    yield InstallerEvent.stageStart('webui_deps', title: 'Deps');
-    yield InstallerEvent.stageSuccess('webui_deps');
-  }
-
-  @override
-  Future<void> startServer({String? webuiPath, String? pythonPath, int port = 8787, String? logFilePath}) async {
-    executed.add('startServer');
-  }
 
   @override
   Future<bool> waitForHealth({String baseUrl = 'http://127.0.0.1:8787', Duration timeout = const Duration(seconds: 30), Duration interval = const Duration(milliseconds: 500)}) async {
@@ -197,8 +184,6 @@ void main() {
     expect(find.text('环境检查'), findsOneWidget);
     expect(find.text('拉取 Agent'), findsOneWidget);
     expect(find.text('安装依赖'), findsOneWidget);
-    expect(find.text('部署 WebUI'), findsOneWidget);
-    expect(find.text('启动服务'), findsOneWidget);
     expect(find.text('配置模型'), findsOneWidget);
     expect(find.byKey(const ValueKey('install-guide-start-btn')), findsOneWidget);
   });
@@ -219,7 +204,7 @@ void main() {
 
     // 验证调度执行了全部安装步骤
     expect(psInstaller.stagesExecuted, ['prereqs', 'agent', 'deps']);
-    expect(webuiBootstrap.executed, containsAll(['clone', 'deps', 'startServer', 'health']));
+    expect(webuiBootstrap.executed, isEmpty);
 
     // 成功切换到模型配置表单
     expect(find.text('选择模型服务商'), findsOneWidget);

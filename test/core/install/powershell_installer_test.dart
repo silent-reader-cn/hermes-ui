@@ -101,6 +101,8 @@ class _FakeFileSystemAdapter implements FileSystemAdapter {
   String localAppData = r'C:\Users\Admin\AppData\Local';
   @override
   bool isWindows = true;
+  @override
+  String executablePath = r'C:\Program Files\Hermes\hermes.exe';
 
   @override
   bool directoryExists(String path) => false;

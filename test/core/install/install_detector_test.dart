@@ -38,22 +38,28 @@ class _FakeProcessExecutor implements ProcessExecutor {
 class _FakeFileSystemAdapter implements FileSystemAdapter {
   _FakeFileSystemAdapter({
     this.existingDirs = const {},
+    this.existingFiles = const {},
     this.localAppData = r'C:\Users\Admin\AppData\Local',
     this.isWindows = true,
+    this.executablePath = r'C:\Program Files\Hermes\hermes.exe',
   });
 
   Set<String> existingDirs;
+  Set<String> existingFiles;
   final Set<String> _files = {};
   @override
   String localAppData;
   @override
   bool isWindows;
+  @override
+  String executablePath;
 
   @override
   bool directoryExists(String path) => existingDirs.contains(path);
 
   @override
-  bool fileExists(String path) => _files.contains(path);
+  bool fileExists(String path) =>
+      existingFiles.contains(path) || _files.contains(path);
 
   @override
   Future<void> createDirectory(String path, {bool recursive = true}) async {
@@ -144,6 +150,56 @@ void main() {
 
       final installed = await detector.isInstalled();
       expect(installed, isFalse);
+    });
+
+    test('agentInstalled 与 isInstalled 语义一致', () async {
+      final fs = _FakeFileSystemAdapter(
+        existingDirs: {r'C:\Users\Admin\AppData\Local\hermes\hermes-agent'},
+      );
+      final detector = DefaultInstallDetector(
+        fileSystem: fs,
+        processExecutor: _FakeProcessExecutor(),
+      );
+
+      expect(await detector.agentInstalled(), isTrue);
+      expect(await detector.isInstalled(), isTrue);
+    });
+
+    test('bundledWebuiAvailable：Windows 且 server.py 存在 → 返回 true', () {
+      final fs = _FakeFileSystemAdapter(
+        isWindows: true,
+        executablePath: r'C:\Program Files\Hermes\hermes.exe',
+        existingFiles: {
+          r'C:\Program Files\Hermes\webui\server\server.py',
+        },
+      );
+      final detector = DefaultInstallDetector(fileSystem: fs);
+
+      expect(detector.bundledWebuiAvailable(), isTrue);
+    });
+
+    test('bundledWebuiAvailable：Windows 但 server.py 不存在 → 返回 false', () {
+      final fs = _FakeFileSystemAdapter(
+        isWindows: true,
+        executablePath: r'C:\Program Files\Hermes\hermes.exe',
+        existingFiles: {},
+      );
+      final detector = DefaultInstallDetector(fileSystem: fs);
+
+      expect(detector.bundledWebuiAvailable(), isFalse);
+    });
+
+    test('bundledWebuiAvailable：非 Windows 平台 → 恒返回 false', () {
+      final fs = _FakeFileSystemAdapter(
+        isWindows: false,
+        executablePath: r'/opt/hermes/hermes',
+        existingFiles: {
+          r'/opt/hermes/webui/server/server.py',
+        },
+      );
+      final detector = DefaultInstallDetector(fileSystem: fs);
+
+      expect(detector.bundledWebuiAvailable(), isFalse);
     });
   });
 }

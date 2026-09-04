@@ -8,10 +8,10 @@ import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
-import '../../core/install/install_detector.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import 'onboarding_providers.dart';
+import 'widgets/wide_dual_pane.dart';
 
 /// 健康检查状态（提交按钮阶段一触发，随后刷新认证模式）。
 enum _HealthState { idle, checking, ok, failed }
@@ -57,26 +57,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   String _loginMessage = '';
   // 提交按钮 loading / 防重入锁：阶段一检查、阶段二验证、保存共用。
   bool _busy = false;
-  // 本机已安装状态（仅在 Windows 下为 false 时展示本地部署入口）。
-  bool _isInstalled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_checkInstalled());
-  }
-
-  Future<void> _checkInstalled() async {
-    final detector = ref.read(installDetectorProvider);
-    if (!detector.isWindows) {
-      if (mounted) setState(() => _isInstalled = true);
-      return;
-    }
-    final installed = await detector.isInstalled();
-    if (mounted) {
-      setState(() => _isInstalled = installed);
-    }
-  }
 
   @override
   void dispose() {
@@ -340,25 +320,47 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
       child: SafeArea(
-        child: Column(
-          children: [
-            Expanded(child: _buildForm()),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: SizedBox(
-                width: double.infinity,
-                child: CupertinoButton.filled(
-                  key: const ValueKey('onboarding-connect'),
-                  onPressed: _busy ? null : () => unawaited(_onSubmit()),
-                  child: _busy
-                      ? const CupertinoActivityIndicator()
-                      : Text(l10n.connectAndSave),
+        child: WideDualPane(
+          wideChild: _buildWideForm(l10n),
+          child: Column(
+            children: [
+              Expanded(child: _buildForm()),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: _buildSubmitButton(l10n),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSubmitButton(AppLocalizations l10n) {
+    return CupertinoButton.filled(
+      key: const ValueKey('onboarding-connect'),
+      onPressed: _busy ? null : () => unawaited(_onSubmit()),
+      child: _busy
+          ? const CupertinoActivityIndicator()
+          : Text(l10n.connectAndSave),
+    );
+  }
+
+  Widget _buildWideForm(AppLocalizations l10n) {
+    return ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.all(24),
+      children: [
+        ..._buildFormFields(l10n),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: _buildSubmitButton(l10n),
+        ),
+      ],
     );
   }
 
@@ -366,103 +368,40 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     final l10n = AppLocalizations.of(context);
     return ListView(
       padding: const EdgeInsets.all(24),
-      children: [
-        Text(
-          l10n.connectYourHermexServer,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          l10n.inputServerAddressHint,
-          style: TextStyle(
-            fontSize: 15,
-            color: secondaryText.resolveFrom(context),
-          ),
-        ),
-        const SizedBox(height: 24),
-        CupertinoTextField(
-          key: const ValueKey('onboarding-url'),
-          controller: _urlController,
-          placeholder: 'https://hermes.example.com:30002',
-          autocorrect: false,
-          keyboardType: TextInputType.url,
-          padding: const EdgeInsets.all(12),
-        ),
-        const SizedBox(height: 8),
-        _buildHealthStatus(),
-        if (_health == _HealthState.ok) ...[
-          const SizedBox(height: 20),
-          _buildAuthSection(),
-        ],
-        if (!_isInstalled && ref.read(installDetectorProvider).isWindows) ...[
-          const SizedBox(height: 32),
-          _buildLocalDeployBanner(),
-        ],
-      ],
+      children: _buildFormFields(l10n),
     );
   }
 
-  /// Windows 本机一键安装部署入口 Banner（仅未安装且 Windows 平台显示）。
-  Widget _buildLocalDeployBanner() {
-    final l10n = AppLocalizations.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground
-            .resolveFrom(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
-          width: 0.5,
+  List<Widget> _buildFormFields(AppLocalizations l10n) {
+    return [
+      Text(
+        l10n.connectYourHermexServer,
+        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        l10n.inputServerAddressHint,
+        style: TextStyle(
+          fontSize: 15,
+          color: secondaryText.resolveFrom(context),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                CupertinoIcons.desktopcomputer,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                l10n.installGuideLocalDeploy,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            l10n.installGuideLocalDeployDesc,
-            style: TextStyle(
-              fontSize: 13,
-              color: secondaryText.resolveFrom(context),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: CupertinoButton(
-              key: const ValueKey('onboarding-local-deploy-btn'),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              color: CupertinoColors.activeBlue,
-              onPressed: () => context.push('/install-guide'),
-              child: Text(
-                l10n.installGuideStartInstall,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: CupertinoColors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
+      const SizedBox(height: 24),
+      CupertinoTextField(
+        key: const ValueKey('onboarding-url'),
+        controller: _urlController,
+        placeholder: 'https://hermes.example.com:30002',
+        autocorrect: false,
+        keyboardType: TextInputType.url,
+        padding: const EdgeInsets.all(12),
       ),
-    );
+      const SizedBox(height: 8),
+      _buildHealthStatus(),
+      if (_health == _HealthState.ok) ...[
+        const SizedBox(height: 20),
+        _buildAuthSection(),
+      ],
+    ];
   }
 
   /// URL 下方的健康检查状态（成功绿勾 / 失败红文案 / 检查中进度）。

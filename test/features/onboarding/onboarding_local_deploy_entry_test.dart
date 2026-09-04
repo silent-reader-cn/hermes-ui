@@ -28,6 +28,12 @@ class _FakeInstallDetector implements InstallDetector {
   String get webuiPath => r'C:\Users\Admin\AppData\Local\hermes\webui';
 
   @override
+  Future<bool> agentInstalled() async => installed;
+
+  @override
+  bool bundledWebuiAvailable() => false;
+
+  @override
   Future<bool> isInstalled() async => installed;
 }
 
@@ -56,25 +62,9 @@ void main() {
     );
   }
 
-  testWidgets('Windows 且未安装 Hermes → OnboardingPage 显示「本机部署」入口并可跳转', (tester) async {
+  testWidgets('OnboardingPage 已裁撤旧版本地部署 Banner（Windows 未安装时也不再展示）', (tester) async {
     detector.isWindows = true;
     detector.installed = false;
-
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
-
-    expect(find.text('本机部署'), findsOneWidget);
-    expect(find.byKey(const ValueKey('onboarding-local-deploy-btn')), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('onboarding-local-deploy-btn')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Windows 本机部署向导'), findsAtLeastNWidgets(1));
-  });
-
-  testWidgets('Windows 但已安装 Hermes → OnboardingPage 不显示「本机部署」入口', (tester) async {
-    detector.isWindows = true;
-    detector.installed = true;
 
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
@@ -83,7 +73,7 @@ void main() {
     expect(find.byKey(const ValueKey('onboarding-local-deploy-btn')), findsNothing);
   });
 
-  testWidgets('非 Windows 平台 → OnboardingPage 不显示「本机部署」入口', (tester) async {
+  testWidgets('非 Windows 平台 → OnboardingPage 亦不显示「本机部署」入口', (tester) async {
     detector.isWindows = false;
     detector.installed = false;
 
