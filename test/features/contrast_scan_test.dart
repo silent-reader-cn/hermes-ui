@@ -361,12 +361,18 @@ final Set<String> allKnownIssues = <String>{
 
 /// 组装带主题的 CupertinoApp 壳。
 Widget _app(Brightness brightness, Widget home) {
-  return CupertinoApp(theme: buildCupertinoTheme(brightness), home: home);
+  return CupertinoApp(
+    // 对比度扫描须与金照/全局测试同语言（zh），壳未传 locale 会走平台 en。
+    locale: const Locale('zh'),
+    theme: buildCupertinoTheme(brightness),
+    home: home,
+  );
 }
 
 /// 组装带主题的 CupertinoApp.router 壳。
 Widget _routerApp(Brightness brightness, Widget child) {
   return CupertinoApp.router(
+    locale: const Locale('zh'),
     theme: buildCupertinoTheme(brightness),
     routerConfig: GoRouter(
       initialLocation: '/',
@@ -445,7 +451,9 @@ Future<void> _scanPage(
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    // localeModeProvider.build() 会把 LocaleResolver 打回 system 再读 prefs；
+    // 钉 zh 与 flutter_test_config 全局基线一致，防 provider 首建翻转。
+    SharedPreferences.setMockInitialValues({'app_locale_mode': 'zh'});
   });
 
   testWidgets('onboarding 页面对比度扫描（浅/深）', (tester) async {

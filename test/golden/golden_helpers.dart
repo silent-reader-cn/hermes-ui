@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
+import 'package:hermes_ui/app/locale/locale_resolver.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 
 /// 截图逻辑尺寸（iPhone 12/13/14 尺寸 390x844，2x 物理像素）。
@@ -59,6 +61,13 @@ Future<void> _registerFontFile(String family, String path) async {
 /// 以 [brightness] 主题挂载 [page]（注入 [overrides]），等异步加载与入场动画
 /// 结算后返回（适合接 matchesGoldenFile 截图）。
 ///
+/// 金照统一钉死中文 locale（L2 起服务层文案随 LocaleResolver 变化，
+/// 而金照基线在中文环境生成；CI/开发机系统语言不影响）。
+/// 双保险：test/flutter_test_config.dart 已全局钉，这里显式再钉一次防单文件绕过。
+void pinGoldenLocale() => LocaleResolver.reset(mode: AppLocaleMode.zh);
+
+/// 泵入被测页面并结算动画。
+///
 /// [size] 缺省为竖屏 [goldenSurfaceSize]；需要横屏的页面（如 workspace）
 /// 可传 [goldenLandscapeSize]。
 Future<void> pumpHermesPage(
@@ -68,6 +77,7 @@ Future<void> pumpHermesPage(
   List<Override> overrides = const [],
   Size size = goldenSurfaceSize,
 }) async {
+  pinGoldenLocale();
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = goldenDevicePixelRatio;
   addTearDown(tester.view.reset);
