@@ -3,7 +3,18 @@ name: Flutter CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      webui_ref:
+        description: 'hermes-webui git ref (branch, tag, or commit sha)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze-test:
@@ -49,3 +60,56 @@ jobs:
           python-version: '3.12'
       - run: pip install -r tools/fake_gateway/requirements.txt
       - run: python tools/fake_gateway/smoke_test.py
+
+  windows-installer:
+    runs-on: windows-latest
+    needs: analyze-test
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # Primary: choco install innosetup. Alternative: choco install jrsoftware.iscc
+          choco install innosetup --no-progress -y
+          if (Test-Path "C:\Program Files (x86)\Inno Setup 6") {
+            "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding ascii
+          }
+
+      - name: Flutter build windows
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Assemble WebUI sidecar bundle
+        shell: pwsh
+        run: |
+          $webuiRef = "${{ github.event.inputs.webui_ref }}"
+          if ($webuiRef) {
+            powershell -ExecutionPolicy Bypass -File scripts/packaging/build_webui_bundle.ps1 -WebuiRef $webuiRef
+          } else {
+            powershell -ExecutionPolicy Bypass -File scripts/packaging/build_webui_bundle.ps1
+          }
+
+      - name: Compile Inno Setup installer
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/packaging/build_installer.ps1
+
+      - name: Upload Windows Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-ui-windows-setup
+          path: build/installer/*.exe
+          if-no-files-found: error
+
