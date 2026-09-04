@@ -57,7 +57,12 @@ try {
     # -------------------------------------------------------------------------
     $pythonZip = Join-Path $tempDir "python-$PythonVersion-embed-amd64.zip"
     $pythonOrgUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
-    $nugetFallbackUrl = "https://api.nuget.org/v3-flatcontainer/python/$PythonVersion/python.$PythonVersion.nupkg"
+    # Mirror fallback: npmmirror hosts the SAME official embeddable zip
+    # (verified reachable from CN networks; python.org itself is often
+    # blocked/slow here). NOTE: the old nuget.org "python" package fallback was
+    # removed - its tools\ payload is a FULL install WITHOUT pythonXX._pth,
+    # so Step 2 below could never succeed from that route.
+    $npmmirrorFallbackUrl = "https://registry.npmmirror.com/-/binary/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
 
     $downloadSuccess = $false
 
@@ -92,24 +97,18 @@ try {
     }
 
     if (-not $downloadSuccess) {
-        # Fallback route: nuget.org python package
-        Log-Info "Primary download failed. Attempting fallback from nuget.org: $nugetFallbackUrl"
-        $nupkgPath = Join-Path $tempDir "python.$PythonVersion.nupkg"
+        # Fallback route: npmmirror official-embeddable mirror (same zip).
+        Log-Info "Primary download failed. Attempting fallback from npmmirror: $npmmirrorFallbackUrl"
         try {
-            curl.exe -f -sSL "$nugetFallbackUrl" -o "$nupkgPath"
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $nupkgPath)) {
-                Log-Info "Extracting python package from NuGet..."
-                $nugetExtractDir = Join-Path $tempDir "nuget_extracted"
-                Expand-Archive -Path $nupkgPath -DestinationPath $nugetExtractDir -Force
-                $toolsDir = Join-Path $nugetExtractDir "tools"
-                if (Test-Path $toolsDir) {
-                    Copy-Item -Path "$toolsDir\*" -Destination $pythonDir -Recurse -Force
-                    $downloadSuccess = $true
-                    Log-Success "Extracted Python from NuGet tools payload"
-                }
+            curl.exe -f -sSL "$npmmirrorFallbackUrl" -o "$pythonZip"
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $pythonZip) -and ((Get-Item $pythonZip).Length -gt 1000000)) {
+                $downloadSuccess = $true
+                Log-Success "Downloaded Python embed from npmmirror"
+            } else {
+                Log-Warn "npmmirror download failed with exit code $LASTEXITCODE"
             }
         } catch {
-            Log-Warn "Fallback NuGet download failed: $_"
+            Log-Warn "Fallback npmmirror download failed: $_"
         }
     }
 
@@ -243,15 +242,31 @@ try {
     }
 
     Log-Info "Bootstrapping pip in embedded Python..."
-    & $pythonExe $getPipPy --no-warn-script-location
+    # Default route (pypi.org) works on GitHub runners; on CN networks pypi.org
+    # is unreachable -> retry once against the Tsinghua TUNA mirror.
+    $indexArgs = @()
+    & $pythonExe $getPipPy --no-warn-script-location @indexArgs
     if ($LASTEXITCODE -ne 0) {
-        Log-Err "Failed to bootstrap pip"
-        exit 1
+        Log-Warn "pip bootstrap via pypi.org failed; retrying with TUNA mirror"
+        $indexArgs = @("-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
+        & $pythonExe $getPipPy --no-warn-script-location @indexArgs
+        if ($LASTEXITCODE -ne 0) {
+            Log-Err "Failed to bootstrap pip (both pypi.org and TUNA mirror)"
+            exit 1
+        }
     }
 
     Log-Info "Installing pyyaml and cryptography into site-packages..."
-    & $pythonExe -m pip install --target "$sitePackagesDir" "pyyaml>=6.0" "cryptography>=42.0"
-    if ($LASTEXITCODE -ne 0) {
+    & $pythonExe -m pip install --target "$sitePackagesDir" @indexArgs "pyyaml>=6.0" "cryptography>=42.0"
+    if ($LASTEXITCODE -ne 0 -and $indexArgs.Count -eq 0) {
+        Log-Warn "pip install via pypi.org failed; retrying with TUNA mirror"
+        $indexArgs = @("-i", "https://pypi.tuna.tsinghua.edu.cn/simple")
+        & $pythonExe -m pip install --target "$sitePackagesDir" @indexArgs "pyyaml>=6.0" "cryptography>=42.0"
+        if ($LASTEXITCODE -ne 0) {
+            Log-Err "Failed to install dependencies via pip (both routes)"
+            exit 1
+        }
+    } elseif ($LASTEXITCODE -ne 0) {
         Log-Err "Failed to install dependencies via pip"
         exit 1
     }

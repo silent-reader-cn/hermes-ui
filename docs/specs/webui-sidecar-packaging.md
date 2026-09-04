@@ -87,7 +87,9 @@
 - **版本**：Python 3.11.9 (amd64 embeddable zip)
 - **下载源与容灾策略**：
   - 首选：`https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip`
-  - 兜底：NuGet FlatContainer `https://api.nuget.org/v3-flatcontainer/python/3.11.9/python.3.11.9.nupkg`
+  - 兜底：npmmirror 官方 embeddable 镜像 `https://registry.npmmirror.com/-/binary/python/3.11.9/python-3.11.9-embed-amd64.zip`（与 python.org 同一 zip；国内网络实测可达）
+  - pip 引导/依赖安装：pypi.org 失败自动重试清华 TUNA 镜像（`-i https://pypi.tuna.tsinghua.edu.cn/simple`）
+  - ~~NuGet `python` 包兜底~~ 已移除：其 `tools\` 载荷为完整版安装（**无 `pythonXX._pth`**），Step 2 必失败，回退路线从不可走通（2026-09-04 审查发现，同日全链实测 npmmirror+TUNA 双回退通过）
   - 构建脚本内置多源下载与自动 fallback 机制
 
 ### 3.2 `python311._pth` 配置与 `site-packages` 启用
