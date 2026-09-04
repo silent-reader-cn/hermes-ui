@@ -190,7 +190,11 @@ void main() {
         const ValueKey('settings-desktop-remember-window'),
       );
 
-      await tester.scrollUntilVisible(minTrayFinder, 50);
+      await tester.scrollUntilVisible(
+        minTrayFinder,
+        50,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.pumpAndSettle();
       await tester.drag(find.byType(ListView), const Offset(0, 100));
       await tester.pumpAndSettle();
