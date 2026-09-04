@@ -301,7 +301,10 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
 
   @override
   Future<void> start() async {
-    // 幂等：若已处于 running 状态，直接返回
+    // 幂等：若已处于 running 状态，直接返回。
+    // 注意语义：自愈退避期间状态保持 running（detail=restarting N），
+    // 此时用户点「启动」会命中本短路——预期行为：watchdog 已在自愈，
+    // 无需重复拉起；UI 侧胶囊显示「重启中」即反馈。
     if (_state.status == SidecarStatus.running) {
       return;
     }

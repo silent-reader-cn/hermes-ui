@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/server_info.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
+import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';
@@ -31,6 +34,63 @@ class _FakeOnboardingApi implements OnboardingServerApi {
   }
 }
 
+
+/// sidecar 配置存储 fake：内存 prefs + 内存 secure storage（免平台通道）。
+class _FakeSidecarSecureStorage implements SidecarSecureStorage {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+}
+
+/// sidecar 服务 fake：记录 start/stop 调用。
+class _RecordingSidecarService implements WebuiSidecarService {
+  SidecarState _state = SidecarState.initial;
+  final StreamController<SidecarState> _controller =
+      StreamController<SidecarState>.broadcast();
+  int startCalls = 0;
+  int stopCalls = 0;
+
+  @override
+  SidecarState get currentState => _state;
+
+  @override
+  Stream<SidecarState> get states => _controller.stream;
+
+  @override
+  Future<void> start() async {
+    startCalls++;
+    _emit(const SidecarState(status: SidecarStatus.running));
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+    _emit(const SidecarState());
+  }
+
+  @override
+  Future<void> restart() async {
+    await stop();
+    await start();
+  }
+
+  void _emit(SidecarState s) {
+    _state = s;
+    _controller.add(s);
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -46,12 +106,22 @@ void main() {
   }
 
   /// 建容器并挂 listener 保证 provider 存活（异步 _load 可靠完成）。
+  /// setBuiltinEnabled 联动 sidecar（决策4），override 内存 fake 免平台通道。
+  _RecordingSidecarService lastSidecar = _RecordingSidecarService();
   ProviderContainer buildContainer() {
+    lastSidecar = _RecordingSidecarService();
     final container = ProviderContainer(
       overrides: [
         connectionStoreProvider.overrideWithValue(
           ConnectionStore(storage: InMemorySecureStorage()),
         ),
+        webuiSidecarConfigStorageProvider.overrideWithValue(
+          WebuiSidecarConfigStorage(
+            prefs: SharedPreferences.getInstance(),
+            secureStorage: _FakeSidecarSecureStorage(),
+          ),
+        ),
+        webuiSidecarServiceProvider.overrideWithValue(lastSidecar),
       ],
     );
     addTearDown(container.dispose);
@@ -169,11 +239,18 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(container.read(activeConnectionProvider), isNull);
 
-      // 重新启用，active 仍为 null（不自动激活）
+      // 停用联动：sidecar 开关关闭 + stop() 被调（决策4）
+      expect(container.read(webuiSidecarConfigProvider).enabled, isFalse);
+      expect(lastSidecar.stopCalls, 1);
+      expect(lastSidecar.startCalls, 0);
+
+      // 重新启用，active 仍为 null（不自动激活）；联动 start()
       await controller.setBuiltinEnabled(true);
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(container.read(connectionsProvider).first.enabled, isTrue);
       expect(container.read(activeConnectionProvider), isNull);
+      expect(container.read(webuiSidecarConfigProvider).enabled, isTrue);
+      expect(lastSidecar.startCalls, 1);
     });
 
     test('switchableConnectionsProvider 排除已停用的 builtin', () async {

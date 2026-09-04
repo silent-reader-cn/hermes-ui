@@ -599,11 +599,21 @@ class TrayManagerService with TrayListener {
   }
 
   /// 销毁托盘服务。
+  /// 注销语言变化监听（dispose 调用，防静态多播表泄漏）。
+  void disposeLocaleListener() {
+    final token = _localeListenerToken;
+    if (token != null) {
+      LocaleResolver.removeListener(token);
+      _localeListenerToken = null;
+    }
+  }
+
   Future<void> dispose() async {
     _menuUpdateThrottleTimer?.cancel();
     _menuUpdateThrottleTimer = null;
     await _sidecarSubscription?.cancel();
     _sidecarSubscription = null;
+    disposeLocaleListener();
 
     if (!isDesktop) return;
 

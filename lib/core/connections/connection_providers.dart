@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/onboarding/onboarding_providers.dart';
+import '../../features/webui_sidecar/webui_sidecar_providers.dart';
 import '../api/api_client.dart';
 import '../api/custom_header.dart';
 import 'connection_store.dart';
@@ -46,9 +47,13 @@ class ConnectionsController extends Notifier<List<ServerConnection>> {
     final index = state.indexWhere((c) => c.id == connection.id);
     if (index < 0) {
       final dup = state.indexWhere(
-        (c) => c.baseUrl.trim().toLowerCase() ==
-            connection.baseUrl.trim().toLowerCase(),
+        (c) =>
+            c.kind != ConnectionKind.builtin &&
+            c.baseUrl.trim().toLowerCase() ==
+                connection.baseUrl.trim().toLowerCase(),
       );
+      // 去重永不指向 builtin 行：否则同 baseUrl 的 remote 会顶替内置连接、
+      // 绕过「builtin 不可删」铁律；builtin 与 remote 允许同 URL 并存。
       if (dup >= 0) {
         target = connection.copyWith(
           id: state[dup].id,
@@ -124,6 +129,21 @@ class ConnectionsController extends Notifier<List<ServerConnection>> {
 
     all[index] = updated;
     state = all;
+
+    // 决策4 联动：「停用」= 关 sidecar 开关并停止内置实例（否则进程照跑、
+    // 下次启动仍自动拉起）；「启用」对称恢复开关并拉起。
+    // 非 Windows/无内置包时 start() 自身置 failed，不抛错，联动安全。
+    try {
+      await ref.read(webuiSidecarConfigProvider.notifier).setEnabled(enabled);
+      final controller = ref.read(webuiSidecarControllerProvider.notifier);
+      if (enabled) {
+        await controller.start();
+      } else {
+        await controller.stop();
+      }
+    } catch (_) {
+      // 联动失败不回滚连接 enabled 态（列表语义为准；sidecar 状态页可见）。
+    }
   }
 
   /// 删除连接；对 kind==builtin 抛 [StateError] 防护（模型层兜底）。

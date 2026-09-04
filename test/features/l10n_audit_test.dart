@@ -44,6 +44,26 @@ void main() {
         reason: '发现硬编码中文 label：\n${violations.join("\n")}',
       );
     });
+
+    test(
+        'title/placeholder/hintText/tooltip/middle 中文零残留'
+        '（豁免：session_list 内部键、memory 死代码）', () {
+      final exemptFragments = [
+        'session_list_providers.dart', // 内部键（_sectionTitle 渲染层映射）
+        'memory_providers.dart', // 死代码（tab 实际渲染走 l10n）
+      ];
+      final violations = _scan(
+        RegExp(
+          r"(title|placeholder|hintText|tooltip|middle):\s*(const\s+)?(Text\(\s*)?'[^']*[一-鿿]",
+        ),
+        excludePathFragments: exemptFragments,
+      );
+      expect(
+        violations,
+        isEmpty,
+        reason: '发现硬编码中文 title/placeholder：\n${violations.join("\n")}',
+      );
+    });
   });
 }
 

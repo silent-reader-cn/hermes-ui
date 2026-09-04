@@ -36,9 +36,11 @@ class LocaleModeController extends Notifier<AppLocaleMode> {
 
   @override
   AppLocaleMode build() {
-    LocaleResolver.updateMode(AppLocaleMode.system);
+    // 初值跟随 LocaleResolver 现态（生产默认 system；测试基线由
+    // test/flutter_test_config.dart 预钉 zh——provider 首建不得翻转它），
+    // prefs 异步加载后 setMode/updateMode 纠正为持久值。
     unawaited(_load());
-    return AppLocaleMode.system;
+    return LocaleResolver.currentMode;
   }
 
   Future<void> _load() async {

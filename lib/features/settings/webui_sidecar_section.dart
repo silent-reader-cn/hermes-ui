@@ -443,7 +443,19 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
         statusText = '● ${l10n.webuiStatusRunning}';
         statusColor = statusGreenText.resolveFrom(context);
         if (state.detail != null && state.detail!.isNotEmpty) {
-          subtitle = state.detail;
+          // P2-11：service 内部 detail 为英文诊断串，UI 消费处映射 l10n。
+          final detail = state.detail!;
+          final lower = detail.toLowerCase();
+          if (lower.contains('takeover')) {
+            subtitle = l10n.webuiDetailTakeover;
+          } else if (lower.contains('restarting')) {
+            final attempt = RegExp(r'(\d+)').firstMatch(detail)?.group(1);
+            subtitle = l10n.webuiDetailRestarting(
+              int.tryParse(attempt ?? '') ?? 0,
+            );
+          } else {
+            subtitle = detail;
+          }
         } else if (state.pid != null) {
           subtitle = 'PID: ${state.pid}';
         }

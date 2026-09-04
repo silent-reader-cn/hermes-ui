@@ -44,15 +44,29 @@ class DesktopLifecycleObserver extends ConsumerStatefulWidget {
 }
 
 class _DesktopLifecycleObserverState
-    extends ConsumerState<DesktopLifecycleObserver> {
+    extends ConsumerState<DesktopLifecycleObserver>
+    with WidgetsBindingObserver {
   GoRouter? _router;
+
+  /// 托盘服务引用（didChangeLocales 刷新菜单用，initDesktop 后非空）。
+  TrayManagerService? _trayService;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initDesktopServices());
     });
+  }
+
+  /// 自动模式下系统语言中途变更 → 刷新托盘菜单（服务层文案经 LocaleResolver
+  /// 取语言，widget 树内文案由 CupertinoApp locale 重建自动刷新，无需额外处理）。
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    if (widget.isDesktop ?? isDesktopPlatform()) {
+      _trayService?.scheduleThrottledUpdateContextMenu();
+    }
   }
 
   Future<void> _initDesktopServices() async {
@@ -64,6 +78,7 @@ class _DesktopLifecycleObserverState
       await titleService.resetTitle();
 
       final trayService = ref.read(trayManagerServiceProvider);
+      _trayService = trayService;
       await trayService.initialize();
 
       final memoryService = ref.read(windowMemoryServiceProvider);
@@ -169,6 +184,7 @@ class _DesktopLifecycleObserverState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     super.dispose();
   }
