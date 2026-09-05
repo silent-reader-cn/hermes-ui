@@ -1913,9 +1913,31 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (append.isEmpty) return false;
       // replay 直连：直接拼接不加分隔符。
     } else {
-      append = currentContent.isEmpty ? text : '\n\n$text';
+      // 1. 整段包含：已展示内容已包含本快照全量 → 吞掉（语义同 replay 分支兜底）
+      if (currentContent.contains(text)) return false;
+
+      // 2. 快照前缀重叠：currentContent 后缀与 text 前缀最大重叠（overlap >= 2 时只追加残余）
+      var overlap = 0;
+      final maxK = currentContent.length < text.length
+          ? currentContent.length
+          : text.length;
+      for (var k = maxK; k >= 2; k--) {
+        if (currentContent.endsWith(text.substring(0, k))) {
+          overlap = k;
+          break;
+        }
+      }
+
+      if (overlap >= 2) {
+        append = text.substring(overlap);
+        // 3. 短片段防误判：残余 append 去空白后为空 → 吞掉
+        if (append.trim().isEmpty) return false;
+      } else {
+        // 4. 未命中任何去重 → 维持现状新段落
+        append = currentContent.isEmpty ? text : '\n\n$text';
+      }
     }
-    // interim 是独立新段落（分隔符 `\n\n` 追加）→ 需建 text 断点；start 由
+    // interim 独立新段落或快照残余拼接：需建 text 断点；start 由
     // _appendToStreamingMessage 内部按缓冲全量取，保证段边界对齐最终 content。
     _appendToStreamingMessage(append, establishPoint: true);
     _markProgress();

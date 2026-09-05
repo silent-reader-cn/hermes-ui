@@ -155,6 +155,20 @@ bool isMessageMatch(ChatMessage local, ChatMessage server) {
     return true;
   }
 
+  // 双方 role == 'user' 且精确相等失败时，追加兜底：归一化匹配
+  if (local.role == 'user' && server.role == 'user') {
+    final normLocal = _normalizeUserContent(localContent);
+    final normServer = _normalizeUserContent(serverContent);
+    if (normLocal == normServer) {
+      final localTs = local.timestamp;
+      final serverTs = server.timestamp;
+      if (localTs != null && serverTs != null && localTs > 0 && serverTs > 0) {
+        return (localTs - serverTs).abs() <= 120.0;
+      }
+      return true;
+    }
+  }
+
   // 5. 本地流式临时 assistant 消息与服务端 assistant 消息匹配（替换占位）
   if (local.role == 'assistant' && _isTempId(localId)) {
     final localTs = local.timestamp;
@@ -180,23 +194,60 @@ bool isMessageMatch(ChatMessage local, ChatMessage server) {
   return false;
 }
 
+/// 剥离服务端注入标记（[Workspace::v1: ...]、[Attached files: ...]、行级占位符），
+/// 归一化展示与比对文本。
+String _normalizeUserContent(String raw) {
+  var text = raw;
+  // 1. 剥离 ^[Workspace::v1: ...] 行（可能带前导换行，容忍转义反斜杠路径与任意后缀）
+  text = text.replaceAll(
+    RegExp(
+      r'^[^\S\r\n]*\[Workspace::v1:[ \t]*[^\]]*\][^\S\r\n]*(?:\r?\n|$)',
+      multiLine: true,
+      caseSensitive: false,
+    ),
+    '',
+  );
+  // 2. 剥离 [Attached files: ...] 段
+  text = text.replaceAll(
+    RegExp(r'\[Attached files:[ \t]*[^\]]*\]', caseSensitive: false),
+    '',
+  );
+  // 3. 剥离行级占位符 [screenshot]、[image]、[attachment]（整行精确匹配才删，防误伤正文）
+  text = text.replaceAll(
+    RegExp(
+      r'^[^\S\r\n]*\[(screenshot|image|attachment)\][^\S\r\n]*(?:\r?\n|$)',
+      multiLine: true,
+      caseSensitive: false,
+    ),
+    '',
+  );
+  // 4. 归一化后 trim 首尾空白
+  return text.trim();
+}
+
 bool _isTempId(String? id) {
   if (id == null || id.isEmpty) return true;
   return id.startsWith('local-') || id.startsWith('stream-');
 }
 
 ChatMessage _patchMessage(ChatMessage local, ChatMessage server) {
-  // 前缀包含去重（chat_spec.md §5.5 最低档）：内容互为前缀时取更长一方
-  // （流式中途 transcript 重载常见「服务端 checkpoint 落后本地已展示内容」，
-  // 取短会让可见文本回缩）。与 done 路径 _mergingLoadedMessages 语义一致。
   var content = server.content;
   final localContent = local.content ?? '';
   final serverContent = server.content ?? '';
-  if (localContent.isNotEmpty &&
+
+  if (server.role == 'user') {
+    final normalized = _normalizeUserContent(serverContent);
+    if (normalized != serverContent) {
+      content = normalized.isNotEmpty ? normalized : local.content;
+    }
+  } else if (localContent.isNotEmpty &&
       serverContent.isNotEmpty &&
       localContent != serverContent &&
       (localContent.startsWith(serverContent) ||
           serverContent.startsWith(localContent))) {
+    // 前缀包含去重（chat_spec.md §5.5 最低档）：内容互为前缀时取更长一方
+    // （流式中途 transcript 重载常见「服务端 checkpoint 落后本地已展示内容」，
+    // 取短会让可见文本回缩）。与 done 路径 _mergingLoadedMessages 语义一致。
     content = localContent.length >= serverContent.length
         ? local.content
         : server.content;
