@@ -132,6 +132,33 @@ void main() {
       expect(find.text('第一步分析整体结构。'), findsNothing);
     });
 
+    testWidgets('1b. #58 胶囊位置：在用户提问气泡下方、最终答复上方', (tester) async {
+      await pumpTurnSession(
+        tester,
+        sessionData: createMultiMessageTurnSession(),
+      );
+
+      final capsuleDy = tester
+          .getTopLeft(find.byKey(const ValueKey('collapsible-process-capsule')))
+          .dy;
+      final userDy = tester.getTopLeft(find.text('帮我审查代码')).dy;
+      final finalDy = tester
+          .getTopLeft(find.text('这是最终的审查报告，一切正常。'))
+          .dy;
+
+      // #58 改判（推翻 #55「胶囊钉回合最上方」）：提问 → 胶囊 → 最终答复
+      expect(
+        capsuleDy,
+        greaterThan(userDy),
+        reason: '#58 胶囊应在用户气泡下方',
+      );
+      expect(
+        capsuleDy,
+        lessThan(finalDy),
+        reason: '#58 胶囊应在最终答复上方',
+      );
+    });
+
     testWidgets('2. 点胶囊展开与再次收起：展开后符合 #54 时间线语义，再次点击回到折叠态', (tester) async {
       await pumpTurnSession(
         tester,

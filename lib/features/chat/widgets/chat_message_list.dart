@@ -189,6 +189,7 @@ class _SafeMarkdownBody extends StatelessWidget {
     // ignore: unused_element_parameter
     this.inlineSyntaxes,
     this.isStreaming = false,
+    this.sessionId,
   });
 
   final String data;
@@ -198,6 +199,7 @@ class _SafeMarkdownBody extends StatelessWidget {
   final bool selectable;
   final List<md.InlineSyntax>? inlineSyntaxes;
   final bool isStreaming;
+  final String? sessionId;
 
   @override
   Widget build(BuildContext context) {
@@ -218,6 +220,13 @@ class _SafeMarkdownBody extends StatelessWidget {
         styleSheet: styleSheet,
         builders: builders,
         inlineSyntaxes: inlineSyntaxes,
+        // #57：live 文本段 MEDIA 链接点击 → 预览/下载
+        onTapLink: (text, href, title) => onChatMarkdownLinkTap(
+          context,
+          link: href,
+          linkText: text,
+          sessionId: sessionId,
+        ),
         // ignore: deprecated_member_use
         imageBuilder: imageBuilder,
       );
@@ -1813,17 +1822,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                 _highlightTargetRenderId != turn.userEntry?.renderId &&
                 _highlightTargetRenderId != turn.finalAssistantEntry?.renderId);
 
-        // 1. 胶囊行置于回合最上方（提问气泡之前）
-        displayItems.add(
-          _CapsuleListItem(
-            turn: turn,
-            isExpanded: isExpanded,
-            toolGroups: turn.allToolGroups(entryToolGroups),
-            intermediateTextCount: turn.intermediateTextCount,
-          ),
-        );
-
-        // 2. 主人提问气泡（常显）
+        // 1. 主人提问气泡（常显，#58：胶囊改钉气泡下方，提问先行）
         if (turn.userEntry != null) {
           displayItems.add(
             _MessageListItem(
@@ -1834,6 +1833,16 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             ),
           );
         }
+
+        // 2. 胶囊行置于提问气泡下方、最终答复上方（#58 改判，推翻 #55「回合最上方」）
+        displayItems.add(
+          _CapsuleListItem(
+            turn: turn,
+            isExpanded: isExpanded,
+            toolGroups: turn.allToolGroups(entryToolGroups),
+            intermediateTextCount: turn.intermediateTextCount,
+          ),
+        );
 
         // 3. 助手消息：中间助手及尾随助手收起时隐藏，最终答复常显（收起时仅露文本）
         final finalEntry = turn.finalAssistantEntry!;
@@ -2621,6 +2630,7 @@ class _LiveTextBlock extends ConsumerWidget {
           data: parsedContent,
           isStreaming: !hasMediaMarker,
           selectable: true,
+          sessionId: sessionId,
           styleSheet: buildAssistantMarkdownStyleSheet(context),
           builders: createAssistantMarkdownBuilders(context),
           // ignore: deprecated_member_use

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/connections/connection_providers.dart';
@@ -273,6 +274,104 @@ class ChatInlineMediaWidget extends ConsumerWidget {
       sessionId: sessionId,
     );
   }
+}
+
+/// 聊天正文 markdown 链接点击统一处理（#57）。
+///
+/// `MEDIA:` 标记会被 [ChatMediaParser] 转成 `[📎 name](url)` 形式的链接，
+/// 但 flutter_markdown 默认 `onTapLink` 是 no-op——本函数接到三处
+/// MarkdownBody（用户气泡 / 助手气泡 / live 文本段）：
+/// - 图片 → 直接开 Lightbox 大图预览；
+/// - 其余（apk/文档/音视频/任意文件）→ 开附件预览页（内含 #53 下载确认框
+///   与下载中心入队链路），点击即可下载；
+/// - http/https 普通网页链接 → url_launcher 外部打开；失败给可见提示。
+Future<void> onChatMarkdownLinkTap(
+  BuildContext context, {
+  required String? link,
+  String? linkText,
+  String? sessionId,
+}) async {
+  if (link == null || link.isEmpty || !context.mounted) return;
+  final uri = Uri.tryParse(link);
+  final isHttp = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  final kind = MessageAttachment.mediaKindForName(link);
+
+  // 图片：Lightbox 预览（内部含下载按钮）。
+  if (kind == MessageMediaKind.image) {
+    showAttachmentPreview(
+      context,
+      resolvedUrl: link,
+      name: linkText,
+      altText: linkText,
+      isImage: true,
+      sessionId: sessionId,
+    );
+    return;
+  }
+
+  // 明确的媒体/文档类型（apk、zip、txt…）：附件预览页 → 确认框 → 下载中心。
+  if (kind != MessageMediaKind.file) {
+    showAttachmentPreview(
+      context,
+      resolvedUrl: link,
+      name: linkText,
+      altText: linkText,
+      isImage: false,
+      sessionId: sessionId,
+    );
+    return;
+  }
+
+  // 纯 file 类：无扩展名的普通网页链接 → url_launcher 外部打开；
+  // 带文件扩展名的 http(s) 直链（如 https://host/app.apk）→ 应用内预览下载。
+  if (isHttp) {
+    final lastSegment = uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.last
+        : '';
+    final looksLikeFile = lastSegment.contains('.');
+    if (!looksLikeFile) {
+      try {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched && context.mounted) {
+          _showLinkFallbackPreview(context, link, linkText, sessionId);
+        }
+      } catch (_) {
+        if (context.mounted) {
+          _showLinkFallbackPreview(context, link, linkText, sessionId);
+        }
+      }
+      return;
+    }
+  }
+
+  showAttachmentPreview(
+    context,
+    resolvedUrl: link,
+    name: linkText,
+    altText: linkText,
+    isImage: false,
+    sessionId: sessionId,
+  );
+}
+
+void _showLinkFallbackPreview(
+  BuildContext context,
+  String link,
+  String? linkText,
+  String? sessionId,
+) {
+  // 外部浏览器启动失败：退到应用内预览页（可见，不静默吞点击）。
+  showAttachmentPreview(
+    context,
+    resolvedUrl: link,
+    name: linkText,
+    altText: linkText,
+    isImage: false,
+    sessionId: sessionId,
+  );
 }
 
 /// 打开附件预览全屏弹窗（图片走 Lightbox 大图，非图展示文档信息与下载操作）。

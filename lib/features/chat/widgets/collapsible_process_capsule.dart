@@ -1,12 +1,18 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/status_colors.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
 
-/// 回合完成后过程折叠胶囊组件（active.md #55）。
+/// 回合完成后过程折叠胶囊组件（active.md #55，样式改版 #59，位置改版 #58）。
 ///
 /// 将已完成回合中的思考块、工具调用卡、中间文本等过程项收敛为单行摘要胶囊，
 /// 默认收起（首次折叠，会话内记忆），点击可展开/收起详情。
+///
+/// #59 形态定位：**轻量摘要条**——与 [ToolCallGroupCard]（实底灰盒 + 边框 +
+/// 绿勾状态图标，tool_call_card.dart）刻意拉开层级：无背景盒、无边框，
+/// 左侧 3px 圆角竖条 accent + 常规字重灰字 + 弱化箭头。胶囊只在回合完成态
+/// 出现，状态图标与工具卡绿勾重复，故移除。
 class CollapsibleProcessCapsule extends StatefulWidget {
   const CollapsibleProcessCapsule({
     super.key,
@@ -77,154 +83,136 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final effectiveExpanded = widget.isExpanded ?? _expanded;
+
+    final titleStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w400,
+      color: secondaryText.resolveFrom(context),
+    );
+
+    return SizedBox(
+      key: const ValueKey('collapsible-process-capsule'),
+      width: double.infinity,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // #59 左侧竖条 accent：标识「这是一段可展开的过程摘要」，
+          // 与工具卡（实底盒）形成层级区分。
+          Container(
+            width: 3,
+            height: 32,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: statusBlueText.resolveFrom(context),
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    // 可用标题宽度：容器宽 - 左右内边距 - 箭头 - 间距（- 耗时）
+                    var availableWidth = constraints.maxWidth - 20 - 12 - 6;
+                    final trailingDuration = _trailingDuration();
+                    if (trailingDuration != null) {
+                      availableWidth -= 44;
+                    }
+                    if (availableWidth < 0) availableWidth = 0;
+
+                    final title = formatProcessCapsuleSummary(
+                      toolGroups: widget.toolGroups,
+                      intermediateTextCount: widget.intermediateTextCount,
+                      hideThinking: widget.hideThinking,
+                      l10n: l10n,
+                      maxWidth: constraints.maxWidth.isFinite
+                          ? availableWidth
+                          : null,
+                      style: titleStyle,
+                      textScaler: MediaQuery.textScalerOf(context),
+                      textDirection: Directionality.of(context),
+                    );
+
+                    return Semantics(
+                      button: true,
+                      label: effectiveExpanded
+                          ? l10n.turn55CollapseProcess
+                          : l10n.turn55ExpandProcess,
+                      child: GestureDetector(
+                        key: const ValueKey('process-capsule-header'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _toggle,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: titleStyle,
+                                ),
+                              ),
+                              if (trailingDuration != null) ...[
+                                Text(
+                                  trailingDuration,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: secondaryText.resolveFrom(context),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Icon(
+                                effectiveExpanded
+                                    ? CupertinoIcons.chevron_up
+                                    : CupertinoIcons.chevron_down,
+                                size: 12,
+                                color: CupertinoColors.tertiaryLabel
+                                    .resolveFrom(context),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (effectiveExpanded && widget.children.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [const SizedBox(height: 4), ...widget.children],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 耗时尾缀（无思考且总耗时 > 0 时展示）。
+  String? _trailingDuration() {
     final allCalls = [for (final g in widget.toolGroups) ...g.toolCalls];
-
-    final hasFailed =
-        widget.toolGroups.any((g) => g.hasFailedTool) ||
-        allCalls.any((c) => c.isError == true);
-    final isRunning = widget.toolGroups.any((g) => !g.isComplete);
-
+    final hasThinking =
+        !widget.hideThinking && allCalls.any((c) => c.isThinking);
     final durationSeconds = allCalls
         .map((c) => c.duration)
         .whereType<double>()
         .fold<double>(0.0, (a, b) => a + b);
-    final hasThinking =
-        !widget.hideThinking && allCalls.any((c) => c.isThinking);
-
-    final statusColor = hasFailed
-        ? CupertinoColors.systemRed.resolveFrom(context)
-        : (isRunning
-              ? CupertinoColors.activeBlue.resolveFrom(context)
-              : CupertinoColors.systemGreen.resolveFrom(context));
-
-    final trailingDuration = (durationSeconds > 0 && !hasThinking)
+    return (durationSeconds > 0 && !hasThinking)
         ? '${durationSeconds.toStringAsFixed(1)}s'
         : null;
-
-    final titleStyle = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-      color: CupertinoColors.label.resolveFrom(context),
-    );
-
-    return Container(
-      key: const ValueKey('collapsible-process-capsule'),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey6.resolveFrom(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // 计算可用标题宽度：容器宽 - 内外边距 - 图标与间距 - 耗时 - 箭头
-              var availableWidth = constraints.maxWidth - 20 - 14 - 6 - 12 - 6;
-              if (trailingDuration != null) {
-                availableWidth -= 40;
-              }
-              if (availableWidth < 0) availableWidth = 0;
-
-              final title = formatProcessCapsuleSummary(
-                toolGroups: widget.toolGroups,
-                intermediateTextCount: widget.intermediateTextCount,
-                hideThinking: widget.hideThinking,
-                l10n: l10n,
-                maxWidth: constraints.maxWidth.isFinite ? availableWidth : null,
-                style: titleStyle,
-                textScaler: MediaQuery.textScalerOf(context),
-                textDirection: Directionality.of(context),
-              );
-
-              return Semantics(
-                button: true,
-                label: effectiveExpanded
-                    ? l10n.turn55CollapseProcess
-                    : l10n.turn55ExpandProcess,
-                child: GestureDetector(
-                  key: const ValueKey('process-capsule-header'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _toggle,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        if (isRunning)
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CupertinoActivityIndicator(
-                              radius: 7,
-                              color: CupertinoColors.activeBlue.resolveFrom(
-                                context,
-                              ),
-                            ),
-                          )
-                        else
-                          Icon(
-                            hasFailed
-                                ? CupertinoIcons.exclamationmark_triangle_fill
-                                : CupertinoIcons.checkmark_circle_fill,
-                            size: 14,
-                            color: statusColor,
-                          ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: titleStyle,
-                          ),
-                        ),
-                        if (trailingDuration != null) ...[
-                          Text(
-                            trailingDuration,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        Icon(
-                          effectiveExpanded
-                              ? CupertinoIcons.chevron_up
-                              : CupertinoIcons.chevron_down,
-                          size: 12,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          if (effectiveExpanded && widget.children.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [const SizedBox(height: 4), ...widget.children],
-              ),
-            ),
-        ],
-      ),
-    );
   }
 }
 

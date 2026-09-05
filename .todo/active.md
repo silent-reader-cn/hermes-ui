@@ -40,3 +40,47 @@
 **备注**：与 #55/#54 同文件域（chat_message_list.dart），串行开工（#55 合入后再扇 #56），避免并行冲突。若真机取证发现根因偏离假设（如 Clamping 与别的链互拉），以帧采样数据修正规格再动手，勿按假设硬改。
 
 ---
+
+### #57 [P1] 聊天正文 MEDIA 文件链接（如 app-release.apk）点击无反应
+
+**主人报障（2026-09-05）**：助手消息尾部 `MEDIA:` 渲染出的 `📎 app-release.apk` 蓝色链接点击无任何反应。
+
+**根因（实锤）**：`chat_media_parser.dart:101-106` 把非图片 MEDIA 转成 markdown 链接 `[📎 name](url)`，但全仓 `onTapLink` 出现 0 次——三处聊天 MarkdownBody（`message_bubble.dart:221`（用户）、`:336`（助手）、`chat_message_list.dart:2620` `_SafeMarkdownBody`（live 文本段））均未接链接回调，flutter_markdown 默认 onTapLink 为 no-op → 链接可见不可点。
+
+**修复规格**：
+1. 新建共享 helper（建议 `chat_media_view.dart` 内 `Future<void> onChatMarkdownLinkTap(BuildContext, WidgetRef? 或 ref 读取器, Uri? link, String? text)`）：
+   - `link == null` 直接返回；
+   - kind = `MessageAttachment.mediaKindForName(link.toString())`；image → `showAttachmentPreview(isImage: true)`；其余 → `showAttachmentPreview(isImage: false, resolvedUrl: 原样 link, name: 文件名)`（预览页 `_AttachmentDownloadButton` 已有确认框+入队+进度，复用 #53 链路，勿另起炉灶）；
+   - http/https 普通网页链接（kind=file 且 scheme http/https 且非 /api/media 场景）→ 走 `url_launcher launchUrl(externalApplication)`；无法启动时 in-app 提示。注意：MEDIA 生成的相对路径/file:// 已被 `ChatMediaResolver.resolveMediaUrl` 转 /api/media URL 的场景在预览页 `_effectiveUrl` 已兜底，链接点击这里同样把原值交给预览页即可。
+2. 三处 MarkdownBody 加 `onTapLink: (text, href, title) => handler(...)`；`_SafeMarkdownBody` 需透传该回调。
+3. 验收：widget 测试（新文件 `test/features/chat/chat_markdown_link_tap_test.dart`）——pump 含 `MEDIA:<path>.apk` 的助手消息 → tap 链接 → 断言 AttachmentLightbox 出现且下载按钮 key `attachment-download-button` 可点（注入 `createDownloadTestOverrides()`）；普通 https 链接 tap 走 url_launcher mock（`UrlLauncherPlatform`）。
+
+---
+
+### #58 [P1] 回合过程折叠胶囊应在用户气泡下方（现钉在上方）
+
+**主人报障（2026-09-05）**：完成回合的「思考×13, 终端×10…」胶囊卡显示在用户提问气泡**上方**，应改到**下方**（提问气泡 → 胶囊 → 最终答复）。
+
+**根因（实锤）**：`chat_message_list.dart:1816-1836` 折叠分支顺序 = 胶囊行 → userEntry → 最终答复，注释明写「胶囊行置于回合最上方（提问气泡之前）」（#55 当时拍板，现推翻）。
+
+**修复规格**：collapsible 分支 displayItems 顺序改为：1) userEntry（提问气泡常显）→ 2) `_CapsuleListItem` → 3) 最终答复与中间条目（展开态逻辑不变）。非折叠分支不动。
+
+**验收**：`turn_collapse_test.dart` 新增/改断言：胶囊 dy > 用户气泡 dy 且 < 最终文本 dy（getTopLeft 数值化）；其余 7 例语义不变全绿。
+
+---
+
+### #59 [P2] 回合胶囊样式与工具组卡零区分度（同底同框同图标）
+
+**主人指示（2026-09-05 OOB）**：「大回合折叠的样式要和 tools 折叠卡有些差异，不然看起来没区分度」。
+
+**根因（实锤）**：`collapsible_process_capsule.dart:113-118` 与 `tool_call_card.dart:333-339`（ToolCallGroupCard）装饰完全相同：systemGrey6 底 + radius10 + systemGrey4 边框 + fontSize12/w600 + checkmark_circle_fill 绿图标 + chevron 箭头。
+
+**修复规格（区分方向）**：胶囊改为「轻量摘要条」形态，与工具卡拉开层级：
+- 去实底：背景透明或极浅（不画 systemGrey6 盒），改左侧 3px 圆角竖条 accent（statusBlue/secondaryLabel 系，resolveFrom）+ 无边框；
+- 文字 fontSize 13、常规字重（w400）、secondaryLabel 色，前缀「过程」文案保留 l10n；
+- 状态图标缩小为 12 或移除（胶囊只在回合完成态出现，绿勾与工具卡重复）；
+- 展开箭头保留但弱化 tertiaryLabel；
+- 暗黑模式全部颜色显式 resolveFrom（skill 铁律），对比度扫描过 AA。
+- 验收：`contrast_scan_test.dart` 零新增告警；金照若受影响 `--update-goldens`；胶囊 key `collapsible-process-capsule`/`process-capsule-header` 不变（测试依赖）。
+
+---

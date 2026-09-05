@@ -223,6 +223,13 @@ class _UserContent extends StatelessWidget {
               selectable: true,
               styleSheet: buildUserMarkdownStyleSheet(context),
               builders: createUserMarkdownBuilders(context),
+              // #57：MEDIA 文件链接点击 → 预览/下载；网页链接 → 外部打开
+              onTapLink: (text, href, title) => onChatMarkdownLinkTap(
+                context,
+                link: href,
+                linkText: text,
+                sessionId: sessionId,
+              ),
               // ignore: deprecated_member_use
               imageBuilder: (uri, title, alt) {
                 return ChatInlineMediaWidget(
@@ -338,6 +345,13 @@ class _AssistantContent extends StatelessWidget {
             selectable: true,
             styleSheet: buildAssistantMarkdownStyleSheet(context),
             builders: createAssistantMarkdownBuilders(context),
+            // #57：MEDIA 文件链接点击 → 预览/下载；网页链接 → 外部打开
+            onTapLink: (text, href, title) => onChatMarkdownLinkTap(
+              context,
+              link: href,
+              linkText: text,
+              sessionId: sessionId,
+            ),
             // ignore: deprecated_member_use
             imageBuilder: (uri, title, alt) {
               return ChatInlineMediaWidget(
