@@ -511,20 +511,30 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
       switch (point.kind) {
         case LiveSegmentKind.text:
           // 关闭聚合：text 断点分区块（思考行/工具行随区段合并）。
-          if (!toolCoalesce) flushBlock();
-          if (textIndex < textSegments.length) {
-            final segment = textSegments[textIndex];
-            final segStart = segment.start.clamp(0, content.length);
-            final segEnd = segment.end.clamp(segStart, content.length);
-            if (segEnd > segStart) {
-              entries.add(
-                LiveTimelineEntry(
-                  kind: LiveSegmentKind.text,
-                  renderKey: 'live:text:${point.sequence}',
-                  textSlice: content.substring(segStart, segEnd),
-                ),
-              );
-            }
+          // #62：纯空白 text 段（'\n\n'/空格 token、interim 分隔符残留）
+          // 渲染为零高度隐形文本，不是分隔符——不 flush 不渲染，相邻
+          // 工具块自然并为一张卡（修复 live 中「连续四张 tools 折叠卡」）。
+          final segment = textIndex < textSegments.length
+              ? textSegments[textIndex]
+              : null;
+          final segStart = segment == null
+              ? 0
+              : segment.start.clamp(0, content.length);
+          final segEnd = segment == null
+              ? 0
+              : segment.end.clamp(segStart, content.length);
+          final segText = segEnd > segStart
+              ? content.substring(segStart, segEnd)
+              : '';
+          if (segText.trim().isNotEmpty) {
+            if (!toolCoalesce) flushBlock();
+            entries.add(
+              LiveTimelineEntry(
+                kind: LiveSegmentKind.text,
+                renderKey: 'live:text:${point.sequence}',
+                textSlice: segText,
+              ),
+            );
           }
           textIndex++;
         case LiveSegmentKind.thinking:
