@@ -100,6 +100,7 @@ class PersistedToolCall {
     this.tid,
     this.assistantMsgIdx,
     this.args,
+    this.isError,
   });
 
   factory PersistedToolCall.fromJson(Map<String, Object?> json) {
@@ -117,6 +118,7 @@ class PersistedToolCall {
         'assistantMsgIdx',
       ], lossyInt),
       args: argsValue is JsonObject ? argsValue.value : null,
+      isError: firstKey(json, ['is_error', 'isError'], lossyBool),
     );
   }
 
@@ -125,6 +127,7 @@ class PersistedToolCall {
   final String? tid;
   final int? assistantMsgIdx;
   final Map<String, JsonValue>? args;
+  final bool? isError;
 
   Map<String, Object?> toJson() {
     return {
@@ -133,6 +136,7 @@ class PersistedToolCall {
       if (tid != null) 'tid': tid,
       if (assistantMsgIdx != null) 'assistant_msg_idx': assistantMsgIdx,
       if (args != null) 'args': JsonObject(args!).toJson(),
+      if (isError != null) 'is_error': isError,
     };
   }
 
@@ -147,6 +151,7 @@ class PersistedToolCall {
       name: name,
       preview: snippet,
       args: args,
+      isError: isError,
       isCompleted: true,
     );
   }
@@ -158,12 +163,13 @@ class PersistedToolCall {
         other.snippet == snippet &&
         other.tid == tid &&
         other.assistantMsgIdx == assistantMsgIdx &&
+        other.isError == isError &&
         deepEquals(other.args, args);
   }
 
   @override
   int get hashCode =>
-      Object.hash(name, snippet, tid, assistantMsgIdx, deepHash(args));
+      Object.hash(name, snippet, tid, assistantMsgIdx, isError, deepHash(args));
 
   @override
   String toString() {
@@ -1020,11 +1026,14 @@ class ToolCallGroup {
         _nonEmpty(object['snippet']?.stringValue) ??
         _nonEmpty(object['preview']?.stringValue);
 
+    final isError =
+        object['is_error']?.boolValue ?? object['isError']?.boolValue;
     return ToolCall(
       id: toolID,
       name: name,
       preview: preview,
       args: _arguments(argumentValue),
+      isError: isError,
       isCompleted: true,
     );
   }

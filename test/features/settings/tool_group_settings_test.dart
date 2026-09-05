@@ -66,6 +66,46 @@ void main() {
     });
   });
 
+  group('TurnCollapseController 状态与持久化', () {
+    test('默认值为 true', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final state = container.read(turnCollapseProvider);
+      expect(state, isTrue);
+    });
+
+    test('初始状态从 SharedPreferences 读取', () async {
+      SharedPreferences.setMockInitialValues({kTurnCollapseKey: false});
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final controller = container.read(turnCollapseProvider.notifier);
+      await controller.load();
+
+      final state = container.read(turnCollapseProvider);
+      expect(state, isFalse);
+    });
+
+    test('setTurnCollapse 修改配置并写入 SharedPreferences', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final controller = container.read(turnCollapseProvider.notifier);
+      await controller.setTurnCollapse(false);
+
+      expect(container.read(turnCollapseProvider), isFalse);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(kTurnCollapseKey), isFalse);
+
+      await controller.setTurnCollapse(true);
+      expect(container.read(turnCollapseProvider), isTrue);
+      expect(prefs.getBool(kTurnCollapseKey), isTrue);
+    });
+  });
+
   group('ToolCallGroup.groups 聚合与穿插', () {
     test('coalesce: true 聚合模式：合并同一回合内不同 assistant 消息的工具调用', () {
       final messages = [
@@ -321,10 +361,67 @@ void main() {
       expect(container.read(toolGroupCoalesceProvider), isFalse);
       expect(prefs.getBool(kToolGroupCoalesceKey), isFalse);
     });
+
+    testWidgets('渲染回合过程折叠开关并响应点击切换', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          connectionStoreProvider.overrideWithValue(
+            ConnectionStore(storage: InMemorySecureStorage()),
+          ),
+          apiClientProvider.overrideWithValue(
+            ApiClient(baseUrl: 'http://test.local:30002'),
+          ),
+          settingsApiFactoryProvider.overrideWithValue(
+            (_) => FakeSettingsApi(),
+          ),
+          onboardingApiFactoryProvider.overrideWithValue(
+            (_, _) => FakeOnboardingLoginApi(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const CupertinoApp(home: SettingsPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final tileFinder = find.byKey(const ValueKey('settings-turn-collapse'));
+      final switchFinder = find.byKey(
+        const ValueKey('settings-switch-turn-collapse'),
+      );
+
+      expect(tileFinder, findsOneWidget);
+      expect(switchFinder, findsOneWidget);
+      expect(find.text('折叠回合过程'), findsOneWidget);
+      expect(find.text('默认只显示提问和最终答复'), findsOneWidget);
+
+      // 默认开启
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
+
+      // 点击切换为关闭
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      expect(container.read(turnCollapseProvider), isFalse);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(kTurnCollapseKey), isFalse);
+
+      // 再次点击恢复开启
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      expect(container.read(turnCollapseProvider), isTrue);
+      expect(prefs.getBool(kTurnCollapseKey), isTrue);
+    });
   });
 
   group('ChatMessageList 工具按回合聚合与穿插渲染测试', () {
     testWidgets('coalesce 开关控制多工具卡片的合并与穿插渲染，无 double 副本', (tester) async {
+      SharedPreferences.setMockInitialValues({kTurnCollapseKey: false});
       final fakeApi = FakeChatApi();
       fakeApi.sessionResult = {
         'session': {

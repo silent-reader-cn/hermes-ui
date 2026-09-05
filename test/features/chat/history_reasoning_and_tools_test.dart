@@ -9,6 +9,8 @@ import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
+import 'package:hermes_ui/features/settings/tool_group_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -230,6 +232,7 @@ void main() {
     testWidgets('ChatPage 全链路：加载含 reasoning 与 toolCalls 的历史会话，气泡内可展开查看', (
       tester,
     ) async {
+      SharedPreferences.setMockInitialValues({kTurnCollapseKey: false});
       const fullThinking =
           '深度思考全链路测试：第一步分析项目结构，第二步定位数据模型，第三步检查 UI 折叠状态机，最后确认各层数据传递与渲染一致性。额外补充：第四步验证边界条件与异常分支，第五步收敛为可复用工具与测试覆盖，确保历史回放与实时流式行为完全一致。';
       final api = FakeChatApi();

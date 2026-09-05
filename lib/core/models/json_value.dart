@@ -17,9 +17,9 @@ sealed class JsonValue {
       return JsonArray(json.map(JsonValue.fromJson).toList(growable: false));
     }
     if (json is Map) {
-      return JsonObject(json.map(
-        (k, v) => MapEntry(k.toString(), JsonValue.fromJson(v)),
-      ));
+      return JsonObject(
+        json.map((k, v) => MapEntry(k.toString(), JsonValue.fromJson(v))),
+      );
     }
     return const JsonNull(); // 类型不符兜底，绝不 throw
   }
@@ -164,6 +164,14 @@ extension JsonValueX on JsonValue {
     } catch (_) {
       return null;
     }
+  }
+
+  /// 仅当自身是 bool 时返回其值。
+  bool? get boolValue {
+    return switch (this) {
+      JsonBool(:final value) => value,
+      _ => null,
+    };
   }
 
   /// 仅当自身是 object 时返回其字段表（对应 Swift `objectValue`）。

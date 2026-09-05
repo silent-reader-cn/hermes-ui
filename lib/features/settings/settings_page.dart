@@ -232,6 +232,7 @@ class _ChatSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final turnCollapse = ref.watch(turnCollapseProvider);
     final coalesce = ref.watch(toolGroupCoalesceProvider);
     final hideReasoning = ref.watch(hideReasoningProvider);
     final sendShortcut = ref.watch(chatSendShortcutSettingsProvider).mode;
@@ -313,6 +314,20 @@ class _ChatSection extends ConsumerWidget {
             onTap: () =>
                 _openSpeedPresetPicker(context, ref, smoothStreamingSpeed),
           ),
+        CupertinoListTile(
+          key: const ValueKey('settings-turn-collapse'),
+          title: Text(l10n.turn55TurnCollapseTitle),
+          subtitle: Text(l10n.turn55TurnCollapseDesc),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-switch-turn-collapse'),
+            value: turnCollapse,
+            onChanged: (value) {
+              unawaited(
+                ref.read(turnCollapseProvider.notifier).setTurnCollapse(value),
+              );
+            },
+          ),
+        ),
         CupertinoListTile(
           key: const ValueKey('settings-group-tools-by-turn'),
           title: Text(l10n.groupToolsByTurn),
