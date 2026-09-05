@@ -284,6 +284,30 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 拖动起始判定敏感阈值（8px，touchSlop 基准附近，排除轻点，#41）。
   static const double _dragSensitivityThreshold = 8.0;
 
+  /// 锚点准入最小可见高度阈值（24px，避免贴边一条缝的条目当锚，#56）。
+  static const double _minAnchorVisibleHeight = 24.0;
+
+  /// 阅读锚点补偿死区阈值（4px，低于此漂移不触发 jumpTo，#56）。
+  static const double _anchorDeadzoneThreshold = 4.0;
+
+  /// 防抖锁冻结帧数（同锚点连续反向补偿触发冻结，#56）。
+  static const int _anchorFreezeFrames = 10;
+
+  /// 锚点出树最大容忍帧数（容忍 <= 5 帧等待其回到树中，#56）。
+  static const int _maxAnchorMissingFrames = 5;
+
+  String? _lastAnchorCompensatedKey;
+  double _lastAnchorCompensationDirection = 0.0;
+  int _anchorFreezeRemainingFrames = 0;
+  int _anchorMissingFrames = 0;
+
+  void _resetAnchorStabilityState() {
+    _lastAnchorCompensatedKey = null;
+    _lastAnchorCompensationDirection = 0.0;
+    _anchorFreezeRemainingFrames = 0;
+    _anchorMissingFrames = 0;
+  }
+
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
@@ -325,6 +349,50 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   @visibleForTesting
   bool get hasReadingAnchor => _readingAnchor != null;
 
+  @visibleForTesting
+  String? get readingAnchorCandidateKey => _readingAnchor?.candidateKey;
+
+  @visibleForTesting
+  Map<String, GlobalKey> get itemKeys => _itemKeys;
+
+  @visibleForTesting
+  double? get readingAnchorTopOffset => _readingAnchor?.topOffset;
+
+  @visibleForTesting
+  int get anchorFreezeRemainingFrames => _anchorFreezeRemainingFrames;
+
+  @visibleForTesting
+  int get anchorMissingFrames => _anchorMissingFrames;
+
+  @visibleForTesting
+  double get lastAnchorCompensationDirection =>
+      _lastAnchorCompensationDirection;
+
+  @visibleForTesting
+  void testUpdateReadingAnchor() => _updateReadingAnchor();
+
+  @visibleForTesting
+  void testMaybeRestoreReadingAnchor() => _maybeRestoreReadingAnchor();
+
+  @visibleForTesting
+  void testSetReadingAnchor({
+    required String candidateKey,
+    String? renderId,
+    String? liveRenderKey,
+    String? toolGroupId,
+    String? messageId,
+    required double topOffset,
+  }) {
+    _readingAnchor = _ReadingAnchor(
+      candidateKey: candidateKey,
+      renderId: renderId,
+      liveRenderKey: liveRenderKey,
+      toolGroupId: toolGroupId,
+      messageId: messageId,
+      topOffset: topOffset,
+    );
+  }
+
   late ProviderSubscription<int> _scrollTriggerSub;
   late ProviderSubscription<ChatPhase> _phaseSub;
   ChatPhase? _lastPhase;
@@ -364,6 +432,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           _userHasScrolled = false;
           _nearBottom = true;
           _readingAnchor = null;
+          _resetAnchorStabilityState();
           _pinnedTranscriptCount = 0;
         } else if (next == ChatPhase.streaming) {
           if (_justSent ||
@@ -373,6 +442,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             _userHasScrolled = false;
             _nearBottom = true;
             _readingAnchor = null;
+            _resetAnchorStabilityState();
             _pinnedTranscriptCount = 0;
           }
         }
@@ -453,6 +523,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
               _userHasScrolled = false;
               _nearBottom = true;
               _readingAnchor = null;
+              _resetAnchorStabilityState();
               _pinnedTranscriptCount = 0;
             }
           }
@@ -549,6 +620,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           final wasNotNear = !_nearBottom;
           _userHasScrolled = false;
           _readingAnchor = null;
+          _resetAnchorStabilityState();
           _pinnedTranscriptCount = 0;
           _nearBottom = true;
           if ((wasScrolled || wasNotNear) && mounted) {
@@ -580,7 +652,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
-  /// 记录视口顶部第一条可见条目 + 偏移（候选锚点优先级：renderId → liveRenderKey → toolGroupId → messageId，todo.md #14）。
+  /// 记录视口顶部第一条可见条目 + 偏移（候选锚点优先级：renderId → liveRenderKey → toolGroupId → messageId，todo.md #14 / #56）。
   void _updateReadingAnchor() {
     if (!_controller.hasClients ||
         (_nearBottom && !_userHasScrolled) ||
@@ -595,6 +667,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final toolGroups = ref.read(toolGroupsProvider(widget.sessionId));
 
     _ReadingAnchor? candidate;
+    _ReadingAnchor? fallbackCandidate;
 
     // 1. 优先扫描 transcript 消息
     for (final entry in transcript) {
@@ -607,23 +680,33 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ancestor: scrollableBox,
       );
       final dy = localOffset.dy;
-      if (dy + box.size.height > 0) {
-        final group = toolGroups
-            .where(
-              (g) =>
-                  g.anchorMessageID == entry.message.messageId ||
-                  g.anchorMessageID == entry.anchorId,
-            )
-            .firstOrNull;
-        candidate = _ReadingAnchor(
-          candidateKey: entry.renderId,
-          renderId: entry.renderId,
-          toolGroupId: group?.id,
-          messageId: entry.message.messageId ?? entry.message.id,
-          topOffset: dy,
-        );
-        break;
+      final visibleHeight = dy >= 0 ? box.size.height : (dy + box.size.height);
+      if (visibleHeight <= 0) continue;
+
+      final group = toolGroups
+          .where(
+            (g) =>
+                g.anchorMessageID == entry.message.messageId ||
+                g.anchorMessageID == entry.anchorId,
+          )
+          .firstOrNull;
+      final anchor = _ReadingAnchor(
+        candidateKey: entry.renderId,
+        renderId: entry.renderId,
+        toolGroupId: group?.id,
+        messageId: entry.message.messageId ?? entry.message.id,
+        topOffset: dy,
+      );
+
+      // 方向 A 锚点准入收紧（#56）：可见高度 < 24px 且 < 条目高 1/3 的贴边条目跳过
+      if (visibleHeight < _minAnchorVisibleHeight &&
+          visibleHeight < box.size.height / 3.0) {
+        fallbackCandidate ??= anchor;
+        continue;
       }
+
+      candidate = anchor;
+      break;
     }
 
     // 2. 其次扫描 live 时间线段落
@@ -632,30 +715,43 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         final key = _itemKeys[entry.renderKey];
         if (key?.currentContext == null) continue;
         final box = key!.currentContext!.findRenderObject() as RenderBox?;
-        if (box == null || !box.attached) continue;
+        if (box == null || !box.attached || box.size.height == 0) continue;
         final localOffset = box.localToGlobal(
           Offset.zero,
           ancestor: scrollableBox,
         );
         final dy = localOffset.dy;
-        if (dy + box.size.height > 0) {
-          candidate = _ReadingAnchor(
-            candidateKey: entry.renderKey,
-            liveRenderKey: entry.renderKey,
-            toolGroupId: entry.toolGroup?.id,
-            topOffset: dy,
-          );
-          break;
+        final visibleHeight = dy >= 0
+            ? box.size.height
+            : (dy + box.size.height);
+        if (visibleHeight <= 0) continue;
+
+        final anchor = _ReadingAnchor(
+          candidateKey: entry.renderKey,
+          liveRenderKey: entry.renderKey,
+          toolGroupId: entry.toolGroup?.id,
+          topOffset: dy,
+        );
+
+        if (visibleHeight < _minAnchorVisibleHeight &&
+            visibleHeight < box.size.height / 3.0) {
+          fallbackCandidate ??= anchor;
+          continue;
         }
+
+        candidate = anchor;
+        break;
       }
     }
 
-    if (candidate != null) {
-      _readingAnchor = candidate;
+    final chosen = candidate ?? fallbackCandidate;
+    if (chosen != null) {
+      _readingAnchor = chosen;
+      _anchorMissingFrames = 0;
     }
   }
 
-  /// 内容变化 postFrame 无动画跳回锚点，绝不拉回底部（todo.md #14）。
+  /// 内容变化 postFrame 无动画跳回锚点，绝不拉回底部（todo.md #14 / #56）。
   void _maybeRestoreReadingAnchor() {
     if (!mounted ||
         !_controller.hasClients ||
@@ -672,6 +768,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _updateReadingAnchor();
       return;
     }
+
+    // 方向 B 防抖锁（#56）：反向补偿后冻结期内跳过补偿
+    if (_anchorFreezeRemainingFrames > 0) {
+      _anchorFreezeRemainingFrames--;
+      return;
+    }
+
     final anchor = _readingAnchor!;
 
     final scrollableBox = context.findRenderObject() as RenderBox?;
@@ -692,20 +795,50 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       targetKey = _itemKeys[anchor.messageId];
     }
 
-    if (targetKey?.currentContext == null) return;
+    if (targetKey?.currentContext == null) {
+      // 方向 C 锚点稳定性（#56）：出树时不立即换锚，容忍 <= 5 帧等待其回到树中
+      _anchorMissingFrames++;
+      if (_anchorMissingFrames > _maxAnchorMissingFrames) {
+        _updateReadingAnchor();
+      }
+      return;
+    }
     final box = targetKey!.currentContext!.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
+    if (box == null || !box.attached) {
+      _anchorMissingFrames++;
+      if (_anchorMissingFrames > _maxAnchorMissingFrames) {
+        _updateReadingAnchor();
+      }
+      return;
+    }
 
+    _anchorMissingFrames = 0;
     final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
     final currentDy = localOffset.dy;
     final diff = currentDy - anchor.topOffset;
 
-    if (diff.abs() > 0.5) {
+    // 方向 B 补偿死区（#56）：jump 阈值从 0.5 提至 4px
+    if (diff.abs() >= _anchorDeadzoneThreshold) {
+      final currentDirection = diff > 0 ? 1.0 : -1.0;
+      final anchorKey = anchor.candidateKey;
+
+      // 方向 B 防抖锁（#56）：同锚点连续两次补偿方向相反 → 冻结 10 帧
+      if (_lastAnchorCompensatedKey == anchorKey &&
+          _lastAnchorCompensationDirection != 0.0 &&
+          currentDirection != _lastAnchorCompensationDirection) {
+        _anchorFreezeRemainingFrames = _anchorFreezeFrames;
+        _lastAnchorCompensationDirection = 0.0;
+        return;
+      }
+
       final newPixels = (_controller.position.pixels + diff).clamp(
         0.0,
         _controller.position.maxScrollExtent,
       );
-      if ((newPixels - _controller.position.pixels).abs() > 0.5) {
+      if ((newPixels - _controller.position.pixels).abs() >=
+          _anchorDeadzoneThreshold) {
+        _lastAnchorCompensatedKey = anchorKey;
+        _lastAnchorCompensationDirection = currentDirection;
         _controller.jumpTo(newPixels);
       }
     }
@@ -942,6 +1075,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                 _nearBottom = true;
                 _userHasScrolled = false;
                 _readingAnchor = null;
+                _resetAnchorStabilityState();
                 _pinnedTranscriptCount = 0;
                 _settleJumpToBottom(attempts: 0);
               }
@@ -1059,6 +1193,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _nearBottom = false;
     _justSent = false;
     _readingAnchor = null;
+    _resetAnchorStabilityState();
     _pinnedTranscriptCount = transcript.length;
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1126,6 +1261,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _isUserInteracting = false;
     _justSent = false;
     _readingAnchor = null;
+    _resetAnchorStabilityState();
     _pinnedTranscriptCount = transcript.length;
     _isOutlineJumping = true;
     setState(() {});
@@ -1293,6 +1429,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
               _userHasScrolled = true;
               _nearBottom = false;
               _readingAnchor = null;
+              _resetAnchorStabilityState();
               _updateReadingAnchor();
               if (mounted) setState(() {});
             }),
@@ -1302,6 +1439,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _userHasScrolled = true;
       _nearBottom = false;
       _readingAnchor = null;
+      _resetAnchorStabilityState();
       _updateReadingAnchor();
       if (mounted) setState(() {});
     }
@@ -1371,6 +1509,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       if (!_userHasScrolled) {
         _nearBottom = true;
         _readingAnchor = null;
+        _resetAnchorStabilityState();
         _pinnedTranscriptCount = 0;
       }
     } else if (_dragDisplacement < -_dragSensitivityThreshold) {
@@ -1389,6 +1528,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _userHasScrolled = false;
         _nearBottom = true;
         _readingAnchor = null;
+        _resetAnchorStabilityState();
         _pinnedTranscriptCount = 0;
       } else {
         // 按压前不跟随 → 若松手位置接近底部超 80px 阈值 → 进入跟随；否则保持不跟随
@@ -1399,6 +1539,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           _userHasScrolled = false;
           _nearBottom = true;
           _readingAnchor = null;
+          _resetAnchorStabilityState();
           _pinnedTranscriptCount = 0;
         } else {
           _userHasScrolled = true;
@@ -1489,6 +1630,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _userHasScrolled = false;
       _nearBottom = true;
       _readingAnchor = null;
+      _resetAnchorStabilityState();
       _pinnedTranscriptCount = 0;
     }
 
@@ -2039,6 +2181,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                           _userHasScrolled = false;
                           _nearBottom = true;
                           _readingAnchor = null;
+                          _resetAnchorStabilityState();
                           _pinnedTranscriptCount = 0;
                         });
                         _scrollToBottom(animated: true);
