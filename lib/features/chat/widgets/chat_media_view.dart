@@ -488,8 +488,12 @@ class AttachmentLightbox extends StatelessWidget {
 
       body = Column(
         children: [
+          // 注意：InteractiveViewer 的 ClipRect 采用自身盒子尺寸，而其盒子会收缩到
+          // 子图自然尺寸（Center/松约束下 1x1 小图 = 视口缩没，放大内容被裁回小框，
+          // 真机反馈 bug）。SizedBox.expand 把视口钉满全屏，子 Image 均为
+          // BoxFit.contain，紧约束下初始即 contain 铺满视口。
           Expanded(
-            child: Center(
+            child: SizedBox.expand(
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4.0,

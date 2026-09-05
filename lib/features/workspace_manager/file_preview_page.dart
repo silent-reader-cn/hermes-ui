@@ -395,8 +395,12 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           return [_buildUnsupportedSliver()];
         }
         return [
-          SliverToBoxAdapter(
-            child: Center(
+          // InteractiveViewer 的 ClipRect 采用自身盒子尺寸，松约束下会收缩为图片
+          // 自然尺寸（小图放大被裁回小框，真机反馈 bug）。SliverFillRemaining +
+          // SizedBox.expand 把视口钉满剩余空间；Image BoxFit.contain 初始即铺满。
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: SizedBox.expand(
               child: InteractiveViewer(
                 key: const ValueKey('preview-image-viewer'),
                 minScale: 0.5,

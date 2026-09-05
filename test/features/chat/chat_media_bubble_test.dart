@@ -272,6 +272,11 @@ void main() {
 
       // 验证弹出全屏 Lightbox
       expect(find.byType(InteractiveViewer), findsOneWidget);
+      // 回归（真机反馈 bug）：1x1 小图时 InteractiveViewer 曾被 Center 收缩
+      // 为图片自然尺寸，放大内容被内部 ClipRect 裁回小框。视口必须铺满宽度。
+      final viewerSize = tester.getSize(find.byType(InteractiveViewer));
+      expect(viewerSize.width, 800);
+      expect(viewerSize.height, greaterThan(400));
       expect(find.byIcon(CupertinoIcons.clear_thick), findsOneWidget);
 
       // 点击关闭

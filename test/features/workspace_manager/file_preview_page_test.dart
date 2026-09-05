@@ -181,6 +181,13 @@ void main() {
       );
       expect(image.image, isA<MemoryImage>());
       expect((image.image as MemoryImage).bytes, same(kPngBytes));
+      // 回归（真机反馈 bug）：InteractiveViewer 视口必须铺满剩余空间，
+      // 不能被小图收缩（否则放大内容被内部 ClipRect 裁回小框）。
+      final viewerSize = tester.getSize(
+        find.byKey(const ValueKey('preview-image-viewer')),
+      );
+      expect(viewerSize.width, 800);
+      expect(viewerSize.height, greaterThan(400));
     });
 
     testWidgets('归档/未知类型：无法预览提示 + 下载兜底按钮', (tester) async {
