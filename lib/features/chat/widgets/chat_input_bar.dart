@@ -255,24 +255,34 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     if (message.trim().isEmpty) return;
     _textController.clear();
     setState(() => _hasText = false);
-    final sent = await ref
-        .read(chatControllerProvider(widget.sessionId).notifier)
-        .send(message, attachments: pendingAttachments);
+    // await 前一次性捕获全部 notifier（均无 autoDispose，随容器常驻）：
+    // 发送途中切会话/退页导致本 widget dispose 后，`ref` 即不可再用
+    // （platform_error: Cannot use "ref" after the widget was disposed）。
+    final controller = ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final selectionsRepo = repo;
+    final attachmentsRepo =
+        ref.read(pendingAttachmentsProvider(widget.sessionId).notifier);
+    final draftRepo = ref.read(chatDraftProvider(widget.sessionId).notifier);
+    final sent = await controller.send(message, attachments: pendingAttachments);
     if (sent) {
       if (extra != raw) {
-        ref.read(pendingSelectionsProvider(widget.sessionId).notifier).clear();
+        selectionsRepo.clear();
       }
-      ref.read(pendingAttachmentsProvider(widget.sessionId).notifier).clear();
+      attachmentsRepo.clear();
       // 发送成功：清空本会话草稿（prefill 也已随发送消费）。
-      ref.read(chatDraftProvider(widget.sessionId).notifier).clear();
-    } else if (!sent) {
-      _textController.text = raw;
-      _textController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _textController.text.length),
-      );
-      setState(() => _hasText = raw.trim().isNotEmpty);
+      draftRepo.clear();
+    } else {
+      // 发送失败：仅在本页仍在场时回填输入框（_textController 已随 dispose
+      // 销毁，退页后触碰同样抛 StateError）；草稿回填是数据层操作照常执行。
+      if (mounted) {
+        _textController.text = raw;
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _textController.text.length),
+        );
+        setState(() => _hasText = raw.trim().isNotEmpty);
+      }
       // 发送失败：草稿同步回填内容（继续编辑保留）。
-      ref.read(chatDraftProvider(widget.sessionId).notifier).update(raw);
+      draftRepo.update(raw);
     }
   }
 
