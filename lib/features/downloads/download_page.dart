@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/status_colors.dart';
@@ -13,6 +14,30 @@ import '../diagnostics/diagnostics_service.dart';
 import '../shared/app_back_button.dart';
 import 'download_models.dart';
 import 'download_providers.dart';
+
+/// 原生 FileProvider 通道：把绝对路径换成 content:// URI。
+const MethodChannel _fileShareChannel =
+    MethodChannel('com.silentreader.hermes_ui/file_share');
+
+/// 经 MainActivity 的 FileProvider MethodChannel 生成 content:// URI。
+/// 失败（通道缺失/异常）返回 null，由调用方兜底。
+Future<String?> _androidContentUriFor(String path) async {
+  try {
+    final uri = await _fileShareChannel.invokeMethod<String>(
+      'getShareUri',
+      {'path': path},
+    );
+    return uri;
+  } catch (error) {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'downloads',
+      message: 'FileProvider 生成 content URI 失败: $error',
+      details: {'path': path},
+    );
+    return null;
+  }
+}
 
 /// 跨平台打开已下载文件的核心方法。
 ///
@@ -74,9 +99,12 @@ Future<void> openDownloadedFile(
       return;
     }
     if (!kIsWeb && Platform.isAndroid) {
+      // Android 7+ StrictMode 禁止裸 file:// URI 跨应用共享（FileUriExposedException），
+      // 必须先经原生 FileProvider 换成 content:// URI 再发 ACTION_VIEW。
+      final contentUri = await _androidContentUriFor(path);
       final intent = AndroidIntent(
         action: 'android.intent.action.VIEW',
-        data: Uri.encodeFull('file://$path'),
+        data: contentUri ?? Uri.encodeFull('file://$path'),
         type: mimeType,
         flags: const [
           0x10000000, // FLAG_ACTIVITY_NEW_TASK
