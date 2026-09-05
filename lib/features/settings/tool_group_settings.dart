@@ -179,3 +179,64 @@ class ToolGroupCoalesceController extends Notifier<bool> {
     }
   }
 }
+
+/// 回合过程折叠持久化键。
+const String kTurnCollapseKey = 'settings.turnCollapse';
+
+/// 回合过程折叠偏好设置 Provider（持久化到 shared_preferences）。
+final turnCollapseProvider = NotifierProvider<TurnCollapseController, bool>(
+  TurnCollapseController.new,
+);
+
+/// 回合过程折叠控制器。
+class TurnCollapseController extends Notifier<bool> {
+  /// 持久化 Key。
+  static const String keyTurnCollapse = kTurnCollapseKey;
+
+  /// 读取回合过程折叠偏好设置（默认 true）。
+  static Future<bool> loadTurnCollapsePref({
+    SharedPreferences? customPrefs,
+  }) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyTurnCollapse) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true;
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadTurnCollapsePref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+
+  /// 外部手动触发加载。
+  Future<void> load() => _load();
+
+  /// 更新折叠开关并持久化到 [SharedPreferences]。
+  Future<void> setTurnCollapse(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyTurnCollapse, value);
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+}

@@ -27,6 +27,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({
+      kTurnCollapseKey: false,
       kToolGroupCoalesceKey: coalesceTools,
       kThinkGroupCoalesceKey: true,
       kHideReasoningKey: false,

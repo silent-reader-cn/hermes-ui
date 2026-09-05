@@ -20,6 +20,7 @@ import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'collapsible_process_capsule.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
@@ -47,6 +48,134 @@ class _ReadingAnchor {
   final String? toolGroupId;
   final String? messageId;
   final double topOffset;
+}
+
+/// 回合信息封装（用于回合级过程折叠分组，#55）。
+class _TurnInfo {
+  _TurnInfo({
+    required this.turnKey,
+    this.userEntry,
+    required this.assistantEntries,
+  });
+
+  final String turnKey;
+  final TranscriptMessage? userEntry;
+  final List<TranscriptMessage> assistantEntries;
+
+  List<TranscriptMessage> get allEntries => [?userEntry, ...assistantEntries];
+
+  TranscriptMessage? get finalAssistantEntry {
+    for (var i = assistantEntries.length - 1; i >= 0; i--) {
+      final a = assistantEntries[i];
+      if (a.message.content?.trim().isNotEmpty == true) {
+        return a;
+      }
+    }
+    return null;
+  }
+
+  int get intermediateTextCount {
+    final finalEntry = finalAssistantEntry;
+    if (finalEntry == null) return 0;
+    var count = 0;
+    for (final a in assistantEntries) {
+      if (a == finalEntry) continue;
+      if (a.message.content?.trim().isNotEmpty == true) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  List<ToolCallGroup> allToolGroups(
+    Map<String, List<ToolCallGroup>> entryToolGroups,
+  ) {
+    final groups = <ToolCallGroup>[];
+    if (userEntry != null) {
+      final uGroups = entryToolGroups[userEntry!.renderId];
+      if (uGroups != null) groups.addAll(uGroups);
+    }
+    for (final a in assistantEntries) {
+      final aGroups = entryToolGroups[a.renderId];
+      if (aGroups != null) groups.addAll(aGroups);
+    }
+    return groups;
+  }
+
+  bool hasFailure(Map<String, List<ToolCallGroup>> entryToolGroups) {
+    for (final entry in allEntries) {
+      final groups = entryToolGroups[entry.renderId];
+      if (groups != null) {
+        for (final g in groups) {
+          if (g.hasFailedTool || g.toolCalls.any((c) => c.isError == true)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+}
+
+/// 消息列表项抽象类型（#55：消息或注入折叠胶囊）。
+sealed class _ChatListItem {
+  const _ChatListItem();
+}
+
+class _CapsuleListItem extends _ChatListItem {
+  const _CapsuleListItem({
+    required this.turn,
+    required this.isExpanded,
+    required this.toolGroups,
+    required this.intermediateTextCount,
+  });
+
+  final _TurnInfo turn;
+  final bool isExpanded;
+  final List<ToolCallGroup> toolGroups;
+  final int intermediateTextCount;
+}
+
+class _MessageListItem extends _ChatListItem {
+  const _MessageListItem({
+    required this.entry,
+    required this.groups,
+    required this.isHidden,
+    required this.isFinalAssistantInCollapsedTurn,
+  });
+
+  final TranscriptMessage entry;
+  final List<ToolCallGroup> groups;
+  final bool isHidden;
+  final bool isFinalAssistantInCollapsedTurn;
+}
+
+bool _isTurnCollapsible({
+  required _TurnInfo turn,
+  required bool turnCollapseEnabled,
+  required bool isTurnCompleted,
+  required Map<String, List<ToolCallGroup>> entryToolGroups,
+  required bool hideThinking,
+}) {
+  if (!turnCollapseEnabled) return false;
+  if (!isTurnCompleted) return false;
+
+  final finalEntry = turn.finalAssistantEntry;
+  if (finalEntry == null) return false;
+
+  if (turn.hasFailure(entryToolGroups)) return false;
+
+  final allGroups = turn.allToolGroups(entryToolGroups);
+  final hasThinking =
+      !hideThinking &&
+      allGroups.any((g) => g.toolCalls.any((c) => c.isThinking));
+  final toolCount = allGroups.fold<int>(
+    0,
+    (sum, g) => sum + g.toolCalls.where((c) => !c.isThinking).length,
+  );
+  final intermediateTexts = turn.intermediateTextCount;
+
+  return intermediateTexts > 0 || hasThinking || toolCount > 0;
 }
 
 /// 安全 Markdown 渲染组件（增量流式解析异常兜底为纯文本，防止大灰屏，todo.md #8）。
@@ -143,6 +272,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   final GlobalKey<State<StatefulWidget>> _highlightKey =
       GlobalKey<State<StatefulWidget>>();
   final Set<String> _expandedNoticeIds = <String>{};
+  final Set<String> _expandedTurnKeys = <String>{};
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
   _ReadingAnchor? _readingAnchor;
   double? _lastBottomInset;
@@ -285,6 +415,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _highlightSettled = false;
       _highlightPositioned = false;
       _expandedNoticeIds.clear();
+      _expandedTurnKeys.clear();
       _itemKeys.clear();
       _readingAnchor = null;
       _lastBottomInset = null;
@@ -377,7 +508,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 跟随态（贴底且用户未上滚）→ 走 `_settleJumpToBottom` 轻量收敛链补跳；
   /// 离底阅读、手势在途、各类程序化定位在途时一律不动。
   bool _onMetricsChanged(ScrollMetricsNotification notification) {
-        // 气泡内横向滚动器等内层 Scrollable 的 metrics 通知会冒泡到本监听：
+    // 气泡内横向滚动器等内层 Scrollable 的 metrics 通知会冒泡到本监听：
     // 只响应纵向（本列表是唯一纵向滚动器）。
     if (notification.metrics.axis != Axis.vertical) return false;
     if (!_nearBottom ||
@@ -470,7 +601,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       final key = _itemKeys[entry.renderId];
       if (key?.currentContext == null) continue;
       final box = key!.currentContext!.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
+      if (box == null || !box.attached || box.size.height == 0) continue;
       final localOffset = box.localToGlobal(
         Offset.zero,
         ancestor: scrollableBox,
@@ -1093,7 +1224,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       final itemCtx = itemKey?.currentContext;
       if (itemCtx == null) continue;
       final box = itemCtx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
+      if (box == null || !box.attached || box.size.height == 0) continue;
       final localOffset = box.localToGlobal(
         Offset.zero,
         ancestor: scrollableBox,
@@ -1447,6 +1578,149 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       ),
           ];
 
+    final turnCollapseEnabled = ref.watch(turnCollapseProvider);
+
+    // 回合分组（#55 过程折叠）
+    final turns = <_TurnInfo>[];
+    _TurnInfo? currentTurn;
+    for (final entry in transcript) {
+      if (TranscriptTurnClassifier.isUserTurnBoundary(entry.message)) {
+        currentTurn = _TurnInfo(
+          turnKey: 'turn:user:${entry.loadedIndex}',
+          userEntry: entry,
+          assistantEntries: [],
+        );
+        turns.add(currentTurn);
+      } else if (entry.message.role == 'assistant') {
+        if (currentTurn == null) {
+          currentTurn = _TurnInfo(
+            turnKey: 'turn:orphan:${entry.loadedIndex}',
+            assistantEntries: [entry],
+          );
+          turns.add(currentTurn);
+        } else {
+          currentTurn.assistantEntries.add(entry);
+        }
+      } else {
+        if (currentTurn == null) {
+          currentTurn = _TurnInfo(
+            turnKey: 'turn:other:${entry.loadedIndex}',
+            userEntry: entry,
+            assistantEntries: [],
+          );
+          turns.add(currentTurn);
+        } else if (currentTurn.userEntry == null) {
+          currentTurn = _TurnInfo(
+            turnKey: 'turn:user:${entry.loadedIndex}',
+            userEntry: entry,
+            assistantEntries: [],
+          );
+          turns.add(currentTurn);
+        } else {
+          currentTurn.assistantEntries.add(entry);
+        }
+      }
+    }
+
+    final displayItems = <_ChatListItem>[];
+    for (var i = 0; i < turns.length; i++) {
+      final turn = turns[i];
+      final isLastTurn = i == turns.length - 1;
+      final isTurnCompleted =
+          !isLastTurn ||
+          (streaming == null &&
+              phase != ChatPhase.streaming &&
+              phase != ChatPhase.sending);
+
+      final collapsible = _isTurnCollapsible(
+        turn: turn,
+        turnCollapseEnabled: turnCollapseEnabled,
+        isTurnCompleted: isTurnCompleted,
+        entryToolGroups: entryToolGroups,
+        hideThinking: hideThinking,
+      );
+
+      if (!collapsible) {
+        if (turn.userEntry != null) {
+          displayItems.add(
+            _MessageListItem(
+              entry: turn.userEntry!,
+              groups: entryToolGroups[turn.userEntry!.renderId] ?? const [],
+              isHidden: false,
+              isFinalAssistantInCollapsedTurn: false,
+            ),
+          );
+        }
+        for (final a in turn.assistantEntries) {
+          displayItems.add(
+            _MessageListItem(
+              entry: a,
+              groups: entryToolGroups[a.renderId] ?? const [],
+              isHidden: false,
+              isFinalAssistantInCollapsedTurn: false,
+            ),
+          );
+        }
+      } else {
+        final hasHighlightTarget =
+            _highlightTargetRenderId != null &&
+            turn.allEntries.any((e) => e.renderId == _highlightTargetRenderId);
+        final isExpanded =
+            _expandedTurnKeys.contains(turn.turnKey) ||
+            (hasHighlightTarget &&
+                _highlightTargetRenderId != turn.userEntry?.renderId &&
+                _highlightTargetRenderId != turn.finalAssistantEntry?.renderId);
+
+        // 1. 胶囊行置于回合最上方（提问气泡之前）
+        displayItems.add(
+          _CapsuleListItem(
+            turn: turn,
+            isExpanded: isExpanded,
+            toolGroups: turn.allToolGroups(entryToolGroups),
+            intermediateTextCount: turn.intermediateTextCount,
+          ),
+        );
+
+        // 2. 主人提问气泡（常显）
+        if (turn.userEntry != null) {
+          displayItems.add(
+            _MessageListItem(
+              entry: turn.userEntry!,
+              groups: entryToolGroups[turn.userEntry!.renderId] ?? const [],
+              isHidden: false,
+              isFinalAssistantInCollapsedTurn: false,
+            ),
+          );
+        }
+
+        // 3. 助手消息：中间助手及尾随助手收起时隐藏，最终答复常显（收起时仅露文本）
+        final finalEntry = turn.finalAssistantEntry!;
+        for (final a in turn.assistantEntries) {
+          if (a == finalEntry) {
+            displayItems.add(
+              _MessageListItem(
+                entry: a,
+                groups: isExpanded
+                    ? (entryToolGroups[a.renderId] ?? const [])
+                    : const <ToolCallGroup>[],
+                isHidden: false,
+                isFinalAssistantInCollapsedTurn: !isExpanded,
+              ),
+            );
+          } else {
+            displayItems.add(
+              _MessageListItem(
+                entry: a,
+                groups: entryToolGroups[a.renderId] ?? const [],
+                isHidden: !isExpanded,
+                isFinalAssistantInCollapsedTurn: false,
+              ),
+            );
+          }
+        }
+      }
+    }
+
     final showQueuedBanner = queuedMessages.isNotEmpty;
     // 落地兜底：仅在 coalesce==true 且 transcript 为空且无可挂载 anchor 时渲染聚合视图
     final needFallback =
@@ -1477,7 +1751,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? 1
         : liveTimeline.length;
 
-    var itemCount = transcript.length + liveItemCount;
+    var itemCount = displayItems.length + liveItemCount;
     if (showStatusLine) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
@@ -1597,11 +1871,37 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                   itemCount: itemCount,
                   itemBuilder: (context, index) {
                     // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
-                    if (index < transcript.length) {
-                      final entry = transcript[index];
-                      final groups =
-                          entryToolGroups[entry.renderId] ??
-                          const <ToolCallGroup>[];
+                    if (index < displayItems.length) {
+                      final item = displayItems[index];
+                      if (item is _CapsuleListItem) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          child: CollapsibleProcessCapsule(
+                            toolGroups: item.toolGroups,
+                            intermediateTextCount: item.intermediateTextCount,
+                            hideThinking: hideThinking,
+                            isExpanded: item.isExpanded,
+                            onToggle: () {
+                              if (!mounted) return;
+                              setState(() {
+                                if (_expandedTurnKeys.contains(
+                                  item.turn.turnKey,
+                                )) {
+                                  _expandedTurnKeys.remove(item.turn.turnKey);
+                                } else {
+                                  _expandedTurnKeys.add(item.turn.turnKey);
+                                }
+                              });
+                            },
+                          ),
+                        );
+                      }
+                      final msgItem = item as _MessageListItem;
+                      final entry = msgItem.entry;
+                      final groups = msgItem.groups;
                       final noticeId = entry.message.id;
                       final expanded = _expandedNoticeIds.contains(noticeId);
                       final isHighlightTarget =
@@ -1620,6 +1920,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       }
                       for (final g in groups) {
                         _itemKeys.putIfAbsent(g.id, () => entryKey);
+                      }
+
+                      if (msgItem.isHidden) {
+                        return KeyedSubtree(
+                          key: entryKey,
+                          child: const SizedBox.shrink(),
+                        );
                       }
 
                       return KeyedSubtree(
@@ -1655,7 +1962,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                         ),
                       );
                     }
-                    var tail = index - transcript.length;
+                    var tail = index - displayItems.length;
                     if (showQueuedBanner) {
                       if (tail == 0) {
                         return QueuedBanner(

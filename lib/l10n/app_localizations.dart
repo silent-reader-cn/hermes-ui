@@ -1505,9 +1505,8 @@ class AppLocalizations {
   String get autoOpenContextDesc => isEnglish
       ? 'Open the context panel automatically when creating a new session to set workspace and model'
       : '新建会话时自动打开上下文面板，便于设置工作区和模型';
-  String get onboardingBrandSlogan => isEnglish
-      ? 'Your self-hosted AI companion'
-      : '随时随地的自建 AI 智能体助手';
+  String get onboardingBrandSlogan =>
+      isEnglish ? 'Your self-hosted AI companion' : '随时随地的自建 AI 智能体助手';
 
   // ---------------------------------------------------------------------------
   // Built-in WebUI Sidecar
@@ -1524,27 +1523,23 @@ class AppLocalizations {
   String get webuiListeningPort => isEnglish ? 'Listening Port' : '监听端口';
   String get webuiInvalidHost =>
       isEnglish ? 'Please enter a valid IPv4 address' : '请输入合法的 IPv4 地址';
-  String get webuiInvalidPort => isEnglish
-      ? 'Port must be between 1 and 65535'
-      : '端口号必须在 1-65535 之间';
+  String get webuiInvalidPort =>
+      isEnglish ? 'Port must be between 1 and 65535' : '端口号必须在 1-65535 之间';
   String get webuiPassword => isEnglish ? 'WebUI Password' : 'WebUI 密码';
   String get webuiPasswordEmpty =>
       isEnglish ? 'Password cannot be empty' : '密码不能为空';
-  String get webuiPasswordPlaceholder =>
-      isEnglish ? 'Enter password' : '输入密码';
+  String get webuiPasswordPlaceholder => isEnglish ? 'Enter password' : '输入密码';
   String get webuiStatusTitle => isEnglish ? 'Service Status' : '服务状态';
   String get webuiStatusRunning => isEnglish ? 'Running' : '运行中';
   String get webuiStatusStarting => isEnglish ? 'Starting…' : '启动中…';
   String get webuiStatusStopped => isEnglish ? 'Stopped' : '已停止';
   String get webuiStatusFailed => isEnglish ? 'Failed' : '启动失败';
-  String get webuiFailurePortOccupied =>
-      isEnglish ? 'Port occupied' : '端口占用';
+  String get webuiFailurePortOccupied => isEnglish ? 'Port occupied' : '端口占用';
   String get webuiFailureMissingBundle =>
       isEnglish ? 'Missing built-in bundle' : '缺内置包';
   String get webuiFailureHealthTimeout =>
       isEnglish ? 'Health check timed out' : '健康超时';
-  String get webuiFailureStartFailed =>
-      isEnglish ? 'Failed to start' : '启动失败';
+  String get webuiFailureStartFailed => isEnglish ? 'Failed to start' : '启动失败';
   String get webuiOpenLogs => isEnglish ? 'Open Log Directory' : '打开日志目录';
 
   // Keepalive error messages (keepalive* prefix)
@@ -1573,10 +1568,8 @@ class AppLocalizations {
       isEnglish ? 'Start & Connect' : '启动并连接';
   String get onboardingEnterSessionList =>
       isEnglish ? 'Enter Sessions' : '进入会话列表';
-  String get onboardingStarting =>
-      isEnglish ? 'Starting…' : '启动中…';
-  String get onboardingRestarting =>
-      isEnglish ? 'Restarting…' : '重启中';
+  String get onboardingStarting => isEnglish ? 'Starting…' : '启动中…';
+  String get onboardingRestarting => isEnglish ? 'Restarting…' : '重启中';
   String get onboardingRetry => isEnglish ? 'Retry' : '重试';
   String get onboardingNeedInstallAgent =>
       isEnglish ? 'Hermes engine required' : '需先安装 Hermes 引擎';
@@ -1592,10 +1585,8 @@ class AppLocalizations {
   String get onboardingStartOnLoginSubtitle => isEnglish
       ? 'Start Hermes automatically when logging in'
       : '登录 Windows 时自动启动应用';
-  String get onboardingBuiltinNotStarted =>
-      isEnglish ? 'Not Started' : '未启动';
-  String get onboardingBuiltinRunning =>
-      isEnglish ? 'Running' : '运行中';
+  String get onboardingBuiltinNotStarted => isEnglish ? 'Not Started' : '未启动';
+  String get onboardingBuiltinRunning => isEnglish ? 'Running' : '运行中';
 
   // ---------------------------------------------------------------------------
   // Language Settings (多语言设置)
@@ -1610,10 +1601,12 @@ class AppLocalizations {
   String get trayShowWindow => isEnglish ? 'Show Main Window' : '显示主窗口';
   String get trayNewSession => isEnglish ? 'New Session' : '新建会话';
   String get trayOpenWebui => isEnglish ? 'Open WebUI' : '打开 WebUI';
-  String get trayNoRecentSessions => isEnglish ? 'No Recent Sessions' : '暂无最近会话';
+  String get trayNoRecentSessions =>
+      isEnglish ? 'No Recent Sessions' : '暂无最近会话';
   String get trayQuitApp => isEnglish ? 'Quit App' : '退出应用';
   String get trayWebuiRunning => isEnglish ? 'WebUI: Running' : 'WebUI 服务：运行中';
-  String get trayWebuiStarting => isEnglish ? 'WebUI: Starting' : 'WebUI 服务：启动中';
+  String get trayWebuiStarting =>
+      isEnglish ? 'WebUI: Starting' : 'WebUI 服务：启动中';
   String get trayWebuiFailed => isEnglish ? 'WebUI: Failed' : 'WebUI 服务：失败';
   String get trayWebuiStopped => isEnglish ? 'WebUI: Stopped' : 'WebUI 服务：已停止';
   String get trayStatusRunning => isEnglish ? 'Running' : '运行中';
@@ -1622,16 +1615,18 @@ class AppLocalizations {
   String get trayStatusReadOnly => isEnglish ? 'Read-only' : '只读';
   String get notifTurnCompleted => isEnglish ? 'Turn Completed' : '回合完成';
   String get notifDownloadComplete => isEnglish ? 'Download Completed' : '下载完成';
-  String get notifClarifyBody => isEnglish ? 'The agent needs clarification — tap to view' : 'Agent 需要你澄清，点击查看';
-  String get notifErrorBody => isEnglish ? 'Generation was interrupted — tap to view' : '会话生成异常中断，点击查看';
-  String get notifTurnFallbackBody => isEnglish ? 'Agent turn completed — tap to view' : 'Agent 回合已生成完毕，点击查看';
-  String get webuiDetailTakeover =>
-      isEnglish
-          ? 'Takeover: reusing an already-running instance'
-          : '接管模式：复用已运行实例';
-  String webuiDetailRestarting(int attempt) => isEnglish
-      ? 'Restarting (attempt $attempt)…'
-      : '重启中（第 $attempt 次尝试）…';
+  String get notifClarifyBody => isEnglish
+      ? 'The agent needs clarification — tap to view'
+      : 'Agent 需要你澄清，点击查看';
+  String get notifErrorBody =>
+      isEnglish ? 'Generation was interrupted — tap to view' : '会话生成异常中断，点击查看';
+  String get notifTurnFallbackBody =>
+      isEnglish ? 'Agent turn completed — tap to view' : 'Agent 回合已生成完毕，点击查看';
+  String get webuiDetailTakeover => isEnglish
+      ? 'Takeover: reusing an already-running instance'
+      : '接管模式：复用已运行实例';
+  String webuiDetailRestarting(int attempt) =>
+      isEnglish ? 'Restarting (attempt $attempt)…' : '重启中（第 $attempt 次尝试）…';
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations) ??
@@ -1660,4 +1655,19 @@ class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
 extension AppLocalizationsDl53 on AppLocalizations {
   String get dl53CannotDownload =>
       isEnglish ? 'Cannot download from this source' : '无法从此来源下载';
+}
+
+// ---------------------------------------------------------------------------
+// #55 Turn process collapse extensions
+// ---------------------------------------------------------------------------
+extension AppLocalizationsTurn55 on AppLocalizations {
+  String get turn55IntermediateText => isEnglish ? 'Intermediate text' : '中间文本';
+  String get turn55TurnCollapseTitle =>
+      isEnglish ? 'Collapse Turn Process' : '折叠回合过程';
+  String get turn55TurnCollapseDesc => isEnglish
+      ? 'Default to showing only question and final response'
+      : '默认只显示提问和最终答复';
+  String get turn55ExpandProcess => isEnglish ? 'Expand process' : '展开过程';
+  String get turn55CollapseProcess => isEnglish ? 'Collapse process' : '收起过程';
+  String get turn55ProcessLabel => isEnglish ? 'Process' : '过程';
 }
