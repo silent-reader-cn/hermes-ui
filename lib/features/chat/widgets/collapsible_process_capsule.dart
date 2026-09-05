@@ -4,15 +4,15 @@ import '../../../app/theme/status_colors.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
 
-/// 回合完成后过程折叠胶囊组件（active.md #55，样式改版 #59，位置改版 #58）。
+/// 回合完成后过程折叠胶囊组件（active.md #55，样式改版 #59 → #64 方案 E）。
 ///
 /// 将已完成回合中的思考块、工具调用卡、中间文本等过程项收敛为单行摘要胶囊，
 /// 默认收起（首次折叠，会话内记忆），点击可展开/收起详情。
 ///
-/// #59 形态定位：**轻量摘要条**——与 [ToolCallGroupCard]（实底灰盒 + 边框 +
-/// 绿勾状态图标，tool_call_card.dart）刻意拉开层级：无背景盒、无边框，
-/// 左侧 3px 圆角竖条 accent + 常规字重灰字 + 弱化箭头。胶囊只在回合完成态
-/// 出现，状态图标与工具卡绿勾重复，故移除。
+/// #64 方案 E「时间轴轨」：左侧一根发丝轨线串起整个回合过程（header +
+/// 展开后的子卡都挂在轨上），胶囊是轨上的空心蓝节点——语义即「本回合的
+/// 过程流起点」。与 [ToolCallGroupCard]（实底灰盒 + 边框 + 绿勾）天然
+/// 不同视觉语言，层级区分由形态本身完成，不再依赖孤立的装饰竖条。
 class CollapsibleProcessCapsule extends StatefulWidget {
   const CollapsibleProcessCapsule({
     super.key,
@@ -89,114 +89,117 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
       fontWeight: FontWeight.w400,
       color: secondaryText.resolveFrom(context),
     );
+    // 轨线与节点色（#64 方案 E）：装饰元素不受 AA 文字对比约束，
+    // 但深浅两态仍显式解析，防暗黑退化。
+    final railColor = const CupertinoDynamicColor.withBrightness(
+      color: Color(0x1F000000), // 浅底 12% 黑
+      darkColor: Color(0x26FFFFFF), // 深底 15% 白
+    );
 
     return SizedBox(
       key: const ValueKey('collapsible-process-capsule'),
       width: double.infinity,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // #59 左侧竖条 accent：标识「这是一段可展开的过程摘要」，
-          // 与工具卡（实底盒）形成层级区分。
-          Container(
-            width: 3,
-            height: 32,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: statusBlueText.resolveFrom(context),
-              borderRadius: BorderRadius.circular(1.5),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        // 左缘让出 17px 给轨线（rail 5px 居中于 0-10 区），内容整体缩进。
+        padding: const EdgeInsets.only(left: 17),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 轨线 + 空心蓝节点（节点对齐 header 行垂直中心）。
+            Row(
               children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    // 可用标题宽度：容器宽 - 左右内边距 - 箭头 - 间距（- 耗时）
-                    var availableWidth = constraints.maxWidth - 20 - 12 - 6;
-                    final trailingDuration = _trailingDuration();
-                    if (trailingDuration != null) {
-                      availableWidth -= 44;
-                    }
-                    if (availableWidth < 0) availableWidth = 0;
+                _TimelineNode(color: statusBlueText.resolveFrom(context)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // 可用标题宽度：容器宽 - 左右内边距 - 箭头 - 间距（- 耗时）
+                      var availableWidth = constraints.maxWidth - 20 - 12 - 6;
+                      final trailingDuration = _trailingDuration();
+                      if (trailingDuration != null) {
+                        availableWidth -= 44;
+                      }
+                      if (availableWidth < 0) availableWidth = 0;
 
-                    final title = formatProcessCapsuleSummary(
-                      toolGroups: widget.toolGroups,
-                      intermediateTextCount: widget.intermediateTextCount,
-                      hideThinking: widget.hideThinking,
-                      l10n: l10n,
-                      maxWidth: constraints.maxWidth.isFinite
-                          ? availableWidth
-                          : null,
-                      style: titleStyle,
-                      textScaler: MediaQuery.textScalerOf(context),
-                      textDirection: Directionality.of(context),
-                    );
+                      final title = formatProcessCapsuleSummary(
+                        toolGroups: widget.toolGroups,
+                        intermediateTextCount: widget.intermediateTextCount,
+                        hideThinking: widget.hideThinking,
+                        l10n: l10n,
+                        maxWidth: constraints.maxWidth.isFinite
+                            ? availableWidth
+                            : null,
+                        style: titleStyle,
+                        textScaler: MediaQuery.textScalerOf(context),
+                        textDirection: Directionality.of(context),
+                        processPrefix: true,
+                      );
 
-                    return Semantics(
-                      button: true,
-                      label: effectiveExpanded
-                          ? l10n.turn55CollapseProcess
-                          : l10n.turn55ExpandProcess,
-                      child: GestureDetector(
-                        key: const ValueKey('process-capsule-header'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _toggle,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: titleStyle,
-                                ),
-                              ),
-                              if (trailingDuration != null) ...[
-                                Text(
-                                  trailingDuration,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: secondaryText.resolveFrom(context),
+                      return Semantics(
+                        button: true,
+                        label: effectiveExpanded
+                            ? l10n.turn55CollapseProcess
+                            : l10n.turn55ExpandProcess,
+                        child: GestureDetector(
+                          key: const ValueKey('process-capsule-header'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _toggle,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: titleStyle,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                if (trailingDuration != null) ...[
+                                  Text(
+                                    trailingDuration,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: secondaryText.resolveFrom(
+                                        context,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Icon(
+                                  effectiveExpanded
+                                      ? CupertinoIcons.chevron_up
+                                      : CupertinoIcons.chevron_down,
+                                  size: 12,
+                                  color: CupertinoColors.tertiaryLabel
+                                      .resolveFrom(context),
+                                ),
                               ],
-                              Icon(
-                                effectiveExpanded
-                                    ? CupertinoIcons.chevron_up
-                                    : CupertinoIcons.chevron_down,
-                                size: 12,
-                                color: CupertinoColors.tertiaryLabel
-                                    .resolveFrom(context),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                if (effectiveExpanded && widget.children.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [const SizedBox(height: 4), ...widget.children],
-                    ),
+                      );
+                    },
                   ),
+                ),
               ],
             ),
-          ),
-        ],
+            if (effectiveExpanded && widget.children.isNotEmpty)
+              // 展开内容同样挂轨：左侧 1px 发丝轨线 + 节点延续，子卡缩进
+              // 与 header 文本对齐。
+              _RailBody(
+                railColor: railColor.resolveFrom(context),
+                nodeColor: statusBlueText.resolveFrom(context),
+                children: widget.children,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -216,7 +219,92 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
   }
 }
 
+/// #64 方案 E：轨线上的空心蓝节点（7px 圆环，header 行首）。
+class _TimelineNode extends StatelessWidget {
+  const _TimelineNode({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 10,
+      height: 32,
+      child: Center(
+        child: Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// #64 方案 E：展开体的左缘轨线（1px 发丝线 + 顶部实心小节点延续）。
+///
+/// 用 Stack + Positioned 画线：Stack 由内容定高，positioned 轨线自动
+/// 拉伸到内容全高（Row+Expanded 方案在无界高度约束下会 RenderFlex 炸）。
+class _RailBody extends StatelessWidget {
+  const _RailBody({
+    required this.railColor,
+    required this.nodeColor,
+    required this.children,
+  });
+
+  final Color railColor;
+  final Color nodeColor;
+  final List<Widget> children;
+
+  // 轨线 x = 节点圆心（header 节点区宽 10 的中心 5）对齐，线宽 1 → left 4.5。
+  static const double _railLeft = 4.5;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: _railLeft,
+          top: 0,
+          bottom: 0,
+          child: SizedBox(width: 1, child: ColoredBox(color: railColor)),
+        ),
+        Positioned(
+          left: _railLeft - 1,
+          top: 14,
+          child: Container(
+            width: 3,
+            height: 3,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: nodeColor,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 2),
+              ...children,
+              const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 根据可用宽度自适应计算过程胶囊标题（对齐 [_adaptiveActivityTitle] 风格）。
+///
+/// [processPrefix]（#64 方案 E）：标题带「过程 ·」前缀，与轨线节点共同
+/// 读出「本回合的过程流」语义；宽度不足时前缀优先保留、明细退省略号。
 String formatProcessCapsuleSummary({
   required List<ToolCallGroup> toolGroups,
   required int intermediateTextCount,
@@ -226,6 +314,7 @@ String formatProcessCapsuleSummary({
   TextStyle? style,
   TextScaler? textScaler,
   TextDirection? textDirection,
+  bool processPrefix = false,
 }) {
   final allCalls = [for (final g in toolGroups) ...g.toolCalls];
 
@@ -252,6 +341,12 @@ String formatProcessCapsuleSummary({
     return l10n.turn55ProcessLabel;
   }
 
+  // #64 方案 E 前缀：「过程 · 执行代码×8 …」；宽度不足时前缀优先保留、
+  // 明细退省略号（前缀 + 首项仍放不下时由渲染层 ellipsis 兜底）。
+  final prefix = processPrefix
+      ? '${l10n.turn55ProcessLabel} \u00B7 '
+      : '';
+
   final entries = counts.entries.toList()
     ..sort((a, b) {
       final cmp = b.value.compareTo(a.value);
@@ -263,7 +358,8 @@ String formatProcessCapsuleSummary({
       style == null ||
       textScaler == null ||
       textDirection == null) {
-    return entries.map((e) => '${e.key} \u00D7${e.value}').join(', ');
+    final detail = entries.map((e) => '${e.key} \u00D7${e.value}').join(', ');
+    return '$prefix$detail';
   }
 
   bool fits(String text) {
@@ -283,8 +379,8 @@ String formatProcessCapsuleSummary({
     final candidateVisible = [...visible, itemText];
     final remaining = entries.length - candidateVisible.length;
     final candidateString = remaining > 0
-        ? '${candidateVisible.join(', ')} \u2026'
-        : candidateVisible.join(', ');
+        ? '$prefix${candidateVisible.join(', ')} \u2026'
+        : '$prefix${candidateVisible.join(', ')}';
 
     if (fits(candidateString)) {
       visible.add(itemText);
@@ -296,10 +392,10 @@ String formatProcessCapsuleSummary({
   if (visible.isNotEmpty) {
     final remaining = entries.length - visible.length;
     if (remaining > 0) {
-      return '${visible.join(', ')} \u2026';
+      return '$prefix${visible.join(', ')} \u2026';
     }
-    return visible.join(', ');
+    return '$prefix${visible.join(', ')}';
   }
 
-  return '${entries.first.key} \u2026';
+  return '$prefix${entries.first.key} \u2026';
 }
