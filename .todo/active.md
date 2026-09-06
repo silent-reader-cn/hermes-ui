@@ -39,4 +39,28 @@
 
 ---
 
-（当前队列：#76 方案已定 · 未开工，等待排期）
+### #77 [P1] 宽屏右侧面板「返回」吞聊天——go 替换栈无来源可回，落空到 EmptyDetailPane
+
+- 复现：宽屏（≥900）点击进入某聊天 → 点侧栏「记忆/定时任务」等模块 → 右侧进入功能页 → 按页面左上角返回 → 落到空面板（EmptyDetailPane），聊天页丢失
+- 位置：
+  - `lib/app/shell/sidebar_utility_toolbar.dart:132` 宽屏侧栏入口 `context.go(item.path)`（替换栈）
+  - `lib/features/shared/app_back_button.dart:36-42` `canPop()`=false → `fallback='/'`
+  - `lib/app/shell/adaptive_shell.dart:270-272` 宽屏 `/` 渲染 `EmptyDetailPane`
+  - `lib/features/shared/app_navigation.dart:29-36` `leaveToRoot` 宽屏分支同病（`go('/')`）
+- 根因：go_router `go` 无历史栈，#51 拍板「宽屏保持 go」后宽屏右侧面板没有「上一页」概念；AppBackButton 无栈可 pop 只能兜底 `/`，宽屏 `/` 即空面板
+- 修复方向（来源单槽，推荐）：
+  1. 新增 `detailNavOriginProvider`（StateProvider<String?>）：宽屏进入功能页（openAdaptiveRoute 宽屏分支 + sidebar_utility_toolbar 侧栏入口两处接线）时记录切换前完整路径；功能页之间跳转**不覆盖**（保留最早来源）；侧栏点会话则覆盖为新聊天路径（面板旅程重置）
+  2. `AppBackButton` 改 ConsumerWidget：宽屏且 origin 非空且 ≠ 当前路径 → `go(origin)` 并清槽；否则现行逻辑（canPop→pop / fallback）
+  3. `leaveToRoot` 宽屏分支同样优先 origin（chat_page 归档/删除后回列表场景）
+  4. git_page 现硬编码 `fallback: '/chat/<id>'`（git_page.dart:52）可被 origin 机制覆盖，改回默认 AppBackButton（可选，验收不强制）
+- 现状 vs 预期：现状 = 宽屏从聊天进功能页按返回落到空面板；预期 = 返回原聊天（含流式状态），窄屏不受影响（push/pop 语义不变）
+- 验收：
+  1. widget 测试：宽屏视口 chat→记忆→back → 断言回原聊天路径；记忆→定时任务→back → 回聊天（非记忆）；侧栏换会话后功能页 back → 回新聊天
+  2. 窄屏回归：push/pop 行为与现有一致（既有 session_open_chat_route_test 不破）
+  3. 深链直进功能页（无来源）→ fallback 现行行为不变
+  4. `C:/tmp/f.bat analyze` 零告警 + 全量 test 绿
+- 备注：go_router 17.5；改动面 = app_navigation.dart + app_back_button.dart + sidebar_utility_toolbar.dart + 新 provider 文件，14 处 AppBackButton 挂点无需逐页改。
+
+---
+
+（当前队列：#76 方案已定 · 未开工、#77 宽屏返回吞聊天 · 待排期）
