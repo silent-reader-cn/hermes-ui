@@ -46,23 +46,32 @@
   - `lib/app/shell/sidebar_utility_toolbar.dart:132` 宽屏侧栏入口 `context.go(item.path)`（替换栈）
   - `lib/features/shared/app_back_button.dart:36-42` `canPop()`=false → `fallback='/'`
   - `lib/app/shell/adaptive_shell.dart:270-272` 宽屏 `/` 渲染 `EmptyDetailPane`
-  - `lib/features/shared/app_navigation.dart:29-36` `leaveToRoot` 宽屏分支同病（`go('/')`）
+  - `lib/features/shared/app_navigation.dart:29-36` `openAdaptiveRoute`/`leaveToRoot` 宽屏分支
 - 根因：go_router `go` 无历史栈，#51 拍板「宽屏保持 go」后宽屏右侧面板没有「上一页」概念；AppBackButton 无栈可 pop 只能兜底 `/`，宽屏 `/` 即空面板
-- 主人裁决（2026-09-06）：「防止栈积累」维持有效，但宽屏右侧面板切换**双向不得 replace**——聊天→模块/设置、模块/设置→聊天（含侧栏点会话）都保留来路；用户聊天输入中途去看设置，按返回必须回到原聊天继续输入（输入内容由既有会话级草稿 #18 兜住）
-- 修复方向（右侧面板历史栈，上限截断）：
-  1. 新增 `detailNavHistoryProvider`（List<String>，上限 16 截最老）：宽屏右侧面板每次路径切换（chat↔module、chat↔chat、module↔module）前把当前路径入栈；返回 = 出栈末条并 `go` 回去（双向可回退多级）
-  2. 接线点：`openAdaptiveRoute` 宽屏分支、`sidebar_utility_toolbar.dart:132`、`session_sidebar` 会话点击、`chat_page` 内部 go 跳转（归档前跳父/分支/新会话占位）
-  3. `AppBackButton` 改 ConsumerWidget：宽屏且栈非空 → pop+go 回退；否则现行 canPop→pop / fallback；窄屏逻辑不变
-  4. `leaveToRoot`（chat_page 归档/删除后）与 `go('/')` 清空栈（旅程重置）；深链直进栈空走 fallback 不变
-  5. 系统返回（`adaptive_shell.dart:43` 三级分流②「二级页回退到主页」）同步走历史栈优先
-- 现状 vs 预期：现状 = 宽屏从聊天进功能页按返回落到空面板；预期 = 返回原聊天（含流式状态），窄屏不受影响（push/pop 语义不变）
+- 主人裁决（2026-09-06 两轮）：①聊天↔模块/设置双向不得 replace（聊天输入中途去看设置，返回必须回原聊天继续输入，草稿由 #18 会话级草稿兜住）；②最终方案 = **全平台允许 push 积累栈，唯「点进具体聊天」先清栈再进入**
+- 探针实证（2026-09-06，go_router 17.5.0，tap 驱动 context.push，等价生产路径）：
+  1. ShellRoute 内 push **不复制 shell**——push 页渲染在 shell 内层 Navigator，侧栏单实例存活（#51「宽屏禁 push 防叠 shell」的前提不成立）
+  2. push 后旧页 offstage 存活，pop 原样恢复（状态不丢）
+  3. push 页上 `go('/chat/:id')` → push 出的页全部丢弃、栈回单层 = **点聊天天然清栈**
+  4. shell builder 收到的 `state.matchedLocation` 不跟 push（停在底页）；`currentConfiguration.last.matchedLocation` 才跟——侧栏模块高亮如需跟随需换数据源
+  5. 测试坑：裸调 `router.push()` 在 widget 测试环境静默无效，必须 tap 驱动 UI 回调里的 `context.push`
+- 修复方案（改动面极小）：
+  1. **宽屏模块/设置入口 `go`→`push`**：`sidebar_utility_toolbar.dart:132`、`openAdaptiveRoute` 宽屏分支改 `unawaited(context.push(path))`
+  2. **宽屏聊天入口保持 `go`**（`session_list_page.dart` `_openChatRoute` 宽屏分支）= 主人规则「进聊天先清栈」，零改动
+  3. **窄屏零改动**：全程 push 现状即主人规则（聊天必经列表中转，返回天然回列表）
+  4. `AppBackButton` 零改动：push 层 `canPop=true` 自动走 pop；聊天（go 进）`canPop=false` 走 fallback `/`
+  5. `leaveToRoot`（归档/删除会话）保持 `go('/')` 清栈；chat 内部 go 跳转（新会话占位/跳父/分支）保持 go——「聊天=重置点」
+  6. 可选增强（验收不强制）：侧栏模块高亮源改读 `currentConfiguration.last.matchedLocation`；Android 系统返回三级分流第②级优先内层 Navigator canPop→pop
+- 深度上限：不做（push 页轻量；病态积累需连续切 8+ 模块且从不进聊天/返回，Android 返回键可逐级弹）
+- 现状 vs 预期：现状 = 宽屏从聊天进功能页按返回落到空面板；预期 = 模块页返回回原聊天（输入保留），聊天重进即清栈，窄屏不受影响
 - 验收：
-  1. widget 测试：宽屏视口 聊天A→设置→聊天B→记忆 → 返回×3 依次回聊天B→设置→聊天A；记忆→定时任务→back 回记忆（不跳级）；聊天输入草稿回退后在（#18 联动）
-  2. 窄屏回归：push/pop 行为与现有一致（既有 session_open_chat_route_test 不破）
-  3. 深链直进功能页（无来源）→ fallback 现行行为不变
+  1. widget 测试（tap 驱动，参照 session_open_chat_route_test.dart 范式）：宽屏 聊天A→设置→记忆 → 返回×2 依次回设置→聊天A（输入保留）；聊天A→设置→侧栏点聊天B → 栈清空、返回到 `/`；宽屏侧栏点模块后模块页出现、侧栏仍单实例（ShellProbe 计数=1）
+  2. 窄屏回归：session_open_chat_route_test 既有两例直接绿（宽屏点会话仍 go，canPop=false 不变）
+  3. 深链直进功能页 → fallback 现行行为不变
   4. `C:/tmp/f.bat analyze` 零告警 + 全量 test 绿
-- 备注：go_router 17.5；改动面 = app_navigation.dart + app_back_button.dart + sidebar_utility_toolbar.dart + 新 provider 文件，14 处 AppBackButton 挂点无需逐页改。
+- 备注：go_router 17.5；改动面仅 sidebar_utility_toolbar.dart + app_navigation.dart 两个文件的两处 go→push，14 处 AppBackButton 挂点零改动。探针学习已录 skill（hermex-flutter-codebase）。
 
 ---
 
-（当前队列：#76 方案已定 · 未开工、#77 宽屏返回吞聊天 · 待排期）
+（当前队列：#76 方案已定 · 未开工、#77 方案已定 · 未开工）
+
