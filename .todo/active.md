@@ -106,10 +106,12 @@
 
 ### #81 [P1] Windows 下 Ctrl+Enter 发送模式失效——onSubmitted 豁口致裸 Enter 照样发送
 
-- 复现：设置发送快捷键为 Ctrl+Enter 后，裸按 Enter 仍发送（主人 Windows 实机反馈）
-- 位置：`chat_input_bar.dart:820-830` onSubmitted 守卫 `if (multiline && (isControlPressed || isMetaPressed)) return; unawaited(_submit())`——只拦「带修饰键的 Enter」，**不拦裸 Enter**；ctrlEnter 模式（multiline=true，maxLines=null）下裸 Enter 触发 onSubmitted（Windows 桌面端行为）→ 照常 _submit
+- 复现：设置发送快捷键为 Ctrl+Enter 后，裸按 Enter 仍发送（主人 Windows 实机反馈，2026-09-07 复报）
+- 实机取证（2026-09-07）：`%APPDATA%\com.silentreader\Hermes\shared_preferences.json` 含 `"flutter.chat_send_shortcut_mode":"ctrlEnter"`——**设置持久化正常**，问题纯在输入栏执行层；两段式未开（prefs 无 composer_two_pane 键），主人走经典单行路径
+- 位置一（主豁口，经典路径）：`chat_input_bar.dart:820-830` onSubmitted 守卫 `if (multiline && (isControlPressed || isMetaPressed)) return; unawaited(_submit())`——只拦「带修饰键的 Enter」（防双发），**不拦裸 Enter**；ctrlEnter 模式 maxLines=null，Windows 桌面引擎对 multiline 文本框裸 Enter 仍派发 onSubmitted（TextInputAction.done）→ 守卫放行 → 裸 Enter 照常 _submit
+- 位置二（两段式独立豁口）：`_buildTwoPaneComposer`（chat_input_bar.dart:897-903）桌面端 Shortcuts 硬编码 `SingleActivator(enter) → SendIntent`，完全无视 sendMode——两段式 + ctrlEnter 模式下裸 Enter 同样发送
 - 现状 vs 预期：现状 = ctrlEnter 模式裸 Enter 仍发送；预期 = ctrlEnter 模式裸 Enter 换行不发送、Ctrl+Enter 才发送
-- 修复方向：onSubmitted 守卫改按模式判定——`if (sendMode == ChatSendShortcutMode.ctrlEnter) return;`（该模式发送只走 Shortcuts 的 SendMessageIntent）；enter 模式行为不变（裸 Enter 提交）；enter 模式下 Ctrl+Enter 双路径（Shortcuts + onSubmitted）防双发需实现时探针定案（桌面端两路是否都触发）
+- 修复方向：① 经典路径 onSubmitted 守卫改按模式判定——`if (sendMode == ChatSendShortcutMode.ctrlEnter) return;`（该模式发送只走 Shortcuts 的 SendMessageIntent）；enter 模式行为不变（裸 Enter 提交）；enter 模式下 Ctrl+Enter 双路径（Shortcuts + onSubmitted）防双发需实现时探针定案（桌面端两路是否都触发）；② 两段式路径 Shortcuts 的 Enter→SendIntent 行按 sendMode 条件化（ctrlEnter 时桌面 Enter → InsertNewlineIntent，Ctrl+Enter → SendIntent）
 - 验收：Windows 实机 ctrlEnter 模式裸 Enter 换行、Ctrl+Enter 发送；enter 模式裸 Enter 发送不双发；设置切换即时生效
 - 备注：twoPane 路径（`_buildTwoPaneComposer`）若有同款 onSubmitted 豁口一并修；实现时先写 key 事件探针测桌面端 onSubmitted/Shortcuts 触发矩阵再动守卫
 
