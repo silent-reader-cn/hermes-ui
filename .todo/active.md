@@ -73,5 +73,58 @@
 
 ---
 
-（当前队列：#76 方案已定 · 未开工、#77 方案已定 · 未开工）
+### #78 [P2] 宽屏消息右键菜单改悬浮面板（对齐聊天列表三点菜单形态）
+
+- 现状：`chat_message_list.dart:2167-2169` onSecondaryTapDown/onLongPress → `showMessageActionMenu`（message_action_menu.dart）→ `showCupertinoModalPopup` + CupertinoActionSheet 底部弹出——宽窄屏同一形态
+- 主人反馈（2026-09-06）：宽屏右键弹出的是窄屏式底部菜单，不符合桌面 UI；应改为聊天列表对聊天项三点菜单那种悬浮面板
+- 方案：宽屏（≥900）右键 → `showCupertinoPopover` 锚定右键位置（项目已有先例：会话列表三点菜单 showCupertinoPopover 按 900 断点分流）；窄屏长按保持 ActionSheet；菜单项与 truncate 确认框逻辑不变
+- 验收：宽屏右键弹悬浮面板（贴右键点、屏缘越界翻转）、窄屏长按仍底部 ActionSheet、五项动作全部正常
+- 备注：需把 onSecondaryTapDown 的 globalPosition 传入菜单函数；message_action_menu.dart 增加宽屏变体，动作 tag 常量复用
+
+---
+
+### #79 [P1] 「从此处截断」按了不生效——合成 id 反查失配致静默 no-op
+
+- 复现：右键消息 → 从此处截断 → 确认 → 下方消息不消失，无任何报错
+- 位置：`chat_message_list.dart` `_showMessageActions` truncate case：`messages.indexWhere((m) => m.id == message.id)` → `if (index >= 0) await controller.truncateAt(index)`；`ChatMessage.id = messageId ?? '$role-$timestamp-$content'`（chat_message.dart:87）
+- 根因（代码层定位，置信度高，开工后先实机复核）：UI 层 `entry.message` 与 `state.messages` 元素为不同实例，content 在 fromJson 管线（`_extractThinkingTag` think 剥离/媒体解析/附件 enrich）中可能不一致 → **无 messageId 的消息合成 id 两边不同** → indexWhere=-1 → `if (index >= 0)` 不成立 → 静默 no-op（服务端从未收到请求）
+- 修复：索引直传——菜单闭包在 build 处直接携带该消息在 state.messages 的索引（displayItems→messages 坐标换算），废弃 id 反查；兜底：反查失败 setNotice 报错不静默
+- 验收：右键截断确认后下方消息消失并刷新；无 messageId（合成 id）消息同样生效；失败有可见提示
+- 备注：branch case 同样 id 反查（同款坑），一并修
+
+---
+
+### #80 [P1] 「编辑并重新发送」补截断语义（对齐 WebUI submitEdit）
+
+- 现状：`MessageAction.edit` → `prefillComposer(text)` 仅回填输入框，原消息与后续全部保留；再发送 = 追加新回合、旧消息仍在——名不符实（主人问询确认应含截断语义）
+- 参照：webui `ui.js:18117` `submitEdit` = `POST /api/session/truncate` keep_count=被编辑消息绝对索引（**删除被编辑消息及其后全部**）→ 本地 slice → 预填 composer → 发送
+- 修复：edit case = truncate（keepCount=index，不含被编辑消息自己）成功后 prefillComposer；失败不清输入、报错可见。与 #79 同域共用索引解析
+- 验收：编辑重发确认后原消息及之后消失、输入框预填、发送后新消息取代原位置；失败回滚可见
+- 备注：菜单项文案不变；truncateAt 需支持「不含自己」模式（keepCount=index）或直接调 truncateSession
+
+---
+
+### #81 [P1] Windows 下 Ctrl+Enter 发送模式失效——onSubmitted 豁口致裸 Enter 照样发送
+
+- 复现：设置发送快捷键为 Ctrl+Enter 后，裸按 Enter 仍发送（主人 Windows 实机反馈）
+- 位置：`chat_input_bar.dart:820-830` onSubmitted 守卫 `if (multiline && (isControlPressed || isMetaPressed)) return; unawaited(_submit())`——只拦「带修饰键的 Enter」，**不拦裸 Enter**；ctrlEnter 模式（multiline=true，maxLines=null）下裸 Enter 触发 onSubmitted（Windows 桌面端行为）→ 照常 _submit
+- 现状 vs 预期：现状 = ctrlEnter 模式裸 Enter 仍发送；预期 = ctrlEnter 模式裸 Enter 换行不发送、Ctrl+Enter 才发送
+- 修复方向：onSubmitted 守卫改按模式判定——`if (sendMode == ChatSendShortcutMode.ctrlEnter) return;`（该模式发送只走 Shortcuts 的 SendMessageIntent）；enter 模式行为不变（裸 Enter 提交）；enter 模式下 Ctrl+Enter 双路径（Shortcuts + onSubmitted）防双发需实现时探针定案（桌面端两路是否都触发）
+- 验收：Windows 实机 ctrlEnter 模式裸 Enter 换行、Ctrl+Enter 发送；enter 模式裸 Enter 发送不双发；设置切换即时生效
+- 备注：twoPane 路径（`_buildTwoPaneComposer`）若有同款 onSubmitted 豁口一并修；实现时先写 key 事件探针测桌面端 onSubmitted/Shortcuts 触发矩阵再动守卫
+
+---
+
+### #82 [P1] 底部跟随模式下组卡内 ToolCallCard 无法展开（点击闪一下回弹）
+
+- 复现：live 底部跟随（流式/自动跟底）中，tools 组卡能展开（状态保持），但组卡内单个 ToolCallCard 点开即闪回收起
+- 位置：`tool_call_card.dart` 持久化不对称——`ToolCallGroupCard._expanded`（:261/:274-315）有 PageStorage readState/writeState（identifier `tool-group-expanded-<key>`），重建后恢复；内层 `ToolCallCard._expanded`（:21/:67）**纯内存 setState 无持久化**
+- 根因（代码层定位，开工后先探针复核重建源）：底部跟随模式下流式 token/reveal/滚动锚定频繁重建时间线子树，内层 ToolCallCard 被重建 → `_expanded` 复位 false → 视觉「闪一下」；外层组卡因 PageStorage 而幸存——不对称即证据
+- 修复：ToolCallCard 复刻 GroupCard 的 PageStorage 模式（identifier `tool-call-expanded-<call.id>`，initState/didChangeDependencies 同步）；若探针发现重建源是 ValueKey(renderId) 变化导致整泡重建，需一并稳定 renderId（以探针为准）
+- 验收：底部跟随流式中展开内层 tool 卡保持展开不回弹；历史视图行为不变；组卡收起再展开内层状态按 PageStorage 语义恢复
+- 备注：thinking 伪工具行（_ThinkingRow）如无展开态不受影响
+
+---
+
+（当前队列：#76 方案已定 · 未开工、#77 方案已定 · 未开工、#78 P2 待开工、#79 P1 待开工、#80 P1 待开工、#81 P1 待开工、#82 P1 待开工）
 
