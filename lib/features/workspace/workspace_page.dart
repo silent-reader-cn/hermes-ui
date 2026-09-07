@@ -8,6 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/shell/android_back_interceptor.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
@@ -94,8 +95,35 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// 待删除确认的条目（非空 = 删除确认弹窗打开中）。
   WorkspaceEntry? _pendingDelete;
 
+  /// Android 系统返回拦截：非根目录时消费返回 = 上一级目录；根目录放行
+  /// （交还 shell 走 pop 退出页面）。仅当本页为当前顶层路由（文件预览页 /
+  /// 弹窗未覆盖）且列表状态就绪时才消费。
+  bool _handleAndroidBack() {
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return false;
+    final value = ref
+        .read(workspaceControllerProvider(widget.sessionId))
+        .valueOrNull;
+    if (value == null || value.isAtRoot) return false;
+    unawaited(
+      ref
+          .read(workspaceControllerProvider(widget.sessionId).notifier)
+          .navigateUp(),
+    );
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    AndroidBackInterceptorRegistry.register(_handleAndroidBack);
+  }
+
   @override
   void dispose() {
+    // Dart 方法 tear-off 同实例恒等（== 为 true），可直接注销 initState
+    // 注册的同一引用。
+    AndroidBackInterceptorRegistry.unregister(_handleAndroidBack);
     _renameController.dispose();
     super.dispose();
   }

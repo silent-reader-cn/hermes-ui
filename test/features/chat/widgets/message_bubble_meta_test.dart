@@ -86,7 +86,7 @@ void main() {
       expect(find.textContaining('·'), findsNothing);
     });
 
-    testWidgets('仅具备 timestamp 时渲染 Row 且仅展示时间', (tester) async {
+    testWidgets('仅具备 timestamp 时不渲染 meta 行（时间不独立出现，与 tok/s 对齐）', (tester) async {
       final msgDate = DateTime(2026, 9, 7, 11, 20);
       final ts = msgDate.millisecondsSinceEpoch / 1000.0;
 
@@ -106,7 +106,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final expectedTime = formatMessageTimestamp(ts);
-      expect(find.text(expectedTime), findsOneWidget);
+      expect(find.text(expectedTime), findsNothing);
       expect(find.textContaining('tok/s'), findsNothing);
     });
 

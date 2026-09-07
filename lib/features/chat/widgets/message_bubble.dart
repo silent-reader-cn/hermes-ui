@@ -377,14 +377,16 @@ class _AssistantContent extends StatelessWidget {
       }
     }
 
+    // #83 修订：meta 行整体由 turnTps 门控——时间只在 tok/s 旁追加出现，
+    // 不独立显示（用户不关注每条消息的时间；无速率数据则整行不渲染）。
     final metaSpans = <String>[];
     if (message.turnTps != null) {
       metaSpans.add('${message.turnTps!.toStringAsFixed(1)} tok/s');
-    }
-    if (message.timestamp != null) {
-      final formattedTime = formatMessageTimestamp(message.timestamp!);
-      if (formattedTime.isNotEmpty) {
-        metaSpans.add(formattedTime);
+      if (message.timestamp != null) {
+        final formattedTime = formatMessageTimestamp(message.timestamp!);
+        if (formattedTime.isNotEmpty) {
+          metaSpans.add(formattedTime);
+        }
       }
     }
     if (metaSpans.isNotEmpty) {

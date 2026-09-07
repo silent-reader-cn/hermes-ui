@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/shell/android_back_interceptor.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -513,6 +514,53 @@ void main() {
         find.byType(AppBackButton),
       );
       expect(backButton.fallback, '/');
+    });
+
+    testWidgets('Android 返回拦截：非根目录消费返回 = 上一级目录', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('src', dir: true)],
+          'src': [buildEntry('main.dart')],
+        },
+      );
+      await pumpWorkspace(tester, api);
+
+      // 进入子目录（模拟点击目录行）。
+      await tester.tap(find.text('src'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('main.dart'), findsOneWidget);
+
+      // 模拟 shell 询问页面级拦截器：应消费并导航回上一级。
+      expect(AndroidBackInterceptorRegistry.handle(), isTrue);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('src'), findsOneWidget);
+    });
+
+    testWidgets('Android 返回拦截：根目录放行（handle 返回 false）', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('a.txt')],
+        },
+      );
+      await pumpWorkspace(tester, api);
+
+      expect(AndroidBackInterceptorRegistry.handle(), isFalse);
+    });
+
+    testWidgets('Android 返回拦截：页面 dispose 后注销（handle 放行）', (tester) async {
+      final api = FakeWorkspaceApi(
+        directories: {
+          '.': [buildEntry('a.txt')],
+        },
+      );
+      await pumpWorkspace(tester, api);
+      expect(AndroidBackInterceptorRegistry.handle(), isFalse);
+
+      // 卸载页面 → 处理器注销 → 依旧放行（无残留引用）。
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(AndroidBackInterceptorRegistry.handle(), isFalse);
     });
   });
 }

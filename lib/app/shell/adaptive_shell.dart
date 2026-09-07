@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/adaptive_popover.dart';
+import 'android_back_interceptor.dart';
 import 'empty_detail_pane.dart';
 import 'session_sidebar.dart';
 import 'sidebar_resize_handle.dart';
@@ -40,7 +41,9 @@ const String kAdaptiveSidebarWidthStorageKey = 'adaptive_sidebar_width';
 /// - 窄屏（width < 900）：直接展示当前页面 [child]，保持单栈 Cupertino 体验。
 /// - 宽屏（width >= 900）：左侧展示常驻 [SessionSidebar]（宽度可拖拽调整并在 [280, 420] 之间 clamp，且持久化到本地存储），
 ///   中间展示拖拽手柄 [SidebarResizeHandle]，右侧展示详情内容 [child]（若路由为 `/` 则展示 [EmptyDetailPane]）。
-/// - 系统返回（Android）：三级分流接管（① 弹层/覆盖层关闭；② 二级页回退到主页 `/`；③ 主页 2 秒内双击退出应用），其他平台行为空转。
+/// - 系统返回（Android）：四级分流接管（① 弹层/覆盖层关闭；② 页面级拦截器
+///   （如工作区非根目录 → 上一级目录，[AndroidBackInterceptorRegistry]）；
+///   ③ 二级页回退到主页 `/`；④ 主页 2 秒内双击退出应用），其他平台行为空转。
 class AdaptiveShell extends StatefulWidget {
   const AdaptiveShell({
     super.key,
@@ -168,6 +171,14 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
   void _handleAndroidBack() {
     // 1. 先关 overlay 弹层（AdaptiveActionMenu / ContextWindowPopover 等）
     if (AdaptivePopover.closeTopOverlay()) {
+      _lastBackPressTime = null;
+      _dismissExitToast();
+      return;
+    }
+
+    // 1.5 页面级拦截器（LIFO）：如工作区文件浏览非根目录时返回 = 上一级
+    // 目录而非退出页面；处理器自证当前顶层（isCurrent）才消费。
+    if (AndroidBackInterceptorRegistry.handle()) {
       _lastBackPressTime = null;
       _dismissExitToast();
       return;
