@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'dart:io' show Platform;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -46,6 +47,21 @@ abstract interface class TurnNotificationService {
     String fileName,
     int byteSize,
   );
+
+  /// 下载进度 → 状态栏常驻进度通知（#93；Android only，其他平台空转）。
+  ///
+  /// [fileName] 当前下载文件名；[receivedBytes]/[expectedBytes] 已接收/总字节
+  /// （expectedBytes <= 0 表示总大小未知 → 进度条转 indeterminate）；
+  /// [queuedCount] 为队列中排队中任务数（>0 时正文附「还有 N 个排队」）。
+  Future<void> updateDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  });
+
+  /// 隐藏下载进度常驻通知（下载完成/失败/取消/队列空时调用；Android only）。
+  Future<void> clearDownloadProgress();
 
   /// 清除全部通知（回到前台 / 点击通知后调用）。
   Future<void> clearAll();
@@ -95,7 +111,9 @@ class LocalNotificationsTurnNotificationService
   LocalNotificationsTurnNotificationService({
     FlutterLocalNotificationsPlugin? plugin,
     this.onTap,
-  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    bool? androidPlatformOverride,
+  })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+        _androidPlatformOverride = androidPlatformOverride; // ignore: prefer_initializing_formals
 
   /// Android 通知通道：回合完成。
   static const channelTurnsId = 'turns';
@@ -120,6 +138,9 @@ class LocalNotificationsTurnNotificationService
   static const channelDownloadsName = '下载完成';
   static const channelDownloadsDescription = '文件下载完成时推送系统通知';
   static const notificationDownloadsId = 1301;
+
+  /// 下载进行中常驻进度通知 ID（#93；与 1301 同渠道，完成时 cancel 本条）。
+  static const notificationDownloadProgressId = 1401;
 
   /// Android 通知渠道配置列表（启动时批量预创建）。
   static const androidChannels = <AndroidNotificationChannel>[
@@ -162,6 +183,11 @@ class LocalNotificationsTurnNotificationService
 
   /// 点击通知回调（入参为 payload：sessionId 或 `download:<id>` 等扩展前缀）。
   final void Function(String payload)? onTap;
+
+  /// Android 平台判定覆盖（测试注入用；null = 真实 Platform.isAndroid）。
+  final bool? _androidPlatformOverride;
+
+  bool get _isAndroid => _androidPlatformOverride ?? Platform.isAndroid;
 
   bool _initialized = false;
 
@@ -409,6 +435,87 @@ class LocalNotificationsTurnNotificationService
         tag: 'notifications',
         message: '下载完成通知发送失败',
         details: {'downloadId': downloadId, 'fileName': fileName},
+        errorKind: error.toString(),
+      );
+    }
+  }
+
+  @override
+  Future<void> updateDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  }) async {
+    // #93 手机端专属：Windows 等桌面平台不弹进度通知（桌面下载页内可见）。
+    if (!_isAndroid) return;
+    await _ensureInitialized();
+    try {
+      final hasTotal = expectedBytes > 0;
+      final percent = hasTotal ? (receivedBytes * 100 ~/ expectedBytes) : 0;
+      final sizeText = hasTotal
+          ? '${formatDownloadByteSize(receivedBytes)} / ${formatDownloadByteSize(expectedBytes)}'
+          : formatDownloadByteSize(receivedBytes);
+      final queueSuffix = queuedCount > 0 ? ' · 还有 $queuedCount 个排队' : '';
+      final body = '$fileName ${sizeText.isNotEmpty ? '($sizeText)' : ''}'
+          '$queueSuffix';
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'notifications',
+        message: '更新下载进度通知',
+        details: {
+          'fileName': fileName,
+          'receivedBytes': receivedBytes,
+          'expectedBytes': expectedBytes,
+          'percent': percent,
+          'queuedCount': queuedCount,
+        },
+      );
+      await _plugin.show(
+        id: notificationDownloadProgressId,
+        title: AppLocalizations(LocaleResolver.resolve()).notifDownloading,
+        body: formatPreview(body),
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelDownloadsId,
+            channelDownloadsName,
+            channelDescription: channelDownloadsDescription,
+            importance: Importance.low,
+            priority: Priority.low,
+            ongoing: true,
+            onlyAlertOnce: true,
+            showProgress: true,
+            indeterminate: !hasTotal,
+            maxProgress: 100,
+            progress: percent.clamp(0, 100),
+          ),
+        ),
+        payload: 'download:progress',
+      );
+    } on Object catch (error) {
+      developer.log('下载进度通知更新失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '下载进度通知更新失败',
+        details: {'fileName': fileName},
+        errorKind: error.toString(),
+      );
+    }
+  }
+
+  @override
+  Future<void> clearDownloadProgress() async {
+    if (!_isAndroid) return;
+    await _ensureInitialized();
+    try {
+      await _plugin.cancel(id: notificationDownloadProgressId);
+    } on Object catch (error) {
+      developer.log('清除下载进度通知失败: $error', name: 'notifications');
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'notifications',
+        message: '清除下载进度通知失败',
         errorKind: error.toString(),
       );
     }

@@ -26,6 +26,17 @@ class _FakeNotificationService implements TurnNotificationService {
     String fileName,
     int byteSize,
   ) async {}
+  @override
+  Future<void> updateDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  }) async {}
+
+  @override
+  Future<void> clearDownloadProgress() async {}
+
 
   @override
   Future<void> notifyTurnCompleted(

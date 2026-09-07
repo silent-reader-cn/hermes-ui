@@ -75,11 +75,35 @@
 
 ---
 
-## #92（待排查）live 流式中用户划回上方被 scroll 来回拉扯
+## #93 下载进度常驻通知（Android 状态栏显示下载进度）
 
-- 主人反馈（附录屏 Screenrecorder-2026-09-07-12-59-21-81.mp4）：live 时用户划回上方查看内容，scroll 来回滚动（疑似自动跟随与用户手势互相抢）。
-- 相关现场：#74 已修「PC 滚轮上滚被拉回」（负位移守卫 + 程序化滚动门控，`chat_message_list.dart`）；本例为安卓/触屏场景回拉，可能与 #74 同根因不同入口（触摸 drag 未覆盖）或 reveal 队列 flush 节奏相关。
-- 状态：登记待排查（需结合录屏复现路径定位手势状态机分支）。
+- 主人要求：手机端下载进行中在状态栏常驻显示下载进度通知；下载完成/失败/取消后消失。
+- 位置：`lib/features/notifications/turn_notification_service.dart`（接口 + 生产实现）、`lib/features/downloads/download_controller.dart`（进度同步钩子）、`lib/l10n/app_localizations.dart`（尾部 extension）。
+- 实施：
+  1. 接口新增 `updateDownloadProgress({fileName, receivedBytes, expectedBytes, queuedCount})` 与 `clearDownloadProgress()`；
+  2. 生产实现：Android-only（`androidPlatformOverride` 测试钩子 + `Platform.isAndroid`，Windows 空转）；通知 ID **1401**（复用 downloads 渠道），`showProgress + maxProgress:100 + progress + ongoing:true + onlyAlertOnce + importance:low`（进度条静默更新不响铃）；总大小未知（expectedBytes≤0）→ `indeterminate`；正文 = 「文件名 (已收/总量) · 还有 N 个排队」；标题 l10n `notifDownloading`（正在下载/Downloading）；
+  3. `DownloadController`：下载开始与 onProgress 节流回调后 `_syncProgressNotification`（fire-and-forget）；完成（发 1301 完成通知后）、失败、worker finally 兜底均 `clearDownloadProgress`；
+  4. 7 处测试 fake 补桩。
+- 测试：service 4 例（Android show 参数组装/indeterminate 分支/非 Android 空转/cancel 1401）+ controller 3 例（进度调用与完成清除/失败清除/取消清除）。
+- 验收：analyze 零告警 ✅；全量 2530 例仅 #90 已登记抖动测试失败（与本改动无关，单跑恒绿）✅。
+- 状态：已实施，随批次 commit，待主人真机复验。
+
+---
+
+## #92（描述修正）live 流式页面上方区域 y 轴上下抖动
+
+- 主人补充（推翻先前「被拉回」猜测）：划到上方**能保持、不会被拉回**（区别于 #74 PC 滚轮回拉，非同根因）；问题是停留在上方时页面有 y 轴上下滚动抖动。
+- 疑因方向（待排查）：流式增量期间 extent 增长与程序化滚动（jumpTo/justify）在用户已上滚后仍对 viewport 施加修正；或 reveal 队列 flush 时 `maxScrollExtent` 估算波动传导。排查入口：`chat_message_list.dart` 手势状态机与「程序化滚动门控」（#74 加的负位移守卫只管回拉，不管页内抖动）。
+- 状态：登记待排查。
+
+---
+
+## #94（待排查）已在澄清会话中仍发应用内通知，盖住澄清弹窗
+
+- 主人要求：用户已停留在「需要澄清确认的聊天」页面时，不要发该会话的应用内通知（in-app 通知横幅会盖住上方的澄清确认弹窗）。
+- 位置线索：`lib/features/notifications/notification_providers.dart` `turnNotificationHookProvider`（前台 resumed 分支：`active != sessionId` 才发 in-app——澄清通知链路疑似未走该 hook 或判定条件不同）；澄清卡渲染在 `chat_page.dart`。
+- 待办：定位澄清事件 → in-app 通知的触发链路，补「当前路由即该会话聊天页」判定（activeSessionId + 当前路由 location 双条件）后静默。
+- 状态：登记待排查。
 
 ---
 

@@ -53,6 +53,9 @@ void main() {
         ),
       ).thenAnswer((_) async {});
       when(() => plugin.cancelAll()).thenAnswer((_) async {});
+      when(
+        () => plugin.cancel(id: any(named: 'id')),
+      ).thenAnswer((_) async {});
     });
 
     group('notifyTurnCompleted 参数组装', () {
@@ -386,6 +389,98 @@ void main() {
             payload: 's-test',
           ),
         ]);
+      });
+    });
+
+    group('#93 updateDownloadProgress / clearDownloadProgress', () {
+      test('Android 平台：show 到 downloads 渠道、id 1401、带进度条与 ongoing', () async {
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+        await androidService.updateDownloadProgress(
+          fileName: 'big.zip',
+          receivedBytes: 512 * 1024 * 1024 ~/ 2,
+          expectedBytes: 512 * 1024 * 1024,
+          queuedCount: 2,
+        );
+
+        final details = verify(
+          () => plugin.show(
+            id: 1401,
+            title: '正在下载',
+            body: captureAny(named: 'body'),
+            notificationDetails: captureAny(named: 'notificationDetails'),
+            payload: 'download:progress',
+          ),
+        ).captured;
+
+        final body = details[0] as String;
+        final notifDetails = details[1] as NotificationDetails;
+        expect(body, contains('big.zip'));
+        expect(body, contains('还有 2 个排队'));
+        expect(notifDetails.android, isNotNull);
+        expect(notifDetails.android!.showProgress, isTrue);
+        expect(notifDetails.android!.maxProgress, 100);
+        expect(notifDetails.android!.progress, inInclusiveRange(0, 100));
+        expect(notifDetails.android!.ongoing, isTrue);
+        expect(notifDetails.android!.onlyAlertOnce, isTrue);
+      });
+
+      test('总大小未知（expectedBytes<=0）→ indeterminate 进度条', () async {
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+        await androidService.updateDownloadProgress(
+          fileName: 'stream.bin',
+          receivedBytes: 1024,
+          expectedBytes: -1,
+        );
+
+        final details = verify(
+          () => plugin.show(
+            id: any(named: 'id'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: captureAny(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        ).captured;
+        final notifDetails = details.single as NotificationDetails;
+        expect(notifDetails.android!.indeterminate, isTrue);
+      });
+
+      test('非 Android 平台空转：不 show 也不 cancel', () async {
+        final desktopService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: false,
+        );
+        await desktopService.updateDownloadProgress(
+          fileName: 'a.zip',
+          receivedBytes: 1,
+          expectedBytes: 2,
+        );
+        await desktopService.clearDownloadProgress();
+        verifyNever(
+          () => plugin.show(
+            id: any(named: 'id'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        );
+        verifyNever(() => plugin.cancel(id: any(named: 'id')));
+      });
+
+      test('clearDownloadProgress：cancel id 1401', () async {
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+        await androidService.clearDownloadProgress();
+        verify(() => plugin.cancel(id: 1401)).called(1);
       });
     });
 

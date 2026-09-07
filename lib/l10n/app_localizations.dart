@@ -1729,3 +1729,9 @@ extension AppLocalizationsAutoLoadImages85 on AppLocalizations {
       isEnglish ? 'Tap to load' : '点击加载';
 }
 
+// #93 下载进度常驻通知（notification-rewriter 不涉及；仅 Android 使用）
+// ---------------------------------------------------------------------------
+extension AppLocalizationsDownloadProgress93 on AppLocalizations {
+  String get notifDownloading => isEnglish ? 'Downloading' : '正在下载';
+}
+

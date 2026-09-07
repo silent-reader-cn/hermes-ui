@@ -389,6 +389,7 @@ class DownloadController extends Notifier<DownloadState> {
         );
         _updateTask(downloading);
         await _repository.saveRecord(downloading);
+        _syncProgressNotification(currentTask);
 
         try {
           DiagnosticsService.instance.log(
@@ -450,6 +451,7 @@ class DownloadController extends Notifier<DownloadState> {
                   expectedBytes: effectiveTotal > 0 ? effectiveTotal : null,
                 );
                 _updateTask(progressed);
+                _syncProgressNotification(progressed);
               },
             );
           }
@@ -515,6 +517,12 @@ class DownloadController extends Notifier<DownloadState> {
             completed.fileName,
             bytes.length,
           );
+          // #93 进度通知随完成隐藏（完成通知 1301 另发）。
+          unawaited(
+            _notificationService
+                .clearDownloadProgress()
+                .catchError((Object _) {}),
+          );
         } catch (error) {
           if (_cancelledTaskIds.contains(currentTask.id)) {
             _cancelledTaskIds.remove(currentTask.id);
@@ -534,6 +542,12 @@ class DownloadController extends Notifier<DownloadState> {
           );
           _updateTask(failed);
           await _repository.saveRecord(failed);
+          // #93 进度通知随失败隐藏。
+          unawaited(
+            _notificationService
+                .clearDownloadProgress()
+                .catchError((Object _) {}),
+          );
 
           DiagnosticsService.instance.log(
             level: DiagnosticsLogLevel.error,
@@ -546,7 +560,29 @@ class DownloadController extends Notifier<DownloadState> {
       }
     } finally {
       _isWorkerRunning = false;
+      // #93 队列清空（或 worker 退出）→ 兜底隐藏进度通知（防取消/丢弃路径漏清）。
+      unawaited(
+        _notificationService.clearDownloadProgress().catchError((Object _) {}),
+      );
     }
+  }
+
+  /// #93 下载进度常驻通知同步（fire-and-forget；通知服务内部吞异常，仅
+  /// Android 生效）。仍在队列中的 queued 任务数（不含当前下载）附加到正文。
+  void _syncProgressNotification(DownloadTask task) {
+    final queuedCount = state.tasks
+        .where((t) => t.status == DownloadStatus.queued)
+        .length;
+    unawaited(
+      _notificationService
+          .updateDownloadProgress(
+            fileName: task.fileName,
+            receivedBytes: task.receivedBytes,
+            expectedBytes: task.expectedBytes ?? -1,
+            queuedCount: queuedCount,
+          )
+          .catchError((Object _) {}),
+    );
   }
 
   void _updateTask(DownloadTask task) {

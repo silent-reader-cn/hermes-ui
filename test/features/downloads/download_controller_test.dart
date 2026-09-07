@@ -21,6 +21,9 @@ class _FakeNotificationService implements TurnNotificationService {
   final List<(String, String)> clarifyCalls = [];
   final List<(String, String, String)> errorCalls = [];
   int clearAllCalls = 0;
+  final List<({String fileName, int receivedBytes, int expectedBytes})>
+      progressCalls = [];
+  int clearProgressCalls = 0;
 
   @override
   Future<void> notifyDownloadCompleted(
@@ -30,6 +33,23 @@ class _FakeNotificationService implements TurnNotificationService {
   ) async {
     downloadCompletedCalls.add((downloadId, fileName, byteSize));
   }
+  @override
+  Future<void> updateDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  }) async {
+    progressCalls.add(
+      (fileName: fileName, receivedBytes: receivedBytes, expectedBytes: expectedBytes),
+    );
+  }
+
+  @override
+  Future<void> clearDownloadProgress() async {
+    clearProgressCalls++;
+  }
+
 
   @override
   Future<void> notifyTurnCompleted(
@@ -137,6 +157,89 @@ void main() {
       ],
     );
   }
+
+  group('#93 下载进度常驻通知同步', () {
+    test('下载中调用 updateDownloadProgress（开始 + onProgress 回调），完成后 clear', () async {
+      mockDownloadResponses['https://example.com/progress.zip'] = () =>
+          Uint8List.fromList(List.filled(64, 7));
+
+      final container = createContainer(
+        customDownloader: (url, {onProgress}) async {
+          // 模拟 dio 分片回调（总量 64）
+          onProgress?.call(16, 64);
+          onProgress?.call(48, 64);
+          return Uint8List.fromList(List.filled(64, 7));
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/progress.zip',
+        fileName: 'progress.zip',
+        expectedBytes: 64,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final state = container.read(downloadControllerProvider);
+      expect(state.taskById(id)!.status, DownloadStatus.completed);
+
+      // 开始下载（received=0）+ 两次分片 = 至少 2 次进度调用
+      expect(notificationService.progressCalls, isNotEmpty);
+      expect(
+        notificationService.progressCalls.every((c) => c.fileName == 'progress.zip'),
+        isTrue,
+      );
+      // 完成后进度通知被清除（clear 调用 ≥1；开始+分片+完成兜底都会触发）
+      expect(notificationService.clearProgressCalls, greaterThanOrEqualTo(1));
+    });
+
+    test('下载失败后清进度通知', () async {
+      final container = createContainer(
+        customDownloader: (url, {onProgress}) async =>
+            throw Exception('boom'),
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      await controller.enqueue(
+        sourceUrl: 'https://example.com/boom.zip',
+        fileName: 'boom.zip',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final state = container.read(downloadControllerProvider);
+      expect(
+        state.tasks.every((t) => t.status != DownloadStatus.downloading),
+        isTrue,
+      );
+      expect(notificationService.clearProgressCalls, greaterThanOrEqualTo(1));
+    });
+
+    test('取消下载后清进度通知', () async {
+      // 慢速下载器：给 cancel 留出时间窗
+      final container = createContainer(
+        customDownloader: (url, {onProgress}) async {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          return Uint8List.fromList([1]);
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/slow.zip',
+        fileName: 'slow.zip',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await controller.cancel(id);
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      final state = container.read(downloadControllerProvider);
+      expect(state.taskById(id)!.status, DownloadStatus.cancelled);
+      expect(notificationService.clearProgressCalls, greaterThanOrEqualTo(1));
+    });
+  });
 
   group('DownloadController 核心队列与状态机', () {
     test('单任务下载成功：更新 completed、保存文件、触发通知、记录诊断日志', () async {
