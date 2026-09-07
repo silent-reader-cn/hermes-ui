@@ -9,7 +9,9 @@ import 'adaptive_popover.dart';
 /// 本文件仅做转发，避免既有调用方大改。
 Future<void> showCupertinoPopover({
   required BuildContext context,
-  required GlobalKey anchorKey,
+  GlobalKey? anchorKey,
+  Offset? position,
+  Rect? anchorRect,
   required Widget Function(BuildContext context, VoidCallback close) builder,
   double preferredWidth = 360,
   double? minWidth,
@@ -22,10 +24,13 @@ Future<void> showCupertinoPopover({
   bool barrierDismissible = true,
   double maxHeight = 420,
   double gap = 8,
+  VoidCallback? onClosed,
 }) {
   return showAdaptivePopover(
     context: context,
     anchorKey: anchorKey,
+    position: position,
+    anchorRect: anchorRect,
     builder: builder,
     preferredWidth: preferredWidth,
     minWidth: minWidth,
@@ -38,5 +43,6 @@ Future<void> showCupertinoPopover({
     barrierDismissible: barrierDismissible,
     maxHeight: maxHeight,
     gap: gap,
+    onClosed: onClosed,
   );
 }

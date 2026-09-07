@@ -1507,12 +1507,38 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   }
 
   /// 长按/右键消息弹操作菜单并执行动作。
-  Future<void> _showMessageActions(ChatMessage message) async {
-    final action = await showMessageActionMenu(context, message: message);
+  Future<void> _showMessageActions(
+    ChatMessage message, {
+    int? messageIndex,
+    Offset? position,
+  }) async {
+    final action = await showMessageActionMenu(
+      context,
+      message: message,
+      position: position,
+    );
     if (action == null || !mounted) return;
     final controller = ref.read(
       chatControllerProvider(widget.sessionId).notifier,
     );
+    final l10n = AppLocalizations.of(context);
+
+    int resolveIndex() {
+      final messages =
+          ref.read(chatControllerProvider(widget.sessionId)).messages;
+      if (messageIndex != null &&
+          messageIndex >= 0 &&
+          messageIndex < messages.length) {
+        return messageIndex;
+      }
+      if (message.messageId != null && message.messageId!.isNotEmpty) {
+        final idx =
+            messages.indexWhere((m) => m.messageId == message.messageId);
+        if (idx >= 0) return idx;
+      }
+      return messages.indexWhere((m) => m.id == message.id);
+    }
+
     switch (action) {
       case MessageAction.copy:
       case MessageAction.copyMd:
@@ -1520,31 +1546,45 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         unawaited(copyMessageText(message));
         if (mounted) {
           controller.setNotice(
-            AppLocalizations.of(context).copiedToClipboardNotice,
+            l10n.copiedToClipboardNotice,
           );
         }
       case MessageAction.edit:
         final text = message.content;
-        if (text != null && text.isNotEmpty) {
-          controller.prefillComposer(text);
+        if (text == null || text.isEmpty) return;
+        final editIndex = resolveIndex();
+        if (editIndex < 0) {
+          controller.setNotice(l10n.msgActionLocateFailed);
+          return;
         }
-      case MessageAction.branch:
-        final branchIndex = ref
-            .read(chatControllerProvider(widget.sessionId))
-            .messages
-            .indexWhere((m) => m.id == message.id);
-        if (branchIndex >= 0) {
-          final newId = await controller.branchAt(branchIndex);
-          if (newId != null && mounted) {
-            context.go('/chat/$newId');
+        final ok = await controller.truncateAt(editIndex, includeTarget: false);
+        if (!ok) {
+          if (mounted) {
+            controller.setNotice(l10n.msgActionEditFailed);
           }
+          return;
+        }
+        controller.prefillComposer(text);
+      case MessageAction.branch:
+        final branchIndex = resolveIndex();
+        if (branchIndex < 0) {
+          controller.setNotice(l10n.msgActionLocateFailed);
+          return;
+        }
+        final newId = await controller.branchAt(branchIndex);
+        if (newId != null && mounted) {
+          context.go('/chat/$newId');
         }
       case MessageAction.truncate:
-        final index = ref
-            .read(chatControllerProvider(widget.sessionId))
-            .messages
-            .indexWhere((m) => m.id == message.id);
-        if (index >= 0) await controller.truncateAt(index);
+        final index = resolveIndex();
+        if (index < 0) {
+          controller.setNotice(l10n.msgActionLocateFailed);
+          return;
+        }
+        final ok = await controller.truncateAt(index);
+        if (!ok && mounted) {
+          controller.setNotice(l10n.msgActionTruncateFailed);
+        }
     }
   }
 
@@ -2164,9 +2204,16 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                         key: isHighlightTarget ? _highlightKey : entryKey,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onLongPress: () => _showMessageActions(entry.message),
-                          onSecondaryTapDown: (_) =>
-                              _showMessageActions(entry.message),
+                          onLongPress: () => _showMessageActions(
+                            entry.message,
+                            messageIndex: entry.loadedIndex,
+                          ),
+                          onSecondaryTapDown: (details) =>
+                              _showMessageActions(
+                                entry.message,
+                                messageIndex: entry.loadedIndex,
+                                position: details.globalPosition,
+                              ),
                           child: SearchMessageHighlight(
                             highlight: isHighlightTarget,
                             child: RepaintBoundary(

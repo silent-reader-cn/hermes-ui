@@ -1671,3 +1671,16 @@ extension AppLocalizationsTurn55 on AppLocalizations {
   String get turn55CollapseProcess => isEnglish ? 'Collapse process' : '收起过程';
   String get turn55ProcessLabel => isEnglish ? 'Process' : '过程';
 }
+
+// ---------------------------------------------------------------------------
+// #78/#79/#80 Message action extensions
+// ---------------------------------------------------------------------------
+extension AppLocalizationsMsgAction on AppLocalizations {
+  String get msgActionLocateFailed =>
+      isEnglish ? 'Failed to locate message' : '定位消息失败';
+  String get msgActionTruncateFailed =>
+      isEnglish ? 'Failed to truncate message' : '截断消息失败';
+  String get msgActionEditFailed =>
+      isEnglish ? 'Failed to truncate before edit' : '编辑前截断失败';
+}
+

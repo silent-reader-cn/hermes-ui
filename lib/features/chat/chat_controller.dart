@@ -454,12 +454,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 从此处截断：保留 [messageIndex] 及其之前的全部消息，删除其后所有。
   ///
-  /// 服务端 keep_count = index + 1（从开头保留条数）；越界或只读返回 false。
-  Future<bool> truncateAt(int messageIndex) async {
+  /// [includeTarget] 为 true 时（默认）keep_count = index + 1（含自己保留）；
+  /// 为 false 时 keep_count = index（不含自己保留，删除被编辑消息及其后全部，用于编辑重发）。
+  /// 服务端 keep_count 从开头保留条数；越界或只读返回 false。
+  Future<bool> truncateAt(
+    int messageIndex, {
+    bool includeTarget = true,
+  }) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     final messages = state.messages;
     if (messageIndex < 0 || messageIndex >= messages.length) return false;
-    final keepCount = messageIndex + 1;
+    final keepCount = includeTarget ? messageIndex + 1 : messageIndex;
+    if (keepCount < 0) return false;
     try {
       final response = await _api!.truncateSession(
         sessionId: state.sessionId,

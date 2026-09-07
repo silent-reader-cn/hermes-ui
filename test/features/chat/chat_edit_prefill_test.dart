@@ -80,6 +80,8 @@ void main() {
       expect(text, _originalText);
       expect(int.parse(selection), _originalText.length,
           reason: '光标应置于回填文本末尾');
+      expect(api.truncateCalls, 1, reason: '编辑应先触发截断会话');
+      expect(api.truncateKeepCounts, [0], reason: '编辑第0条消息应 keepCount=0（不含自己）');
 
       // 一次性语义：消费后 provider 值已清除（unawaited 写→消费→clear）。
       final container = ProviderScope.containerOf(
@@ -109,12 +111,16 @@ void main() {
       await tapEditAndResend(tester);
       final (firstText, _) = readInput(tester);
       expect(firstText, _originalText);
+      expect(api.truncateCalls, 1);
+      expect(api.truncateKeepCounts, [0]);
 
       // 第二次长按同一条 → 再点编辑。
       await tapEditAndResend(tester);
       final (secondText, selection) = readInput(tester);
       expect(secondText, _originalText, reason: '连点第二次仍应回填（去重不吞）');
       expect(int.parse(selection), _originalText.length);
+      expect(api.truncateCalls, 2);
+      expect(api.truncateKeepCounts, [0, 0]);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -144,6 +150,8 @@ void main() {
       await tapEditAndResend(tester);
       final (text, _) = readInput(tester);
       expect(text, _originalText);
+      expect(api.truncateCalls, 1);
+      expect(api.truncateKeepCounts, [0]);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -173,6 +181,7 @@ void main() {
       await tapEditAndResend(tester);
       final (text, _) = readInput(tester);
       expect(text, isEmpty, reason: '只读会话 prefillComposer 静默 return');
+      expect(api.truncateCalls, 0);
 
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ChatPage)),
@@ -180,6 +189,41 @@ void main() {
       expect(
         container.read(chatControllerProvider('s1')).composerPrefill,
         isNull,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+
+    testWidgets('编辑并重新发送：截断失败则不回填输入框且弹出错误提示', (tester) async {
+      final api = apiWithUserMessage();
+      api.mutationOk = false;
+      api.mutationError = '截断被拒绝';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(home: ChatPage(sessionId: 's1')),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tapEditAndResend(tester);
+
+      final (text, _) = readInput(tester);
+      expect(text, isEmpty, reason: '截断失败时不得回填输入框');
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+      expect(
+        container.read(chatControllerProvider('s1')).composerPrefill,
+        isNull,
+      );
+      expect(
+        container.read(chatControllerProvider('s1')).noticeMessage,
+        isNotNull,
+        reason: '截断失败应展示 notice 报错',
       );
 
       await tester.pumpWidget(const SizedBox.shrink());

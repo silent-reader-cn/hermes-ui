@@ -65,7 +65,9 @@ class AdaptivePopover {
 /// - 点击屏障关闭（[barrierDismissible]），屏障颜色 [barrierColor] 默认为透明。
 Future<void> showAdaptivePopover({
   required BuildContext context,
-  required GlobalKey anchorKey,
+  GlobalKey? anchorKey,
+  Offset? position,
+  Rect? anchorRect,
   required Widget Function(BuildContext context, VoidCallback close) builder,
   double preferredWidth = 360,
   double? minWidth,
@@ -79,25 +81,36 @@ Future<void> showAdaptivePopover({
   Color? barrierColor,
   double maxHeight = 420,
   double gap = 8,
+  VoidCallback? onClosed,
 }) async {
   final overlay = Overlay.of(context);
   final overlayBox = overlay.context.findRenderObject() as RenderBox?;
   if (overlayBox == null) return;
-  final anchorContext = anchorKey.currentContext;
-  final anchorBox = anchorContext?.findRenderObject() as RenderBox?;
-  if (anchorBox == null || !anchorBox.attached) return;
 
-  final anchorTopLeft = anchorBox.localToGlobal(
-    Offset.zero,
-    ancestor: overlayBox,
-  );
-  final anchorSize = anchorBox.size;
-  final anchorRect = Rect.fromLTWH(
-    anchorTopLeft.dx,
-    anchorTopLeft.dy,
-    anchorSize.width,
-    anchorSize.height,
-  );
+  Rect? resolvedRect = anchorRect;
+  if (resolvedRect == null && position != null) {
+    final localPos = overlayBox.globalToLocal(position);
+    resolvedRect = Rect.fromLTWH(localPos.dx, localPos.dy, 0, 0);
+  }
+  if (resolvedRect == null && anchorKey != null) {
+    final anchorContext = anchorKey.currentContext;
+    final anchorBox = anchorContext?.findRenderObject() as RenderBox?;
+    if (anchorBox == null || !anchorBox.attached) return;
+
+    final anchorTopLeft = anchorBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final anchorSize = anchorBox.size;
+    resolvedRect = Rect.fromLTWH(
+      anchorTopLeft.dx,
+      anchorTopLeft.dy,
+      anchorSize.width,
+      anchorSize.height,
+    );
+  }
+  if (resolvedRect == null) return;
+  final resolvedAnchorRect = resolvedRect;
 
   final screenW = overlayBox.size.width;
   final screenH = overlayBox.size.height;
@@ -115,23 +128,23 @@ Future<void> showAdaptivePopover({
   double left;
   switch (align) {
     case PopoverAlign.start:
-      left = anchorRect.left + offset.dx;
+      left = resolvedAnchorRect.left + offset.dx;
       break;
     case PopoverAlign.center:
-      left = anchorRect.left +
-          anchorRect.width / 2 -
+      left = resolvedAnchorRect.left +
+          resolvedAnchorRect.width / 2 -
           effectiveWidth / 2 +
           offset.dx;
       break;
     case PopoverAlign.end:
-      left = anchorRect.right - effectiveWidth + offset.dx;
+      left = resolvedAnchorRect.right - effectiveWidth + offset.dx;
       break;
   }
   left = left.clamp(safeLeft, math.max(safeLeft, safeRight - effectiveWidth));
 
   // 纵向方向：计算可用空间并决定最终 placement。
-  final spaceAbove = anchorRect.top;
-  final spaceBelow = screenH - anchorRect.bottom;
+  final spaceAbove = resolvedAnchorRect.top;
+  final spaceBelow = screenH - resolvedAnchorRect.bottom;
 
   PopoverPlacement resolved = placement;
   if (placement == PopoverPlacement.auto) {
@@ -177,6 +190,7 @@ Future<void> showAdaptivePopover({
     if (entry.mounted) {
       entry.remove();
     }
+    onClosed?.call();
   };
 
   AdaptivePopover._activeOverlayClosers.add(close);
@@ -184,7 +198,7 @@ Future<void> showAdaptivePopover({
   entry = OverlayEntry(
     builder: (overlayContext) => _AdaptivePopoverHost(
       left: left,
-      anchorRect: anchorRect,
+      anchorRect: resolvedAnchorRect,
       effectiveWidth: effectiveWidth,
       minWidth: effectiveMinWidth,
       maxWidth: effectiveMaxWidth,

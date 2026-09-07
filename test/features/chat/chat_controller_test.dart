@@ -2034,6 +2034,28 @@ void main() {
       expect(api.truncateKeepCounts, [2]);
     });
 
+    test('从此处截断：includeTarget=false → keepCount=index（不含自己）', () async {
+      final api = _FakeChatApi();
+      api.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'messages': [
+            {'role': 'user', 'content': 'a', 'message_id': 'm1'},
+            {'role': 'assistant', 'content': 'b', 'message_id': 'm2'},
+            {'role': 'user', 'content': 'c', 'message_id': 'm3'},
+          ],
+        },
+      };
+      final container = _buildContainer(api, _FakeClock());
+      final controller = container.read(chatControllerProvider('s1').notifier);
+      await controller.loadMessages();
+
+      final ok = await controller.truncateAt(1, includeTarget: false);
+      expect(ok, isTrue);
+      expect(api.truncateCalls, 1);
+      expect(api.truncateKeepCounts, [1]);
+    });
+
     test('从此处截断：服务端失败 → false + 错误', () async {
       final api = _FakeChatApi();
       api.sessionResult = {
