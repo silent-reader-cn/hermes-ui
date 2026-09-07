@@ -20,6 +20,66 @@ class ToolCallCard extends StatefulWidget {
 class _ToolCallCardState extends State<ToolCallCard> {
   bool _expanded = false;
 
+  String get _storageKey {
+    final call = widget.call;
+    if (call.id.isNotEmpty && !call.id.startsWith('uuid-')) {
+      return 'tool-call-expanded-${call.id}';
+    }
+    // 兜底策略：当 call.id 为空或以 'uuid-' 为前缀时（常见于测试/临时 mock 或旧前缀）：
+    // 1. 若仍具备非空 call.id（如 'uuid-xxx'），附加 displayName 与 call.id 作为标识；
+    // 2. 若 call.id 完全为空，以 displayName 与 startedAt 时间戳组合兜底，
+    // 保证在 _completeToolCall 等流式生命周期内（startedAt 保持一致）仍可准确恢复状态。
+    if (call.id.isNotEmpty) {
+      return 'tool-call-expanded-uuid-${call.displayName}-${call.id}';
+    }
+    return 'tool-call-expanded-fallback-${call.displayName}-${call.startedAt}';
+  }
+
+  void _syncExpandedFromStorage() {
+    final key = _storageKey;
+    final stored = PageStorage.maybeOf(context)?.readState(
+      context,
+      identifier: key,
+    );
+    if (stored is bool) {
+      _expanded = stored;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = false;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncExpandedFromStorage();
+  }
+
+  @override
+  void didUpdateWidget(covariant ToolCallCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.call.id != widget.call.id ||
+        oldWidget.call.startedAt != widget.call.startedAt ||
+        oldWidget.call.name != widget.call.name) {
+      _syncExpandedFromStorage();
+    }
+  }
+
+  void _toggleExpanded() {
+    setState(() {
+      _expanded = !_expanded;
+      final key = _storageKey;
+      PageStorage.maybeOf(context)?.writeState(
+        context,
+        _expanded,
+        identifier: key,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -64,7 +124,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: _toggleExpanded,
             child: Row(
               children: [
                 if (running)
