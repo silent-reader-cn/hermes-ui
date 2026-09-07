@@ -26,8 +26,18 @@ class _FakeSidecarFileSystem implements SidecarFileSystem {
   @override
   String? get envSidecarRoot => null;
 
+  bool Function(String path)? fileExistsOverride;
+  String customAgentDir = r'C:\Users\Admin\AppData\Local\hermes\hermes-agent';
+
+  String get hermesAgentDir => customAgentDir;
+
   @override
-  bool fileExists(String path) => true;
+  bool fileExists(String path) {
+    if (fileExistsOverride != null) {
+      return fileExistsOverride!(path);
+    }
+    return true;
+  }
 
   @override
   String get logDirectoryPath => r'C:\logs';
@@ -192,6 +202,93 @@ void main() {
       expect(mockService.stopCalls, 1);
       expect(container.read(webuiSidecarConfigProvider).enabled, isFalse);
       expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+    });
+
+    testWidgets('未安装 Agent 时点击开关 -> 弹窗且不解开关，保持 false', (tester) async {
+      fakeFs.fileExistsOverride = (path) => false;
+      await container.read(agentEnvPresentProvider.notifier).refresh();
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final switchFinder = find.byKey(
+        const ValueKey('settings-webui-enable-switch'),
+      );
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+
+      // 点击开关
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      // 验证弹出 CupertinoAlertDialog
+      expect(
+        find.byKey(const ValueKey('settings-webui-missing-agent-dialog')),
+        findsOneWidget,
+      );
+      expect(find.text('需要先安装 Hermes Agent'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-webui-dialog-cancel-btn')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-webui-dialog-guide-btn')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-webui-dialog-recheck-btn')),
+        findsOneWidget,
+      );
+
+      // 开关仍保持 false，未调用 start()
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+      expect(container.read(webuiSidecarConfigProvider).enabled, isFalse);
+      expect(mockService.startCalls, 0);
+
+      // 点击「取消」按钮关闭弹窗
+      await tester.tap(
+        find.byKey(const ValueKey('settings-webui-dialog-cancel-btn')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('settings-webui-missing-agent-dialog')),
+        findsNothing,
+      );
+      expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
+    });
+
+    testWidgets('弹窗中点击「重新检测」触发 refresh', (tester) async {
+      var installed = false;
+      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      fakeFs.fileExistsOverride = (path) => installed && path == expectedVenv;
+      await container.read(agentEnvPresentProvider.notifier).refresh();
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final switchFinder = find.byKey(
+        const ValueKey('settings-webui-enable-switch'),
+      );
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('settings-webui-missing-agent-dialog')),
+        findsOneWidget,
+      );
+
+      // 此时用户安装好 agent，点击「重新检测」
+      installed = true;
+      await tester.tap(
+        find.byKey(const ValueKey('settings-webui-dialog-recheck-btn')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('settings-webui-missing-agent-dialog')),
+        findsNothing,
+      );
+      expect(container.read(agentEnvPresentProvider).value, isTrue);
     });
   });
 

@@ -66,8 +66,18 @@ class _FakeSidecarFileSystem implements SidecarFileSystem {
   @override
   String? get envSidecarRoot => null;
 
+  bool Function(String path)? fileExistsOverride;
+  String customAgentDir = r'C:\Users\Admin\AppData\Local\hermes\hermes-agent';
+
+  String get hermesAgentDir => customAgentDir;
+
   @override
-  bool fileExists(String path) => true;
+  bool fileExists(String path) {
+    if (fileExistsOverride != null) {
+      return fileExistsOverride!(path);
+    }
+    return true;
+  }
 
   @override
   String get logDirectoryPath => r'C:\logs';
@@ -441,37 +451,59 @@ void main() {
     });
   });
 
-  group('TASK U2 — agent 缺失卡渲染与入口', () {
-    testWidgets('agentInstalled=false 时顶部渲染卡片，点击 push 到 /install-guide',
+  group('TASK #76 — 引导页内置 Tab 门禁与 agent 缺失卡', () {
+    testWidgets('agentEnvPresent=false 时渲染缺失卡、文案明确、按钮置灰，重检触发 refresh',
         (tester) async {
-      detector.hasAgent = false;
+      var installed = false;
+      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      fakeFs.fileExistsOverride = (path) => installed && path == expectedVenv;
 
       await tester.pumpWidget(buildTestApp(bundledAvailable: true));
       await tester.pumpAndSettle();
 
-      // 验证卡片与按钮存在
+      // 验证卡片与文案存在
       expect(
         find.byKey(const ValueKey('onboarding-missing-agent-card')),
         findsOneWidget,
       );
-      expect(find.text('需先安装 Hermes 引擎'), findsOneWidget);
+      expect(find.text('未检测到 Hermes Agent'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('onboarding-install-agent-btn')),
         findsOneWidget,
       );
+      expect(find.text('查看安装指南'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-recheck-agent-btn')),
+        findsOneWidget,
+      );
+      expect(find.text('我装好了，重新检测'), findsOneWidget);
 
-      // 点击安装按钮
+      // 验证「启动并连接」按钮置灰（onPressed is null）
+      final actionBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('onboarding-builtin-action-btn')),
+      );
+      expect(actionBtn.onPressed, isNull);
+
+      // 模拟用户安装就绪后点击「我装好了，重新检测」
+      installed = true;
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-install-agent-btn')),
+        find.byKey(const ValueKey('onboarding-recheck-agent-btn')),
       );
       await tester.pumpAndSettle();
 
-      // 导航到安装向导
-      expect(find.text('INSTALL_GUIDE_PAGE'), findsOneWidget);
+      // 缺失卡收起，启动按钮解禁
+      expect(
+        find.byKey(const ValueKey('onboarding-missing-agent-card')),
+        findsNothing,
+      );
+      final enabledActionBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('onboarding-builtin-action-btn')),
+      );
+      expect(enabledActionBtn.onPressed, isNotNull);
     });
 
-    testWidgets('agentInstalled=true 时不显示缺失卡片', (tester) async {
-      detector.hasAgent = true;
+    testWidgets('agentEnvPresent=true 时不显示缺失卡片，启动按钮可用', (tester) async {
+      fakeFs.fileExistsOverride = (path) => true;
 
       await tester.pumpWidget(buildTestApp(bundledAvailable: true));
       await tester.pumpAndSettle();
@@ -480,6 +512,10 @@ void main() {
         find.byKey(const ValueKey('onboarding-missing-agent-card')),
         findsNothing,
       );
+      final actionBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('onboarding-builtin-action-btn')),
+      );
+      expect(actionBtn.onPressed, isNotNull);
     });
   });
 

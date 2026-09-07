@@ -61,6 +61,8 @@ class _FakeProcessExecutor implements ProcessExecutor {
   _FakeProcess processToReturn;
   final List<List<String>> runCalls = [];
   final List<Map<String, dynamic>> startCalls = [];
+  FutureOr<ProcessResult> Function(String executable, List<String> arguments)?
+      runHandler;
 
   @override
   Future<ProcessResult> run(
@@ -71,6 +73,9 @@ class _FakeProcessExecutor implements ProcessExecutor {
     bool runInShell = false,
   }) async {
     runCalls.add([executable, ...arguments]);
+    if (runHandler != null) {
+      return await runHandler!(executable, arguments);
+    }
     return ProcessResult(1001, 0, '', '');
   }
 
@@ -662,6 +667,96 @@ void main() {
       expect(env['HERMES_WEBUI_AGENT_DIR'], customAgentPath);
 
       await service.stop();
+    });
+
+    group('spawn preflight 探活与门禁 (TASK #76)', () {
+      test('解释器文件不存在 -> 状态进 failed(startFailed)，detail=解释器缺失，不拉起进程', () async {
+        final service = createService();
+        fakeFs.fileExistsOverride = (path) => !path.endsWith('python.exe');
+
+        await service.start();
+
+        expect(service.currentState.status, SidecarStatus.failed);
+        expect(service.currentState.reason, SidecarFailureReason.startFailed);
+        expect(service.currentState.detail, '解释器缺失');
+        expect(fakeExecutor.startCalls, isEmpty);
+      });
+
+      test('依赖缺失 yaml -> 状态进 failed(startFailed)，detail=依赖缺失：yaml', () async {
+        final service = createService();
+        fakeExecutor.runHandler = (executable, arguments) {
+          if (arguments.contains('import yaml, cryptography')) {
+            return ProcessResult(
+              1002,
+              1,
+              '',
+              "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'yaml'\n",
+            );
+          }
+          return ProcessResult(1001, 0, '', '');
+        };
+
+        await service.start();
+
+        expect(service.currentState.status, SidecarStatus.failed);
+        expect(service.currentState.reason, SidecarFailureReason.startFailed);
+        expect(service.currentState.detail, '依赖缺失：yaml');
+        expect(fakeExecutor.startCalls, isEmpty);
+      });
+
+      test('依赖缺失 cryptography -> 状态进 failed(startFailed)，detail=依赖缺失：cryptography', () async {
+        final service = createService();
+        fakeExecutor.runHandler = (executable, arguments) {
+          if (arguments.contains('import yaml, cryptography')) {
+            return ProcessResult(
+              1002,
+              1,
+              '',
+              "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'cryptography'\n",
+            );
+          }
+          return ProcessResult(1001, 0, '', '');
+        };
+
+        await service.start();
+
+        expect(service.currentState.status, SidecarStatus.failed);
+        expect(service.currentState.reason, SidecarFailureReason.startFailed);
+        expect(service.currentState.detail, '依赖缺失：cryptography');
+        expect(fakeExecutor.startCalls, isEmpty);
+      });
+
+      test('探活执行超时 (10s) -> 状态进 failed(startFailed)，detail=依赖探活超时', () async {
+        final service = createService();
+        fakeExecutor.runHandler = (executable, arguments) async {
+          if (arguments.contains('import yaml, cryptography')) {
+            throw TimeoutException('Timed out');
+          }
+          return ProcessResult(1001, 0, '', '');
+        };
+
+        await service.start();
+
+        expect(service.currentState.status, SidecarStatus.failed);
+        expect(service.currentState.reason, SidecarFailureReason.startFailed);
+        expect(service.currentState.detail, '依赖探活超时');
+        expect(fakeExecutor.startCalls, isEmpty);
+      });
+
+      test('preflight 检查成功 -> 正常拉起子进程', () async {
+        final service = createService();
+        fakeExecutor.runHandler = (executable, arguments) {
+          return ProcessResult(1001, 0, '', '');
+        };
+
+        await service.start();
+
+        expect(service.currentState.status, SidecarStatus.running);
+        expect(service.currentState.pid, 7788);
+        expect(fakeExecutor.startCalls.length, 1);
+
+        await service.stop();
+      });
     });
   });
 }

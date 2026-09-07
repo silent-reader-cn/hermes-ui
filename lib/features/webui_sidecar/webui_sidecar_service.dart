@@ -243,6 +243,45 @@ extension SidecarFileSystemAgentExtension on SidecarFileSystem {
   }
 }
 
+/// Hermes Agent 官方文档外链地址。
+const String hermesAgentDocsUrl = 'https://hermes-agent.nousresearch.com/docs';
+
+/// 探测并解析 Hermes Agent venv 下的 Python 解释器路径。
+///
+/// 优先级：
+/// 1. `<agentDir>\venv\Scripts\python.exe` 存在 → 优先使用；
+/// 2. `<agentDir>\.venv\Scripts\python.exe` 存在 → 次选使用；
+/// 3. 都不存在 → 返回 null。
+String? resolveAgentPythonPath(
+  SidecarFileSystem fileSystem, [
+  String? customAgentDir,
+]) {
+  final targetAgentDir = customAgentDir ?? fileSystem.hermesAgentDir;
+  final sep = Platform.pathSeparator;
+  final venvPy = '$targetAgentDir${sep}venv${sep}Scripts${sep}python.exe';
+  if (fileSystem.fileExists(venvPy)) {
+    return venvPy;
+  }
+  final dotVenvPy = '$targetAgentDir$sep.venv${sep}Scripts${sep}python.exe';
+  if (fileSystem.fileExists(dotVenvPy)) {
+    return dotVenvPy;
+  }
+  return null;
+}
+
+/// 检查当前系统与文件环境中 Hermes Agent venv 是否存在。
+///
+/// 仅 Windows 环境有效；且必须在 [customAgentDir] 或 [SidecarFileSystem.hermesAgentDir] 命中 `venv\Scripts\python.exe` 或 `.venv\Scripts\python.exe`。
+bool isAgentEnvPresent(
+  SidecarFileSystem fileSystem, [
+  String? customAgentDir,
+]) {
+  if (!fileSystem.isWindows) {
+    return false;
+  }
+  return resolveAgentPythonPath(fileSystem, customAgentDir) != null;
+}
+
 /// WebUI Sidecar 服务接口（生命周期与状态核心）。
 abstract interface class WebuiSidecarService {
   /// 启动内置 WebUI 服务（幂等：已 running 直接返回；读取最新配置）。
@@ -302,18 +341,58 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
   /// 2. `%LOCALAPPDATA%\hermes\hermes-agent\.venv\Scripts\python.exe` 存在 → 次选使用；
   /// 3. 都不存在 → 兜底使用内置包 embedded python（`<bundleDir>\python\python.exe`）。
   String resolvePythonPath([String? bundleDir]) {
+    final agentPy = resolveAgentPythonPath(fileSystem, customAgentDir);
+    if (agentPy != null) {
+      return agentPy;
+    }
     final root = bundleDir ?? fileSystem.resolveBundleDir();
-    final targetAgentDir = agentDir;
     final sep = Platform.pathSeparator;
-    final venvPy = '$targetAgentDir${sep}venv${sep}Scripts${sep}python.exe';
-    if (fileSystem.fileExists(venvPy)) {
-      return venvPy;
-    }
-    final dotVenvPy = '$targetAgentDir$sep.venv${sep}Scripts${sep}python.exe';
-    if (fileSystem.fileExists(dotVenvPy)) {
-      return dotVenvPy;
-    }
     return '$root${sep}python${sep}python.exe';
+  }
+
+  /// 提取缺失的 Python 依赖模块名称。
+  static String extractMissingDependency(String output) {
+    final match = RegExp(r"No module named '([^']+)'").firstMatch(output);
+    if (match != null) {
+      final name = match.group(1);
+      if (name != null && name.isNotEmpty) {
+        return name;
+      }
+    }
+    if (output.contains('yaml')) return 'yaml';
+    if (output.contains('cryptography')) return 'cryptography';
+    return 'yaml, cryptography';
+  }
+
+  /// 运行 spawn preflight 前置检查：解释器文件存在 + `venv python -c "import yaml, cryptography"` 探活（超时 10s）。
+  ///
+  /// 返回 null 表示检查通过；返回非空字符串表示失败原因（作为 SidecarState.detail）。
+  Future<String?> runPreflight(String pyPath) async {
+    // 1. 解释器文件存在性检查
+    if (!fileSystem.fileExists(pyPath)) {
+      return '解释器缺失';
+    }
+
+    // 2. 依赖探活检查
+    try {
+      final result = await processExecutor
+          .run(
+            pyPath,
+            const ['-c', 'import yaml, cryptography'],
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (result.exitCode != 0) {
+        final errText = '${result.stderr}\n${result.stdout}';
+        final missingMod = extractMissingDependency(errText);
+        return '依赖缺失：$missingMod';
+      }
+      return null;
+    } on TimeoutException {
+      return '依赖探活超时';
+    } catch (_) {
+      return '解释器缺失';
+    }
   }
 
   /// 健康检查探测器。
@@ -484,6 +563,19 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
     final pyPath = resolvePythonPath(bundleDir);
     final serverPath =
         '$bundleDir${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+
+    // 前置检查：解释器文件存在 + venv python -c "import yaml, cryptography" 探活
+    final preflightError = await runPreflight(pyPath);
+    if (preflightError != null) {
+      _updateState(
+        SidecarState(
+          status: SidecarStatus.failed,
+          reason: SidecarFailureReason.startFailed,
+          detail: preflightError,
+        ),
+      );
+      return;
+    }
 
     final env = <String, String>{
       'HERMES_WEBUI_HOST': config.host,

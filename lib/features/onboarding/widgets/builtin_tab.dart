@@ -5,12 +5,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/status_colors.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/connections/server_connection.dart';
-import '../../../core/install/install_detector.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../desktop/desktop_settings.dart';
 import '../../webui_sidecar/webui_sidecar_providers.dart';
@@ -34,7 +34,6 @@ class BuiltinTab extends ConsumerStatefulWidget {
 class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   bool _isStartingAndConnecting = false;
   String? _errorMessage;
-  bool _isAgentInstalled = true;
 
   // 高级设置折叠状态与控制器
   bool _isAdvancedExpanded = false;
@@ -64,8 +63,6 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     _hostFocusNode.addListener(_onHostFocusChange);
     _portFocusNode.addListener(_onPortFocusChange);
     _passwordFocusNode.addListener(_onPasswordFocusChange);
-
-    unawaited(_checkAgentInstalled());
   }
 
   @override
@@ -103,18 +100,19 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     }
   }
 
-  Future<void> _checkAgentInstalled() async {
+  Future<void> _recheckAgent() async {
     try {
-      final detector = ref.read(installDetectorProvider);
-      final installed = await detector.agentInstalled();
-      if (mounted) {
-        setState(() {
-          _isAgentInstalled = installed;
-        });
-      }
-    } catch (_) {
-      // 检查异常兜底
-    }
+      await ref.read(agentEnvPresentProvider.notifier).refresh();
+    } catch (_) {}
+  }
+
+  Future<void> _openInstallGuide() async {
+    try {
+      await launchUrl(
+        Uri.parse(hermesAgentDocsUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
   }
 
   String _mapFailureReason(SidecarState state) {
@@ -123,7 +121,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       SidecarFailureReason.portOccupied => l10n.webuiFailurePortOccupied,
       SidecarFailureReason.missingBundle => l10n.webuiFailureMissingBundle,
       SidecarFailureReason.healthTimeout => l10n.webuiFailureHealthTimeout,
-      SidecarFailureReason.startFailed => l10n.webuiFailureStartFailed,
+      SidecarFailureReason.startFailed =>
+        state.detail ?? l10n.webuiFailureStartFailed,
       SidecarFailureReason.none => state.detail ?? l10n.webuiStatusFailed,
     };
   }
@@ -345,11 +344,14 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         activeConn.kind == ConnectionKind.builtin &&
         sidecarState.status == SidecarStatus.running;
 
+    final isAgentInstalled =
+        ref.watch(agentEnvPresentProvider).value ?? false;
+
     return ListView(
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       children: [
-        if (!_isAgentInstalled) ...[
+        if (!isAgentInstalled) ...[
           _buildMissingAgentCard(l10n),
           const SizedBox(height: 12),
         ],
@@ -374,13 +376,17 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         if (sidecarState.status == SidecarStatus.failed ||
             _errorMessage != null) ...[
           const SizedBox(height: 12),
-          _buildErrorSection(l10n, sidecarState),
+          _buildErrorSection(l10n, sidecarState, isAgentInstalled),
         ],
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
-          child:
-              _buildActionButton(l10n, sidecarState, isBuiltinActiveAndRunning),
+          child: _buildActionButton(
+            l10n,
+            sidecarState,
+            isBuiltinActiveAndRunning,
+            isAgentInstalled,
+          ),
         ),
         const SizedBox(height: 20),
         _buildAdvancedDisclosure(context, l10n),
@@ -418,7 +424,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  l10n.onboardingNeedInstallAgent,
+                  l10n.agentGateNotDetectedTitle,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -430,35 +436,57 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           ),
           const SizedBox(height: 6),
           Text(
-            l10n.onboardingNeedInstallAgentDesc,
+            l10n.agentGateNotDetectedDesc,
             style: TextStyle(
               fontSize: 13,
               color: secondaryText.resolveFrom(context),
             ),
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: CupertinoButton(
-              key: const ValueKey('onboarding-install-agent-btn'),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: CupertinoColors.activeOrange,
-              borderRadius: BorderRadius.circular(8),
-              onPressed: () async {
-                await context.push('/install-guide');
-                if (mounted) {
-                  unawaited(_checkAgentInstalled());
-                }
-              },
-              child: Text(
-                l10n.onboardingGoToInstallGuide,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  key: const ValueKey('onboarding-install-agent-btn'),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  color: CupertinoColors.activeOrange,
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: () => unawaited(_openInstallGuide()),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      l10n.agentGateViewInstallGuide,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: CupertinoButton(
+                  key: const ValueKey('onboarding-recheck-agent-btn'),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  color: CupertinoColors.systemGrey5.resolveFrom(context),
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: () => unawaited(_recheckAgent()),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      l10n.agentGateRecheckDone,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -540,7 +568,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   }
 
   /// 失败态就地红字 + 重试
-  Widget _buildErrorSection(AppLocalizations l10n, SidecarState sidecarState) {
+  Widget _buildErrorSection(
+    AppLocalizations l10n,
+    SidecarState sidecarState,
+    bool isAgentInstalled,
+  ) {
     final failureMsg = _errorMessage ?? _mapFailureReason(sidecarState);
 
     return Container(
@@ -570,8 +602,9 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
             key: const ValueKey('onboarding-builtin-retry-btn'),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             minimumSize: const Size(0, 28),
-            onPressed:
-                _isStartingAndConnecting ? null : () => unawaited(_startAndConnect()),
+            onPressed: (_isStartingAndConnecting || !isAgentInstalled)
+                ? null
+                : () => unawaited(_startAndConnect()),
             child: Text(
               l10n.onboardingRetry,
               style: TextStyle(
@@ -591,6 +624,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     AppLocalizations l10n,
     SidecarState sidecarState,
     bool isBuiltinActiveAndRunning,
+    bool isAgentInstalled,
   ) {
     if (isBuiltinActiveAndRunning) {
       return CupertinoButton.filled(
@@ -610,9 +644,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       buttonText = l10n.onboardingStartAndConnect;
     }
 
+    final canPress = !isBusy && isAgentInstalled;
+
     return CupertinoButton.filled(
       key: const ValueKey('onboarding-builtin-action-btn'),
-      onPressed: isBusy ? null : () => unawaited(_startAndConnect()),
+      onPressed: canPress ? () => unawaited(_startAndConnect()) : null,
       child: isBusy
           ? const CupertinoActivityIndicator()
           : Text(buttonText),

@@ -30,8 +30,18 @@ class _FakeSidecarFileSystem implements SidecarFileSystem {
   @override
   String? get envSidecarRoot => null;
 
+  bool Function(String path)? fileExistsOverride;
+  String customAgentDir = r'C:\Users\Admin\AppData\Local\hermes\hermes-agent';
+
+  String get hermesAgentDir => customAgentDir;
+
   @override
-  bool fileExists(String path) => true;
+  bool fileExists(String path) {
+    if (fileExistsOverride != null) {
+      return fileExistsOverride!(path);
+    }
+    return true;
+  }
 
   @override
   String get logDirectoryPath => r'C:\logs';
@@ -251,6 +261,77 @@ void main() {
       expect(state.status, SidecarStatus.failed);
       expect(state.reason, SidecarFailureReason.startFailed);
       expect(state.detail, contains('only supported on Windows'));
+    });
+  });
+
+  group('agentEnvPresentProvider 环境检测与刷新', () {
+    late _FakeSidecarFileSystem fakeFs;
+    late ProviderContainer container;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      fakeFs = _FakeSidecarFileSystem();
+      container = ProviderContainer(
+        overrides: [
+          sidecarFileSystemProvider.overrideWithValue(fakeFs),
+        ],
+      );
+    });
+
+    tearDown(() {
+      container.dispose();
+    });
+
+    test('非 Windows 平台直接返回 false', () async {
+      fakeFs.isWindows = false;
+      final present = await container.read(agentEnvPresentProvider.future);
+      expect(present, isFalse);
+    });
+
+    test('Windows 下 venv/Scripts/python.exe 存在 -> 返回 true', () async {
+      fakeFs.isWindows = true;
+      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      fakeFs.fileExistsOverride = (path) => path == expectedVenv;
+
+      final present = await container.read(agentEnvPresentProvider.future);
+      expect(present, isTrue);
+    });
+
+    test('Windows 下 venv 缺失但 .venv/Scripts/python.exe 存在 -> 返回 true', () async {
+      fakeFs.isWindows = true;
+      final expectedDotVenv =
+          '${fakeFs.customAgentDir}\\.venv\\Scripts\\python.exe';
+      fakeFs.fileExistsOverride = (path) => path == expectedDotVenv;
+
+      final present = await container.read(agentEnvPresentProvider.future);
+      expect(present, isTrue);
+    });
+
+    test('Windows 下 venv 与 .venv 均缺失 -> 返回 false', () async {
+      fakeFs.isWindows = true;
+      fakeFs.fileExistsOverride = (path) => false;
+
+      final present = await container.read(agentEnvPresentProvider.future);
+      expect(present, isFalse);
+    });
+
+    test('refresh() 重新检测并在环境就绪后更新为 true', () async {
+      fakeFs.isWindows = true;
+      var fileInstalled = false;
+      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      fakeFs.fileExistsOverride =
+          (path) => fileInstalled && path == expectedVenv;
+
+      // 初始未安装
+      final initial = await container.read(agentEnvPresentProvider.future);
+      expect(initial, isFalse);
+
+      // 用户安装就绪
+      fileInstalled = true;
+      final refreshed =
+          await container.read(agentEnvPresentProvider.notifier).refresh();
+      expect(refreshed, isTrue);
+      expect(container.read(agentEnvPresentProvider).value, isTrue);
     });
   });
 }

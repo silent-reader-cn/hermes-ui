@@ -22,6 +22,30 @@ final bundledWebuiAvailableProvider = Provider<bool>((ref) {
   return fs.isBundleAvailable();
 });
 
+/// Agent 环境存在性探测 Notifier。
+class AgentEnvPresentNotifier extends AsyncNotifier<bool> {
+  @override
+  FutureOr<bool> build() {
+    final fs = ref.watch(sidecarFileSystemProvider);
+    return isAgentEnvPresent(fs);
+  }
+
+  /// 重新探测环境。
+  Future<bool> refresh() async {
+    state = const AsyncValue.loading();
+    final fs = ref.read(sidecarFileSystemProvider);
+    final present = isAgentEnvPresent(fs);
+    state = AsyncValue.data(present);
+    return present;
+  }
+}
+
+/// Agent 环境（venv 解释器）是否存在探测 Provider。
+final agentEnvPresentProvider =
+    AsyncNotifierProvider<AgentEnvPresentNotifier, bool>(
+  AgentEnvPresentNotifier.new,
+);
+
 /// WebUI Sidecar 核心服务 Provider。
 final webuiSidecarServiceProvider = Provider<WebuiSidecarService>((ref) {
   final service = DefaultWebuiSidecarService(

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
@@ -139,7 +140,63 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
     }
   }
 
+  Future<void> _showMissingAgentDialog() async {
+    final l10n = AppLocalizations.of(context);
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          key: const ValueKey('settings-webui-missing-agent-dialog'),
+          title: Text(l10n.agentGateNeedInstallTitle),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(l10n.agentGateNeedInstallDesc),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              key: const ValueKey('settings-webui-dialog-cancel-btn'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: Text(l10n.agentGateCancel),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('settings-webui-dialog-guide-btn'),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  await launchUrl(
+                    Uri.parse(hermesAgentDocsUrl),
+                    mode: LaunchMode.externalApplication,
+                  );
+                } catch (_) {}
+              },
+              child: Text(l10n.agentGateGoToInstallGuide),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('settings-webui-dialog-recheck-btn'),
+              isDefaultAction: true,
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await ref.read(agentEnvPresentProvider.notifier).refresh();
+              },
+              child: Text(l10n.agentGateRecheck),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _handleToggle(bool value) async {
+    if (value) {
+      final isAgentPresent = ref.read(agentEnvPresentProvider).value ?? false;
+      if (!isAgentPresent) {
+        await _showMissingAgentDialog();
+        return;
+      }
+    }
+
     setState(() => _isToggling = true);
     try {
       await ref.read(webuiSidecarConfigProvider.notifier).setEnabled(value);
@@ -469,7 +526,8 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
           SidecarFailureReason.portOccupied => l10n.webuiFailurePortOccupied,
           SidecarFailureReason.missingBundle => l10n.webuiFailureMissingBundle,
           SidecarFailureReason.healthTimeout => l10n.webuiFailureHealthTimeout,
-          SidecarFailureReason.startFailed => l10n.webuiFailureStartFailed,
+          SidecarFailureReason.startFailed =>
+            state.detail ?? l10n.webuiFailureStartFailed,
           SidecarFailureReason.none => l10n.webuiStatusFailed,
         };
         subtitle = reasonText;

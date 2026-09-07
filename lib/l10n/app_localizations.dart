@@ -1673,6 +1673,30 @@ extension AppLocalizationsTurn55 on AppLocalizations {
 }
 
 // ---------------------------------------------------------------------------
+// #76 Agent gate extensions
+// ---------------------------------------------------------------------------
+extension AppLocalizationsAgentGate on AppLocalizations {
+  String get agentGateNotDetectedTitle =>
+      isEnglish ? 'Hermes Agent Not Detected' : '未检测到 Hermes Agent';
+  String get agentGateNotDetectedDesc => isEnglish
+      ? 'Built-in WebUI service requires a local Hermes Agent environment to run.'
+      : '启用内置 WebUI 服务需依赖本机已安装的 Hermes Agent 运行环境。';
+  String get agentGateViewInstallGuide =>
+      isEnglish ? 'View Install Guide' : '查看安装指南';
+  String get agentGateRecheckDone =>
+      isEnglish ? 'I have installed it, recheck' : '我装好了，重新检测';
+  String get agentGateNeedInstallTitle =>
+      isEnglish ? 'Hermes Agent Required' : '需要先安装 Hermes Agent';
+  String get agentGateNeedInstallDesc => isEnglish
+      ? 'Hermes Agent runtime is not installed on this machine. Cannot start built-in WebUI service. Please install it first.'
+      : '检测到本机尚未安装 Hermes Agent 运行环境，无法启动内置 WebUI 服务。请先安装后再启用。';
+  String get agentGateGoToInstallGuide =>
+      isEnglish ? 'Go to Install Guide' : '前往安装指南';
+  String get agentGateRecheck => isEnglish ? 'Recheck' : '重新检测';
+  String get agentGateCancel => isEnglish ? 'Cancel' : '取消';
+}
+
+// ---------------------------------------------------------------------------
 // #78/#79/#80 Message action extensions
 // ---------------------------------------------------------------------------
 extension AppLocalizationsMsgAction on AppLocalizations {
