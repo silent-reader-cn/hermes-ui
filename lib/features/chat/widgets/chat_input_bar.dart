@@ -673,6 +673,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     interactive,
                     canSendWithPending,
                     snapshot,
+                    sendMode,
                   )
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -817,16 +818,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                 }
                               },
                               onSubmitted: (_) {
-                                // ctrlEnter 模式防双发：Ctrl+Enter/Cmd+Enter 在部分
-                                // 平台可能同时触发 onSubmitted 与 Shortcuts——若修饰键
-                                // 按下则跳过，交给 Shortcuts 的 SendMessageIntent 处理。
-                                if (multiline &&
-                                    (HardwareKeyboard
-                                            .instance
-                                            .isControlPressed ||
-                                        HardwareKeyboard
-                                            .instance
-                                            .isMetaPressed)) {
+                                // 豁口一修复：
+                                // 1. ctrlEnter 模式：发送只走 Shortcuts 通道（Ctrl+Enter/Cmd+Enter），
+                                //    onSubmitted 绝不提交（桌面 IME/done 动作不发，裸 Enter 交引擎默认换行）。
+                                if (sendMode == ChatSendShortcutMode.ctrlEnter) {
+                                  return;
+                                }
+                                // 2. enter 模式防双发：Ctrl+Enter/Cmd+Enter 同样走 Shortcuts 通道（SendMessageIntent），
+                                //    若修饰键按下则跳过，交给 Shortcuts 处理；裸 Enter 照常提交。
+                                if (HardwareKeyboard.instance.isControlPressed ||
+                                    HardwareKeyboard.instance.isMetaPressed) {
                                   return;
                                 }
                                 unawaited(_submit());
@@ -889,6 +890,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     bool interactive,
     bool canSendWithPending,
     ContextWindowSnapshot? snapshot,
+    ChatSendShortcutMode sendMode,
   ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -900,12 +902,27 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 const PasteAttachmentIntent(),
             const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
                 const PasteAttachmentIntent(),
-            if (isDesktopPlatform())
-              const SingleActivator(LogicalKeyboardKey.enter):
-                  const SendIntent(),
-            if (isDesktopPlatform())
-              const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-                  const InsertNewlineIntent(),
+            if (isDesktopPlatform()) ...{
+              if (sendMode == ChatSendShortcutMode.ctrlEnter) ...{
+                const SingleActivator(LogicalKeyboardKey.enter):
+                    const InsertNewlineIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                    const InsertNewlineIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                    const SendIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                    const SendIntent(),
+              } else ...{
+                const SingleActivator(LogicalKeyboardKey.enter):
+                    const SendIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                    const InsertNewlineIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                    const SendIntent(),
+                const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                    const SendIntent(),
+              },
+            },
             if (!isDesktopPlatform())
               const SingleActivator(LogicalKeyboardKey.enter):
                   const InsertNewlineIntent(),
