@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -129,7 +131,7 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                             ? primaryColor.withValues(alpha: 0.12)
                             : CupertinoColors.transparent,
                         onPressed: () {
-                          context.go(item.path);
+                          unawaited(context.push(item.path));
                         },
                         child: Icon(
                           item.icon,

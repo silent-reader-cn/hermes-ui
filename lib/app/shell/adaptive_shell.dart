@@ -243,7 +243,10 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
-    final isRootSessionList = widget.state.matchedLocation == '/';
+    final router = GoRouter.maybeOf(context);
+    final effectiveLocation = router?.routerDelegate.currentConfiguration.last.matchedLocation ??
+        widget.state.matchedLocation;
+    final isRootSessionList = effectiveLocation == '/';
     final isAndroid = defaultTargetPlatform == TargetPlatform.android;
 
     final Widget content = isWide
@@ -256,7 +259,7 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
                   key: const ValueKey('adaptive-shell-sidebar-container'),
                   width: _sidebarWidth,
                   child: SessionSidebar(
-                    currentLocation: widget.state.matchedLocation,
+                    currentLocation: effectiveLocation,
                   ),
                 ),
                 SidebarResizeHandle(
