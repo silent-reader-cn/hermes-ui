@@ -562,7 +562,7 @@ void main() {
       expect(find.text('名称'), findsOneWidget);
       expect(find.text('地址'), findsOneWidget);
       expect(find.text('密码'), findsOneWidget);
-      expect(find.text('例如 https://hermes.example.com:30002'), findsOneWidget);
+      expect(find.text('例如 https://hermes.example.com:8787'), findsOneWidget);
 
       // 空 URL 直接保存 → 校验错误
       await tester.tap(find.byKey(const ValueKey('server-editor-save')));

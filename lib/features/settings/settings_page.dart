@@ -1310,7 +1310,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                       CupertinoTextField(
                         key: const ValueKey('server-editor-url'),
                         controller: _urlController,
-                        placeholder: 'https://hermes.example.com:30002',
+                        placeholder: 'https://hermes.example.com:8787',
                         autocorrect: false,
                         keyboardType: TextInputType.url,
                         padding: const EdgeInsets.all(12),

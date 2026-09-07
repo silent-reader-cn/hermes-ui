@@ -86,11 +86,11 @@ void main() {
       expect(l10n.serverUrlRequired, '请输入服务器地址');
       expect(
         l10n.pleaseEnterValidServerUrl,
-        '请输入有效的服务器地址，例如 https://hermes.example.com:30002',
+        '请输入有效的服务器地址，例如 https://hermes.example.com:8787',
       );
       expect(
         l10n.serverUrlInvalid,
-        '请输入有效的服务器地址，例如 https://hermes.example.com:30002',
+        '请输入有效的服务器地址，例如 https://hermes.example.com:8787',
       );
       expect(l10n.headerValidationFailed, 'Header 名必须是合法 token，值不能包含换行');
     });

@@ -35,7 +35,7 @@ class ServerConnection {
   /// 用户命名，如 'Home'（缺省用主机名）。
   final String name;
 
-  /// 服务器地址，如 `https://hermes.example.com:30002`（不含尾斜杠）。
+  /// 服务器地址，如 `https://hermes.example.com:8787`（不含尾斜杠）。
   final String baseUrl;
 
   /// dashboard 登录用户名（可空；登录请求实际只发密码，见 api_spec §1.1）。

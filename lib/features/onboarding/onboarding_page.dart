@@ -478,7 +478,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         CupertinoTextField(
           key: const ValueKey('onboarding-url'),
           controller: _urlController,
-          placeholder: 'https://hermes.example.com:30002',
+          placeholder: 'https://hermes.example.com:8787',
           autocorrect: false,
           keyboardType: TextInputType.url,
           padding: const EdgeInsets.all(12),
@@ -549,7 +549,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       CupertinoTextField(
         key: const ValueKey('onboarding-url'),
         controller: _urlController,
-        placeholder: 'https://hermes.example.com:30002',
+        placeholder: 'https://hermes.example.com:8787',
         autocorrect: false,
         keyboardType: TextInputType.url,
         padding: const EdgeInsets.all(12),

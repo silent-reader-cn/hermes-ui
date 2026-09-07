@@ -98,12 +98,12 @@ void main() {
     // 弹窗（对齐 #19 确认框模式）：标题「连接失败」+ 格式错误内容
     expect(find.text('连接失败'), findsOneWidget);
     expect(
-      find.text('请输入有效的服务器地址，例如 https://hermes.example.com:30002'),
+      find.text('请输入有效的服务器地址，例如 https://hermes.example.com:8787'),
       findsOneWidget,
     );
     // 就地红字并存
     expect(
-      find.text('❌ 请输入有效的服务器地址，例如 https://hermes.example.com:30002'),
+      find.text('❌ 请输入有效的服务器地址，例如 https://hermes.example.com:8787'),
       findsOneWidget,
     );
     expect(api.healthCalls, 0);

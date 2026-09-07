@@ -68,8 +68,8 @@ class AppLocalizations {
   String get connectYourHermexServer =>
       isEnglish ? 'Connect your Hermes server' : '连接你的 Hermes 服务器';
   String get inputServerAddressHint => isEnglish
-      ? 'Enter the hermes-webui address (with port), e.g. https://hermes.example.com:30002'
-      : '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:30002';
+      ? 'Enter the hermes-webui address (with port), e.g. https://hermes.example.com:8787'
+      : '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:8787';
   String get testConnection => isEnglish ? 'Test Connection' : '连接测试';
   String get haveApiKeySkipWizard =>
       isEnglish ? 'Have an API Key? Skip wizard' : '已有 API Key？跳过向导';
@@ -121,11 +121,11 @@ class AppLocalizations {
   String get serverUrlRequired =>
       isEnglish ? 'Please enter the server address' : '请输入服务器地址';
   String get pleaseEnterValidServerUrl => isEnglish
-      ? 'Please enter a valid server address, e.g. https://hermes.example.com:30002'
-      : '请输入有效的服务器地址，例如 https://hermes.example.com:30002';
+      ? 'Please enter a valid server address, e.g. https://hermes.example.com:8787'
+      : '请输入有效的服务器地址，例如 https://hermes.example.com:8787';
   String get serverUrlInvalid => isEnglish
-      ? 'Please enter a valid server address, e.g. https://hermes.example.com:30002'
-      : '请输入有效的服务器地址，例如 https://hermes.example.com:30002';
+      ? 'Please enter a valid server address, e.g. https://hermes.example.com:8787'
+      : '请输入有效的服务器地址，例如 https://hermes.example.com:8787';
   String get headerValidationFailed => isEnglish
       ? 'Header name must be a valid token, and value cannot contain newlines'
       : 'Header 名必须是合法 token，值不能包含换行';
@@ -1186,8 +1186,8 @@ class AppLocalizations {
   String get serverUrlLabel => isEnglish ? 'Address' : '地址';
   String get serverPasswordLabel => isEnglish ? 'Password' : '密码';
   String get serverUrlExampleHint => isEnglish
-      ? 'e.g. https://hermes.example.com:30002'
-      : '例如 https://hermes.example.com:30002';
+      ? 'e.g. https://hermes.example.com:8787'
+      : '例如 https://hermes.example.com:8787';
   String get serverPasswordPlaceholder => isEnglish
       ? 'Password (optional; leave blank to keep existing)'
       : '密码（可选；编辑时留空保持原密码）';
