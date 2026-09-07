@@ -1735,3 +1735,15 @@ extension AppLocalizationsDownloadProgress93 on AppLocalizations {
   String get notifDownloading => isEnglish ? 'Downloading' : '正在下载';
 }
 
+// #96 APK 安装权限引导（仅 Android 使用）
+// ---------------------------------------------------------------------------
+extension AppLocalizationsInstallPermission96 on AppLocalizations {
+  String get installPermissionTitle =>
+      isEnglish ? 'Install Permission Required' : '需要安装权限';
+  String get installPermissionBody => isEnglish
+      ? 'To install APK files, allow "Install unknown apps" for Hermes in system settings, then come back and tap Open again.'
+      : '安装 APK 需要在系统设置中允许 Hermes「安装未知应用」，授权后回来重新点「打开」即可。';
+  String get installPermissionGoSettings =>
+      isEnglish ? 'Go to Settings' : '去设置';
+}
+

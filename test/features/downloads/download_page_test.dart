@@ -228,6 +228,11 @@ void main() {
         find.byKey(const ValueKey('download-open-task-3')),
         findsOneWidget,
       );
+      // #97 完成态（文件存在）出现分享按钮
+      expect(
+        find.byKey(const ValueKey('download-share-task-3')),
+        findsOneWidget,
+      );
 
       expect(find.text('code.dart'), findsOneWidget);
       expect(find.text('失败：HTTP 404'), findsOneWidget);
@@ -375,6 +380,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('暂无下载记录'), findsOneWidget);
+    });
+  });
+
+  group('#96/#97 APK 安装权限闸门与分享按钮', () {
+    testWidgets('完成态 APK 任务出现打开与分享按钮（文件存在）', (tester) async {
+      final apkPath = await tester.runAsync(() async {
+        final apkFile = File('${tempDir.path}/app-release.apk');
+        await apkFile.writeAsBytes(List.filled(1024, 0));
+        return apkFile.path;
+      });
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final tasks = [
+        DownloadTask(
+          id: 'task-apk',
+          sourceUrl: 'https://example.com/app-release.apk',
+          fileName: 'app-release.apk',
+          mimeType: 'application/vnd.android.package-archive',
+          status: DownloadStatus.completed,
+          receivedBytes: 1024,
+          expectedBytes: 1024,
+          savedPath: apkPath,
+          createdAt: now,
+        ),
+      ];
+
+      await tester.pumpWidget(buildTestApp(tasksOverride: tasks));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('download-open-task-apk')), findsOneWidget);
+      expect(find.byKey(const ValueKey('download-share-task-apk')), findsOneWidget);
+      // 打开按钮文案仍为「打开」（权限闸门在点击后 Android 分支内）。
+      expect(find.text('打开'), findsOneWidget);
     });
   });
 }

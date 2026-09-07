@@ -39,6 +39,99 @@ Future<String?> _androidContentUriFor(String path) async {
   }
 }
 
+/// Android 8+：当前 app 是否已被授予「安装未知应用」资格（#96）。
+Future<bool> _canRequestInstall() async {
+  try {
+    return await _fileShareChannel.invokeMethod<bool>(
+          'canRequestInstall',
+        ) ??
+        false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// 跳转系统「安装未知应用」授权设置页（#96；用户勾选后返回重试）。
+Future<void> _openInstallPermissionSettings() async {
+  try {
+    await _fileShareChannel.invokeMethod('openInstallPermissionSettings');
+  } catch (error) {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'downloads',
+      message: '跳转安装权限设置页失败: $error',
+    );
+  }
+}
+
+/// APK 文件 → 引导安装权限后发起系统包安装器（#96）。
+///
+/// Android 8+ 未授予「安装未知应用」时先跳系统设置页；返回后再次检查，
+/// 已授予则继续 launch 安装 Intent，仍未授予则提示后放弃。
+Future<void> _installApkWithPermissionGate(
+  BuildContext context,
+  String path,
+) async {
+  final l10n = AppLocalizations.of(context);
+  if (!await _canRequestInstall()) {
+    if (!context.mounted) return;
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(l10n.installPermissionTitle),
+        content: Text(l10n.installPermissionBody),
+        actions: [
+          CupertinoDialogAction(
+            child: Text(l10n.cancel),
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: Text(l10n.installPermissionGoSettings),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              unawaited(_openInstallPermissionSettings());
+            },
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted) return;
+    // 用户从设置页返回后复查：已授予则继续安装。
+    if (!await _canRequestInstall()) return;
+  }
+
+  final contentUri = await _androidContentUriFor(path);
+  final intent = AndroidIntent(
+    action: 'android.intent.action.VIEW',
+    data: contentUri ?? Uri.encodeFull('file://$path'),
+    type: 'application/vnd.android.package-archive',
+    flags: const [
+      0x10000000, // FLAG_ACTIVITY_NEW_TASK
+      0x00000001, // FLAG_GRANT_READ_URI_PERMISSION
+    ],
+  );
+  await intent.launch();
+}
+
+/// 经 MainActivity 系统分享面板分享本地文件（#97）。
+Future<void> shareDownloadedFile(String path, {String? mimeType}) async {
+  try {
+    await _fileShareChannel.invokeMethod('shareFile', {
+      'path': path,
+      'mimeType': mimeType,
+    });
+  } catch (error) {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.error,
+      tag: 'downloads',
+      message: '分享文件失败: $error',
+      details: {'path': path, 'mimeType': mimeType},
+      errorKind: error.toString(),
+    );
+  }
+}
+
 /// 跨平台打开已下载文件的核心方法。
 ///
 /// 行为契约：
@@ -420,6 +513,7 @@ class _DownloadTaskCard extends ConsumerWidget {
         break;
       case DownloadStatus.completed:
         if (fileExistsOnDisk) {
+          final isApk = task.fileName.toLowerCase().endsWith('.apk');
           actionButtons.add(
             CupertinoButton(
               key: ValueKey('download-open-${task.id}'),
@@ -428,14 +522,21 @@ class _DownloadTaskCard extends ConsumerWidget {
               borderRadius: BorderRadius.circular(6),
               minimumSize: const Size(44, 28),
               onPressed: () {
-                unawaited(
-                  openDownloadedFile(
-                    context,
-                    task.savedPath!,
-                    mimeType: task.mimeType,
-                    customOpener: onOpenFile,
-                  ),
-                );
+                if (isApk && !kIsWeb && Platform.isAndroid) {
+                  // #96 APK：先过「安装未知应用」权限闸门再发起安装。
+                  unawaited(
+                    _installApkWithPermissionGate(context, task.savedPath!),
+                  );
+                } else {
+                  unawaited(
+                    openDownloadedFile(
+                      context,
+                      task.savedPath!,
+                      mimeType: task.mimeType,
+                      customOpener: onOpenFile,
+                    ),
+                  );
+                }
               },
               child: Text(
                 l10n.downloadOpen,
@@ -443,6 +544,39 @@ class _DownloadTaskCard extends ConsumerWidget {
                   fontSize: 12,
                   color: CupertinoColors.white,
                 ),
+              ),
+            ),
+          );
+          // #97 分享按钮：系统分享面板（Android）；桌面走系统分享等价能力。
+          actionButtons.add(
+            CupertinoButton(
+              key: ValueKey('download-share-${task.id}'),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              minimumSize: const Size(32, 28),
+              onPressed: () {
+                if (!kIsWeb && Platform.isAndroid) {
+                  unawaited(
+                    shareDownloadedFile(
+                      task.savedPath!,
+                      mimeType: task.mimeType,
+                    ),
+                  );
+                } else {
+                  // 桌面兜底：沿用打开（资源管理器定位）便于手动转发。
+                  unawaited(
+                    openDownloadedFile(
+                      context,
+                      task.savedPath!,
+                      mimeType: task.mimeType,
+                      customOpener: onOpenFile,
+                    ),
+                  );
+                }
+              },
+              child: Icon(
+                CupertinoIcons.share,
+                size: 18,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
           );

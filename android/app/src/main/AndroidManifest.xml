@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- APK 安装：下载页点开 .apk 发起系统包安装器（Android 8+ 仍需用户在
+         设置中逐应用授予「安装未知应用」，此声明是前提资格） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Hermes"
         android:name="${applicationName}"
