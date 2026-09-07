@@ -230,26 +230,48 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
           ),
         // 收起态中标题（仅 showMiddleOnNarrow 页面，如 workspace 系）。
         // 横屏对齐系统：标题以居中 17pt 呈现（无大标题扩展行）。
+        // #95 重叠修复：竖屏下固定左对齐 x=20 会与 persistent 行 leading
+        // 返回按钮（图标中心 ≈ x=38）重叠（工作区页实测「工‹作区」）。
+        // 有 leading 时收起态标题改为整体居中（iOS 原生 middle 语义，
+        // 让出 leading/trailing 区），无 leading 保持原左对齐不变。
         if (showCollapsedTitle || !showLargeTitle)
           Positioned(
-            left: showLargeTitle ? _titleLeft : 0,
-            right: showLargeTitle ? null : 0,
+            left: (showLargeTitle && leading == null) ? _titleLeft : 0,
+            right: 0,
             top: collapsedTitleCenterY - 12,
             child: _wrapTitle(
-              Opacity(
-                opacity: showLargeTitle ? collapsed : 1.0,
-                child: Text(
-                  title,
-                  textAlign: showLargeTitle ? TextAlign.start : TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: labelColor,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              // 有 leading：Center 让文字盒水平居中（iOS middle 语义）；
+              // 无 leading：文本贴左（原左对齐）。textAlign 需配合全宽盒，
+              // 单独使用会被 Text 内容宽吞掉（居中失效），故用 Center 包裹。
+              (showLargeTitle && leading == null)
+                  ? Opacity(
+                      opacity: collapsed,
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: labelColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  : Center(
+                      child: Opacity(
+                        opacity: showLargeTitle ? collapsed : 1.0,
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: labelColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
             ),
           ),
         // 大标题（左对齐，随滚动上移淡出）。

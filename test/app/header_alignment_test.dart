@@ -168,4 +168,53 @@ void main() {
     // ▾ 明显位于页面 trailing 按钮左侧（不再挤右上角一排）。
     expect(dropdownRect.right, lessThan(trailingRect.left));
   });
+
+  testWidgets('#95 showMiddleOnNarrow+leading：滚动收起后中标题居中，不与返回按钮重叠', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const CupertinoApp(
+        localizationsDelegates: testDelegates,
+        home: ProviderScope(
+          child: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                AdaptiveSliverNavigationBar(
+                  title: '工作区',
+                  showMiddleOnNarrow: true,
+                  leading: SizedBox(
+                    key: ValueKey('fake-back'),
+                    width: 44,
+                    height: 44,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 2000, width: double.infinity),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 滚动到收起态（shrinkOffset >= largeTitle extension）。
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
+    final backRect = tester.getRect(find.byKey(const ValueKey('fake-back')));
+    // 收起后大标题(34pt)淡出但仍在树中，取 17pt 的收起态中标题。
+    final titleRect = tester.getRect(find.text('工作区').first);
+    expect(titleRect.height, lessThan(24)); // 17pt 行盒，非 34pt 大标题
+
+    final screenWidth = tester.view.physicalSize.width /
+        tester.view.devicePixelRatio;
+    // 居中生效：全宽盒中心 ≈ 屏幕中心（旧实现左对齐时 center 偏左）。
+    expect((titleRect.center.dx - screenWidth / 2).abs(), lessThan(1));
+    // leading 返回按钮不侵入中央标题带（右缘 < 屏宽一半 - 标题半宽）。
+    expect(backRect.right, lessThan(screenWidth / 2 - titleRect.width / 2));
+  });
 }

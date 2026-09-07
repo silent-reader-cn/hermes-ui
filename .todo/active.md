@@ -98,6 +98,18 @@
 
 ---
 
+## #95（已实施）工作区页收起态中标题与返回按钮重叠
+
+- 主人反馈（附截图）：工作区页向下滚动后，上方标题文本与左上返回 icon 重叠（「工‹作区」）；其他页面无此问题。
+- 复现：窄屏进入 `/workspace/:sid` / `/workspaces` / 文件预览页（三处 `showMiddleOnNarrow: true` + `leading: AppBackButton`）→ 下滑 → 收起态 17pt 中标题左对齐 x=20，与 persistent 行返回按钮（chevron 中心 ≈ x=38，范围 31–45）几何重叠。
+- 根因：`LargeTitleSliverHeaderDelegate` 收起态中标题竖屏分支固定 `left: _titleLeft(20) + TextAlign.start`，未感知 leading 是否存在——设计时 workspace 系页面 leading 为空，后补 AppBackButton 后未同步。其他页面不开 `showMiddleOnNarrow`，收起后无中标题，故无此问题。
+- 实施：`large_title_sliver_header.dart` 收起态标题——`leading == null` 保持原左对齐 x=20；有 leading 时改 `Center` 包裹整体居中（iOS 原生 middle 语义，让出 leading/trailing 区）。注意 textAlign:center 单独用会被 Text 内容宽吞掉（居中失效），必须 Center 包裹给全宽约束。
+- 测试：`header_alignment_test.dart` 新增 #95 回归例（滚动收起后 17pt 标题中心 ≈ 屏幕中心 ±1px、leading 右缘不侵中央标题带），4/4 全绿。
+- 验收：analyze 零告警 ✅；金照 22/22 ✅；全量 2532 全绿 ✅（含 #90 抖动测试本轮通过）。
+- 状态：已实施，随批次 commit，待主人真机复验。
+
+---
+
 ## #94（待排查）已在澄清会话中仍发应用内通知，盖住澄清弹窗
 
 - 主人要求：用户已停留在「需要澄清确认的聊天」页面时，不要发该会话的应用内通知（in-app 通知横幅会盖住上方的澄清确认弹窗）。
