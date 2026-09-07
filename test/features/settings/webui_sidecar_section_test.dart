@@ -503,6 +503,49 @@ void main() {
         'new-secret-999888',
       );
     });
+
+    testWidgets('非编辑态与编辑态均提供重新生成密码按钮，点击分别写回保存与填入输入框', (tester) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // 验证非编辑态 subtitle 提示文案
+      expect(
+        find.text('默认已生成随机密码，可修改为你自己的密码'),
+        findsOneWidget,
+      );
+
+      // 非编辑态点击重新生成按钮
+      final regenBtnFinder = find.byKey(
+        const ValueKey('settings-webui-regen-password-btn'),
+      );
+      expect(regenBtnFinder, findsOneWidget);
+      await tester.tap(regenBtnFinder);
+      await tester.pumpAndSettle();
+
+      final nonEditRegenPwd =
+          container.read(webuiSidecarConfigProvider).password;
+      expect(nonEditRegenPwd.isNotEmpty, isTrue);
+      expect(nonEditRegenPwd, isNot('init-secret-123456'));
+
+      // 进入编辑态
+      await tester.tap(
+        find.byKey(const ValueKey('settings-webui-edit-password-btn')),
+      );
+      await tester.pumpAndSettle();
+
+      // 编辑态点击重新生成按钮
+      await tester.tap(
+        find.byKey(const ValueKey('settings-webui-regen-password-btn')),
+      );
+      await tester.pumpAndSettle();
+
+      final inputWidget = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('settings-webui-password-input')),
+      );
+      final editRegenPwd = inputWidget.controller?.text;
+      expect(editRegenPwd != null && editRegenPwd.isNotEmpty, isTrue);
+      expect(editRegenPwd, isNot(nonEditRegenPwd));
+    });
   });
 
   group('WebuiSidecarSection 状态指示四态渲染断言', () {

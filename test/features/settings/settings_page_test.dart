@@ -1582,7 +1582,7 @@ void main() {
         connections: [buildConn('c1', 'Home', 'http://hermes.local:30002')],
         activeId: 'c1',
       );
-      await pumpPage(tester, container, size: const Size(800, 1200));
+      await pumpPage(tester, container);
 
       expect(
         find.byKey(const ValueKey('settings-switch-notify-turns')),

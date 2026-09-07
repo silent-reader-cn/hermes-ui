@@ -398,6 +398,19 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
             ),
             const SizedBox(width: 4),
             CupertinoButton(
+              key: const ValueKey('settings-webui-regen-password-btn'),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              minimumSize: const Size(0, 28),
+              onPressed: () {
+                setState(() {
+                  _passwordController.text =
+                      SidecarConfig.generateRandomPassword();
+                  _passwordError = null;
+                });
+              },
+              child: Text(l10n.agentGateRegeneratePassword),
+            ),
+            CupertinoButton(
               key: const ValueKey('settings-webui-save-password-btn'),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               minimumSize: const Size(0, 28),
@@ -432,7 +445,13 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                 fontSize: 12,
               ),
             )
-          : null,
+          : Text(
+              l10n.agentGatePasswordHint,
+              style: TextStyle(
+                color: secondaryText.resolveFrom(context),
+                fontSize: 12,
+              ),
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -446,6 +465,19 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
             ),
           ),
           const SizedBox(width: 8),
+          CupertinoButton(
+            key: const ValueKey('settings-webui-regen-password-btn'),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: const Size(0, 28),
+            onPressed: () async {
+              final newPwd = SidecarConfig.generateRandomPassword();
+              _passwordController.text = newPwd;
+              await ref
+                  .read(webuiSidecarConfigProvider.notifier)
+                  .setPassword(newPwd);
+            },
+            child: Text(l10n.agentGateRegeneratePassword),
+          ),
           CupertinoButton(
             key: const ValueKey('settings-webui-copy-password-btn'),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

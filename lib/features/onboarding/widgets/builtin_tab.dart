@@ -35,8 +35,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   bool _isStartingAndConnecting = false;
   String? _errorMessage;
 
-  // 高级设置折叠状态与控制器
-  bool _isAdvancedExpanded = false;
+  // 高级设置折叠状态与控制器（默认展开）
+  bool _isAdvancedExpanded = true;
   final TextEditingController _hostController = TextEditingController();
   final TextEditingController _portController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -851,6 +851,19 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
             ),
             const SizedBox(width: 4),
             CupertinoButton(
+              key: const ValueKey('onboarding-sidecar-regen-password-btn'),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              minimumSize: const Size(0, 28),
+              onPressed: () {
+                setState(() {
+                  _passwordController.text =
+                      SidecarConfig.generateRandomPassword();
+                  _passwordError = null;
+                });
+              },
+              child: Text(l10n.agentGateRegeneratePassword),
+            ),
+            CupertinoButton(
               key: const ValueKey('onboarding-sidecar-save-password-btn'),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               minimumSize: const Size(0, 28),
@@ -885,7 +898,13 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                 fontSize: 12,
               ),
             )
-          : null,
+          : Text(
+              l10n.agentGatePasswordHint,
+              style: TextStyle(
+                color: secondaryText.resolveFrom(context),
+                fontSize: 12,
+              ),
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -899,6 +918,19 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
             ),
           ),
           const SizedBox(width: 6),
+          CupertinoButton(
+            key: const ValueKey('onboarding-sidecar-regen-password-btn'),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: const Size(0, 28),
+            onPressed: () async {
+              final newPwd = SidecarConfig.generateRandomPassword();
+              _passwordController.text = newPwd;
+              await ref
+                  .read(webuiSidecarConfigProvider.notifier)
+                  .setPassword(newPwd);
+            },
+            child: Text(l10n.agentGateRegeneratePassword),
+          ),
           CupertinoButton(
             key: const ValueKey('onboarding-sidecar-copy-password-btn'),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

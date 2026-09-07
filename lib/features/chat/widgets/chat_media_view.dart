@@ -17,6 +17,7 @@ import '../../downloads/download_models.dart';
 import '../../downloads/download_page.dart';
 import '../../downloads/download_providers.dart';
 import '../../downloads/download_save_service.dart';
+import '../../settings/settings_providers.dart';
 import 'chat_media_parser.dart';
 import '../../../app/widgets/hermes_page_route.dart';
 
@@ -32,7 +33,7 @@ final mediaFileProvider = FutureProvider.family<File, String>((ref, url) {
 });
 
 /// 聊天内联媒体渲染组件（支持图片、base64 Data URI、本地文件与服务器 /api/media 路由）。
-class ChatInlineMediaWidget extends ConsumerWidget {
+class ChatInlineMediaWidget extends ConsumerStatefulWidget {
   const ChatInlineMediaWidget({
     super.key,
     required this.rawUri,
@@ -60,18 +61,27 @@ class ChatInlineMediaWidget extends ConsumerWidget {
   final BorderRadius borderRadius;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatInlineMediaWidget> createState() =>
+      _ChatInlineMediaWidgetState();
+}
+
+class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
+  bool _forceLoaded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final resolvedUrl = ChatMediaResolver.resolveMediaUrl(
-      rawUri,
-      baseUrl: baseUrl,
-      sessionId: sessionId,
+      widget.rawUri,
+      baseUrl: widget.baseUrl,
+      sessionId: widget.sessionId,
     );
 
     if (resolvedUrl.isEmpty) {
       return _ImageErrorPlaceholder(
-        altText: alt ?? title,
-        rawUri: rawUri,
-        maxWidth: maxWidth,
+        altText: widget.alt ?? widget.title,
+        rawUri: widget.rawUri,
+        maxWidth: widget.maxWidth,
       );
     }
 
@@ -79,9 +89,94 @@ class ChatInlineMediaWidget extends ConsumerWidget {
     final isNetworkUrl =
         resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://');
 
+    final autoLoadImages = ref.watch(autoLoadImagesProvider);
+    final shouldGate = !autoLoadImages && !_forceLoaded && isNetworkUrl;
+
+    if (shouldGate) {
+      final displayName = widget.alt ?? widget.title;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Container(
+          constraints: BoxConstraints(
+            minWidth: 32,
+            minHeight: 32,
+            maxWidth: widget.maxWidth,
+            maxHeight: widget.maxHeight,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey5.resolveFrom(context),
+            borderRadius: widget.borderRadius,
+            border: Border.all(
+              color: CupertinoColors.systemGrey4.resolveFrom(context),
+              width: 0.5,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.photo,
+                    size: 20,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                  if (displayName != null && displayName.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              CupertinoButton(
+                key: const ValueKey('chat-inline-media-tap-to-load'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                color: CupertinoTheme.of(context).primaryColor,
+                borderRadius: BorderRadius.circular(5),
+                minimumSize: const Size(36, 26),
+                onPressed: () {
+                  setState(() {
+                    _forceLoaded = true;
+                  });
+                },
+                child: Text(
+                  l10n.chatAutoLoadTapToLoad,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: CupertinoColors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final placeholderSize = _calculatePlaceholderSize(
-      maxWidth: maxWidth,
-      maxHeight: maxHeight,
+      maxWidth: widget.maxWidth,
+      maxHeight: widget.maxHeight,
       url: resolvedUrl,
     );
 
@@ -105,17 +200,17 @@ class ChatInlineMediaWidget extends ConsumerWidget {
                 errorKind: error.toString(),
               );
               return _ImageErrorPlaceholder(
-                altText: alt ?? title,
-                rawUri: rawUri,
-                maxWidth: maxWidth,
+                altText: widget.alt ?? widget.title,
+                rawUri: widget.rawUri,
+                maxWidth: widget.maxWidth,
               );
             },
           );
         } else {
           imageWidget = _ImageErrorPlaceholder(
-            altText: alt ?? title,
-            rawUri: rawUri,
-            maxWidth: maxWidth,
+            altText: widget.alt ?? widget.title,
+            rawUri: widget.rawUri,
+            maxWidth: widget.maxWidth,
           );
         }
       } catch (error) {
@@ -126,9 +221,9 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           errorKind: error.toString(),
         );
         imageWidget = _ImageErrorPlaceholder(
-          altText: alt ?? title,
-          rawUri: rawUri,
-          maxWidth: maxWidth,
+          altText: widget.alt ?? widget.title,
+          rawUri: widget.rawUri,
+          maxWidth: widget.maxWidth,
         );
       }
     } else if (isNetworkUrl) {
@@ -144,7 +239,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             }
             return _loadingBox(
               context,
-              borderRadius,
+              widget.borderRadius,
               width: placeholderSize.width,
               height: placeholderSize.height,
             );
@@ -157,17 +252,17 @@ class ChatInlineMediaWidget extends ConsumerWidget {
               errorKind: error.toString(),
             );
             return _ImageErrorPlaceholder(
-              altText: alt ?? title,
-              rawUri: rawUri,
+              altText: widget.alt ?? widget.title,
+              rawUri: widget.rawUri,
               resolvedUrl: resolvedUrl,
-              sessionId: sessionId,
-              maxWidth: maxWidth,
+              sessionId: widget.sessionId,
+              maxWidth: widget.maxWidth,
             );
           },
         ),
         loading: () => _loadingBox(
           context,
-          borderRadius,
+          widget.borderRadius,
           width: placeholderSize.width,
           height: placeholderSize.height,
         ),
@@ -179,11 +274,11 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             errorKind: error.toString(),
           );
           return _ImageErrorPlaceholder(
-            altText: alt ?? title,
-            rawUri: rawUri,
+            altText: widget.alt ?? widget.title,
+            rawUri: widget.rawUri,
             resolvedUrl: resolvedUrl,
-            sessionId: sessionId,
-            maxWidth: maxWidth,
+            sessionId: widget.sessionId,
+            maxWidth: widget.maxWidth,
           );
         },
       );
@@ -198,7 +293,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           }
           return _loadingBox(
             context,
-            borderRadius,
+            widget.borderRadius,
             width: placeholderSize.width,
             height: placeholderSize.height,
           );
@@ -211,21 +306,21 @@ class ChatInlineMediaWidget extends ConsumerWidget {
             errorKind: error.toString(),
           );
           return _ImageErrorPlaceholder(
-            altText: alt ?? title,
-            rawUri: rawUri,
+            altText: widget.alt ?? widget.title,
+            rawUri: widget.rawUri,
             resolvedUrl: resolvedUrl,
-            sessionId: sessionId,
-            maxWidth: maxWidth,
+            sessionId: widget.sessionId,
+            maxWidth: widget.maxWidth,
           );
         },
       );
     } else {
       imageWidget = _ImageErrorPlaceholder(
-        altText: alt ?? title,
-        rawUri: rawUri,
+        altText: widget.alt ?? widget.title,
+        rawUri: widget.rawUri,
         resolvedUrl: resolvedUrl,
-        sessionId: sessionId,
-        maxWidth: maxWidth,
+        sessionId: widget.sessionId,
+        maxWidth: widget.maxWidth,
       );
     }
 
@@ -237,20 +332,16 @@ class ChatInlineMediaWidget extends ConsumerWidget {
           context,
           resolvedUrl: resolvedUrl,
           memoryBytes: memoryBytes,
-          altText: alt ?? title,
+          altText: widget.alt ?? widget.title,
         ),
-        // 注意：不使用 AnimatedSize 做高度过渡——占位→真图的尺寸差异会被
-        // 逐帧撑高 maxScrollExtent，底部跟随只能逐帧补跳（观感「边长边跳」）；
-        // 改为真实尺寸一步到位 + 150ms 淡入，extent 单次变化由
-        // ScrollMetricsNotification 跟底链路一次补跳收敛。
         child: Container(
           constraints: BoxConstraints(
             minWidth: 32,
             minHeight: 32,
-            maxWidth: maxWidth,
-            maxHeight: maxHeight,
+            maxWidth: widget.maxWidth,
+            maxHeight: widget.maxHeight,
           ),
-          decoration: BoxDecoration(borderRadius: borderRadius),
+          decoration: BoxDecoration(borderRadius: widget.borderRadius),
           clipBehavior: Clip.antiAlias,
           child: imageWidget,
         ),
@@ -271,7 +362,7 @@ class ChatInlineMediaWidget extends ConsumerWidget {
       name: altText,
       altText: altText,
       isImage: true,
-      sessionId: sessionId,
+      sessionId: widget.sessionId,
     );
   }
 }

@@ -1064,3 +1064,64 @@ class RecentlyCreatedSessionIdController extends Notifier<String?> {
     state = null;
   }
 }
+
+// -----------------------------------------------------------------------------
+// 自动加载图片开关
+// -----------------------------------------------------------------------------
+
+/// 自动加载图片偏好设置键。
+const String kAutoLoadImagesKey = 'settings.autoLoadImages';
+
+/// 自动加载图片偏好设置 Provider（持久化到 shared_preferences，默认开启）。
+final autoLoadImagesProvider =
+    NotifierProvider<AutoLoadImagesController, bool>(
+      AutoLoadImagesController.new,
+    );
+
+/// 自动加载图片控制器。
+class AutoLoadImagesController extends Notifier<bool> {
+  static const String keyAutoLoadImages = kAutoLoadImagesKey;
+
+  static Future<bool> loadPref({SharedPreferences? customPrefs}) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyAutoLoadImages) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true;
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadPref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+
+  Future<void> load() => _load();
+
+  Future<void> setEnabled(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyAutoLoadImages, value);
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+}
+

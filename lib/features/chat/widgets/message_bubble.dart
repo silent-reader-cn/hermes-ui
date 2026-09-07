@@ -377,14 +377,29 @@ class _AssistantContent extends StatelessWidget {
       }
     }
 
+    final metaSpans = <String>[];
     if (message.turnTps != null) {
+      metaSpans.add('${message.turnTps!.toStringAsFixed(1)} tok/s');
+    }
+    if (message.timestamp != null) {
+      final formattedTime = formatMessageTimestamp(message.timestamp!);
+      if (formattedTime.isNotEmpty) {
+        metaSpans.add(formattedTime);
+      }
+    }
+    if (metaSpans.isNotEmpty) {
       sections.add(
-        Text(
-          '${message.turnTps!.toStringAsFixed(1)} tok/s',
-          style: TextStyle(
-            fontSize: 11,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              metaSpans.join(' · '),
+              style: TextStyle(
+                fontSize: 11,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -499,4 +514,27 @@ class _FallbackInjectedNoticeCardState
   }
 }
 
-/// 发送中指示器（sending 相位，未拿到 stream_id）。
+/// 格式化消息完成时间戳（Unix 秒 double）。
+///
+/// 当天返回 `HH:mm`；跨天返回 `MM-dd HH:mm`（本地时区）。
+/// 可选传入 [now] 用于单测对齐基准时间。
+String formatMessageTimestamp(double timestamp, {DateTime? now}) {
+  if (timestamp.isNaN || timestamp.isInfinite || timestamp <= 0) {
+    return '';
+  }
+  final date = DateTime.fromMillisecondsSinceEpoch((timestamp * 1000).round());
+  final current = now ?? DateTime.now();
+  final isSameDay =
+      date.year == current.year &&
+      date.month == current.month &&
+      date.day == current.day;
+
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  if (isSameDay) {
+    return '$hour:$minute';
+  }
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '$month-$day $hour:$minute';
+}

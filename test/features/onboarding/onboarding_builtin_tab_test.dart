@@ -553,17 +553,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 初始折叠
+      // 初始默认展开（#84：host/port/密码首见即见）
       expect(
         find.byKey(const ValueKey('onboarding-sidecar-port-input')),
-        findsNothing,
+        findsOneWidget,
       );
-
-      // 点击展开
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-advanced-disclosure')),
-      );
-      await tester.pumpAndSettle();
 
       // 修改端口
       await tester.enterText(
@@ -588,6 +582,19 @@ void main() {
         find.byKey(const ValueKey('onboarding-sidecar-edit-password-btn')),
       );
       await tester.pumpAndSettle();
+
+      // 点击重新生成按钮填入新随机串
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-sidecar-regen-password-btn')),
+      );
+      await tester.pumpAndSettle();
+      final regenPassword = tester
+          .widget<CupertinoTextField>(
+            find.byKey(const ValueKey('onboarding-sidecar-password-input')),
+          )
+          .controller!
+          .text;
+      expect(regenPassword.isNotEmpty, isTrue);
 
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-sidecar-password-input')),

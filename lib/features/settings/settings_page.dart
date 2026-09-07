@@ -426,6 +426,18 @@ class _ChatSection extends ConsumerWidget {
             },
           ),
         ),
+        CupertinoListTile(
+          title: Text(l10n.chatAutoLoadSetting),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-auto-load-images'),
+            value: ref.watch(autoLoadImagesProvider),
+            onChanged: (value) {
+              unawaited(
+                ref.read(autoLoadImagesProvider.notifier).setEnabled(value),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
