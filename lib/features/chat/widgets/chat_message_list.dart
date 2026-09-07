@@ -359,6 +359,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool get dragExceededThreshold => _dragExceededThreshold;
 
   @visibleForTesting
+  bool get restoringOlderPosition => _restoringOlderPosition;
+
+  @visibleForTesting
   bool get isGestureActive => _isGestureActive;
 
   @visibleForTesting
@@ -510,6 +513,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositioning = false;
       _initialPositionScheduled = false;
       _restoringOlderPosition = false;
+      _olderRestoreAnchorId = null;
+      _olderRestoreAnchorDy = null;
+      _olderRestoreAttempts = 0;
       _userHasScrolled = false;
       _isUserInteracting = false;
       _pressFollowed = true;
@@ -908,6 +914,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? _controller.position.maxScrollExtent
         : 0.0;
     _restoringOlderPosition = true;
+    // PATCH(#93): capture a geometric anchor (top-edge visible item + its
+    // viewport dy) instead of relying on the lazy ListView's estimated
+    // maxScrollExtent. See _restoreOlderScrollPosition below.
+    _olderRestoreAnchorId = _captureTopEdgeAnchorId();
+    _olderRestoreAnchorDy = _olderRestoreAnchorId == null
+        ? null
+        : _topEdgeAnchorDy(_olderRestoreAnchorId!);
     try {
       await ref
           .read(chatControllerProvider(widget.sessionId).notifier)
@@ -927,6 +940,61 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
+  /// 分页 restore 的几何锚（#93）：分页触发时视口顶缘可见条目的 renderId
+  /// 与其视口 dy。加载完成后逐帧实测该条目 dy、jumpTo 精确归位，直到收敛。
+  ///
+  /// 不再使用 `beforePixels + (maxExtent - beforeExtent)` 补偿：lazy
+  /// ListView 的 `maxScrollExtent` 是估算值（未构建条目按均值折算），预置
+  /// 50 条后误差可达数个视口高，clamp 后把落点拍到端点（0=历史头部 或
+  /// max=末尾），即用户报告的「跳到末尾 / 历史头部」。几何锚定完全实测，
+  /// 与估算无关。
+  String? _olderRestoreAnchorId;
+  double? _olderRestoreAnchorDy;
+  int _olderRestoreAttempts = 0;
+  // PATCH(#93): the anchor converges on the first post-load frame (lazy
+  // builder lays out the new page then); 3 frames of budget is plenty and
+  // keeps the postFrame chain short so it can never stall pending frames
+  // (a long chain of postFrame-only callbacks does not schedule new
+  // frames — pumpAndSettle/real devices alike stop feeding it).
+  static const int _maxOlderRestoreAttempts = 3;
+  static const double _olderRestoreSettleEpsilon = 1.0;
+
+  /// 记录视口顶缘第一条可见条目的 renderId（可见高度 > 0 即可，含部分可见）。
+  String? _captureTopEdgeAnchorId() {
+    if (!_controller.hasClients) return null;
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return null;
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+    String? bestId;
+    double bestDy = double.infinity;
+    for (final entry in transcript) {
+      final key = _itemKeys[entry.renderId];
+      if (key?.currentContext == null) continue;
+      final box = key!.currentContext!.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached || box.size.height == 0) continue;
+      final dy =
+          box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
+      if (dy + box.size.height <= 0) continue; // 完全在视口上方
+      if (dy < bestDy) {
+        bestDy = dy;
+        bestId = entry.renderId;
+      }
+    }
+    return bestId;
+  }
+
+  /// 实测锚点条目当前视口 dy；条目不在树中返回 null。
+  double? _topEdgeAnchorDy(String renderId) {
+    if (!_controller.hasClients) return null;
+    final key = _itemKeys[renderId];
+    if (key?.currentContext == null) return null;
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return null;
+    final box = key!.currentContext!.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || box.size.height == 0) return null;
+    return box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
+  }
+
   void _restoreOlderScrollPosition({
     required double beforePixels,
     required double beforeExtent,
@@ -937,7 +1005,65 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _restoringOlderPosition = false;
         return;
       }
-      if (frame < 2) {
+      // PATCH(#93): anchor-settling restore. First frame: if the geometric
+      // anchor is usable, jump so the anchored item returns to its
+      // pre-load viewport dy. Then re-measure per frame until the anchor
+      // holds (lazy builder keeps refining extents for a few frames) or
+      // the attempt budget runs out. Fallback (no anchor): previous
+      // extent-delta compensation, kept for safety.
+      final anchorId = _olderRestoreAnchorId;
+      final anchorDy = _olderRestoreAnchorDy;
+      if (anchorId == null || anchorDy == null) {
+        final delta = _controller.position.maxScrollExtent - beforeExtent;
+        final target = (beforePixels + delta).clamp(
+          0.0,
+          _controller.position.maxScrollExtent,
+        );
+        _controller.jumpTo(target);
+        _restoringOlderPosition = false;
+        _nearBottom =
+            _controller.position.maxScrollExtent -
+                _controller.position.pixels <
+            _nearBottomThreshold;
+        return;
+      }
+      final measuredDy = _topEdgeAnchorDy(anchorId);
+      if (measuredDy == null) {
+        // Anchored item not (yet) built: keep waiting within budget.
+        if (_olderRestoreAttempts < _maxOlderRestoreAttempts) {
+          _olderRestoreAttempts++;
+          _restoreOlderScrollPosition(
+            beforePixels: beforePixels,
+            beforeExtent: beforeExtent,
+            frame: frame + 1,
+          );
+        } else {
+          _restoringOlderPosition = false;
+        }
+        return;
+      }
+      final diff = measuredDy - anchorDy;
+      if (diff.abs() <= _olderRestoreSettleEpsilon) {
+        // Anchor holds: finalize immediately instead of burning the rest
+        // of the frame budget (shorter chain = no stall window).
+        _restoringOlderPosition = false;
+        _olderRestoreAnchorId = null;
+        _olderRestoreAnchorDy = null;
+        _nearBottom =
+            _controller.position.maxScrollExtent -
+                _controller.position.pixels <
+            _nearBottomThreshold;
+        return;
+      }
+      if (diff.abs() > _olderRestoreSettleEpsilon) {
+        final target = (_controller.position.pixels + diff).clamp(
+          0.0,
+          _controller.position.maxScrollExtent,
+        );
+        _controller.jumpTo(target);
+      }
+      _olderRestoreAttempts++;
+      if (_olderRestoreAttempts < _maxOlderRestoreAttempts) {
         _restoreOlderScrollPosition(
           beforePixels: beforePixels,
           beforeExtent: beforeExtent,
@@ -945,17 +1071,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         );
         return;
       }
-      final delta = _controller.position.maxScrollExtent - beforeExtent;
-      final target = (beforePixels + delta).clamp(
-        0.0,
-        _controller.position.maxScrollExtent,
-      );
-      if (!mounted || !_controller.hasClients) {
-        _restoringOlderPosition = false;
-        return;
-      }
-      _controller.jumpTo(target);
       _restoringOlderPosition = false;
+      _olderRestoreAnchorId = null;
+      _olderRestoreAnchorDy = null;
       _nearBottom =
           _controller.position.maxScrollExtent - _controller.position.pixels <
           _nearBottomThreshold;
@@ -1594,7 +1712,31 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _isGestureActive = false;
     _isUserInteracting = false;
 
-    if (!_initialPositioned || _initialPositioning || _restoringOlderPosition) {
+    if (!_initialPositioned || _initialPositioning) {
+      _dragDisplacement = 0.0;
+      _dragExceededThreshold = false;
+      return;
+    }
+    if (_restoringOlderPosition) {
+      // PATCH(#93): a gesture ending during an older-pages restore must
+      // still settle the user's intent. Silently discarding it left
+      // `_userHasScrolled == false && _nearBottom == true`, and the
+      // post-build follow logic then yanked the list back to the bottom
+      // ("scroll jumps to the newest message after loading history").
+      // The restore window is brief and only blocks programmatic
+      // scrolls; gesture state must be resolved here as usual.
+      if (_dragDisplacement < -_dragSensitivityThreshold) {
+        if (!_userHasScrolled) {
+          _pinnedTranscriptCount = ref
+              .read(transcriptMessagesProvider(widget.sessionId))
+              .length;
+        }
+        _userHasScrolled = true;
+        _nearBottom = false;
+      }
+      // Upward (towards bottom) displacement during restore is ignored:
+      // the restore owns the viewport for a few frames; keep follow
+      // state untouched so the anchor can place it precisely.
       _dragDisplacement = 0.0;
       _dragExceededThreshold = false;
       return;
@@ -2106,9 +2248,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       _dragDisplacement.abs() >= _dragSensitivityThreshold) {
                     _dragExceededThreshold = true;
                     // 拖动/滚轮开始超过 8px 敏感阈值即置取消（解锁自由滚动，不滚到离底不算用户离开，#41/#74）
+                    // PATCH(#93)：restore 窗口内也必须结算离底意图——否则
+                    // 分页加载期间持续滚轮/拖动的用户在 restore 结束后会被
+                    // 跟底逻辑拉回末尾（用户报告「加载历史后跳到最底」）。
+                    // restore 只约束程序化滚动，不约束用户意图结算。
                     if (_initialPositioned &&
-                        !_initialPositioning &&
-                        !_restoringOlderPosition) {
+                        !_initialPositioning) {
                       final wasNotScrolled = !_userHasScrolled;
                       if (!_userHasScrolled) {
                         _pinnedTranscriptCount = ref
