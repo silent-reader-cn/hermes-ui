@@ -2761,7 +2761,18 @@ class _LiveTextBlock extends ConsumerWidget {
           selectable: true,
           sessionId: sessionId,
           styleSheet: buildAssistantMarkdownStyleSheet(context),
-          builders: createAssistantMarkdownBuilders(context),
+          // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
+          builders: createAssistantMarkdownBuilders(
+            context,
+            imageBuilder: (uri, title, alt) {
+              return ChatInlineMediaWidget(
+                rawUri: uri.toString(),
+                title: title,
+                alt: alt,
+                baseUrl: _resolveBaseUrl(context),
+              );
+            },
+          ),
           // ignore: deprecated_member_use
           imageBuilder: (uri, title, alt) {
             return ChatInlineMediaWidget(

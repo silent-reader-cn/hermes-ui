@@ -58,4 +58,29 @@
 
 ---
 
-（当前队列：#87/#88 已实施待批次收口 commit；#89 取证待排查；#90 待治理）
+## #91 聊天 Markdown 图片块级化（不与文字同行镶嵌，避免撑高行高）
+
+- 主人要求：聊天里图片渲染总是另起一行（前方已是换行/图片在行首则不重复另起），不要 inline 镶嵌在文字里撑高文字行；「其实就是不要 inline 以后图像组件全部 block」。
+- 位置：`lib/features/chat/widgets/markdown_styles.dart`（builders 工厂 + 新增 `ImgBlockElementBuilder`）；接线 `message_bubble.dart`（user/assistant 两处 MarkdownBody）、`chat_message_list.dart`（`_SafeMarkdownBody` live 路径）。
+- 现状 vs 预期：现状 = flutter_markdown `img` 非 block 标签，图片 widget 进段落 `Wrap(crossAxisAlignment: center)` 与文字同行，图片高度撑高整行；预期 = 图片独立成块（文本块 / 图片块 / 文本块），图片不参与文字行内排版。
+- 根因（包内机制实锤，flutter_markdown 0.7.7+1 `builder.dart`）：`_kBlockTags` 不含 `img`；段内图片走 `else if (tag == 'img')` inline 分支加入 `current.children`，段落收口 `_mergeInlineChildren` + `Wrap` 同行混排。包支持自定义 builder `isBlockElement() => true` 注册为块级：进入图片前 `_addAnonymousBlockIfNeeded()` 先把已累积 inline 文本 flush 成独立块 → 图片单独成块 → 后续文本再起块。行首图片（前面无 inline）不产生空块 → 不重复另起行，天然满足主人「避免重复行」要求。
+- 实施：
+  1. 新增 `ImgBlockElementBuilder`（持有与 MarkdownBody 同源的 `imageBuilder` 回调，`visitElementAfterWithContext` 用 `element.attributes['src'/'alt'/'title']` 生成同一 `ChatInlineMediaWidget`，媒体卡片/门控/预览逻辑不变）。
+  2. `createMarkdownElementBuilders` 增加可选 `imageBuilder` 参数，**仅在传入时注册 `'img'` builder**（memory_page / file_preview_page 两处未接媒体链路，保持包默认渲染不回归）。
+  3. `createAssistantMarkdownBuilders` / `createUserMarkdownBuilders` 透传 `imageBuilder`；聊天三处调用点（bubble assistant/user + live list）把现有 imageBuilder 闭包同源传入。
+- 范围外：流式纯文本路径（`isStreaming` 时用 `Text`）不含图片，无需处理；user 气泡同款 block 化。
+- 测试：`markdown_image_block_test.dart` 4/4（行中图片前后文字拆独立块 / 行首图片无空文本块 / 连续两图独立纵向排列 / 未传 imageBuilder 不注册 img）。
+- 验收：analyze 零告警 ✅；test/features/chat 591 全绿 ✅；金照 22/22 ✅（金照不覆盖含图 markdown）。
+- 状态：已实施，随批次 commit，待主人真机复验。
+
+---
+
+## #92（待排查）live 流式中用户划回上方被 scroll 来回拉扯
+
+- 主人反馈（附录屏 Screenrecorder-2026-09-07-12-59-21-81.mp4）：live 时用户划回上方查看内容，scroll 来回滚动（疑似自动跟随与用户手势互相抢）。
+- 相关现场：#74 已修「PC 滚轮上滚被拉回」（负位移守卫 + 程序化滚动门控，`chat_message_list.dart`）；本例为安卓/触屏场景回拉，可能与 #74 同根因不同入口（触摸 drag 未覆盖）或 reveal 队列 flush 节奏相关。
+- 状态：登记待排查（需结合录屏复现路径定位手势状态机分支）。
+
+---
+
+（当前队列：#91 已实施待收口 commit；#92 登记待排查；#89 保活通知不同步登记待排查；#90 滚动抖动登记待治理）

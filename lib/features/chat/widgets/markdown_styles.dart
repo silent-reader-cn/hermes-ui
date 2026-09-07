@@ -267,7 +267,46 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// 创建通用 Markdown 元素构建器映射表（注册 code 标签以支持行内 pill）。
+/// 图片块级化构建器（#91）。
+///
+/// 注册到 `img` 标签且 `isBlockElement()` 返回 true：flutter_markdown 在遇到
+/// 块级标签时会先把此前累积的 inline 文本 flush 成独立块（`_addAnonymousBlockIfNeeded`），
+/// 再为图片单独建块——效果：
+/// - 行中图片 → 文本块 / 图片块 / 文本块 三段独立，图片不再撑高文字行；
+/// - 行首或独立段落图片 → 前面无 inline 文本，不产生空块，不会多出重复空行；
+/// - 连续多张图片 → 各自独立成块纵向排列。
+///
+/// 默认的 inline `img` 渲染路径（`builder.dart` `else if (tag == 'img')` 分支）
+/// 在 builder 注册后不再触发，图片 widget 由传入的 [imageBuilder]（与
+/// MarkdownBody 的 imageBuilder 同源回调）生成，保持媒体卡片/门控/预览逻辑不变。
+class ImgBlockElementBuilder extends MarkdownElementBuilder {
+  ImgBlockElementBuilder({this.imageBuilder});
+
+  // ignore: deprecated_member_use
+  final Widget Function(Uri, String?, String?)? imageBuilder;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final src = element.attributes['src'];
+    if (src == null || src.isEmpty) return const SizedBox.shrink();
+    final uri = Uri.tryParse(src.split('#').first);
+    if (uri == null) return const SizedBox.shrink();
+    final builder = imageBuilder;
+    if (builder == null) return const SizedBox.shrink();
+    return builder(uri, element.attributes['alt'], element.attributes['title']);
+  }
+}
+
+/// 创建通用 Markdown 元素构建器映射表（注册 code 标签以支持行内 pill +
+/// img 标签块级化）。
 Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
   BuildContext context, {
   Color? codeBackgroundColor,
@@ -276,6 +315,8 @@ Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
   BorderRadiusGeometry codeBorderRadius = const BorderRadius.all(
     Radius.circular(kInlineCodeBorderRadius),
   ),
+  // ignore: deprecated_member_use
+  Widget Function(Uri, String?, String?)? imageBuilder,
 }) {
   final builder = InlineCodeElementBuilder(
     backgroundColor: codeBackgroundColor,
@@ -285,13 +326,22 @@ Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
   );
   return <String, MarkdownElementBuilder>{
     'code': builder,
+    // 仅在提供 imageBuilder 时注册 img 块级 builder：memory/文件预览等
+    // 只读场景未接媒体渲染链路，保持包默认 inline 渲染不回归。
+    if (imageBuilder != null)
+      'img': ImgBlockElementBuilder(imageBuilder: imageBuilder),
   };
 }
 
 /// assistant / memory 等正文场景 Markdown 构建器（灰色 pill 底色）。
+///
+/// 图片块级化：额外注册 [ImgBlockElementBuilder]（`isBlockElement` = true），
+/// 让段内图片独立成块渲染，不再与文本同行镶嵌撑高行高。
 Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
-  BuildContext context,
-) {
+  BuildContext context, {
+  // ignore: deprecated_member_use
+  Widget Function(Uri, String?, String?)? imageBuilder,
+}) {
   final label = CupertinoColors.label.resolveFrom(context);
   final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
   return createMarkdownElementBuilders(
@@ -303,13 +353,16 @@ Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
       fontFamily: 'monospace',
       color: label,
     ),
+    imageBuilder: imageBuilder,
   );
 }
 
 /// user 气泡场景 Markdown 构建器（蓝底半透明白 pill 底色）。
 Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
-  BuildContext context,
-) {
+  BuildContext context, {
+  // ignore: deprecated_member_use
+  Widget Function(Uri, String?, String?)? imageBuilder,
+}) {
   return createMarkdownElementBuilders(
     context,
     codeBackgroundColor: CupertinoColors.white.withValues(alpha: 0.22),
@@ -319,5 +372,6 @@ Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
       fontFamily: 'monospace',
       color: CupertinoColors.white,
     ),
+    imageBuilder: imageBuilder,
   );
 }

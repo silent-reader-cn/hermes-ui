@@ -222,7 +222,20 @@ class _UserContent extends StatelessWidget {
               data: parsedDisplay,
               selectable: true,
               styleSheet: buildUserMarkdownStyleSheet(context),
-              builders: createUserMarkdownBuilders(context),
+              // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
+              builders: createUserMarkdownBuilders(
+                context,
+                imageBuilder: (uri, title, alt) {
+                  return ChatInlineMediaWidget(
+                    rawUri: uri.toString(),
+                    title: title,
+                    alt: alt,
+                    baseUrl: baseUrl,
+                    sessionId: sessionId,
+                    customHeaders: customHeaders,
+                  );
+                },
+              ),
               // #57：MEDIA 文件链接点击 → 预览/下载；网页链接 → 外部打开
               onTapLink: (text, href, title) => onChatMarkdownLinkTap(
                 context,
@@ -344,7 +357,20 @@ class _AssistantContent extends StatelessWidget {
             data: parsedContent,
             selectable: true,
             styleSheet: buildAssistantMarkdownStyleSheet(context),
-            builders: createAssistantMarkdownBuilders(context),
+            // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
+            builders: createAssistantMarkdownBuilders(
+              context,
+              imageBuilder: (uri, title, alt) {
+                return ChatInlineMediaWidget(
+                  rawUri: uri.toString(),
+                  title: title,
+                  alt: alt,
+                  baseUrl: baseUrl,
+                  sessionId: sessionId,
+                  customHeaders: customHeaders,
+                );
+              },
+            ),
             // #57：MEDIA 文件链接点击 → 预览/下载；网页链接 → 外部打开
             onTapLink: (text, href, title) => onChatMarkdownLinkTap(
               context,
