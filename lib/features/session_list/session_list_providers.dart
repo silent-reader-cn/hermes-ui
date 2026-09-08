@@ -1286,6 +1286,144 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     );
   }
 
+  /// 聊天页行操作免网络本地同步（无状态未就绪时静默 no-op）。
+  ///
+  /// 调用方：聊天页菜单成功后直接同步列表，避免 pop 回列表等 30s 轮询。
+  /// [archived] 语义对齐 [setArchived] 单项逻辑：
+  /// - true → 从普通列表移除 + archivedCount+1（归档视图下次进入时 fetchArchived 重拉）；
+  /// - false → 本地反归档：普通列表该行 archived=false（若不存在则不插入，
+  ///   等全量刷新补全，避免凭空造行），同时从归档视图移除 + archivedCount-1。
+  void applyExternalRename(String id, String title) {
+    final current = state.valueOrNull;
+    if (current == null || id.isEmpty) return;
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    SessionSummary replacer(SessionSummary s) => s.replacingTitle(trimmed);
+    _syncLocalSession(id, replacer, dropArchived: false);
+  }
+
+  /// 聊天页置顶同步（成功后调用；失败不调用，列表保持旧值）。
+  void applyExternalPinned(String id, bool pinned) {
+    final current = state.valueOrNull;
+    if (current == null || id.isEmpty) return;
+    SessionSummary replacer(SessionSummary s) =>
+        _replaced(s, pinned: pinned);
+    _syncLocalSession(id, replacer, dropArchived: false);
+  }
+
+  /// 聊天页归档/取消归档同步（成功后调用）。
+  ///
+  /// 归档成功后即使身处归档筛选视图，也从普通列表移除（对齐 [setArchived]）；
+  /// 归档视图自身不做本地增删（下次进入 fetchArchived 重拉为准）。
+  void applyExternalArchived(String id, bool archived) {
+    final current = state.valueOrNull;
+    if (current == null || id.isEmpty) return;
+    if (archived) {
+      state = AsyncData(
+        current.copyWith(
+          sessions:
+              current.sessions.where((s) => s.sessionId != id).toList(),
+          searchResults: current.searchResults == null
+              ? null
+              : () => current.searchResults!
+                    .where((s) => s.sessionId != id)
+                    .toList(),
+          archivedSessions: current.archivedSessions
+              .where((s) => s.sessionId != id)
+              .toList(),
+          selectedSessionIds: {...current.selectedSessionIds}..remove(id),
+        ),
+      );
+      unawaited(_adjustArchivedCount(1));
+      return;
+    }
+    SessionSummary replacer(SessionSummary s) =>
+        _replaced(s, archived: false);
+    _syncLocalSession(id, replacer, dropArchived: false);
+    unawaited(_removeArchived(id));
+    unawaited(_adjustArchivedCount(-1));
+  }
+
+  /// 聊天页删除同步（成功后调用）：三视图移除 + 取消勾选残留。
+  void applyExternalDeleted(String id) {
+    final current = state.valueOrNull;
+    if (current == null || id.isEmpty) return;
+    _streamingSessions.remove(id);
+    state = AsyncData(
+      current.copyWith(
+        sessions: current.sessions.where((s) => s.sessionId != id).toList(),
+        searchResults: current.searchResults == null
+            ? null
+            : () => current.searchResults!
+                  .where((s) => s.sessionId != id)
+                  .toList(),
+        archivedSessions: current.archivedSessions
+            .where((s) => s.sessionId != id)
+            .toList(),
+        selectedSessionIds: {...current.selectedSessionIds}..remove(id),
+      ),
+    );
+  }
+
+  /// 聊天页分支同步（成功后调用）：新会话插到列表顶部（对齐 [_insertSession]
+  /// 的「缺时间戳兜底现在」规则，避免落入「更早」分区底部看不见）。
+  void applyExternalBranched(SessionSummary session) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final id = session.sessionId;
+    if (id == null || id.isEmpty) return;
+    if (current.sessions.any((s) => s.sessionId == id)) return;
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
+    var withStamp =
+        session.createdAt == null ? session.copyWith(createdAt: now) : session;
+    if (_streamingSessions.containsKey(id)) {
+      withStamp = withStamp.withStreaming(
+        isStreaming: true,
+        activeStreamId: _streamingSessions[id],
+      );
+    }
+    state = AsyncData(
+      current.copyWith(
+        sessions: [withStamp, ...current.sessions],
+        visibleCount: current.visibleCount + 1,
+      ),
+    );
+  }
+
+  /// 三视图本地行替换原语：普通 + 搜索命中 + 归档视图同步改行。
+  /// [dropArchived] 为 true 时额外把该行从归档视图剔除
+  /// （归档成功场景：普通列表已移除，归档视图等重拉，不做本地插入）。
+  void _syncLocalSession(
+    String id,
+    SessionSummary Function(SessionSummary) transform, {
+    required bool dropArchived,
+  }) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        sessions: [
+          for (final s in current.sessions)
+            s.sessionId == id ? transform(s) : s,
+        ],
+        searchResults: current.searchResults == null
+            ? null
+            : () => [
+                for (final s in current.searchResults!)
+                  s.sessionId == id ? transform(s) : s,
+              ],
+        archivedSessions: dropArchived
+            ? current.archivedSessions
+                .where((s) => s.sessionId != id)
+                .toList()
+            : [
+                for (final s in current.archivedSessions)
+                  s.sessionId == id ? transform(s) : s,
+              ],
+      ),
+    );
+  }
+
   /// 从归档视图移除指定会话（取消归档后调用）。
   Future<void> _removeArchived(String id) async {
     final current = state.valueOrNull;

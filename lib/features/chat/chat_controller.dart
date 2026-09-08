@@ -330,6 +330,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         return false;
       }
       state = state.copyWith(displayTitle: trimmed);
+      _syncSessionListRename(trimmed);
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -337,21 +338,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
   }
 
-  /// 更新当前会话的置顶状态。
+  /// 更新当前会话的置顶状态（成功后免网络同步会话列表）。
   Future<bool> setPinned(bool pinned) => _mutateSession(
     () => _api!.pinSession(sessionId: state.sessionId, pinned: pinned),
     failure: '置顶状态更新失败。',
+    onSuccess: (id) => _syncSessionListPinned(id, pinned),
   );
 
-  /// 更新当前会话的归档状态。
+  /// 更新当前会话的归档状态（成功后免网络同步会话列表）。
   Future<bool> setArchived(bool archived) => _mutateSession(
     () => _api!.archiveSession(sessionId: state.sessionId, archived: archived),
     failure: '归档状态更新失败。',
+    onSuccess: (id) => _syncSessionListArchived(id, archived),
   );
 
   Future<bool> _mutateSession(
     Future<SessionMutationResponse> Function() request, {
     required String failure,
+    void Function(String sessionId)? onSuccess,
   }) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     try {
@@ -360,6 +364,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _setSendError(response.error ?? failure);
         return false;
       }
+      final callback = onSuccess;
+      if (callback != null) callback(state.sessionId);
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -370,12 +376,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 删除当前会话。
   Future<bool> deleteSession() async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
+    final deletedId = state.sessionId;
     try {
-      final response = await _api!.deleteSession(state.sessionId);
+      final response = await _api!.deleteSession(deletedId);
       if (response.ok == false) {
         _setSendError(response.error ?? '删除会话失败。');
         return false;
       }
+      _syncSessionListDeleted(deletedId);
       return true;
     } on ApiException catch (error) {
       _setSendError(error.message);
@@ -388,13 +396,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// [keepCount] 非空时仅复制前 N 条消息（消息级分支）。
   Future<String?> branchSession({int? keepCount}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return null;
+    final parentId = state.sessionId;
     try {
       final response = await _api!.branchSession(
-        state.sessionId,
+        parentId,
         keepCount: keepCount,
       );
       if (response.sessionId == null) {
         _setSendError(response.error ?? '创建会话分支失败。');
+      } else {
+        _syncSessionListBranched(response, parentId: parentId);
       }
       return response.sessionId;
     } on ApiException catch (error) {
@@ -2846,6 +2857,79 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } on ApiException {
       // 标题补拉失败静默。
     }
+  }
+
+  /// 聊天页改名成功 → 免网络同步会话列表对应行标题。
+  ///
+  /// 失败路径不调用（列表保持旧值等下次全量刷新纠偏）；列表 provider
+  /// 尚未就绪（无激活连接/未初始化）时静默跳过。
+  void _syncSessionListRename(String title) {
+    if (_disposed || state.sessionId.isEmpty) return;
+    try {
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .applyExternalRename(state.sessionId, title);
+    } catch (_) {}
+  }
+
+  /// 聊天页置顶成功 → 免网络同步会话列表对应行。
+  void _syncSessionListPinned(String id, bool pinned) {
+    if (_disposed || id.isEmpty) return;
+    try {
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .applyExternalPinned(id, pinned);
+    } catch (_) {}
+  }
+
+  /// 聊天页归档/取消归档成功 → 免网络同步会话列表
+  /// （归档后返回列表不再看到该行，无需等 30s 轮询）。
+  void _syncSessionListArchived(String id, bool archived) {
+    if (_disposed || id.isEmpty) return;
+    try {
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .applyExternalArchived(id, archived);
+    } catch (_) {}
+  }
+
+  /// 聊天页删除成功 → 免网络同步会话列表（返回列表不再看到该行）。
+  void _syncSessionListDeleted(String id) {
+    if (_disposed || id.isEmpty) return;
+    try {
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .applyExternalDeleted(id);
+    } catch (_) {}
+  }
+
+  /// 聊天页分支成功 → 新会话插到列表顶部（免一次全量拉取）。
+  ///
+  /// 标题：服务端返回优先，缺失时兜底 `<当前标题> (fork)`
+  /// （对齐列表侧 branch 的本地命名，避免刷新前后跳变）。
+  void _syncSessionListBranched(
+    SessionBranchResponse response, {
+    required String parentId,
+  }) {
+    if (_disposed) return;
+    final newId = response.sessionId;
+    if (newId == null || newId.isEmpty) return;
+    final serverTitle = response.title?.trim();
+    final baseTitle = state.displayTitle.trim().isEmpty
+        ? null
+        : state.displayTitle.trim();
+    final resolvedTitle = (serverTitle != null && serverTitle.isNotEmpty)
+        ? serverTitle
+        : (baseTitle == null ? null : '$baseTitle (fork)');
+    try {
+      ref.read(sessionListControllerProvider.notifier).applyExternalBranched(
+            SessionSummary(
+              sessionId: newId,
+              title: resolvedTitle,
+              parentSessionId: response.parentSessionId ?? parentId,
+            ),
+          );
+    } catch (_) {}
   }
 
   void _onNewSessionCreated(String newSessionId, String hint) {
