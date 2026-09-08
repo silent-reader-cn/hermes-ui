@@ -1804,6 +1804,29 @@ class $DownloadRecordsTable extends DownloadRecords
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _tempPathMeta = const VerificationMeta(
+    'tempPath',
+  );
+  @override
+  late final GeneratedColumn<String> tempPath = GeneratedColumn<String>(
+    'temp_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1818,6 +1841,8 @@ class $DownloadRecordsTable extends DownloadRecords
     completedAt,
     failureMessage,
     sessionId,
+    tempPath,
+    attemptCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1922,6 +1947,21 @@ class $DownloadRecordsTable extends DownloadRecords
         sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
       );
     }
+    if (data.containsKey('temp_path')) {
+      context.handle(
+        _tempPathMeta,
+        tempPath.isAcceptableOrUnknown(data['temp_path']!, _tempPathMeta),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1979,6 +2019,14 @@ class $DownloadRecordsTable extends DownloadRecords
         DriftSqlType.string,
         data['${effectivePrefix}session_id'],
       ),
+      tempPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}temp_path'],
+      ),
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
     );
   }
 
@@ -2001,6 +2049,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
   final int? completedAt;
   final String? failureMessage;
   final String? sessionId;
+  final String? tempPath;
+  final int attemptCount;
   const DownloadRecord({
     required this.id,
     required this.sourceUrl,
@@ -2014,6 +2064,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     this.completedAt,
     this.failureMessage,
     this.sessionId,
+    this.tempPath,
+    required this.attemptCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2042,6 +2094,10 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     if (!nullToAbsent || sessionId != null) {
       map['session_id'] = Variable<String>(sessionId);
     }
+    if (!nullToAbsent || tempPath != null) {
+      map['temp_path'] = Variable<String>(tempPath);
+    }
+    map['attempt_count'] = Variable<int>(attemptCount);
     return map;
   }
 
@@ -2071,6 +2127,10 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       sessionId: sessionId == null && nullToAbsent
           ? const Value.absent()
           : Value(sessionId),
+      tempPath: tempPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tempPath),
+      attemptCount: Value(attemptCount),
     );
   }
 
@@ -2092,6 +2152,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       completedAt: serializer.fromJson<int?>(json['completedAt']),
       failureMessage: serializer.fromJson<String?>(json['failureMessage']),
       sessionId: serializer.fromJson<String?>(json['sessionId']),
+      tempPath: serializer.fromJson<String?>(json['tempPath']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
     );
   }
   @override
@@ -2110,6 +2172,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
       'completedAt': serializer.toJson<int?>(completedAt),
       'failureMessage': serializer.toJson<String?>(failureMessage),
       'sessionId': serializer.toJson<String?>(sessionId),
+      'tempPath': serializer.toJson<String?>(tempPath),
+      'attemptCount': serializer.toJson<int>(attemptCount),
     };
   }
 
@@ -2126,6 +2190,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     Value<int?> completedAt = const Value.absent(),
     Value<String?> failureMessage = const Value.absent(),
     Value<String?> sessionId = const Value.absent(),
+    Value<String?> tempPath = const Value.absent(),
+    int? attemptCount,
   }) => DownloadRecord(
     id: id ?? this.id,
     sourceUrl: sourceUrl ?? this.sourceUrl,
@@ -2143,6 +2209,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
         ? failureMessage.value
         : this.failureMessage,
     sessionId: sessionId.present ? sessionId.value : this.sessionId,
+    tempPath: tempPath.present ? tempPath.value : this.tempPath,
+    attemptCount: attemptCount ?? this.attemptCount,
   );
   DownloadRecord copyWithCompanion(DownloadRecordsCompanion data) {
     return DownloadRecord(
@@ -2166,6 +2234,10 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
           ? data.failureMessage.value
           : this.failureMessage,
       sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      tempPath: data.tempPath.present ? data.tempPath.value : this.tempPath,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
     );
   }
 
@@ -2183,7 +2255,9 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
           ..write('createdAt: $createdAt, ')
           ..write('completedAt: $completedAt, ')
           ..write('failureMessage: $failureMessage, ')
-          ..write('sessionId: $sessionId')
+          ..write('sessionId: $sessionId, ')
+          ..write('tempPath: $tempPath, ')
+          ..write('attemptCount: $attemptCount')
           ..write(')'))
         .toString();
   }
@@ -2202,6 +2276,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
     completedAt,
     failureMessage,
     sessionId,
+    tempPath,
+    attemptCount,
   );
   @override
   bool operator ==(Object other) =>
@@ -2218,7 +2294,9 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
           other.createdAt == this.createdAt &&
           other.completedAt == this.completedAt &&
           other.failureMessage == this.failureMessage &&
-          other.sessionId == this.sessionId);
+          other.sessionId == this.sessionId &&
+          other.tempPath == this.tempPath &&
+          other.attemptCount == this.attemptCount);
 }
 
 class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
@@ -2234,6 +2312,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
   final Value<int?> completedAt;
   final Value<String?> failureMessage;
   final Value<String?> sessionId;
+  final Value<String?> tempPath;
+  final Value<int> attemptCount;
   final Value<int> rowid;
   const DownloadRecordsCompanion({
     this.id = const Value.absent(),
@@ -2248,6 +2328,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     this.completedAt = const Value.absent(),
     this.failureMessage = const Value.absent(),
     this.sessionId = const Value.absent(),
+    this.tempPath = const Value.absent(),
+    this.attemptCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadRecordsCompanion.insert({
@@ -2263,6 +2345,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     this.completedAt = const Value.absent(),
     this.failureMessage = const Value.absent(),
     this.sessionId = const Value.absent(),
+    this.tempPath = const Value.absent(),
+    this.attemptCount = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sourceUrl = Value(sourceUrl),
@@ -2282,6 +2366,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     Expression<int>? completedAt,
     Expression<String>? failureMessage,
     Expression<String>? sessionId,
+    Expression<String>? tempPath,
+    Expression<int>? attemptCount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2297,6 +2383,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
       if (completedAt != null) 'completed_at': completedAt,
       if (failureMessage != null) 'failure_message': failureMessage,
       if (sessionId != null) 'session_id': sessionId,
+      if (tempPath != null) 'temp_path': tempPath,
+      if (attemptCount != null) 'attempt_count': attemptCount,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2314,6 +2402,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     Value<int?>? completedAt,
     Value<String?>? failureMessage,
     Value<String?>? sessionId,
+    Value<String?>? tempPath,
+    Value<int>? attemptCount,
     Value<int>? rowid,
   }) {
     return DownloadRecordsCompanion(
@@ -2329,6 +2419,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
       completedAt: completedAt ?? this.completedAt,
       failureMessage: failureMessage ?? this.failureMessage,
       sessionId: sessionId ?? this.sessionId,
+      tempPath: tempPath ?? this.tempPath,
+      attemptCount: attemptCount ?? this.attemptCount,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2372,6 +2464,12 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
     if (sessionId.present) {
       map['session_id'] = Variable<String>(sessionId.value);
     }
+    if (tempPath.present) {
+      map['temp_path'] = Variable<String>(tempPath.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2393,6 +2491,8 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
           ..write('completedAt: $completedAt, ')
           ..write('failureMessage: $failureMessage, ')
           ..write('sessionId: $sessionId, ')
+          ..write('tempPath: $tempPath, ')
+          ..write('attemptCount: $attemptCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2588,7 +2688,16 @@ class $$CachedSessionsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CachedSessionsTable, CachedSession>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CachedSessionsTable,
+                    CachedSession
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -2771,7 +2880,16 @@ class $$CachedMessagesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CachedMessagesTable, CachedMessage>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CachedMessagesTable,
+                    CachedMessage
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -3030,7 +3148,16 @@ class $$CachedMediaTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CachedMediaTable, CachedMediaData>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CachedMediaTable,
+                    CachedMediaData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -3295,7 +3422,16 @@ class $$DiagnosticsLogsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DiagnosticsLogsTable, DiagnosticsLog>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $DiagnosticsLogsTable,
+                    DiagnosticsLog
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -3333,6 +3469,8 @@ typedef $$DownloadRecordsTableCreateCompanionBuilder =
       Value<int?> completedAt,
       Value<String?> failureMessage,
       Value<String?> sessionId,
+      Value<String?> tempPath,
+      Value<int> attemptCount,
       Value<int> rowid,
     });
 typedef $$DownloadRecordsTableUpdateCompanionBuilder =
@@ -3349,6 +3487,8 @@ typedef $$DownloadRecordsTableUpdateCompanionBuilder =
       Value<int?> completedAt,
       Value<String?> failureMessage,
       Value<String?> sessionId,
+      Value<String?> tempPath,
+      Value<int> attemptCount,
       Value<int> rowid,
     });
 
@@ -3418,6 +3558,16 @@ class $$DownloadRecordsTableFilterComposer
 
   ColumnFilters<String> get sessionId => $composableBuilder(
     column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tempPath => $composableBuilder(
+    column: $table.tempPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3490,6 +3640,16 @@ class $$DownloadRecordsTableOrderingComposer
     column: $table.sessionId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get tempPath => $composableBuilder(
+    column: $table.tempPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadRecordsTableAnnotationComposer
@@ -3544,6 +3704,14 @@ class $$DownloadRecordsTableAnnotationComposer
 
   GeneratedColumn<String> get sessionId =>
       $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get tempPath =>
+      $composableBuilder(column: $table.tempPath, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
 }
 
 class $$DownloadRecordsTableTableManager
@@ -3595,6 +3763,8 @@ class $$DownloadRecordsTableTableManager
                 Value<int?> completedAt = const Value.absent(),
                 Value<String?> failureMessage = const Value.absent(),
                 Value<String?> sessionId = const Value.absent(),
+                Value<String?> tempPath = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadRecordsCompanion(
                 id: id,
@@ -3609,6 +3779,8 @@ class $$DownloadRecordsTableTableManager
                 completedAt: completedAt,
                 failureMessage: failureMessage,
                 sessionId: sessionId,
+                tempPath: tempPath,
+                attemptCount: attemptCount,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3625,6 +3797,8 @@ class $$DownloadRecordsTableTableManager
                 Value<int?> completedAt = const Value.absent(),
                 Value<String?> failureMessage = const Value.absent(),
                 Value<String?> sessionId = const Value.absent(),
+                Value<String?> tempPath = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadRecordsCompanion.insert(
                 id: id,
@@ -3639,10 +3813,21 @@ class $$DownloadRecordsTableTableManager
                 completedAt: completedAt,
                 failureMessage: failureMessage,
                 sessionId: sessionId,
+                tempPath: tempPath,
+                attemptCount: attemptCount,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DownloadRecordsTable, DownloadRecord>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $DownloadRecordsTable,
+                    DownloadRecord
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

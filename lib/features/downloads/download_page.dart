@@ -452,14 +452,24 @@ class _DownloadTaskCard extends ConsumerWidget {
         statusColor = statusGreyText.resolveFrom(context);
         break;
       case DownloadStatus.downloading:
-        if (task.expectedBytes != null && task.expectedBytes! > 0) {
-          final progressPercent = ((task.progress ?? 0.0) * 100)
-              .toStringAsFixed(0);
-          statusText =
-              '$progressPercent% (${formatDownloadByteSize(task.receivedBytes)} / ${formatDownloadByteSize(task.expectedBytes!)})';
+        if (task.isBackingOff && task.attemptCount > 0) {
+          statusText = l10n.downloadRetrying(task.attemptCount, 3);
         } else {
-          statusText =
-              '${l10n.downloadStatusDownloading} (${formatDownloadByteSize(task.receivedBytes)})';
+          final resumeSuffix =
+              (task.resumedFromBytes != null && task.resumedFromBytes! > 0)
+                  ? ' · ${l10n.downloadResumedWithSize(formatDownloadByteSize(task.resumedFromBytes!))}'
+                  : '';
+          if (task.expectedBytes != null && task.expectedBytes! > 0) {
+            final progressPercent = ((task.progress ?? 0.0) * 100)
+                .toStringAsFixed(0);
+            statusText =
+                '$progressPercent% (${formatDownloadByteSize(task.receivedBytes)} / ${formatDownloadByteSize(task.expectedBytes!)})'
+                '$resumeSuffix';
+          } else {
+            statusText =
+                '${l10n.downloadStatusDownloading} (${formatDownloadByteSize(task.receivedBytes)})'
+                '$resumeSuffix';
+          }
         }
         statusColor = statusBlueText.resolveFrom(context);
         break;

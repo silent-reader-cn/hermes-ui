@@ -81,6 +81,8 @@ class DownloadRecords extends Table {
   IntColumn get completedAt => integer().nullable()();
   TextColumn get failureMessage => text().nullable()();
   TextColumn get sessionId => text().nullable()();
+  TextColumn get tempPath => text().nullable()();
+  IntColumn get attemptCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -109,13 +111,14 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.memory() => AppDatabase(openConnectionInMemory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// 迁移策略：新建库创建全部表；升级时按版本增量补建表（drift 默认在
   /// schema 升级时若未提供 onUpgrade 会直接抛异常）。
   /// - v1→v2：给已有生产库补建 `cached_media` 表；
   /// - v2→v3：补建 `diagnostics_logs` 诊断日志表（#33 存储迁移）；
-  /// - v3→v4：补建 `download_records` 下载记录表。
+  /// - v3→v4：补建 `download_records` 下载记录表；
+  /// - v4→v5：给 `download_records` 补加 `temp_path`、`attempt_count` 列（#98）。
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
@@ -130,6 +133,12 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await m.createTable(downloadRecords);
+      }
+      if (from < 5) {
+        if (from >= 4) {
+          await m.addColumn(downloadRecords, downloadRecords.tempPath);
+          await m.addColumn(downloadRecords, downloadRecords.attemptCount);
+        }
       }
     },
   );

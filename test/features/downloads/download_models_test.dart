@@ -105,7 +105,7 @@ void main() {
       expect(taskOverReceived.progress, 1.0);
     });
 
-    test('toJson 与 fromJson 正常反序列化', () {
+    test('toJson 与 fromJson 正常反序列化（含 #98 重试与续传字段）', () {
       const original = DownloadTask(
         id: 'dl-test',
         sourceUrl: 'https://example.com/image.png',
@@ -119,12 +119,20 @@ void main() {
         completedAt: 1700000050,
         failureMessage: null,
         sessionId: 'session-xyz',
+        tempPath: r'C:\Users\AppData\temp\dl-test.part',
+        attemptCount: 2,
+        isBackingOff: true,
+        resumedFromBytes: 1024,
       );
 
       final json = original.toJson();
       final reconstructed = DownloadTask.fromJson(json);
 
       expect(reconstructed, equals(original));
+      expect(reconstructed.tempPath, r'C:\Users\AppData\temp\dl-test.part');
+      expect(reconstructed.attemptCount, 2);
+      expect(reconstructed.isBackingOff, isTrue);
+      expect(reconstructed.resumedFromBytes, 1024);
       expect(reconstructed.hashCode, equals(original.hashCode));
       expect(reconstructed.toString(), contains('dl-test'));
     });
@@ -146,6 +154,10 @@ void main() {
         'completed_at': 2000000.0, // double 容错为 int
         'failure_message': 'something',
         'session_id': 'sess-42',
+        'temp_path': '/path/to/part',
+        'attempt_count': '3', // string 容错为 int
+        'is_backing_off': 'true', // string 容错为 bool
+        'resumed_from_bytes': '128',
       };
 
       final parsed = DownloadTask.fromJson(tolerantMap);
@@ -158,6 +170,10 @@ void main() {
       expect(parsed.completedAt, 2000000);
       expect(parsed.failureMessage, 'something');
       expect(parsed.sessionId, 'sess-42');
+      expect(parsed.tempPath, '/path/to/part');
+      expect(parsed.attemptCount, 3);
+      expect(parsed.isBackingOff, isTrue);
+      expect(parsed.resumedFromBytes, 128);
     });
   });
 

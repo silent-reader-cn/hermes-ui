@@ -46,6 +46,10 @@ class DownloadTask {
     this.failureMessage,
     this.sessionId,
     this.sourceType = DownloadSourceType.url,
+    this.tempPath,
+    this.attemptCount = 0,
+    this.isBackingOff = false,
+    this.resumedFromBytes,
   });
 
   /// 任务唯一标识符（UUID）。
@@ -87,6 +91,18 @@ class DownloadTask {
   /// 关联会话 ID（可选）。
   final String? sessionId;
 
+  /// 临时文件绝对路径（断点续传 .part 文件路径；#98）。
+  final String? tempPath;
+
+  /// 自动重试次数（默认 0；#98）。
+  final int attemptCount;
+
+  /// 是否处于退避等待中（第 N/3 次重试等待；#98）。
+  final bool isBackingOff;
+
+  /// 本轮续传起始字节数（若 > 0 表示本轮发生了续传；#98）。
+  final int? resumedFromBytes;
+
   /// 下载进度（0.0 .. 1.0；若预期总大小未知或 <= 0 则返回 null）。
   double? get progress {
     if (expectedBytes != null && expectedBytes! > 0) {
@@ -122,6 +138,10 @@ class DownloadTask {
     Object? failureMessage = _sentinel,
     Object? sessionId = _sentinel,
     DownloadSourceType? sourceType,
+    Object? tempPath = _sentinel,
+    int? attemptCount,
+    bool? isBackingOff,
+    Object? resumedFromBytes = _sentinel,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -143,6 +163,12 @@ class DownloadTask {
           : failureMessage as String?,
       sessionId: sessionId == _sentinel ? this.sessionId : sessionId as String?,
       sourceType: sourceType ?? this.sourceType,
+      tempPath: tempPath == _sentinel ? this.tempPath : tempPath as String?,
+      attemptCount: attemptCount ?? this.attemptCount,
+      isBackingOff: isBackingOff ?? this.isBackingOff,
+      resumedFromBytes: resumedFromBytes == _sentinel
+          ? this.resumedFromBytes
+          : resumedFromBytes as int?,
     );
   }
 
@@ -197,6 +223,18 @@ class DownloadTask {
       sessionId:
           lossyString(map, 'session_id') ?? lossyString(map, 'sessionId'),
       sourceType: DownloadSourceType.fromString(rawSourceType),
+      tempPath: lossyString(map, 'temp_path') ?? lossyString(map, 'tempPath'),
+      attemptCount:
+          lossyInt(map, 'attempt_count') ??
+          lossyInt(map, 'attemptCount') ??
+          0,
+      isBackingOff:
+          lossyBool(map, 'is_backing_off') ??
+          lossyBool(map, 'isBackingOff') ??
+          false,
+      resumedFromBytes:
+          lossyInt(map, 'resumed_from_bytes') ??
+          lossyInt(map, 'resumedFromBytes'),
     );
   }
 
@@ -216,6 +254,10 @@ class DownloadTask {
       if (completedAt != null) 'completed_at': completedAt,
       if (failureMessage != null) 'failure_message': failureMessage,
       if (sessionId != null) 'session_id': sessionId,
+      if (tempPath != null) 'temp_path': tempPath,
+      'attempt_count': attemptCount,
+      if (isBackingOff) 'is_backing_off': isBackingOff,
+      if (resumedFromBytes != null) 'resumed_from_bytes': resumedFromBytes,
     };
   }
 
@@ -236,7 +278,11 @@ class DownloadTask {
           completedAt == other.completedAt &&
           failureMessage == other.failureMessage &&
           sessionId == other.sessionId &&
-          sourceType == other.sourceType;
+          sourceType == other.sourceType &&
+          tempPath == other.tempPath &&
+          attemptCount == other.attemptCount &&
+          isBackingOff == other.isBackingOff &&
+          resumedFromBytes == other.resumedFromBytes;
 
   @override
   int get hashCode => Object.hash(
@@ -253,13 +299,19 @@ class DownloadTask {
     failureMessage,
     sessionId,
     sourceType,
+    tempPath,
+    attemptCount,
+    isBackingOff,
+    resumedFromBytes,
   );
 
   @override
   String toString() =>
       'DownloadTask(id: $id, fileName: $fileName, status: ${status.name}, '
       'sourceType: ${sourceType.name}, received: $receivedBytes, '
-      'expected: $expectedBytes, savedPath: $savedPath)';
+      'expected: $expectedBytes, savedPath: $savedPath, tempPath: $tempPath, '
+      'attemptCount: $attemptCount, isBackingOff: $isBackingOff, '
+      'resumedFromBytes: $resumedFromBytes)';
 }
 
 /// 文件类型分类。

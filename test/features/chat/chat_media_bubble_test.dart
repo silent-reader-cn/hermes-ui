@@ -101,6 +101,7 @@ List<Override> buildDownloadOverrides({
       downloader ??
           ((uri, {onProgress}) async => Uint8List.fromList([1, 2, 3, 4])),
     ),
+    downloadBackoffProvider.overrideWithValue((_) => Duration.zero),
   ];
 }
 

@@ -650,6 +650,56 @@ void main() {
       expect(headers.containsKey('Cookie'), isFalse);
       expect(headers['Accept'], '*/*');
     });
+
+    test('downloadDataResumable 同域带 Range 头与自定义头', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString(
+          'part_content',
+          206,
+          headers: {
+            'content-range': ['bytes 10-21/22'],
+            'accept-ranges': ['bytes'],
+          },
+        ),
+      );
+      final client = buildClient(
+        adapter,
+        headers: const [CustomHeader(name: 'X-Api-Key', value: 'secret')],
+      );
+      final res = await client.downloadDataResumable(
+        Uri.parse('$base/api/media/stream.bin'),
+        rangeHeader: 'bytes=10-',
+      );
+      expect(res.statusCode, 206);
+      expect(res.contentRange, 'bytes 10-21/22');
+      expect(res.acceptRanges, 'bytes');
+
+      final chunks = await res.stream.toList();
+      final body = String.fromCharCodes(chunks.expand((c) => c));
+      expect(body, 'part_content');
+
+      final sentHeaders = adapter.requests.single.headers;
+      expect(sentHeaders['X-Api-Key'], 'secret');
+      expect(sentHeaders['range'], 'bytes=10-');
+    });
+
+    test('downloadDataResumable 跨域剥离自定义头但保留 Range 头', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('chunk', 206),
+      );
+      final client = buildClient(
+        adapter,
+        headers: const [CustomHeader(name: 'X-Api-Key', value: 'secret')],
+      );
+      final res = await client.downloadDataResumable(
+        Uri.parse('https://external-cdn.com/file.bin'),
+        rangeHeader: 'bytes=100-',
+      );
+      expect(res.statusCode, 206);
+      final sentHeaders = adapter.requests.single.headers;
+      expect(sentHeaders.containsKey('X-Api-Key'), isFalse);
+      expect(sentHeaders['range'], 'bytes=100-');
+    });
   });
 
   group('workspace 文件操作（POST 路径与 body）', () {
