@@ -92,6 +92,9 @@ class ChatWatchdogConfig {
     this.maxReconnectAttempts = 6,
     this.reconnectJitterMax = const Duration(milliseconds: 1500),
     this.fullReconnectCooldown = const Duration(seconds: 60),
+    this.recoverySentinelInterval = const Duration(seconds: 60),
+    this.resumeProbeRetries = 2,
+    this.resumeProbeRetryDelay = const Duration(seconds: 2),
     this.random,
     this.customJitter,
   });
@@ -132,6 +135,15 @@ class ChatWatchdogConfig {
 
   /// 同会话同 streamId 全量重连（afterSeq=0）冷却时长（默认 60s，测试可 override 缩短）。
   final Duration fullReconnectCooldown;
+
+  /// 重连预算耗尽哨兵的巡检间隔（默认 60s；后台/锁屏豁免，测试可 override 缩短）。
+  final Duration recoverySentinelInterval;
+
+  /// resume 主动探活失败后的额外重试次数（默认 2，测试可 override）。
+  final int resumeProbeRetries;
+
+  /// resume 主动探活重试间隔（默认 2s，等待 WiFi/frp 就绪，测试可 override）。
+  final Duration resumeProbeRetryDelay;
 
   /// 可选随机数发生器（测试可注入确定性 Random）。
   final Random? random;

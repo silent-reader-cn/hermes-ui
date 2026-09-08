@@ -174,7 +174,7 @@ void main() {
   });
 
   group('重连上限与停止自动重连（封顶 maxReconnectAttempts）', () {
-    test('达上限后彻底停止自动重连，API 调用封顶且保留 recovering 状态', () {
+    test('达上限后 startStream 封顶，#100 哨兵 60s 周期探活且保留 recovering 状态', () {
       fakeAsync((async) {
         final api = _FailingReconnectChatApi(failSubsequentStreams: true);
         api.statusError = NetworkException(NetworkExceptionKind.cannotConnect);
@@ -217,18 +217,18 @@ void main() {
         final statusCallsAtCap = api.statusCalls;
         final streamCallsAtCap = api.startStreamCalls;
 
-        // 推进较长时间（如 60s、300s）：断言不再产生任何自动重试请求
+        // 推进较长时间（60s、300s）：#100 哨兵每 60s 周期探活（前台自愈 + 观测性），
+        // 探活持续失败时不再重建流（isThrottledFallback 禁止转强连）→ startStream 封顶。
         async.elapse(const Duration(seconds: 60));
         async.flushMicrotasks();
-        expect(api.statusCalls, statusCallsAtCap);
+        expect(api.statusCalls, greaterThan(statusCallsAtCap));
         expect(api.startStreamCalls, streamCallsAtCap);
 
         async.elapse(const Duration(seconds: 300));
         async.flushMicrotasks();
-        expect(api.statusCalls, statusCallsAtCap);
         expect(api.startStreamCalls, streamCallsAtCap);
 
-        // 状态保留现有 recovering 语义
+        // 状态保留现有 recovering 语义（探活失败不改变相位）
         final state = container.read(chatControllerProvider(''));
         expect(state.phase, ChatPhase.recovering);
         expect(state.stream.isSuspended, isTrue);

@@ -74,6 +74,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Timer? _reconnectTimer;
   Timer? _statusPollJitterTimer;
   Timer? _forceReconnectJitterTimer;
+  Timer? _recoverySentinelTimer;
+  Timer? _resumeProbeRetryTimer;
 
   /// 最近一次 afterSeq=0 全量重连的 streamId（用于限频）。
   String? _lastFullReconnectStreamId;
@@ -166,6 +168,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealQueue.clear();
     _revealQueueStart = null;
     _appPaused = false;
+    _cancelRecoverySentinel();
+    _cancelResumeProbeRetry();
     _lastContextPollTime = null;
     _isContextPolling = false;
     _startWatchdog();
@@ -237,6 +241,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _transcriptRefreshTimer?.cancel();
     _cancelReconnectTimer();
     _cancelJitterTimers();
+    _cancelRecoverySentinel();
+    _cancelResumeProbeRetry();
     _resetFullReconnectThrottle();
     _lastContextPollTime = null;
     _isContextPolling = false;
@@ -264,6 +270,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     _cancelReconnectTimer();
     _cancelJitterTimers();
+    _cancelRecoverySentinel();
+    _cancelResumeProbeRetry();
     _resetFullReconnectThrottle();
     _reconnectAttempts = 0;
     final trimmed = text.trim();
@@ -1301,6 +1309,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         onClosed: () {
           _streamConnected = false;
           _recordTransportActivity();
+          // #100 F4：非完成态下传输关闭不应留下 recovery 闩锁（checking/
+          // reconnecting 挂起会封死 resume 主动探活入口），复位回 idle。
+          if (!state.stream.hasCompletedResponse &&
+              state.stream.activeStreamId != null &&
+              state.stream.recovery !=
+                  ActiveStreamRecoveryState.reconnecting &&
+              state.stream.recovery != ActiveStreamRecoveryState.idle) {
+            state = state.copyWith(
+              stream: state.stream.copyWith(
+                recovery: ActiveStreamRecoveryState.idle,
+              ),
+            );
+          }
         },
       ),
     );
@@ -1510,6 +1531,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         unawaited(keepalive.cancelOneOffPoll(state.sessionId));
       }
     } catch (_) {}
+    // #100 F1：解锁/回前台 = 人类在场 → 重置恢复状态，拆掉「预算烧尽 +
+    // recovery 闩锁」死锁：重连预算归零、退避/探活重试定时器清除、
+    // recovery 非 idle 强制复位（resume 主动探活只认 idle，不复位则永久跳过）。
+    if (state.stream.activeStreamId != null) {
+      _reconnectAttempts = 0;
+      _cancelReconnectTimer();
+      _cancelResumeProbeRetry();
+      _resetFullReconnectThrottle();
+      final recovery = state.stream.recovery;
+      if (recovery == ActiveStreamRecoveryState.checking ||
+          recovery == ActiveStreamRecoveryState.reconnecting) {
+        state = state.copyWith(
+          stream: state.stream.copyWith(
+            recovery: ActiveStreamRecoveryState.idle,
+          ),
+        );
+      }
+    }
     // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
     // 时刻的传输停滞时长（SSE 后台静默断线无 onTransportError/onClosed 事件，
     // 只能靠时间差识别，`_lastTransportActivity` 即断线状态快照）。
@@ -1555,7 +1594,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         message:
             'Resume active-probe triggered (transportGap: ${transportGap.inMilliseconds}ms, streamId: ${stream.activeStreamId})',
       );
-      unawaited(_checkStatusAndReconnect());
+      unawaited(
+        _checkStatusAndReconnect(
+          resumeRetries: _watchdogConfig.resumeProbeRetries,
+        ),
+      );
     }
   }
 
@@ -3059,6 +3102,53 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _resetReconnectBackoff() {
     _reconnectAttempts = 0;
     _cancelReconnectTimer();
+    _cancelRecoverySentinel();
+    _cancelResumeProbeRetry();
+  }
+
+  /// 取消重连预算耗尽哨兵（#100）。
+  void _cancelRecoverySentinel() {
+    _recoverySentinelTimer?.cancel();
+    _recoverySentinelTimer = null;
+  }
+
+  /// 取消 resume 探活重试定时器（#100）。
+  void _cancelResumeProbeRetry() {
+    _resumeProbeRetryTimer?.cancel();
+    _resumeProbeRetryTimer = null;
+  }
+
+  /// 重连预算耗尽时启动哨兵（#100：耗尽后全链路静默的观测性 + 前台自愈）。
+  /// 每 [ChatWatchdogConfig.recoverySentinelInterval] 巡检一次：条件消失自毁，
+  /// 否则 WARN + status 探活（isThrottledFallback：失败不烧预算转强连）。
+  void _startRecoverySentinelIfExhausted() {
+    if (_disposed) return;
+    if (_reconnectAttempts < _watchdogConfig.effectiveMaxReconnectAttempts) {
+      return;
+    }
+    _recoverySentinelTimer ??= Timer.periodic(
+      _watchdogConfig.recoverySentinelInterval,
+      (_) => _recoverySentinelTick(),
+    );
+  }
+
+  void _recoverySentinelTick() {
+    if (_disposed ||
+        _appPaused ||
+        state.stream.activeStreamId == null ||
+        state.stream.hasCompletedResponse ||
+        state.pendingAction.hasPendingPrompt ||
+        _reconnectAttempts < _watchdogConfig.effectiveMaxReconnectAttempts) {
+      _cancelRecoverySentinel();
+      return;
+    }
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_reconnect',
+      message:
+          'Recovery exhausted, re-probing (attempts: $_reconnectAttempts, session: ${state.sessionId})',
+    );
+    unawaited(_checkStatusAndReconnect(isThrottledFallback: true));
   }
 
   void _handleTransportError(String message) {
@@ -3094,6 +3184,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         message:
             'Transport error: max reconnect attempts ($_reconnectAttempts) reached, stopping auto-reconnect',
       );
+      // #100：预算耗尽不再纯静默——哨兵周期巡检（前台自愈 + 观测性）。
+      _startRecoverySentinelIfExhausted();
       return;
     }
 
@@ -3233,6 +3325,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         message:
             'Force reconnect suppressed: max reconnect attempts ($_reconnectAttempts) reached',
       );
+      // #100：预算耗尽不再纯静默——哨兵周期巡检（前台自愈 + 观测性）。
+      _startRecoverySentinelIfExhausted();
       return;
     }
     if (_reconnectTimer != null && _reconnectTimer!.isActive) {
@@ -3455,6 +3549,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   Future<void> _checkStatusAndReconnect({
     bool isThrottledFallback = false,
+    int resumeRetries = 0,
   }) async {
     final streamId = state.stream.activeStreamId;
     if (streamId == null) return;
@@ -3500,6 +3595,30 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
     } on ApiException catch (e) {
       if (_disposed || gen != _generation) return;
+      // #100 F2：resume 探活带重试预算——解锁瞬间 WiFi/frp 可能未就绪，
+      // 失败立即转强连只会白烧重连预算；间隔重试等网络就绪。
+      if (resumeRetries > 0) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.warn,
+          tag: 'chat_resume',
+          message:
+              'Status check failed: $e, retrying in ${_watchdogConfig.resumeProbeRetryDelay.inMilliseconds}ms (retries left: $resumeRetries)',
+        );
+        _resumeProbeRetryTimer?.cancel();
+        _resumeProbeRetryTimer = Timer(
+          _watchdogConfig.resumeProbeRetryDelay,
+          () {
+            _resumeProbeRetryTimer = null;
+            if (_disposed || gen != _generation) return;
+            if (_appPaused) return;
+            if (state.stream.activeStreamId != streamId) return;
+            unawaited(
+              _checkStatusAndReconnect(resumeRetries: resumeRetries - 1),
+            );
+          },
+        );
+        return;
+      }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.warn,
         tag: 'chat_resume',
