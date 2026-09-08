@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/cache/app_database.dart';
 import 'package:hermes_ui/core/cache/cache_providers.dart';
 import 'package:hermes_ui/features/downloads/download_providers.dart';
@@ -72,24 +74,51 @@ List<Override> createDownloadTestOverrides({
   AppDatabase? db,
   Directory? tempDir,
   DownloadBytesDownloader? downloader,
+  DownloadResumableDownloader? resumableDownloader,
+  DownloadBackoffCalculator? backoff,
+  DownloadTempDirectoryResolver? tempDirectoryResolver,
   TurnNotificationService? notificationService,
 }) {
   final database = db ?? AppDatabase.memory();
+  final targetDir =
+      tempDir ?? Directory.systemTemp.createTempSync('hermes_dl_test_');
+  final partsDir = Directory('${targetDir.path}/parts')..createSync(recursive: true);
+
+  final effectiveDownloader =
+      downloader ?? ((uri, {onProgress}) async => Uint8List.fromList([1, 2, 3, 4]));
+
+  final effectiveResumable =
+      resumableDownloader ??
+      ((uri, {rangeHeader}) async {
+        final bytes = await effectiveDownloader(uri);
+        return ResumableDownloadResponse(
+          statusCode: 200,
+          headers: Headers.fromMap({
+            'accept-ranges': ['bytes'],
+            'content-length': ['${bytes.length}'],
+          }),
+          stream: Stream.value(bytes),
+        );
+      });
+
   return [
     appDatabaseProvider.overrideWithValue(database),
-    downloadRepositoryProvider.overrideWithValue(DownloadRepository(database)),
+    downloadRepositoryProvider.overrideWithValue(
+      DownloadRepository(database, tempDirectoryProvider: () => partsDir),
+    ),
     downloadSaveServiceProvider.overrideWithValue(
-      DownloadSaveService(
-        destinationDirOverride:
-            tempDir ?? Directory.systemTemp.createTempSync('hermes_dl_test_'),
-      ),
+      DownloadSaveService(destinationDirOverride: targetDir),
     ),
     turnNotificationServiceProvider.overrideWithValue(
       notificationService ?? FakeTurnNotificationService(),
     ),
-    downloadDownloaderProvider.overrideWithValue(
-      downloader ??
-          ((uri, {onProgress}) async => Uint8List.fromList([1, 2, 3, 4])),
+    downloadDownloaderProvider.overrideWithValue(effectiveDownloader),
+    downloadResumableDownloaderProvider.overrideWithValue(effectiveResumable),
+    downloadBackoffProvider.overrideWithValue(
+      backoff ?? ((_) => Duration.zero),
+    ),
+    downloadTempDirectoryProvider.overrideWithValue(
+      tempDirectoryResolver ?? (() async => partsDir),
     ),
   ];
 }

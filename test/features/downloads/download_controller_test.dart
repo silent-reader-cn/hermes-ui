@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/cache/app_database.dart';
 import 'package:hermes_ui/core/cache/cache_providers.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
@@ -103,9 +105,20 @@ class _FailingSaveService extends DownloadSaveService {
   }) async {
     throw error;
   }
+
+  @override
+  Future<String> saveFromFile({
+    required String fileName,
+    required File sourceFile,
+    String? mimeType,
+  }) async {
+    throw error;
+  }
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late AppDatabase db;
   late Directory tempSaveDir;
   late DownloadSaveService saveService;
@@ -135,8 +148,77 @@ void main() {
 
   ProviderContainer createContainer({
     DownloadBytesDownloader? customDownloader,
+    DownloadResumableDownloader? customResumableDownloader,
     DownloadSaveService? customSaveService,
+    DownloadBackoffCalculator? customBackoff,
+    DownloadTempDirectoryResolver? customTempDirectoryResolver,
   }) {
+    final effectiveDownloader = customDownloader ??
+        (url, {onProgress}) async {
+          final key = url.toString();
+          if (mockDownloadResponses.containsKey(key)) {
+            return mockDownloadResponses[key]!();
+          }
+          return Uint8List.fromList([1, 2, 3, 4]);
+        };
+
+    final effectiveResumable = customResumableDownloader ??
+        ((url, {rangeHeader}) async {
+          final streamController = StreamController<Uint8List>();
+          final initialHeadersCompleter = Completer<Map<String, List<String>>>();
+
+          void completeHeaders([int? total]) {
+            if (!initialHeadersCompleter.isCompleted) {
+              final h = <String, List<String>>{
+                'accept-ranges': ['bytes'],
+              };
+              if (total != null && total > 0) {
+                h['content-length'] = ['$total'];
+              }
+              initialHeadersCompleter.complete(h);
+            }
+          }
+
+          unawaited(
+            () async {
+              try {
+                var lastEmitted = 0;
+                final bytes = await effectiveDownloader(
+                  url,
+                  onProgress: (received, total) {
+                    completeHeaders(total);
+                    if (received > lastEmitted) {
+                      final chunk = Uint8List.fromList(List.filled(received - lastEmitted, 7));
+                      streamController.add(chunk);
+                      lastEmitted = received;
+                    }
+                  },
+                );
+                completeHeaders(bytes.length);
+                if (bytes.length > lastEmitted) {
+                  streamController.add(Uint8List.fromList(bytes.sublist(lastEmitted)));
+                }
+                unawaited(streamController.close());
+              } catch (e, st) {
+                if (!initialHeadersCompleter.isCompleted) {
+                  initialHeadersCompleter.completeError(e, st);
+                } else {
+                  streamController.addError(e, st);
+                  unawaited(streamController.close());
+                }
+              }
+            }(),
+          );
+
+          final headersMap = await initialHeadersCompleter.future;
+
+          return ResumableDownloadResponse(
+            statusCode: 200,
+            headers: Headers.fromMap(headersMap),
+            stream: streamController.stream,
+          );
+        });
+
     return ProviderContainer(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
@@ -144,15 +226,15 @@ void main() {
           customSaveService ?? saveService,
         ),
         turnNotificationServiceProvider.overrideWithValue(notificationService),
-        downloadDownloaderProvider.overrideWithValue(
-          customDownloader ??
-              (url, {onProgress}) async {
-                final key = url.toString();
-                if (mockDownloadResponses.containsKey(key)) {
-                  return mockDownloadResponses[key]!();
-                }
-                return Uint8List.fromList([1, 2, 3, 4]);
-              },
+        downloadDownloaderProvider.overrideWithValue(effectiveDownloader),
+        downloadBackoffProvider.overrideWithValue(
+          customBackoff ?? ((_) => Duration.zero),
+        ),
+        downloadTempDirectoryProvider.overrideWithValue(
+          customTempDirectoryResolver ?? (() async => tempSaveDir),
+        ),
+        downloadResumableDownloaderProvider.overrideWithValue(
+          effectiveResumable,
         ),
       ],
     );
@@ -752,6 +834,392 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('#98 下载自动重试与断点续传', () {
+    test('网络短暂故障自动重试：前 2 次失败，第 3 次成功 → completed 且 attemptCount == 2', () async {
+      var calls = 0;
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          if (calls <= 2) {
+            throw const SocketException('Connection reset');
+          }
+          return ResumableDownloadResponse(
+            statusCode: 200,
+            headers: Headers.fromMap({
+              'accept-ranges': ['bytes'],
+              'content-length': ['4'],
+            }),
+            stream: Stream.value(Uint8List.fromList([1, 2, 3, 4])),
+          );
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/retry_success.bin',
+        fileName: 'retry_success.bin',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.completed);
+      expect(task.attemptCount, 2);
+      expect(calls, 3);
+      expect(task.savedPath, isNotNull);
+      expect(File(task.savedPath!).readAsBytesSync(), [1, 2, 3, 4]);
+    });
+
+    test('重试 3 次仍失败：连续 4 次短暂故障 → 标记 failed 且 attemptCount == 3，包含重试文案', () async {
+      var calls = 0;
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          throw const SocketException('Connection refused');
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/retry_exhaust.bin',
+        fileName: 'retry_exhaust.bin',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.failed);
+      expect(task.attemptCount, 3);
+      expect(calls, 4); // 初始 1 次 + 重试 3 次 = 4 次
+      expect(task.failureMessage, contains('已重试 3 次'));
+    });
+
+    test('不可重试错误立即失败：404 错误不进行退避重试，直接标记 failed 且 attemptCount == 0', () async {
+      var calls = 0;
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          return ResumableDownloadResponse(
+            statusCode: 404,
+            headers: Headers(),
+            stream: const Stream.empty(),
+          );
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/not_found.bin',
+        fileName: 'not_found.bin',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.failed);
+      expect(task.attemptCount, 0);
+      expect(calls, 1);
+      expect(task.failureMessage, contains('404'));
+    });
+
+    test('断点续传：第 1 次中途断开，第 2 次 Range 续传成功 (206) 且最终文件完整，.part 被清理', () async {
+      var calls = 0;
+      String? receivedRangeHeader;
+
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          receivedRangeHeader = rangeHeader;
+
+          if (calls == 1) {
+            // 第一次：返回 200，只给前 5 字节，然后流异常中断
+            final controller = StreamController<Uint8List>();
+            controller.add(Uint8List.fromList([1, 2, 3, 4, 5]));
+            controller.addError(const SocketException('Connection interrupted'));
+            unawaited(controller.close());
+
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({
+                'accept-ranges': ['bytes'],
+                'content-length': ['10'],
+              }),
+              stream: controller.stream,
+            );
+          } else {
+            // 第二次：重试请求，期望带上 bytes=5-
+            expect(rangeHeader, 'bytes=5-');
+            return ResumableDownloadResponse(
+              statusCode: 206,
+              headers: Headers.fromMap({
+                'accept-ranges': ['bytes'],
+                'content-range': ['bytes 5-9/10'],
+                'content-length': ['5'],
+              }),
+              stream: Stream.value(Uint8List.fromList([6, 7, 8, 9, 10])),
+            );
+          }
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/resume_test.bin',
+        fileName: 'resume_test.bin',
+        expectedBytes: 10,
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.completed);
+      expect(task.attemptCount, 1);
+      expect(task.receivedBytes, 10);
+      expect(calls, 2);
+      expect(receivedRangeHeader, 'bytes=5-');
+
+      // 验证保存的文件完整性（1..10 共 10 个字节）
+      final savedFile = File(task.savedPath!);
+      expect(savedFile.existsSync(), isTrue);
+      expect(savedFile.readAsBytesSync(), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+      // 验证临时 .part 文件已被删除
+      if (task.tempPath != null) {
+        expect(File(task.tempPath!).existsSync(), isFalse);
+      }
+    });
+
+    test('服务端忽略 Range 降级：第 2 次返回 200 OK，清空 .part 从头重新下载', () async {
+      var calls = 0;
+
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          if (calls == 1) {
+            // 第一次：下 4 字节断开
+            final controller = StreamController<Uint8List>();
+            controller.add(Uint8List.fromList([1, 2, 3, 4]));
+            controller.addError(const SocketException('interrupted'));
+            unawaited(controller.close());
+
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({
+                'content-length': ['8'],
+              }),
+              stream: controller.stream,
+            );
+          } else {
+            // 第二次：虽然有 Range，但服务端忽略并返回 200，全量重新给
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({
+                'content-length': ['8'],
+              }),
+              stream: Stream.value(Uint8List.fromList([10, 20, 30, 40, 50, 60, 70, 80])),
+            );
+          }
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/downgrade_200.bin',
+        fileName: 'downgrade_200.bin',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.completed);
+      expect(task.receivedBytes, 8);
+      // 验证最终保存的文件是服务端 200 返回的全量内容，旧 .part 没有被重复追加
+      final savedBytes = File(task.savedPath!).readAsBytesSync();
+      expect(savedBytes, [10, 20, 30, 40, 50, 60, 70, 80]);
+    });
+
+    test('416 Range Not Satisfiable 重新全量下载：清空 .part 后发起无 Range 请求', () async {
+      var calls = 0;
+      final rangeHeaders = <String?>[];
+
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          rangeHeaders.add(rangeHeader);
+
+          if (calls == 1) {
+            // 第一次：下 6 字节断开
+            final controller = StreamController<Uint8List>();
+            controller.add(Uint8List.fromList([1, 2, 3, 4, 5, 6]));
+            controller.addError(const SocketException('interrupted'));
+            unawaited(controller.close());
+
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({'content-length': ['6']}),
+              stream: controller.stream,
+            );
+          } else if (calls == 2) {
+            // 第二次：客户端带 bytes=6-，服务端返回 416
+            return ResumableDownloadResponse(
+              statusCode: 416,
+              headers: Headers(),
+              stream: const Stream.empty(),
+            );
+          } else {
+            // 第三次：收到 416 后控制器内部重新发起 rangeHeader: null
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({'content-length': ['3']}),
+              stream: Stream.value(Uint8List.fromList([7, 8, 9])),
+            );
+          }
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/status_416.bin',
+        fileName: 'status_416.bin',
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.completed);
+      expect(calls, 3);
+      expect(rangeHeaders[0], isNull);
+      expect(rangeHeaders[1], 'bytes=6-');
+      expect(rangeHeaders[2], isNull); // 416 之后必须为 null
+      expect(File(task.savedPath!).readAsBytesSync(), [7, 8, 9]);
+    });
+
+    test('Content-Range 总长度不匹配重新全量下载：清空 .part 重新下载', () async {
+      var calls = 0;
+      final rangeHeaders = <String?>[];
+
+      final container = createContainer(
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          rangeHeaders.add(rangeHeader);
+
+          if (calls == 1) {
+            final controller = StreamController<Uint8List>();
+            controller.add(Uint8List.fromList([1, 2, 3]));
+            controller.addError(const SocketException('interrupted'));
+            unawaited(controller.close());
+
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({'content-length': ['10']}),
+              stream: controller.stream,
+            );
+          } else if (calls == 2) {
+            // 第二次：返回 206，但 content-range 表明 total 是 20，与原 10 不符
+            return ResumableDownloadResponse(
+              statusCode: 206,
+              headers: Headers.fromMap({
+                'content-range': ['bytes 3-19/20'],
+                'content-length': ['17'],
+              }),
+              stream: const Stream.empty(),
+            );
+          } else {
+            // 第三次：从 0 开始全量
+            return ResumableDownloadResponse(
+              statusCode: 200,
+              headers: Headers.fromMap({'content-length': ['5']}),
+              stream: Stream.value(Uint8List.fromList([100, 101, 102, 103, 104])),
+            );
+          }
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/range_mismatch.bin',
+        fileName: 'range_mismatch.bin',
+        expectedBytes: 10,
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final state = container.read(downloadControllerProvider);
+      final task = state.taskById(id);
+
+      expect(task, isNotNull);
+      expect(task!.status, DownloadStatus.completed);
+      expect(calls, 3);
+      expect(rangeHeaders[2], isNull);
+      expect(File(task.savedPath!).readAsBytesSync(), [100, 101, 102, 103, 104]);
+    });
+
+    test('退避等待中取消：打断退避并标记 cancelled，停止继续重试', () async {
+      var calls = 0;
+
+      final container = createContainer(
+        customBackoff: (_) => const Duration(seconds: 10), // 长退避
+        customResumableDownloader: (url, {rangeHeader}) async {
+          calls++;
+          throw const SocketException('Connection lost');
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/backoff_cancel.bin',
+        fileName: 'backoff_cancel.bin',
+      );
+
+      // 等待第 1 次失败并进入退避
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      var state = container.read(downloadControllerProvider);
+      var task = state.taskById(id);
+      expect(task, isNotNull);
+      expect(task!.isBackingOff, isTrue);
+      expect(task.attemptCount, 1);
+
+      // 取消任务
+      await controller.cancel(id);
+
+      state = container.read(downloadControllerProvider);
+      task = state.taskById(id);
+      expect(task!.status, DownloadStatus.cancelled);
+      expect(task.isBackingOff, isFalse);
+
+      // 等待确认没有再发起新的调用
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, 1);
     });
   });
 }

@@ -74,6 +74,31 @@ class DownloadSaveService {
     }
   }
 
+  /// 将已有临时文件安全保存到平台的 Downloads 目录中（#98）。
+  ///
+  /// 返回保存成功的绝对文件路径；若保存失败则抛出 [DownloadSaveException]。
+  Future<String> saveFromFile({
+    required String fileName,
+    required File sourceFile,
+    String? mimeType,
+  }) async {
+    final cleanName = sanitizeFileName(fileName, mimeType: mimeType);
+    final targetDir = await resolveDestinationDirectory();
+    final targetFile = resolveNonConflictingFile(targetDir, cleanName);
+
+    try {
+      if (fileWriterOverride != null) {
+        final bytes = await sourceFile.readAsBytes();
+        await fileWriterOverride!(targetFile, bytes);
+      } else {
+        await sourceFile.copy(targetFile.path);
+      }
+      return targetFile.path;
+    } on Object catch (error) {
+      throw DownloadSaveException('写入文件失败 (${targetFile.path}): $error');
+    }
+  }
+
   /// 解析目标保存目录。
   Future<Directory> resolveDestinationDirectory() async {
     if (destinationDirOverride != null) {

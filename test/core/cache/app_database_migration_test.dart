@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/cache/app_database.dart';
@@ -114,6 +114,72 @@ void _createV3Database(String path) {
       'ON diagnostics_logs (timestamp)',
     );
     db.execute('PRAGMA user_version = 3');
+  } finally {
+    db.close();
+  }
+}
+
+/// 构造一个「schemaVersion=4」的 SQLite 文件库（五张表，download_records 不含 temp_path / attempt_count + user_version=4），
+/// 用于验证 v4→v5 迁移补加 `temp_path` 与 `attempt_count` 列。
+void _createV4Database(String path) {
+  final db = sqlite3.sqlite3.open(path);
+  try {
+    db.execute(
+      'CREATE TABLE cached_sessions ('
+      'session_id TEXT NOT NULL PRIMARY KEY,'
+      'title TEXT NOT NULL DEFAULT \'\','
+      'payload TEXT NOT NULL,'
+      'cached_at INTEGER NOT NULL)',
+    );
+    db.execute(
+      'CREATE TABLE cached_messages ('
+      'message_id TEXT NOT NULL PRIMARY KEY,'
+      'session_id TEXT NOT NULL,'
+      'payload TEXT NOT NULL,'
+      'cached_at INTEGER NOT NULL)',
+    );
+    db.execute(
+      'CREATE TABLE cached_media ('
+      'cache_key TEXT NOT NULL PRIMARY KEY,'
+      'url TEXT NOT NULL,'
+      'mime_type TEXT,'
+      'file_path TEXT NOT NULL,'
+      'byte_size INTEGER NOT NULL,'
+      'cached_at INTEGER NOT NULL,'
+      'last_accessed_at INTEGER NOT NULL,'
+      'session_id TEXT)',
+    );
+    db.execute(
+      'CREATE TABLE diagnostics_logs ('
+      'id TEXT NOT NULL PRIMARY KEY,'
+      'timestamp INTEGER NOT NULL,'
+      'level TEXT NOT NULL,'
+      'tag TEXT NOT NULL,'
+      'message TEXT NOT NULL,'
+      'details TEXT,'
+      'duration_ms INTEGER,'
+      'error_kind TEXT)',
+    );
+    db.execute(
+      'CREATE INDEX idx_diagnostics_logs_timestamp '
+      'ON diagnostics_logs (timestamp)',
+    );
+    db.execute(
+      'CREATE TABLE download_records ('
+      'id TEXT NOT NULL PRIMARY KEY,'
+      'source_url TEXT NOT NULL,'
+      'file_name TEXT NOT NULL,'
+      'mime_type TEXT,'
+      'expected_bytes INTEGER,'
+      'received_bytes INTEGER NOT NULL DEFAULT 0,'
+      'status TEXT NOT NULL,'
+      'saved_path TEXT,'
+      'created_at INTEGER NOT NULL,'
+      'completed_at INTEGER,'
+      'failure_message TEXT,'
+      'session_id TEXT)',
+    );
+    db.execute('PRAGMA user_version = 4');
   } finally {
     db.close();
   }
@@ -300,6 +366,64 @@ void main() {
             ),
           );
       expect((await db.select(db.cachedSessions).get()).single.sessionId, 's3');
+    });
+
+    test('v4 生产库升级到 v5：补加 temp_path 与 attempt_count 字段且已有数据保留', () async {
+      final dir = Directory.systemTemp.createTempSync('hermes_migrate_');
+      final file = File('${dir.path}${Platform.pathSeparator}old_v4.sqlite');
+      addTearDown(() async {
+        try {
+          await dir.delete(recursive: true);
+        } on FileSystemException {
+          // ignore
+        }
+      });
+
+      _createV4Database(file.path);
+
+      // 先插入一条 v4 记录
+      final rawDb = sqlite3.sqlite3.open(file.path);
+      try {
+        rawDb.execute(
+          'INSERT INTO download_records (id, source_url, file_name, status, created_at) '
+          "VALUES ('v4-1', 'https://example.com/a.zip', 'a.zip', 'completed', 1000)",
+        );
+      } finally {
+        rawDb.close();
+      }
+
+      // 以 schemaVersion=5 打开旧 v4 库，触发 v4→v5 增量迁移
+      final db = AppDatabase(NativeDatabase(file));
+      addTearDown(db.close);
+
+      // 验证已有记录保留，且默认字段正确
+      final existing = await (db.select(
+        db.downloadRecords,
+      )..where((t) => t.id.equals('v4-1'))).getSingle();
+      expect(existing.fileName, 'a.zip');
+      expect(existing.tempPath, isNull);
+      expect(existing.attemptCount, 0);
+
+      // 验证新字段可读写
+      await db
+          .into(db.downloadRecords)
+          .insert(
+            DownloadRecordsCompanion.insert(
+              id: 'v5-1',
+              sourceUrl: 'https://example.com/b.zip',
+              fileName: 'b.zip',
+              status: 'downloading',
+              createdAt: 2000,
+              tempPath: const Value('/tmp/b.zip.part'),
+              attemptCount: const Value(2),
+            ),
+          );
+
+      final v5Row = await (db.select(
+        db.downloadRecords,
+      )..where((t) => t.id.equals('v5-1'))).getSingle();
+      expect(v5Row.tempPath, '/tmp/b.zip.part');
+      expect(v5Row.attemptCount, 2);
     });
   });
 }

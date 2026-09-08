@@ -255,6 +255,40 @@ void main() {
       );
     });
 
+    testWidgets('#98 下载状态展示重试与断点续传文案', (tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final tasks = [
+        DownloadTask(
+          id: 'task-retrying',
+          sourceUrl: 'https://example.com/retry.zip',
+          fileName: 'retry.zip',
+          status: DownloadStatus.downloading,
+          attemptCount: 2,
+          isBackingOff: true,
+          createdAt: now - 30000,
+        ),
+        DownloadTask(
+          id: 'task-resumed',
+          sourceUrl: 'https://example.com/resume.zip',
+          fileName: 'resume.zip',
+          status: DownloadStatus.downloading,
+          receivedBytes: 2097152, // 2MB
+          expectedBytes: 4194304, // 4MB
+          resumedFromBytes: 1048576, // 1MB
+          createdAt: now - 20000,
+        ),
+      ];
+
+      await tester.pumpWidget(buildTestApp(tasksOverride: tasks));
+      await tester.pumpAndSettle();
+
+      // 验证重试文案
+      expect(find.textContaining('第 2/3 次重试中'), findsOneWidget);
+
+      // 验证续传文案
+      expect(find.textContaining('已续传 1.0 MB'), findsOneWidget);
+    });
+
     testWidgets('已完成任务在本地文件被删除后展示「文件已被移动或删除」与「重新下载」按钮', (tester) async {
       await tester.runAsync(() async {
         final taskMissingFile = DownloadTask(

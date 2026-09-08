@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 
 import '../../core/cache/app_database.dart';
@@ -7,15 +9,20 @@ import 'download_models.dart';
 ///
 /// 契约说明：
 /// 1. 负责 completed / failed / cancelled / active 状态的增量或更新落库；
-/// 2. 启动时自动执行 [recoverInterruptedTasks]，将上次遗留的 queued / downloading
-///    未完任务转为 failed，并标记文案「应用已退出，下载未完成」；
+/// 2. 启动时自动执行 [recoverInterruptedTasks]：
+///    - URL 来源任务且 `.part` 临时文件存在 → 重置为 queued（receivedBytes 保留
+///      .part 大小、tempPath 落库），供 worker 启动后续传；
+///    - 无 `.part` 或 bytes 来源任务 → 维持转 failed 并标记「应用已退出，下载未完成」；
 /// 3. 支持根据 sourceUrl 快速查重已完成记录。
 class DownloadRepository {
-  DownloadRepository(this._database);
+  DownloadRepository(this._database, {this.tempDirectoryProvider});
 
   final AppDatabase _database;
+  final Directory Function()? tempDirectoryProvider;
 
-  /// 启动中断恢复：将数据库中遗留的 queued 或 downloading 任务转为 failed。
+  /// 启动中断恢复：
+  /// - URL 任务且存在 .part 文件：重置为 queued 待续传；
+  /// - 其余任务：标记 failed（「应用已退出，下载未完成」）。
   Future<void> recoverInterruptedTasks() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final rows =
@@ -27,15 +34,42 @@ class DownloadRepository {
             .get();
 
     for (final row in rows) {
-      await (_database.update(
-        _database.downloadRecords,
-      )..where((t) => t.id.equals(row.id))).write(
-        DownloadRecordsCompanion(
-          status: Value(DownloadStatus.failed.name),
-          failureMessage: const Value('应用已退出，下载未完成'),
-          completedAt: Value(now),
-        ),
-      );
+      final isUrl =
+          !row.sourceUrl.startsWith('bytes:') &&
+          !row.sourceUrl.startsWith('data:');
+
+      File? partFile;
+      if (row.tempPath != null && row.tempPath!.isNotEmpty) {
+        partFile = File(row.tempPath!);
+      } else if (tempDirectoryProvider != null) {
+        final fallbackDir = tempDirectoryProvider!();
+        partFile = File('${fallbackDir.path}/${row.id}.part');
+      }
+
+      if (isUrl && partFile != null && partFile.existsSync()) {
+        final partSize = partFile.lengthSync();
+        await (_database.update(
+          _database.downloadRecords,
+        )..where((t) => t.id.equals(row.id))).write(
+          DownloadRecordsCompanion(
+            status: Value(DownloadStatus.queued.name),
+            receivedBytes: Value(partSize),
+            tempPath: Value(partFile.path),
+            completedAt: const Value(null),
+            failureMessage: const Value(null),
+          ),
+        );
+      } else {
+        await (_database.update(
+          _database.downloadRecords,
+        )..where((t) => t.id.equals(row.id))).write(
+          DownloadRecordsCompanion(
+            status: Value(DownloadStatus.failed.name),
+            failureMessage: const Value('应用已退出，下载未完成'),
+            completedAt: Value(now),
+          ),
+        );
+      }
     }
   }
 
@@ -120,6 +154,8 @@ class DownloadRepository {
       completedAt: Value(task.completedAt),
       failureMessage: Value(task.failureMessage),
       sessionId: Value(task.sessionId),
+      tempPath: Value(task.tempPath),
+      attemptCount: Value(task.attemptCount),
     );
   }
 
@@ -137,6 +173,8 @@ class DownloadRepository {
       completedAt: row.completedAt,
       failureMessage: row.failureMessage,
       sessionId: row.sessionId,
+      tempPath: row.tempPath,
+      attemptCount: row.attemptCount,
     );
   }
 }

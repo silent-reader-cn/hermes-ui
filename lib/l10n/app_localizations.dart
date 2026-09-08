@@ -1747,3 +1747,16 @@ extension AppLocalizationsInstallPermission96 on AppLocalizations {
       isEnglish ? 'Go to Settings' : '去设置';
 }
 
+// ---------------------------------------------------------------------------
+// #98 下载自动重试与断点续传（下载页进行中提示）
+// ---------------------------------------------------------------------------
+extension AppLocalizationsDownloadResume98 on AppLocalizations {
+  String downloadRetrying(int attempt, int maxAttempts) =>
+      isEnglish ? 'Retrying ($attempt/$maxAttempts)…' : '第 $attempt/$maxAttempts 次重试中';
+
+  String get downloadResumed => isEnglish ? 'Resumed' : '已续传';
+
+  String downloadResumedWithSize(String size) =>
+      isEnglish ? 'Resumed $size' : '已续传 $size';
+}
+

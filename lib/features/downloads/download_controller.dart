@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/utils/uuid.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -14,6 +16,36 @@ import 'download_models.dart';
 import 'download_providers.dart';
 import 'download_repository.dart';
 import 'download_save_service.dart';
+
+/// Content-Range 解析结果模型（#98）。
+class ContentRangeInfo {
+  const ContentRangeInfo({
+    required this.start,
+    required this.end,
+    this.total,
+  });
+
+  final int start;
+  final int end;
+  final int? total;
+
+  static ContentRangeInfo? tryParse(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    final regex = RegExp(
+      r'^bytes\s+(\d+)-(\d+)\/(\d+|\*)$',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(trimmed);
+    if (match == null) return null;
+    final start = int.tryParse(match.group(1)!);
+    final end = int.tryParse(match.group(2)!);
+    if (start == null || end == null) return null;
+    final totalStr = match.group(3)!;
+    final total = totalStr == '*' ? null : int.tryParse(totalStr);
+    return ContentRangeInfo(start: start, end: end, total: total);
+  }
+}
 
 /// 下载列表状态快照。
 class DownloadState {
@@ -77,12 +109,15 @@ class DownloadController extends Notifier<DownloadState> {
   late final DownloadRepository _repository;
   late final DownloadSaveService _saveService;
   late final TurnNotificationService _notificationService;
-  late final DownloadBytesDownloader _downloader;
+  late final DownloadResumableDownloader _resumableDownloader;
+  late final DownloadBackoffCalculator _backoffCalculator;
+  late final DownloadTempDirectoryResolver _tempDirectoryResolver;
 
   bool _isWorkerRunning = false;
   bool _isInitialized = false;
   final Set<String> _cancelledTaskIds = {};
   final Map<String, Uint8List> _pendingBytes = {};
+  final Map<String, Completer<void>> _activeBackoffCompleters = {};
   Completer<void>? _initCompleter;
 
   @override
@@ -90,12 +125,15 @@ class DownloadController extends Notifier<DownloadState> {
     _repository = ref.watch(downloadRepositoryProvider);
     _saveService = ref.watch(downloadSaveServiceProvider);
     _notificationService = ref.watch(turnNotificationServiceProvider);
-    _downloader = ref.watch(downloadDownloaderProvider);
+    _resumableDownloader = ref.watch(downloadResumableDownloaderProvider);
+    _backoffCalculator = ref.watch(downloadBackoffProvider);
+    _tempDirectoryResolver = ref.watch(downloadTempDirectoryProvider);
 
     _isWorkerRunning = false;
     _isInitialized = false;
     _cancelledTaskIds.clear();
     _pendingBytes.clear();
+    _activeBackoffCompleters.clear();
     _initCompleter = null;
 
     unawaited(Future.microtask(_ensureInitialized));
@@ -272,12 +310,21 @@ class DownloadController extends Notifier<DownloadState> {
     _cancelledTaskIds.add(id);
     _pendingBytes.remove(id);
 
+    // 打断退避等待（若正在退避）
+    if (_activeBackoffCompleters.containsKey(id)) {
+      _activeBackoffCompleters.remove(id)?.complete();
+    }
+
+    _cleanUpTempFile(task.tempPath);
+
     final cancelledTask = task.copyWith(
       status: DownloadStatus.cancelled,
+      isBackingOff: false,
       completedAt: DateTime.now().millisecondsSinceEpoch,
     );
     _updateTask(cancelledTask);
     await _repository.saveRecord(cancelledTask);
+    _syncProgressNotification(cancelledTask);
 
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
@@ -305,6 +352,8 @@ class DownloadController extends Notifier<DownloadState> {
       failureMessage: null,
       completedAt: null,
       savedPath: null,
+      attemptCount: 0,
+      isBackingOff: false,
     );
 
     _updateTask(retriedTask);
@@ -330,6 +379,8 @@ class DownloadController extends Notifier<DownloadState> {
 
     if (task.isActive) {
       await cancel(id);
+    } else {
+      _cleanUpTempFile(task.tempPath);
     }
 
     state = state.copyWith(
@@ -350,11 +401,100 @@ class DownloadController extends Notifier<DownloadState> {
     _pendingBytes.clear();
     final terminalTasks = state.tasks.where((t) => t.isTerminal).toList();
     for (final t in terminalTasks) {
+      _cleanUpTempFile(t.tempPath);
       await _repository.deleteRecord(t.id);
     }
     state = state.copyWith(
       tasks: state.tasks.where((t) => !t.isTerminal).toList(),
     );
+  }
+
+  void _cleanUpTempFile(String? tempPath) {
+    if (tempPath == null || tempPath.isEmpty) return;
+    try {
+      final file = File(tempPath);
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> _waitBackoff(String taskId, Duration duration) async {
+    if (duration <= Duration.zero) {
+      return !_cancelledTaskIds.contains(taskId);
+    }
+    final completer = Completer<void>();
+    _activeBackoffCompleters[taskId] = completer;
+    final timer = Timer(duration, () {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      _activeBackoffCompleters.remove(taskId);
+    }
+    return !_cancelledTaskIds.contains(taskId);
+  }
+
+  bool _isTransientError(Object error) {
+    if (error is SocketException) return true;
+    if (error is TimeoutException) return true;
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.connectionError:
+          return true;
+        case DioExceptionType.badResponse:
+          final status = error.response?.statusCode;
+          if (status == 429 ||
+              (status != null && status >= 500 && status < 600)) {
+            return true;
+          }
+          return false;
+        default:
+          if (error.error != null && _isTransientError(error.error!)) {
+            return true;
+          }
+          return false;
+      }
+    }
+    if (error is NetworkException) {
+      switch (error.kind) {
+        case NetworkExceptionKind.timedOut:
+        case NetworkExceptionKind.cannotFindHost:
+        case NetworkExceptionKind.cannotConnect:
+        case NetworkExceptionKind.offline:
+          return true;
+        default:
+          return false;
+      }
+    }
+    if (error is HttpException) {
+      if (error.statusCode == 429 ||
+          (error.statusCode >= 500 && error.statusCode < 600)) {
+        return true;
+      }
+      return false;
+    }
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('socketexception') ||
+        msg.contains('timeoutexception') ||
+        msg.contains('timeout') ||
+        msg.contains('connection error') ||
+        msg.contains('connection refused') ||
+        msg.contains('500') ||
+        msg.contains('502') ||
+        msg.contains('503') ||
+        msg.contains('504') ||
+        msg.contains('429')) {
+      return true;
+    }
+    return false;
   }
 
   /// FIFO 单 worker 处理循环。
@@ -370,13 +510,15 @@ class DownloadController extends Notifier<DownloadState> {
               ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
         if (queuedTasks.isEmpty) break;
-        final currentTask = queuedTasks.first;
+        var currentTask = queuedTasks.first;
 
         if (_cancelledTaskIds.contains(currentTask.id)) {
           _cancelledTaskIds.remove(currentTask.id);
           _pendingBytes.remove(currentTask.id);
+          _cleanUpTempFile(currentTask.tempPath);
           final cancelled = currentTask.copyWith(
             status: DownloadStatus.cancelled,
+            isBackingOff: false,
             completedAt: DateTime.now().millisecondsSinceEpoch,
           );
           _updateTask(cancelled);
@@ -386,176 +528,124 @@ class DownloadController extends Notifier<DownloadState> {
 
         final downloading = currentTask.copyWith(
           status: DownloadStatus.downloading,
+          isBackingOff: false,
         );
         _updateTask(downloading);
         await _repository.saveRecord(downloading);
-        _syncProgressNotification(currentTask);
+        _syncProgressNotification(downloading);
+        currentTask = downloading;
 
-        try {
-          DiagnosticsService.instance.log(
-            level: DiagnosticsLogLevel.info,
-            tag: 'downloads',
-            message: '开始下载: ${currentTask.fileName}',
-            details: {
-              'id': currentTask.id,
-              'sourceUrl': currentTask.sourceUrl,
-              'fileName': currentTask.fileName,
-              'expectedBytes': currentTask.expectedBytes,
-              'sourceType': currentTask.sourceType.name,
-            },
-          );
+        // 单任务下载与重试循环
+        while (true) {
+          if (_cancelledTaskIds.contains(currentTask.id)) {
+            _cancelledTaskIds.remove(currentTask.id);
+            _cleanUpTempFile(currentTask.tempPath);
+            final cancelled = currentTask.copyWith(
+              status: DownloadStatus.cancelled,
+              isBackingOff: false,
+              completedAt: DateTime.now().millisecondsSinceEpoch,
+            );
+            _updateTask(cancelled);
+            await _repository.saveRecord(cancelled);
+            break;
+          }
 
-          final Uint8List bytes;
-          if (currentTask.sourceType == DownloadSourceType.bytes) {
-            final memoryBytes = _pendingBytes.remove(currentTask.id);
-            if (memoryBytes != null) {
-              bytes = memoryBytes;
-            } else if (currentTask.sourceUrl.startsWith('data:')) {
-              final commaIdx = currentTask.sourceUrl.indexOf(',');
-              if (commaIdx != -1) {
-                bytes = base64Decode(
-                  currentTask.sourceUrl.substring(commaIdx + 1),
-                );
-              } else {
-                throw Exception('内存数据丢失且无效的 Data URI');
-              }
-            } else {
-              throw Exception('内存数据已失效，无法重新下载');
+          try {
+            await _executeDownload(currentTask);
+            if (_cancelledTaskIds.contains(currentTask.id)) {
+              _cancelledTaskIds.remove(currentTask.id);
+              _cleanUpTempFile(currentTask.tempPath);
+              final cancelled = currentTask.copyWith(
+                status: DownloadStatus.cancelled,
+                isBackingOff: false,
+                completedAt: DateTime.now().millisecondsSinceEpoch,
+              );
+              _updateTask(cancelled);
+              await _repository.saveRecord(cancelled);
             }
-          } else {
-            final uri = Uri.parse(currentTask.sourceUrl);
-            // #69 真实进度回传：dio onReceiveProgress → 任务 receivedBytes，
-            // 节流 ≥100ms 或 ≥1% 增量才刷 state（防高频重建）；total>0 且任务
-            // 无 expectedBytes 时顺带补齐分母。
-            var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
-            var lastReceived = 0;
-            bytes = await _downloader(
-              uri,
-              onProgress: (received, total) {
-                if (received <= 0) return;
-                final now = DateTime.now();
-                final effectiveTotal = total > 0
-                    ? total
-                    : (currentTask.expectedBytes ?? -1);
-                final timeHit =
-                    now.difference(lastProgressAt).inMilliseconds >= 100;
-                final sizeHit =
-                    effectiveTotal <= 0 ||
-                    (received - lastReceived) * 100 >= effectiveTotal;
-                if (!timeHit && !sizeHit && received < effectiveTotal) return;
-                lastProgressAt = now;
-                lastReceived = received;
-                final progressed = currentTask.copyWith(
-                  status: DownloadStatus.downloading,
-                  receivedBytes: received,
-                  expectedBytes: effectiveTotal > 0 ? effectiveTotal : null,
+            break; // 下载成功或已取消，退出本任务重试循环
+          } catch (error) {
+            if (_cancelledTaskIds.contains(currentTask.id)) {
+              _cancelledTaskIds.remove(currentTask.id);
+              _cleanUpTempFile(currentTask.tempPath);
+              final cancelled = currentTask.copyWith(
+                status: DownloadStatus.cancelled,
+                isBackingOff: false,
+                completedAt: DateTime.now().millisecondsSinceEpoch,
+              );
+              _updateTask(cancelled);
+              await _repository.saveRecord(cancelled);
+              break;
+            }
+
+            final isTransient = _isTransientError(error);
+            if (isTransient && currentTask.attemptCount < 3) {
+              final nextAttempt = currentTask.attemptCount + 1;
+              final backingOffTask = currentTask.copyWith(
+                attemptCount: nextAttempt,
+                isBackingOff: true,
+              );
+              currentTask = backingOffTask;
+              _updateTask(currentTask);
+              await _repository.saveRecord(currentTask);
+
+              final backoffDuration = _backoffCalculator(nextAttempt);
+              final canProceed = await _waitBackoff(
+                currentTask.id,
+                backoffDuration,
+              );
+              if (!canProceed || _cancelledTaskIds.contains(currentTask.id)) {
+                _cancelledTaskIds.remove(currentTask.id);
+                _cleanUpTempFile(currentTask.tempPath);
+                final cancelled = currentTask.copyWith(
+                  status: DownloadStatus.cancelled,
+                  isBackingOff: false,
+                  completedAt: DateTime.now().millisecondsSinceEpoch,
                 );
-                _updateTask(progressed);
-                _syncProgressNotification(progressed);
-              },
-            );
+                _updateTask(cancelled);
+                await _repository.saveRecord(cancelled);
+                break;
+              }
+
+              // 退避结束，关闭 isBackingOff，发起下一次下载执行
+              currentTask = currentTask.copyWith(isBackingOff: false);
+              _updateTask(currentTask);
+              await _repository.saveRecord(currentTask);
+              continue;
+            } else {
+              // 失败：重试已超 3 次，或属于永久性不可重试错误
+              final failureMsg = (isTransient && currentTask.attemptCount >= 3)
+                  ? '已重试 3 次，下载失败：$error'
+                  : error.toString();
+
+              final failed = currentTask.copyWith(
+                status: DownloadStatus.failed,
+                failureMessage: failureMsg,
+                isBackingOff: false,
+                completedAt: DateTime.now().millisecondsSinceEpoch,
+              );
+              _updateTask(failed);
+              await _repository.saveRecord(failed);
+              unawaited(
+                _notificationService
+                    .clearDownloadProgress()
+                    .catchError((Object _) {}),
+              );
+
+              DiagnosticsService.instance.log(
+                level: DiagnosticsLogLevel.error,
+                tag: 'downloads',
+                message: '下载失败: ${currentTask.fileName}',
+                details: {
+                  'id': currentTask.id,
+                  'sourceUrl': currentTask.sourceUrl,
+                  'attemptCount': currentTask.attemptCount,
+                },
+                errorKind: error.toString(),
+              );
+              break;
+            }
           }
-
-          if (_cancelledTaskIds.contains(currentTask.id)) {
-            _cancelledTaskIds.remove(currentTask.id);
-            final cancelled = currentTask.copyWith(
-              status: DownloadStatus.cancelled,
-              receivedBytes: bytes.length,
-              completedAt: DateTime.now().millisecondsSinceEpoch,
-            );
-            _updateTask(cancelled);
-            await _repository.saveRecord(cancelled);
-            DiagnosticsService.instance.log(
-              level: DiagnosticsLogLevel.info,
-              tag: 'downloads',
-              message: '任务在下载中取消，丢弃结果: ${currentTask.id}',
-            );
-            continue;
-          }
-
-          final savedPath = await _saveService.save(
-            fileName: currentTask.fileName,
-            bytes: bytes,
-            mimeType: currentTask.mimeType,
-          );
-
-          if (_cancelledTaskIds.contains(currentTask.id)) {
-            _cancelledTaskIds.remove(currentTask.id);
-            final cancelled = currentTask.copyWith(
-              status: DownloadStatus.cancelled,
-              receivedBytes: bytes.length,
-              completedAt: DateTime.now().millisecondsSinceEpoch,
-            );
-            _updateTask(cancelled);
-            await _repository.saveRecord(cancelled);
-            continue;
-          }
-
-          final completed = currentTask.copyWith(
-            status: DownloadStatus.completed,
-            receivedBytes: bytes.length,
-            savedPath: savedPath,
-            completedAt: DateTime.now().millisecondsSinceEpoch,
-            failureMessage: null,
-          );
-          _updateTask(completed);
-          await _repository.saveRecord(completed);
-
-          DiagnosticsService.instance.log(
-            level: DiagnosticsLogLevel.info,
-            tag: 'downloads',
-            message: '下载完成: ${currentTask.fileName}',
-            details: {
-              'id': currentTask.id,
-              'savedPath': savedPath,
-              'byteSize': bytes.length,
-            },
-          );
-
-          await _notificationService.notifyDownloadCompleted(
-            completed.id,
-            completed.fileName,
-            bytes.length,
-          );
-          // #93 进度通知随完成隐藏（完成通知 1301 另发）。
-          unawaited(
-            _notificationService
-                .clearDownloadProgress()
-                .catchError((Object _) {}),
-          );
-        } catch (error) {
-          if (_cancelledTaskIds.contains(currentTask.id)) {
-            _cancelledTaskIds.remove(currentTask.id);
-            final cancelled = currentTask.copyWith(
-              status: DownloadStatus.cancelled,
-              completedAt: DateTime.now().millisecondsSinceEpoch,
-            );
-            _updateTask(cancelled);
-            await _repository.saveRecord(cancelled);
-            continue;
-          }
-
-          final failed = currentTask.copyWith(
-            status: DownloadStatus.failed,
-            failureMessage: error.toString(),
-            completedAt: DateTime.now().millisecondsSinceEpoch,
-          );
-          _updateTask(failed);
-          await _repository.saveRecord(failed);
-          // #93 进度通知随失败隐藏。
-          unawaited(
-            _notificationService
-                .clearDownloadProgress()
-                .catchError((Object _) {}),
-          );
-
-          DiagnosticsService.instance.log(
-            level: DiagnosticsLogLevel.error,
-            tag: 'downloads',
-            message: '下载失败: ${currentTask.fileName}',
-            details: {'id': currentTask.id, 'sourceUrl': currentTask.sourceUrl},
-            errorKind: error.toString(),
-          );
         }
       }
     } finally {
@@ -565,6 +655,298 @@ class DownloadController extends Notifier<DownloadState> {
         _notificationService.clearDownloadProgress().catchError((Object _) {}),
       );
     }
+  }
+
+  Future<void> _executeDownload(DownloadTask currentTask) async {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'downloads',
+      message: '开始下载: ${currentTask.fileName}',
+      details: {
+        'id': currentTask.id,
+        'sourceUrl': currentTask.sourceUrl,
+        'fileName': currentTask.fileName,
+        'expectedBytes': currentTask.expectedBytes,
+        'sourceType': currentTask.sourceType.name,
+        'attemptCount': currentTask.attemptCount,
+      },
+    );
+
+    if (currentTask.sourceType == DownloadSourceType.bytes) {
+      await _executeBytesDownload(currentTask);
+    } else {
+      await _executeUrlDownload(currentTask);
+    }
+  }
+
+  Future<void> _executeBytesDownload(DownloadTask currentTask) async {
+    final Uint8List bytes;
+    final memoryBytes = _pendingBytes[currentTask.id];
+    if (memoryBytes != null) {
+      bytes = memoryBytes;
+    } else if (currentTask.sourceUrl.startsWith('data:')) {
+      final commaIdx = currentTask.sourceUrl.indexOf(',');
+      if (commaIdx != -1) {
+        bytes = base64Decode(
+          currentTask.sourceUrl.substring(commaIdx + 1),
+        );
+      } else {
+        throw Exception('内存数据丢失且无效的 Data URI');
+      }
+    } else {
+      throw Exception('内存数据已失效，无法重新下载');
+    }
+
+    if (_cancelledTaskIds.contains(currentTask.id)) return;
+
+    final savedPath = await _saveService.save(
+      fileName: currentTask.fileName,
+      bytes: bytes,
+      mimeType: currentTask.mimeType,
+    );
+
+    if (_cancelledTaskIds.contains(currentTask.id)) return;
+
+    _pendingBytes.remove(currentTask.id);
+
+    final completed = currentTask.copyWith(
+      status: DownloadStatus.completed,
+      receivedBytes: bytes.length,
+      savedPath: savedPath,
+      completedAt: DateTime.now().millisecondsSinceEpoch,
+      failureMessage: null,
+      isBackingOff: false,
+    );
+    _updateTask(completed);
+    await _repository.saveRecord(completed);
+
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'downloads',
+      message: '下载完成: ${currentTask.fileName}',
+      details: {
+        'id': currentTask.id,
+        'savedPath': savedPath,
+        'byteSize': bytes.length,
+      },
+    );
+
+    await _notificationService.notifyDownloadCompleted(
+      completed.id,
+      completed.fileName,
+      bytes.length,
+    );
+    unawaited(
+      _notificationService.clearDownloadProgress().catchError((Object _) {}),
+    );
+  }
+
+  Future<void> _executeUrlDownload(DownloadTask task) async {
+    var currentTask = task;
+    String tempPath = currentTask.tempPath ?? '';
+    if (tempPath.isEmpty) {
+      final tempDir = await _tempDirectoryResolver();
+      tempPath = '${tempDir.path}/${currentTask.id}.part';
+      currentTask = currentTask.copyWith(tempPath: tempPath);
+      _updateTask(currentTask);
+      await _repository.saveRecord(currentTask);
+    }
+
+    final partFile = File(tempPath);
+    var partBytes = partFile.existsSync() ? partFile.lengthSync() : 0;
+
+    final uri = Uri.parse(currentTask.sourceUrl);
+    final String? rangeHeader = partBytes > 0 ? 'bytes=$partBytes-' : null;
+
+    var response = await _resumableDownloader(uri, rangeHeader: rangeHeader);
+    if (_cancelledTaskIds.contains(currentTask.id)) {
+      _cleanUpTempFile(tempPath);
+      return;
+    }
+
+    // 416 → 远端文件比 .part 小（文件已变更）→ 删 .part 从头重下
+    if (response.statusCode == 416) {
+      _cleanUpTempFile(tempPath);
+      partBytes = 0;
+      response = await _resumableDownloader(uri, rangeHeader: null);
+      if (_cancelledTaskIds.contains(currentTask.id)) {
+        _cleanUpTempFile(tempPath);
+        return;
+      }
+    }
+
+    // 206 → 校验 Content-Range: bytes N-M/total
+    if (response.statusCode == 206) {
+      final rangeInfo = ContentRangeInfo.tryParse(response.contentRange);
+      final validStart = rangeInfo != null && rangeInfo.start == partBytes;
+      final validTotal =
+          currentTask.expectedBytes == null ||
+          rangeInfo?.total == null ||
+          rangeInfo!.total == currentTask.expectedBytes;
+
+      if (!validStart || !validTotal) {
+        // 不符 → 删 .part 从头重下
+        _cleanUpTempFile(tempPath);
+        partBytes = 0;
+        response = await _resumableDownloader(uri, rangeHeader: null);
+        if (_cancelledTaskIds.contains(currentTask.id)) {
+          _cleanUpTempFile(tempPath);
+          return;
+        }
+      }
+    }
+
+    // 200（服务端忽略 Range，如旧版/动态 zip）→ 删 .part 从头重下
+    if (response.statusCode == 200) {
+      if (partBytes > 0) {
+        _cleanUpTempFile(tempPath);
+        partBytes = 0;
+      }
+    }
+
+    if (response.statusCode >= 400) {
+      throw HttpException.fromBody(response.statusCode, null);
+    }
+
+    if (_cancelledTaskIds.contains(currentTask.id)) {
+      _cleanUpTempFile(tempPath);
+      return;
+    }
+
+    int? effectiveTotal = currentTask.expectedBytes;
+    if (response.statusCode == 206) {
+      final rangeInfo = ContentRangeInfo.tryParse(response.contentRange);
+      if (rangeInfo?.total != null) {
+        effectiveTotal = rangeInfo!.total;
+      }
+    } else {
+      if (response.contentLength != null && response.contentLength! > 0) {
+        effectiveTotal = response.contentLength;
+      }
+    }
+
+    if (partBytes > 0 && response.statusCode == 206) {
+      currentTask = currentTask.copyWith(
+        resumedFromBytes: partBytes,
+        receivedBytes: partBytes,
+        expectedBytes: effectiveTotal,
+      );
+      _updateTask(currentTask);
+      _syncProgressNotification(currentTask);
+    } else {
+      currentTask = currentTask.copyWith(
+        resumedFromBytes: null,
+        receivedBytes: 0,
+        expectedBytes: effectiveTotal,
+      );
+      _updateTask(currentTask);
+      _syncProgressNotification(currentTask);
+    }
+
+    IOSink? activeSink;
+    var currentReceived = partBytes;
+    var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
+    var lastReceived = currentReceived;
+
+    try {
+      final sink = partFile.openWrite(
+        mode: partBytes > 0 ? FileMode.append : FileMode.write,
+      );
+      activeSink = sink;
+
+      await for (final chunk in response.stream) {
+        if (_cancelledTaskIds.contains(currentTask.id)) {
+          await sink.flush();
+          await sink.close();
+          activeSink = null;
+          _cleanUpTempFile(tempPath);
+          return;
+        }
+
+        sink.add(chunk);
+        currentReceived += chunk.length;
+
+        final now = DateTime.now();
+        final total = effectiveTotal ?? -1;
+        final timeHit = now.difference(lastProgressAt).inMilliseconds >= 100;
+        final sizeHit =
+            total <= 0 || (currentReceived - lastReceived) * 100 >= total;
+        if (timeHit || sizeHit || (total > 0 && currentReceived >= total)) {
+          lastProgressAt = now;
+          lastReceived = currentReceived;
+          final progressed = currentTask.copyWith(
+            status: DownloadStatus.downloading,
+            receivedBytes: currentReceived,
+            expectedBytes: total > 0 ? total : null,
+          );
+          _updateTask(progressed);
+          _syncProgressNotification(progressed);
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+      activeSink = null;
+    } catch (_) {
+      if (activeSink != null) {
+        try {
+          await activeSink.flush();
+          await activeSink.close();
+        } catch (_) {}
+        activeSink = null;
+      }
+      rethrow;
+    }
+
+    if (_cancelledTaskIds.contains(currentTask.id)) {
+      _cleanUpTempFile(tempPath);
+      return;
+    }
+
+    final savedPath = await _saveService.saveFromFile(
+      fileName: currentTask.fileName,
+      sourceFile: partFile,
+      mimeType: currentTask.mimeType,
+    );
+
+    if (_cancelledTaskIds.contains(currentTask.id)) {
+      _cleanUpTempFile(tempPath);
+      return;
+    }
+
+    // 完成后 .part 必须清理，不得残留
+    _cleanUpTempFile(tempPath);
+
+    final completed = currentTask.copyWith(
+      status: DownloadStatus.completed,
+      receivedBytes: currentReceived,
+      savedPath: savedPath,
+      completedAt: DateTime.now().millisecondsSinceEpoch,
+      failureMessage: null,
+      isBackingOff: false,
+    );
+    _updateTask(completed);
+    await _repository.saveRecord(completed);
+
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'downloads',
+      message: '下载完成: ${currentTask.fileName}',
+      details: {
+        'id': currentTask.id,
+        'savedPath': savedPath,
+        'byteSize': currentReceived,
+      },
+    );
+
+    await _notificationService.notifyDownloadCompleted(
+      completed.id,
+      completed.fileName,
+      currentReceived,
+    );
+    unawaited(
+      _notificationService.clearDownloadProgress().catchError((Object _) {}),
+    );
   }
 
   /// #93 下载进度常驻通知同步（fire-and-forget；通知服务内部吞异常，仅

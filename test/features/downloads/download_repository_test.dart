@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/cache/app_database.dart';
 import 'package:hermes_ui/features/downloads/download_models.dart';
@@ -196,6 +198,81 @@ void main() {
 
       expect(map['t-cancelled']?.status, DownloadStatus.cancelled);
       expect(map['t-cancelled']?.completedAt, 85);
+    });
+
+    test('recoverInterruptedTasks：有 .part 文件的 URL 任务重置为 queued 并恢复 receivedBytes，其他转 failed', () async {
+      final tempDir = Directory.systemTemp.createTempSync('hermes_repo_recover_');
+      addTearDown(() async {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      });
+
+      final repoWithTemp = DownloadRepository(
+        db,
+        tempDirectoryProvider: () => tempDir,
+      );
+
+      // 创建一个 .part 文件，包含 512 字节
+      final partFile = File('${tempDir.path}/task-with-part.part');
+      partFile.writeAsBytesSync(List.filled(512, 1));
+
+      final taskWithPart = DownloadTask(
+        id: 'task-with-part',
+        sourceUrl: 'https://example.com/file.zip',
+        fileName: 'file.zip',
+        status: DownloadStatus.downloading,
+        expectedBytes: 1024,
+        receivedBytes: 200,
+        tempPath: partFile.path,
+        createdAt: 100,
+      );
+
+      final taskWithoutPart = const DownloadTask(
+        id: 'task-without-part',
+        sourceUrl: 'https://example.com/other.zip',
+        fileName: 'other.zip',
+        status: DownloadStatus.downloading,
+        expectedBytes: 1024,
+        receivedBytes: 200,
+        tempPath: '/non/existent/path.part',
+        createdAt: 110,
+      );
+
+      final bytesTask = const DownloadTask(
+        id: 'task-bytes',
+        sourceUrl: 'bytes:data',
+        fileName: 'bytes.bin',
+        status: DownloadStatus.downloading,
+        createdAt: 120,
+      );
+
+      await repoWithTemp.saveRecords([taskWithPart, taskWithoutPart, bytesTask]);
+
+      await repoWithTemp.recoverInterruptedTasks();
+
+      final records = await repoWithTemp.getAllRecords();
+      final map = {for (final r in records) r.id: r};
+
+      // taskWithPart 有有效的 .part 文件，应该被重置为 queued，且 receivedBytes 为 512
+      final recoveredTask = map['task-with-part'];
+      expect(recoveredTask?.status, DownloadStatus.queued);
+      expect(recoveredTask?.receivedBytes, 512);
+      expect(recoveredTask?.tempPath, partFile.path);
+      expect(recoveredTask?.failureMessage, isNull);
+      expect(recoveredTask?.completedAt, isNull);
+
+      // taskWithoutPart 没有有效的 .part 文件，转为 failed
+      final failedTask = map['task-without-part'];
+      expect(failedTask?.status, DownloadStatus.failed);
+      expect(failedTask?.failureMessage, '应用已退出，下载未完成');
+      expect(failedTask?.completedAt, isNotNull);
+
+      // bytesTask 即使在 downloading，也转为 failed
+      final failedBytes = map['task-bytes'];
+      expect(failedBytes?.status, DownloadStatus.failed);
+      expect(failedBytes?.failureMessage, '应用已退出，下载未完成');
+      expect(failedBytes?.completedAt, isNotNull);
     });
   });
 }

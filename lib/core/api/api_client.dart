@@ -17,6 +17,36 @@ typedef AutoReauthHandler = Future<bool> Function();
 /// sendDataReturningResponse 的返回类型：原始字节 + 响应头 + 状态码。
 typedef ApiByteResponse = ({Uint8List data, Headers headers, int statusCode});
 
+/// 断点续传流式下载响应包装（#98）。
+class ResumableDownloadResponse {
+  const ResumableDownloadResponse({
+    required this.statusCode,
+    required this.headers,
+    required this.stream,
+  });
+
+  /// HTTP 状态码（200 / 206 / 416 / 404 / 500 等）。
+  final int statusCode;
+
+  /// 响应头。
+  final Headers headers;
+
+  /// 分片原始字节流。
+  final Stream<Uint8List> stream;
+
+  /// Content-Range 响应头（例如 `bytes 1024-2047/2048`）。
+  String? get contentRange => headers.value('content-range');
+
+  /// Accept-Ranges 响应头（例如 `bytes`）。
+  String? get acceptRanges => headers.value('accept-ranges');
+
+  /// Content-Length 响应头解析出的字节数。
+  int? get contentLength {
+    final raw = headers.value('content-length');
+    return raw != null ? int.tryParse(raw) : null;
+  }
+}
+
 /// dio 封装：认证 cookie 会话 + 自定义 header 注入 + 错误归一化 + 同域判定。
 ///
 /// 对应 Swift 的 actor APIClient（`APIClient.swift`）；请求原语为
@@ -121,8 +151,8 @@ class ApiClient {
 
   /// 执行请求；收到 401 且启用自动重登时，触发一次重登并重放原请求。
   /// 重登或重试仍 401 → 抛 UnauthorizedException（不递归，防死循环）。
-  Future<Response<Uint8List>> _fetchWithAutoReauth(
-    Future<Response<Uint8List>> Function() perform, {
+  Future<Response<T>> _fetchWithAutoReauth<T>(
+    Future<Response<T>> Function() perform, {
     bool allowAutoReauth = true,
   }) async {
     var response = await perform();
@@ -287,6 +317,105 @@ class ApiClient {
     }
     if (status >= 200 && status < 300) return response.data ?? Uint8List(0);
     throw HttpException.fromBody(status, _bodyText(response.data));
+  }
+
+  /// 断点续传流式下载（#98）。
+  ///
+  /// 同域 → 主客户端（带自定义头 + cookie + 401 自动重登）；
+  /// 跨域 → 裸客户端（剥离自定义头，防泄密）；
+  /// 手动跟随重定向，支持传入 [rangeHeader]（例如 `bytes=1024-`）。
+  /// 暴露响应状态码与 Content-Range / Content-Length / Accept-Ranges 头。
+  Future<ResumableDownloadResponse> downloadDataResumable(
+    Uri url, {
+    String? rangeHeader,
+    bool mapsUnauthorized = false,
+    bool allowAutoReauth = true,
+    Duration? timeout,
+  }) async {
+    final sameOrigin = isSameOriginUri(url, _baseUri);
+    final response = await _fetchWithAutoReauth(
+      () => _fetchStreamWithRedirects(
+        url,
+        rangeHeader: rangeHeader,
+        timeout: timeout,
+      ),
+      allowAutoReauth: allowAutoReauth && sameOrigin,
+    );
+    final status = response.statusCode ?? -1;
+    if (mapsUnauthorized && status == 401) {
+      throw const UnauthorizedException();
+    }
+    final body = response.data;
+    final stream = body?.stream ?? const Stream<Uint8List>.empty();
+    return ResumableDownloadResponse(
+      statusCode: status,
+      headers: response.headers,
+      stream: stream,
+    );
+  }
+
+  /// 手动重定向跟随（分片流式响应）：同域跳保留自定义头/cookie（走主 dio），跨域跳剥离
+  /// 自定义头（走裸 dio），最多 [maxRedirects] 跳。
+  Future<Response<ResponseBody>> _fetchStreamWithRedirects(
+    Uri uri, {
+    String? rangeHeader,
+    Duration? timeout,
+  }) async {
+    var current = uri;
+    var options = _buildStreamOptions(
+      current,
+      rangeHeader: rangeHeader,
+      timeout: timeout,
+    );
+    for (var hop = 0; ; hop++) {
+      final sameOrigin = isSameOriginUri(current, _baseUri);
+      final dio = sameOrigin ? _dio : _publicMediaDio;
+      final Response<ResponseBody> response;
+      try {
+        response = await dio.fetch<ResponseBody>(options);
+      } on DioException catch (error) {
+        throw _normalizeDioException(error);
+      }
+      final status = response.statusCode ?? -1;
+      if (!_isRedirect(status)) return response;
+      if (hop >= maxRedirects) {
+        throw HttpException(status, 'Too many redirects');
+      }
+      final location = response.headers.value('location');
+      if (location == null || location.isEmpty) return response;
+      current = current.resolve(location);
+      options = _buildStreamOptions(
+        current,
+        rangeHeader: rangeHeader,
+        timeout: timeout,
+      );
+    }
+  }
+
+  RequestOptions _buildStreamOptions(
+    Uri uri, {
+    String? rangeHeader,
+    Duration? timeout,
+  }) {
+    final headers = <String, dynamic>{
+      'Accept': '*/*',
+      'Cache-Control': 'no-cache',
+    };
+    if (rangeHeader != null && rangeHeader.isNotEmpty) {
+      headers['Range'] = rangeHeader;
+    }
+    final resolvedTimeout = timeout ?? defaultTimeout;
+    return RequestOptions(
+      method: 'GET',
+      path: uri.toString(),
+      headers: headers,
+      responseType: ResponseType.stream,
+      validateStatus: (_) => true,
+      followRedirects: false,
+      connectTimeout: resolvedTimeout,
+      sendTimeout: resolvedTimeout,
+      receiveTimeout: resolvedTimeout,
+    );
   }
 
   /// 手动重定向跟随：同域跳保留自定义头/cookie（走主 dio），跨域跳剥离

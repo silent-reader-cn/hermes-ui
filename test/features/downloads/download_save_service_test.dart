@@ -184,5 +184,36 @@ void main() {
       expect(customWriterCalled, isTrue);
       expect(File(savedPath).existsSync(), isTrue);
     });
+
+    test('saveFromFile 从临时文件流式保存到目标目录并处理命名冲突', () async {
+      final sourceDir = Directory.systemTemp.createTempSync('hermes_src_');
+      final targetDir = Directory.systemTemp.createTempSync('hermes_tgt_');
+      addTearDown(() async {
+        try {
+          await sourceDir.delete(recursive: true);
+          await targetDir.delete(recursive: true);
+        } catch (_) {}
+      });
+
+      final sourceFile = File('${sourceDir.path}/temp_download.part');
+      sourceFile.writeAsBytesSync([100, 101, 102]);
+
+      final service = DownloadSaveService(destinationDirOverride: targetDir);
+
+      final savedPath1 = await service.saveFromFile(
+        fileName: 'report.pdf',
+        sourceFile: sourceFile,
+      );
+      expect(savedPath1, contains('report.pdf'));
+      expect(File(savedPath1).readAsBytesSync(), [100, 101, 102]);
+
+      // 再次保存同名文件，触发冲突递增
+      final savedPath2 = await service.saveFromFile(
+        fileName: 'report.pdf',
+        sourceFile: sourceFile,
+      );
+      expect(savedPath2, contains('report (1).pdf'));
+      expect(File(savedPath2).readAsBytesSync(), [100, 101, 102]);
+    });
   });
 }
