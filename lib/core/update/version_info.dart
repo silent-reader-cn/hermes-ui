@@ -2,7 +2,7 @@
 ///
 /// 当 `pubspec.yaml` 的 version 升级时，同步更新此处的 [appVersion]
 /// （注意：仅保留 X.Y.Z，不含 +buildNumber）。
-const String appVersion = '0.1.30';
+const String appVersion = '0.1.31';
 
 /// 比较版本号 [remote] 是否比 [current] 新。
 ///
