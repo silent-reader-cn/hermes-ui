@@ -45,6 +45,14 @@
 
 ---
 
+## #98 下载自动重试 + 断点续传 [已收口 2026-09-08]
+
+- 交付：main @ 5c19de7（合并 28bdaf8，19 文件 +1960/-208）。自动重试（瞬态错误退避 2s/8s/30s 最多 3 次，403/404 永久错误不重试）+ 断点续传（URL 任务流式写 `.part`，206 校验起点与总长 / 200·416 降级重下，完成后落 Downloads 清 .part）+ 重启恢复续传（有 .part 重置 queued，无 .part 维持 failed）+ Drift v5（temp_path/attempt_count，迁移含真实 v4 库升级测试）+ 下载页「第 N/3 次重试中」「已续传 N MB」提示（l10n 尾部 extension `AppLocalizationsDownloadResume98`）。
+- 验收：独立复验 analyze 零告警 + 全库 2554 全绿（首跑挂 #90 已知 flaky，单跑复绿、复跑全量绿）+ 金照 26 绿。架构沉淀 skill references `downloads-auto-retry-resume-2026-09-08.md`。
+- 待主人：真机复验（Android 实机下载中断恢复场景）。
+
+---
+
 ## #76 二期（待一期真机复验后另批开工）
 
 - 内置服务砍 embedded Python 打包瘦身（方案已定 · 未开工），见 `.todo/20260907.md` #76 条目。
