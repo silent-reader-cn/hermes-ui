@@ -93,6 +93,22 @@
 
 ---
 
+## #102 Windows 单实例防重开（0.1.31 同批交付）
+
+- 主人需求（2026-09-08）：PC 版禁止双实例——开第二个时直接显示第一个的窗口并 focus。
+- 实现（C++ 原生层，`windows/runner/`，全 ASCII）：
+  - `single_instance.h`：命名 Mutex `Local\HermesUI.SingleInstance.Mutex` 启动抢占；`ERROR_ALREADY_EXISTS` → `AllowSetForegroundWindow(ASFW_ANY)` + `PostMessage(HWND_BROADCAST, RegisterWindowMessage("HermesUI.SingleInstance.Activate"))` → 第二实例立即 `EXIT_SUCCESS`（进程不落地）。
+  - `flutter_window.cpp` MessageHandler：收到注册消息 → `GetWindowPlacement` 还原最小化 → `ShowWindow` → `SetForegroundWindow` → `FlashWindowEx` 兜底（OS 拒绝前台权时任务栏闪烁提示）。内核Mutex 随进程退出自动释放，崩溃无残留锁。
+  - `main.cpp`：wWinMain 最前置执行抢占（先于窗口/引擎创建）。
+- E2E 真机验证（build Release 实测）：
+  - 双开 → 进程数恒为 1（第二实例秒退，PID 未变化）；
+  - 第二实例启动后 `GetForegroundWindow()` 归属 PID = 第一实例（35156），窗口标题确认 = Hermes 主窗口；
+  - 单实例退出后 Mutex 自动释放（ZERO_LEFT）。
+- 验收：`flutter build windows --release` 通过；与 #101 更新检测同批发 0.1.31。
+- 状态：已实现并验证，随 0.1.31 发布收口。
+
+---
+
 ## #76 二期（待一期真机复验后另批开工）
 
 - 内置服务砍 embedded Python 打包瘦身（方案已定 · 未开工），见 `.todo/20260907.md` #76 条目。

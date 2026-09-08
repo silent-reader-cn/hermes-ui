@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "single_instance.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -64,6 +65,39 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    default:
+      // Single-instance activate request (broadcast from a second launch):
+      // restore the window if minimized/hidden, then bring it to the
+      // foreground. Registered message value is dynamic, so compare via the
+      // accessor instead of a case label.
+      if (message == HermesSingleInstanceMessage()) {
+        HWND self = GetHandle();
+        if (self != nullptr) {
+          // Recover minimized or hidden windows (e.g. tray-minimized state).
+          WINDOWPLACEMENT placement = {};
+          placement.length = sizeof(placement);
+          if (::GetWindowPlacement(self, &placement) &&
+              (placement.showCmd == SW_SHOWMINIMIZED ||
+               placement.showCmd == SW_SHOWMINNOACTIVE)) {
+            ::ShowWindow(self, SW_RESTORE);
+          }
+          if (!::IsWindowVisible(self)) {
+            ::ShowWindow(self, SW_SHOW);
+          }
+          ::SetForegroundWindow(self);
+          // If the OS denied foreground rights, flash the taskbar button so
+          // the activation attempt is still visible to the user.
+          FLASHWINFO flash = {};
+          flash.cbSize = sizeof(flash);
+          flash.hwnd = self;
+          flash.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+          flash.uCount = 3;
+          flash.dwTimeout = 0;
+          ::FlashWindowEx(&flash);
+        }
+        return 0;
+      }
       break;
   }
 
