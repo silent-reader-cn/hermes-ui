@@ -1760,3 +1760,32 @@ extension AppLocalizationsDownloadResume98 on AppLocalizations {
       isEnglish ? 'Resumed $size' : '已续传 $size';
 }
 
+// ---------------------------------------------------------------------------
+// #101 GitHub Releases 更新检测与自动更新开关
+// ---------------------------------------------------------------------------
+extension AppLocalizationsUpdate101 on AppLocalizations {
+  String get updateSectionTitle =>
+      isEnglish ? 'Software Update' : '软件更新';
+  String get currentVersionLabel =>
+      isEnglish ? 'Current Version' : '当前版本';
+  String get autoCheckUpdateLabel =>
+      isEnglish ? 'Auto-check for Updates' : '自动检查更新';
+  String get checkUpdateNowLabel =>
+      isEnglish ? 'Check for Updates' : '检查更新';
+  String get checkingForUpdate =>
+      isEnglish ? 'Checking for updates…' : '正在检查更新…';
+  String get updateAlreadyLatest =>
+      isEnglish ? 'Already up to date' : '已是最新版本';
+  String get updateCheckFailed =>
+      isEnglish ? 'Failed to check for updates, please try again later' : '检查更新失败，请稍后重试';
+  String updateDialogTitle(String version) =>
+      isEnglish ? 'New Version Available $version' : '发现新版本 $version';
+  String get updateGoToDownload =>
+      isEnglish ? 'Download' : '前往下载';
+  String get updateDownloadingStarted =>
+      isEnglish ? 'Download added to queue' : '已加入下载队列，可在下载管理中查看进度';
+  String get updateInstallNow =>
+      isEnglish ? 'Install Now' : '立即安装';
+  String get updateReadyToInstall =>
+      isEnglish ? 'Update download completed. Install now?' : '新版本已下载完成，是否立即安装？';
+}

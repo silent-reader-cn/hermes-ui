@@ -455,11 +455,21 @@ void main() {
       expect(inAppTurn?.type, InAppNotificationType.turnCompleted);
     });
 
-    test('前台且为当前激活会话 → 不弹 inApp 悬浮条目', () {
+    test('前台且为当前激活会话且在聊天页 → 不弹 inApp 悬浮条目', () {
+      final router = GoRouter(
+        initialLocation: '/chat/sess-active',
+        routes: [
+          GoRoute(
+            path: '/chat/:sessionId',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+        ],
+      );
       final activeContainer = ProviderContainer(
         overrides: [
           turnNotificationServiceProvider.overrideWithValue(service),
           activeSessionIdProvider.overrideWith((ref) => 'sess-active'),
+          routerProvider.overrideWithValue(router),
         ],
       );
       addTearDown(activeContainer.dispose);
@@ -484,6 +494,150 @@ void main() {
       turnHook('sess-active', '回合标题', '回合正文');
       expect(activeContainer.read(inAppNotificationProvider), isNull);
       expect(service.clearAllCalls, 1);
+    });
+  });
+
+  group('#94 澄清页免打扰双条件判定（同会话同页静默 / 同会话不同页通知 / 不同会话通知）', () {
+    late _FakeTurnNotificationService service;
+
+    setUp(() {
+      service = _FakeTurnNotificationService();
+    });
+
+    GoRouter createRouter(String initialLocation) {
+      return GoRouter(
+        initialLocation: initialLocation,
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+          GoRoute(
+            path: '/chat/:sessionId',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+          GoRoute(
+            path: '/workspace/:sessionId',
+            builder: (_, _) => const CupertinoPageScaffold(child: SizedBox()),
+          ),
+        ],
+      );
+    }
+
+    ProviderContainer createContainer({
+      required String? activeSessionId,
+      required String routeLocation,
+    }) {
+      final container = ProviderContainer(
+        overrides: [
+          turnNotificationServiceProvider.overrideWithValue(service),
+          activeSessionIdProvider.overrideWith((ref) => activeSessionId),
+          routerProvider.overrideWithValue(createRouter(routeLocation)),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.resumed);
+      return container;
+    }
+
+    test('1. 同会话同页静默（activeSessionId == sessionId 且路由在 /chat/:sessionId）→ 三类 hook 均静默', () {
+      final container = createContainer(
+        activeSessionId: 'sess-target',
+        routeLocation: '/chat/sess-target',
+      );
+
+      // 澄清 hook：静默（避免横幅盖住澄清确认弹窗）
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-target', '请选择是否执行工具？');
+      expect(container.read(inAppNotificationProvider), isNull);
+
+      // 回合完成 hook：静默
+      final turnHook = container.read(turnNotificationHookProvider);
+      turnHook('sess-target', '回答完成', '好的，已生成。');
+      expect(container.read(inAppNotificationProvider), isNull);
+
+      // 异常 hook：静默
+      final errorHook = container.read(sessionErrorNotificationHookProvider);
+      errorHook('sess-target', '连接超时', '网络异常');
+      expect(container.read(inAppNotificationProvider), isNull);
+    });
+
+    test('2. 同会话不同页通知（activeSessionId == sessionId 但当前在 /settings 或 /workspace/:id）→ 三类 hook 均弹横幅', () {
+      final container = createContainer(
+        activeSessionId: 'sess-target',
+        routeLocation: '/settings',
+      );
+
+      // 澄清 hook：弹出 in-app 通知
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-target', '需要您的确认');
+      final clarifyItem = container.read(inAppNotificationProvider);
+      expect(clarifyItem, isNotNull);
+      expect(clarifyItem?.sessionId, 'sess-target');
+      expect(clarifyItem?.type, InAppNotificationType.clarificationNeeded);
+      expect(clarifyItem?.message, '需要您的确认');
+
+      // 错误 hook：弹出 in-app 通知
+      final errorHook = container.read(sessionErrorNotificationHookProvider);
+      errorHook('sess-target', '执行错误', '沙箱崩溃');
+      final errorItem = container.read(inAppNotificationProvider);
+      expect(errorItem, isNotNull);
+      expect(errorItem?.sessionId, 'sess-target');
+      expect(errorItem?.type, InAppNotificationType.sessionError);
+
+      // 回合完成 hook：弹出 in-app 通知
+      final turnHook = container.read(turnNotificationHookProvider);
+      turnHook('sess-target', '生成完成', '结果已输出');
+      final turnItem = container.read(inAppNotificationProvider);
+      expect(turnItem, isNotNull);
+      expect(turnItem?.sessionId, 'sess-target');
+      expect(turnItem?.type, InAppNotificationType.turnCompleted);
+    });
+
+    test('3. 不同会话通知（activeSessionId != sessionId，即使在聊天页）→ 三类 hook 均弹横幅', () {
+      final container = createContainer(
+        activeSessionId: 'sess-chatting',
+        routeLocation: '/chat/sess-chatting',
+      );
+
+      // 另一会话 sess-other 发生澄清事件：弹出 in-app 通知
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-other', '另一会话需要澄清');
+      final clarifyItem = container.read(inAppNotificationProvider);
+      expect(clarifyItem, isNotNull);
+      expect(clarifyItem?.sessionId, 'sess-other');
+      expect(clarifyItem?.type, InAppNotificationType.clarificationNeeded);
+
+      // 另一会话 sess-other 发生错误事件：弹出 in-app 通知
+      final errorHook = container.read(sessionErrorNotificationHookProvider);
+      errorHook('sess-other', '错误', '失败详情');
+      final errorItem = container.read(inAppNotificationProvider);
+      expect(errorItem, isNotNull);
+      expect(errorItem?.sessionId, 'sess-other');
+
+      // 另一会话 sess-other 回合完成：弹出 in-app 通知
+      final turnHook = container.read(turnNotificationHookProvider);
+      turnHook('sess-other', '完成', '另一会话回答');
+      final turnItem = container.read(inAppNotificationProvider);
+      expect(turnItem, isNotNull);
+      expect(turnItem?.sessionId, 'sess-other');
+    });
+
+    test('4. activeSessionId 为 null（无激活会话时）→ 触发 in-app 横幅', () {
+      final container = createContainer(
+        activeSessionId: null,
+        routeLocation: '/',
+      );
+
+      final clarifyHook = container.read(clarificationNotificationHookProvider);
+      clarifyHook('sess-any', '无激活会话时的澄清');
+      expect(container.read(inAppNotificationProvider), isNotNull);
     });
   });
 

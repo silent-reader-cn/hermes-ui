@@ -23,6 +23,7 @@ import 'features/diagnostics/diagnostics_models.dart';
 import 'features/diagnostics/diagnostics_service.dart';
 import 'features/notifications/background_keepalive_service.dart';
 import 'features/notifications/notification_providers.dart';
+import 'features/session_list/session_auto_refresh.dart';
 
 /// 全局渲染/网络错误可恢复卡片（替代默认大灰屏/红屏，todo.md #8 / active.md §1）。
 class RecoverableErrorCard extends StatefulWidget {
@@ -444,6 +445,16 @@ Future<void> main(List<String> args) async {
         // 会话异常 → 后台通知 hook（cancel / error / 重连失败处调用）。
         chatSessionErrorCallbackProvider.overrideWith(
           (ref) => ref.watch(sessionErrorNotificationHookProvider),
+        ),
+        // 会话列表活跃流同步 → 保活常驻通知 hook（#89 保活通知同步）。
+        sessionStreamingSyncCallbackProvider.overrideWith(
+          (ref) => (activeCount, titles) {
+            unawaited(
+              ref
+                  .read(backgroundKeepaliveServiceProvider)
+                  .syncOngoingNotification(activeCount, titles),
+            );
+          },
         ),
         // 启用生产持久缓存数据库：会话列表 / 消息 /（未来）媒体的离线缓存
         // 真正落盘（默认 appDatabaseProvider 为内存库，重启即清空）。

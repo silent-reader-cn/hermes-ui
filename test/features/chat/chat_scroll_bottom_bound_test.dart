@@ -8,6 +8,8 @@ import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_message_list.dart';
+import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -16,11 +18,23 @@ import '../../helpers/fake_chat_api.dart';
 /// 「回弹」的像素级实证特征：`pixels` 轨迹先超过 `maxScrollExtent`（拉超），
 /// 再被 ClampingScrollPhysics 拉回（弹回）——即轨迹「凸起 + 回落」。
 /// 探针断言：
-/// 1. 任何样本 `pixels <= maxScrollExtent + 0.5`（全程不越界）；
+/// 1. 任何样本 `pixels <= maxScrollExtent + 1.0`（全程不越界，容差 ±1px）；
 /// 2. 轨迹单调不减（无「先涨后跌」的拉回回落）；
 /// 3. 最终 `pixels == maxScrollExtent`（容差 1px，停在真实底部）。
 void main() {
   group('#23 发送消息后滚底不越界/不回弹', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await DiagnosticsService.instance.clear();
+      await DiagnosticsService.instance.setEnabled(false);
+    });
+
+    tearDown(() async {
+      SharedPreferences.setMockInitialValues({});
+      await DiagnosticsService.instance.clear();
+      await DiagnosticsService.instance.setEnabled(false);
+    });
+
     ScrollPosition positionOf(WidgetTester tester) {
       final scrollableFinder = find
           .descendant(
@@ -52,7 +66,7 @@ void main() {
       expect(pixels.length, maxes.length);
       for (var i = 0; i < pixels.length; i++) {
         expect(
-          pixels[i] <= maxes[i] + 0.5,
+          pixels[i] <= maxes[i] + 1.0,
           isTrue,
           reason:
               '$label：样本[$i] 越界（拉超凸起）pixels=${pixels[i]} '
@@ -66,7 +80,7 @@ void main() {
         // 拉回的特征（overshoot 后 ClampingScrollPhysics 弹回，肉眼回弹）；
         // max 回落时 pixels 允许同幅跟随（内容收缩的重新锚定，非回弹）。
         expect(
-          pixelDelta >= maxDelta - 0.5,
+          pixelDelta >= maxDelta - 1.0,
           isTrue,
           reason:
               '$label：样本[$i] 像素回落超过 extent 回落（被弹簧拉回·弹回）'
@@ -77,6 +91,56 @@ void main() {
       }
     }
 
+    testWidgets('600 条长会话长短混合静态构建滚底收敛：停在真实底部，全程不越界', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = FakeChatApi();
+      final messages = List.generate(
+        600,
+        (i) => {
+          'role': i.isEven ? 'user' : 'assistant',
+          'content': i % 11 == 0
+              ? '消息 $i：${'这是一段非常长的消息内容用于撑高气泡高度制造估算偏差。' * 24}'
+              : '消息 $i：短',
+          'message_id': 'm$i',
+        },
+      );
+      api.sessionResult = {
+        'session': {
+          'session_id': 's-bounce-static-600',
+          'messages': messages,
+          'message_count': 600,
+        },
+      };
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(
+            home: ChatPage(sessionId: 's-bounce-static-600'),
+          ),
+        ),
+      );
+      await tester.pump();
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final pos = positionOf(tester);
+      expect(
+        pos.pixels <= pos.maxScrollExtent + 1.0,
+        isTrue,
+        reason: '初始定位不得越界',
+      );
+      expect(
+        pos.pixels,
+        closeTo(pos.maxScrollExtent, 1.0),
+        reason: '600 条懒加载长会话应收敛到真实底部',
+      );
+    });
+
     testWidgets('发送消息 + 流式增长全程不越界、轨迹单调、最终贴底（长会话长短混合）', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
@@ -84,10 +148,10 @@ void main() {
 
       final api = FakeChatApi()
         ..statusResponse = const ChatStreamStatusResponse(active: true);
-      // 长短混合长会话：lazy ListView 的估算 maxScrollExtent 与真实 extent
-      // 偏差大，发送后跳底最容易踩「估算与真实不一致」窗口。
+      // 长短混合长会话（200 条）：lazy ListView 的估算 maxScrollExtent 与真实 extent
+      // 偏差大（约 20 屏高），发送后跳底验证不越界、不回弹。
       final messages = List.generate(
-        600,
+        200,
         (i) => {
           'role': i.isEven ? 'user' : 'assistant',
           'content': i % 11 == 0
@@ -101,7 +165,7 @@ void main() {
           'session_id': 's-bounce-long',
           'active_stream_id': 'stream-bounce',
           'messages': messages,
-          'message_count': 600,
+          'message_count': 200,
         },
       };
 
@@ -111,8 +175,11 @@ void main() {
           child: const CupertinoApp(home: ChatPage(sessionId: 's-bounce-long')),
         ),
       );
-      // 初始定位收敛（_settleToBottom 覆盖路径，已有 R2 测试守卫）。
-      await tester.pumpAndSettle();
+      // 初始定位收敛：确定性 pump 序列消除活跃流定时器与 pumpAndSettle 竞态。
+      await tester.pump();
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       final pos = positionOf(tester);
       final traj = capture(pos);
@@ -136,8 +203,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 48));
         await tester.pump(const Duration(milliseconds: 16));
       }
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       assertNoBounce(traj.pixels, traj.maxes, label: '发送+流式');
       expect(

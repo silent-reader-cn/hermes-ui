@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "updateSectionTitle": "Software Update",
+  "currentVersionLabel": "Current Version",
+  "autoCheckUpdateLabel": "Auto-check for Updates",
+  "checkUpdateNowLabel": "Check for Updates",
+  "checkingForUpdate": "Checking for updates…",
+  "updateAlreadyLatest": "Already up to date",
+  "updateCheckFailed": "Failed to check for updates, please try again later",
+  "updateGoToDownload": "Download",
+  "updateDownloadingStarted": "Download added to queue",
+  "updateInstallNow": "Install Now",
+  "updateReadyToInstall": "Update download completed. Install now?"
+}

@@ -245,6 +245,9 @@ final inAppNotificationProvider = StateProvider<InAppNotificationItem?>(
   (ref) => null,
 );
 
+/// 全局路由 Provider 别名（对齐 goRouterProvider 契约命名）。
+final goRouterProvider = routerProvider;
+
 /// 当前激活会话 ID（从 activeSessionIdProvider 读）。
 String? getActiveSessionId(dynamic ref) {
   try {
@@ -253,6 +256,52 @@ String? getActiveSessionId(dynamic ref) {
     developer.log('getActiveSessionId error: $e');
     return null;
   }
+}
+
+/// 当前路由是否为指定会话的聊天页（`/chat/:sessionId`）。
+bool isCurrentChatRoute(dynamic ref, String sessionId) {
+  if (sessionId.isEmpty) return false;
+  try {
+    final router = ref.read(routerProvider);
+    final config = router.routerDelegate.currentConfiguration;
+    final Uri uri;
+    if (config.isEmpty) {
+      uri = router.routeInformationProvider.value.uri;
+    } else {
+      uri = config.uri;
+    }
+    final segments = uri.pathSegments;
+    if (segments.length >= 2 && segments[0] == 'chat') {
+      return segments[1] == sessionId;
+    }
+    final matches = config.matches;
+    if (matches.isNotEmpty) {
+      final matchedLocation = config.last.matchedLocation;
+      if (matchedLocation == '/chat/$sessionId' ||
+          matchedLocation.startsWith('/chat/$sessionId?')) {
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    developer.log('isCurrentChatRoute error: $e');
+    return false;
+  }
+}
+
+/// 判断是否应静默应用内横幅通知（#94 澄清页免打扰双条件判定）。
+///
+/// 双条件约束：
+/// 1. 当前激活会话匹配目标会话（[getActiveSessionId] == [sessionId]）；
+/// 2. 当前路由即该会话聊天页（[isCurrentChatRoute] 为 true）。
+/// 两者同时满足时静默，避免横幅通知盖住澄清确认弹窗等顶层交互。
+bool shouldSilenceInAppNotification(dynamic ref, String sessionId) {
+  if (sessionId.isEmpty) return false;
+  final active = getActiveSessionId(ref);
+  if (active != sessionId) {
+    return false;
+  }
+  return isCurrentChatRoute(ref, sessionId);
 }
 
 /// 回合/澄清/错误/下载通知服务（生产 [LocalNotificationsTurnNotificationService]；
@@ -285,7 +334,7 @@ void openSessionFromNotification(dynamic ref, String sessionId) {
 ///
 /// 触发时机：
 /// - 开关关闭：不发系统通知也不发 in-app
-/// - app 前台（resumed）：仅事件会话 ≠ 当前激活会话时触发 in-app 提示，并清除残留系统通知
+/// - app 前台（resumed）：非（同会话 且 同聊天页）时触发 in-app 提示，并清除残留系统通知
 /// - app 后台（paused / inactive / detached / hidden）：发系统通知
 final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
   final service = ref.watch(turnNotificationServiceProvider);
@@ -305,8 +354,7 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
     if (!settings.notifyTurnsEnabled) return;
     final lifecycle = ref.read(appLifecycleStateProvider);
     if (lifecycle == AppLifecycleState.resumed) {
-      final active = getActiveSessionId(ref);
-      if (active != sessionId) {
+      if (!shouldSilenceInAppNotification(ref, sessionId)) {
         ref
             .read(inAppNotificationProvider.notifier)
             .state = InAppNotificationItem(
@@ -347,8 +395,7 @@ final clarificationNotificationHookProvider =
         if (!settings.notifyClarifyEnabled) return;
         final lifecycle = ref.read(appLifecycleStateProvider);
         if (lifecycle == AppLifecycleState.resumed) {
-          final active = getActiveSessionId(ref);
-          if (active != sessionId) {
+          if (!shouldSilenceInAppNotification(ref, sessionId)) {
             ref
                 .read(inAppNotificationProvider.notifier)
                 .state = InAppNotificationItem(
@@ -386,8 +433,7 @@ final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
       if (!settings.notifyErrorsEnabled) return;
       final lifecycle = ref.read(appLifecycleStateProvider);
       if (lifecycle == AppLifecycleState.resumed) {
-        final active = getActiveSessionId(ref);
-        if (active != sessionId) {
+        if (!shouldSilenceInAppNotification(ref, sessionId)) {
           ref
               .read(inAppNotificationProvider.notifier)
               .state = InAppNotificationItem(

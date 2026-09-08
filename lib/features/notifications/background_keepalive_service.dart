@@ -66,6 +66,12 @@ abstract interface class BackgroundKeepaliveService {
   /// 更新常驻通知文本（会话数动态文本）。
   Future<void> updateNotification({int activeCount = 0});
 
+  /// 幂等同步常驻保活通知（若文案无变化则不触发底层服务更新，避免 Android notify 抖动）。
+  Future<void> syncOngoingNotification(
+    int activeCount, [
+    List<String>? titles,
+  ]);
+
   /// 调度 WorkManager 加急/退避单次轮询任务。
   Future<void> scheduleExpeditedOneOffPoll({
     required String sessionId,
@@ -225,6 +231,7 @@ class ProductionBackgroundKeepaliveService
 
   bool _fgTaskReady = false;
   bool _workmanagerReady = false;
+  String? _lastOngoingText;
 
   /// 语言切换时刷新常驻通知（读流状态重算 activeCount，非运行时静默跳过）。
   Future<void> _refreshNotificationForLocale() async {
@@ -239,6 +246,7 @@ class ProductionBackgroundKeepaliveService
           (isStreaming || (activeStreamId != null && activeStreamId.isNotEmpty))
               ? 1
               : 0;
+      _lastOngoingText = null;
       await updateNotification(activeCount: activeCount);
     } catch (e, st) {
       developer.log(
@@ -498,6 +506,7 @@ class ProductionBackgroundKeepaliveService
         if (updateResult is ServiceRequestFailure) {
           throw updateResult.error;
         }
+        _lastOngoingText = text;
         return;
       }
 
@@ -509,6 +518,7 @@ class ProductionBackgroundKeepaliveService
       if (result is ServiceRequestFailure) {
         throw result.error;
       }
+      _lastOngoingText = text;
 
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
@@ -546,6 +556,7 @@ class ProductionBackgroundKeepaliveService
       if (result is ServiceRequestFailure) {
         throw result.error;
       }
+      _lastOngoingText = text;
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.debug,
         tag: 'keepalive',
@@ -554,6 +565,45 @@ class ProductionBackgroundKeepaliveService
       );
     } catch (e, st) {
       developer.log('updateNotification error: $e', error: e, stackTrace: st);
+    }
+  }
+
+  @override
+  Future<void> syncOngoingNotification(
+    int activeCount, [
+    List<String>? titles,
+  ]) async {
+    if (!_isAndroid) return;
+    try {
+      final isRunning = await _foregroundTaskWrapper.isRunningService;
+      if (!isRunning) return;
+      final text = formatNotificationText(
+        activeCount,
+        isEnglish: LocaleResolver.isEnglish,
+      );
+      if (text == _lastOngoingText) {
+        return;
+      }
+      final result = await _foregroundTaskWrapper.updateService(
+        notificationTitle: 'Hermes',
+        notificationText: text,
+      );
+      if (result is ServiceRequestFailure) {
+        throw result.error;
+      }
+      _lastOngoingText = text;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'keepalive',
+        message: '幂等同步前台服务常驻通知文本',
+        details: {
+          'activeCount': activeCount,
+          'text': text,
+          'titles': ?titles,
+        },
+      );
+    } catch (e, st) {
+      developer.log('syncOngoingNotification error: $e', error: e, stackTrace: st);
     }
   }
 
@@ -578,6 +628,7 @@ class ProductionBackgroundKeepaliveService
         if (result is ServiceRequestFailure) {
           throw result.error;
         }
+        _lastOngoingText = null;
       }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.info,
@@ -1167,6 +1218,8 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
   final List<(String sessionId, String? streamId)> notifiedRecords = [];
   final List<HyperOsSettingType> openedSettings = [];
   final List<Function?> receivedCallbacks = [];
+  final List<(int count, List<String>? titles)> syncedOngoingNotifications = [];
+  String? lastOngoingText;
 
   bool isInitialized = false;
   bool fgTaskReady = false;
@@ -1239,6 +1292,10 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
     isForegroundServiceRunning = true;
     currentActiveCount = activeCount ??
         ((streamId != null && streamId.isNotEmpty) ? 1 : 0);
+    lastOngoingText = ProductionBackgroundKeepaliveService.formatNotificationText(
+      currentActiveCount,
+      isEnglish: LocaleResolver.isEnglish,
+    );
     updatedNotificationCounts.add(currentActiveCount);
   }
 
@@ -1247,8 +1304,13 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
     stoppedForegroundServices.add('stopped');
     if (force) {
       isForegroundServiceRunning = false;
+      lastOngoingText = null;
     } else {
       currentActiveCount = 0;
+      lastOngoingText = ProductionBackgroundKeepaliveService.formatNotificationText(
+        0,
+        isEnglish: LocaleResolver.isEnglish,
+      );
       updatedNotificationCounts.add(0);
     }
   }
@@ -1256,7 +1318,29 @@ class FakeBackgroundKeepaliveService implements BackgroundKeepaliveService {
   @override
   Future<void> updateNotification({int activeCount = 0}) async {
     currentActiveCount = activeCount;
+    lastOngoingText = ProductionBackgroundKeepaliveService.formatNotificationText(
+      activeCount,
+      isEnglish: LocaleResolver.isEnglish,
+    );
     updatedNotificationCounts.add(activeCount);
+  }
+
+  @override
+  Future<void> syncOngoingNotification(
+    int activeCount, [
+    List<String>? titles,
+  ]) async {
+    final text = ProductionBackgroundKeepaliveService.formatNotificationText(
+      activeCount,
+      isEnglish: LocaleResolver.isEnglish,
+    );
+    if (text == lastOngoingText) {
+      return;
+    }
+    lastOngoingText = text;
+    currentActiveCount = activeCount;
+    updatedNotificationCounts.add(activeCount);
+    syncedOngoingNotifications.add((activeCount, titles));
   }
 
   @override

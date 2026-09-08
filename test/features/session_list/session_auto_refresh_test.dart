@@ -292,4 +292,105 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   });
+
+  group('#89 会话列表活跃流变化与常驻保活同步联动', () {
+    testWidgets('列表出现正在生成的流式会话 → 触发 sessionStreamingSyncCallbackProvider', (tester) async {
+      final syncCalls = <(int, List<String>)>[];
+      const streamingSession = SessionSummary(
+        sessionId: 's-stream-1',
+        title: '流式生成会话',
+        isStreaming: true,
+      );
+      final api = FakeSessionListApi(sessions: [streamingSession]);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
+            onboardingApiFactoryProvider.overrideWithValue((_, _) => FakeOnboardingLoginApi()),
+            sessionStreamingSyncCallbackProvider.overrideWithValue((count, titles) {
+              syncCalls.add((count, titles));
+            }),
+          ],
+          child: const CupertinoApp(
+            home: SessionAutoRefreshObserver(
+              child: SizedBox(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(syncCalls, hasLength(1));
+      expect(syncCalls.single.$1, 1);
+      expect(syncCalls.single.$2, ['流式生成会话']);
+    });
+
+    testWidgets('刷新后活跃流集合无变化 → 幂等不重复触发回调；集合变化时触发', (tester) async {
+      final syncCalls = <(int, List<String>)>[];
+      const s1 = SessionSummary(
+        sessionId: 's1',
+        title: '会话 1',
+        isStreaming: true,
+      );
+      final api = FakeSessionListApi(sessions: [s1]);
+
+      late WidgetRef refHolder;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            sessionListApiFactoryProvider.overrideWithValue((_) => api),
+            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
+            onboardingApiFactoryProvider.overrideWithValue((_, _) => FakeOnboardingLoginApi()),
+            sessionStreamingSyncCallbackProvider.overrideWithValue((count, titles) {
+              syncCalls.add((count, titles));
+            }),
+          ],
+          child: CupertinoApp(
+            home: SessionAutoRefreshObserver(
+              child: Consumer(
+                builder: (context, ref, _) {
+                  refHolder = ref;
+                  return const SizedBox();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(syncCalls, hasLength(1));
+      expect(syncCalls.first.$1, 1);
+
+      // 刷新列表，但 s1 仍在生成中（集合相同：{'s1'}）
+      await refHolder.read(sessionListControllerProvider.notifier).refreshIfStale(force: true);
+      await tester.pump();
+      await tester.pump();
+
+      // 集合不变 -> 不重复触发回调
+      expect(syncCalls, hasLength(1));
+
+      // 新增一个流式会话 s2，刷新后集合变为 {'s1', 's2'}
+      const s2 = SessionSummary(
+        sessionId: 's2',
+        title: '会话 2',
+        isStreaming: true,
+      );
+      api.sessions = [s1, s2];
+      await refHolder.read(sessionListControllerProvider.notifier).refreshIfStale(force: true);
+      await tester.pump();
+      await tester.pump();
+
+      // 集合变化 -> 触发回调更新
+      expect(syncCalls, hasLength(2));
+      expect(syncCalls.last.$1, 2);
+      expect(syncCalls.last.$2, ['会话 1', '会话 2']);
+    });
+  });
 }

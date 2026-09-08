@@ -896,7 +896,11 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _lastAnchorCompensatedKey = anchorKey;
         _lastAnchorCompensationDirection = currentDirection;
         _controller.jumpTo(newPixels);
+        return;
       }
+    } else {
+      _lastAnchorCompensationDirection = 0.0;
+      _lastAnchorCompensatedKey = null;
     }
     _updateReadingAnchor();
   }
@@ -1733,6 +1737,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
         _userHasScrolled = true;
         _nearBottom = false;
+        _readingAnchor = null;
+        _resetAnchorStabilityState();
       }
       // Upward (towards bottom) displacement during restore is ignored:
       // the restore owns the viewport for a few frames; keep follow
@@ -1743,7 +1749,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
 
     final wasUserHasScrolled = _userHasScrolled;
-    final wasNearBottom = _nearBottom;
 
     if (!_dragExceededThreshold ||
         _dragDisplacement.abs() < _dragSensitivityThreshold) {
@@ -1759,6 +1764,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       // 2. 累计向下滑（=内容向下=朝顶部，手指从下往上滑，pixels 减小）→ 一定取消跟随
       _userHasScrolled = true;
       _nearBottom = false;
+      _readingAnchor = null;
+      _resetAnchorStabilityState();
       if (!wasUserHasScrolled) {
         _pinnedTranscriptCount = ref
             .read(transcriptMessagesProvider(widget.sessionId))
@@ -1787,6 +1794,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         } else {
           _userHasScrolled = true;
           _nearBottom = false;
+          _readingAnchor = null;
+          _resetAnchorStabilityState();
         }
       }
     }
@@ -1794,9 +1803,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _dragDisplacement = 0.0;
     _dragExceededThreshold = false;
 
-    if ((wasUserHasScrolled != _userHasScrolled ||
-            wasNearBottom != _nearBottom) &&
-        mounted) {
+    if (mounted) {
       setState(() {});
     }
   }
@@ -2272,7 +2279,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                 if (_isGestureActive) {
                   _handleGestureEnd();
                 } else {
+                  final wasUserInteracting = _isUserInteracting;
                   _isUserInteracting = false;
+                  if (wasUserInteracting && _userHasScrolled && !_nearBottom) {
+                    _readingAnchor = null;
+                    _resetAnchorStabilityState();
+                    if (mounted) setState(() {});
+                  }
                 }
               }
               return false;

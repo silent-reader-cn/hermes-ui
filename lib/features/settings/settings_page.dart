@@ -36,6 +36,8 @@ import 'settings_subpages.dart';
 import 'smooth_streaming_settings.dart';
 import 'tool_group_settings.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../core/update/update_checker_service.dart';
+import '../../core/update/update_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
@@ -1679,20 +1681,106 @@ class _PopBackButton extends StatelessWidget {
   }
 }
 
-/// 关于分组：应用名 + 版本号。
-class _AboutSection extends ConsumerWidget {
+/// 关于与更新分组：应用名 + 版本号 + 自动检查更新开关 + 检查更新按钮。
+class _AboutSection extends ConsumerStatefulWidget {
   const _AboutSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AboutSection> createState() => _AboutSectionState();
+}
+
+class _AboutSectionState extends ConsumerState<_AboutSection> {
+  bool _isChecking = false;
+
+  Future<void> _checkUpdate() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    UpdateCheckResult result;
+    try {
+      final checker = ref.read(updateCheckerServiceProvider);
+      result = await checker.checkForUpdates(isManual: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isChecking = false);
+      }
+    }
+
+    if (!mounted) return;
+
+    final l10n = AppLocalizations.of(context);
+
+    if (result.hasUpdate && result.release != null) {
+      final release = result.release!;
+      final releaseNotes = release.body.trim().isNotEmpty
+          ? release.body.trim()
+          : (release.name.isNotEmpty ? release.name : release.tagName);
+
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: Text(l10n.updateDialogTitle(release.tagName)),
+          content: Text(releaseNotes),
+          actions: [
+            CupertinoDialogAction(
+              child: Text(l10n.cancel),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: Text(l10n.updateGoToDownload),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                unawaited(
+                  handleDownloadOrOpenRelease(context, ref, release),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    } else if (result.status == UpdateCheckStatus.upToDate) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: Text(l10n.updateSectionTitle),
+          content: Text(l10n.updateAlreadyLatest),
+          actions: [
+            CupertinoDialogAction(
+              child: Text(l10n.ok),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      );
+    } else {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: Text(l10n.updateSectionTitle),
+          content: Text(l10n.updateCheckFailed),
+          actions: [
+            CupertinoDialogAction(
+              child: Text(l10n.ok),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     // 动态版本号：平台通道就绪后显示 pubspec version（如 0.1.2+4），
     // 未就绪/异常回退常量（settings_providers.dart appVersionProvider）。
     final version = ref.watch(appVersionProvider).value ?? appVersionFallback;
+    final autoCheckEnabled = ref.watch(autoCheckUpdateEnabledProvider);
+
     return CupertinoListSection(
       dividerMargin: 0,
       additionalDividerMargin: 0,
-
       header: Text(l10n.aboutSection),
       children: [
         CupertinoListTile(
@@ -1700,11 +1788,34 @@ class _AboutSection extends ConsumerWidget {
           subtitle: Text(l10n.hermesWebUIClient),
         ),
         CupertinoListTile(
+          key: const ValueKey('settings-version-tile'),
           title: Text(l10n.version),
           trailing: Text(
             version,
             style: TextStyle(color: secondaryText.resolveFrom(context)),
           ),
+        ),
+        CupertinoListTile(
+          title: Text(l10n.autoCheckUpdateLabel),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-auto-check-update-switch'),
+            value: autoCheckEnabled,
+            onChanged: (val) {
+              unawaited(
+                ref
+                    .read(autoCheckUpdateEnabledProvider.notifier)
+                    .setEnabled(val),
+              );
+            },
+          ),
+        ),
+        CupertinoListTile(
+          key: const ValueKey('settings-check-update-tile'),
+          title: Text(l10n.checkUpdateNowLabel),
+          trailing: _isChecking
+              ? const CupertinoActivityIndicator()
+              : const CupertinoListTileChevron(),
+          onTap: _isChecking ? null : _checkUpdate,
         ),
       ],
     );

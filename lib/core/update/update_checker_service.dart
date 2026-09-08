@@ -1,0 +1,270 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'github_release.dart';
+import 'version_info.dart';
+
+/// SharedPreferences 键：自动检查更新是否开启（默认 true）。
+const String kAutoCheckUpdateEnabledKey = 'auto_check_update_enabled';
+
+/// SharedPreferences 键：上次检查更新时间（ISO8601 格式）。
+const String kLastUpdateCheckAtKey = 'last_update_check_at';
+
+/// GitHub 最新 Release 接口 URL。
+const String kGithubReleasesLatestUrl =
+    'https://api.github.com/repos/silent-reader-cn/hermes-ui/releases/latest';
+
+/// 更新检测结果状态。
+enum UpdateCheckStatus {
+  /// 发现新版本。
+  hasUpdate,
+
+  /// 已是最新版本。
+  upToDate,
+
+  /// 频控跳过（24h 内已检测过）。
+  skippedThrottled,
+
+  /// 开关关闭跳过。
+  skippedDisabled,
+
+  /// 静默检查失败（限流/断网等完全静默）。
+  failedSilent,
+
+  /// 手动检查失败。
+  failed,
+}
+
+/// 更新检测结果对象。
+class UpdateCheckResult {
+  const UpdateCheckResult({
+    required this.status,
+    required this.currentVersion,
+    this.latestVersion,
+    this.release,
+    this.error,
+  });
+
+  /// 检测状态。
+  final UpdateCheckStatus status;
+
+  /// 当前应用版本。
+  final String currentVersion;
+
+  /// 检测到的远端最新版本号。
+  final String? latestVersion;
+
+  /// 远端 Release 对象。
+  final GithubRelease? release;
+
+  /// 异常信息。
+  final Object? error;
+
+  /// 是否存在新版本。
+  bool get hasUpdate => status == UpdateCheckStatus.hasUpdate;
+
+  factory UpdateCheckResult.updateAvailable({
+    required String currentVersion,
+    required GithubRelease release,
+  }) =>
+      UpdateCheckResult(
+        status: UpdateCheckStatus.hasUpdate,
+        currentVersion: currentVersion,
+        latestVersion: release.tagName,
+        release: release,
+      );
+
+  factory UpdateCheckResult.upToDate({
+    required String currentVersion,
+    GithubRelease? release,
+  }) =>
+      UpdateCheckResult(
+        status: UpdateCheckStatus.upToDate,
+        currentVersion: currentVersion,
+        latestVersion: release?.tagName,
+        release: release,
+      );
+
+  factory UpdateCheckResult.skippedThrottled({
+    required String currentVersion,
+  }) =>
+      UpdateCheckResult(
+        status: UpdateCheckStatus.skippedThrottled,
+        currentVersion: currentVersion,
+      );
+
+  factory UpdateCheckResult.skippedDisabled({
+    required String currentVersion,
+  }) =>
+      UpdateCheckResult(
+        status: UpdateCheckStatus.skippedDisabled,
+        currentVersion: currentVersion,
+      );
+
+  factory UpdateCheckResult.failed({
+    required String currentVersion,
+    required Object error,
+    required bool isSilent,
+  }) =>
+      UpdateCheckResult(
+        status: isSilent
+            ? UpdateCheckStatus.failedSilent
+            : UpdateCheckStatus.failed,
+        currentVersion: currentVersion,
+        error: error,
+      );
+}
+
+/// GitHub Releases 更新检测服务。
+class UpdateCheckerService {
+  UpdateCheckerService({
+    Dio? dio,
+    String? currentVersion,
+    Future<SharedPreferences> Function()? prefsResolver,
+  })  : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 15),
+                headers: const {
+                  'Accept': 'application/vnd.github+json',
+                  'User-Agent': 'hermes-ui',
+                },
+              ),
+            ),
+        _currentVersion = currentVersion ?? appVersion,
+        _prefsResolver = prefsResolver ?? SharedPreferences.getInstance;
+
+  final Dio _dio;
+  final String _currentVersion;
+  final Future<SharedPreferences> Function() _prefsResolver;
+
+  String get currentVersion => _currentVersion;
+
+  /// 获取自动更新检查开关状态（默认 true）。
+  Future<bool> isAutoCheckEnabled() async {
+    try {
+      final prefs = await _prefsResolver();
+      return prefs.getBool(kAutoCheckUpdateEnabledKey) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// 设置自动更新检查开关状态。
+  Future<void> setAutoCheckEnabled(bool enabled) async {
+    try {
+      final prefs = await _prefsResolver();
+      await prefs.setBool(kAutoCheckUpdateEnabledKey, enabled);
+    } catch (_) {}
+  }
+
+  /// 获取上次检查更新时间。
+  Future<DateTime?> getLastCheckTime() async {
+    try {
+      final prefs = await _prefsResolver();
+      final str = prefs.getString(kLastUpdateCheckAtKey);
+      if (str != null && str.isNotEmpty) {
+        return DateTime.tryParse(str);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 记录本次检查时间。
+  Future<void> _recordCheckTime(DateTime time) async {
+    try {
+      final prefs = await _prefsResolver();
+      await prefs.setString(kLastUpdateCheckAtKey, time.toIso8601String());
+    } catch (_) {}
+  }
+
+  /// 执行检查更新。
+  ///
+  /// - [isManual]: 是否为手动检查。若是手动检查，忽略 24h 频控与自动更新开关；
+  /// - [now]: 当前时间注入（测试用）。
+  Future<UpdateCheckResult> checkForUpdates({
+    bool isManual = false,
+    DateTime? now,
+  }) async {
+    final currentTime = now ?? DateTime.now();
+
+    if (!isManual) {
+      final enabled = await isAutoCheckEnabled();
+      if (!enabled) {
+        return UpdateCheckResult.skippedDisabled(
+          currentVersion: _currentVersion,
+        );
+      }
+
+      final lastCheck = await getLastCheckTime();
+      if (lastCheck != null) {
+        final diff = currentTime.difference(lastCheck);
+        if (diff < const Duration(hours: 24)) {
+          return UpdateCheckResult.skippedThrottled(
+            currentVersion: _currentVersion,
+          );
+        }
+      }
+    }
+
+    try {
+      final response = await _dio.get<dynamic>(
+        kGithubReleasesLatestUrl,
+        options: Options(
+          headers: const {
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': 'hermes-ui',
+          },
+        ),
+      );
+
+      await _recordCheckTime(currentTime);
+
+      final dynamic data = response.data;
+      final Map<String, dynamic> json;
+      if (data is Map<String, dynamic>) {
+        json = data;
+      } else if (data is Map) {
+        json = data.cast<String, dynamic>();
+      } else {
+        throw FormatException('Unexpected response format: ${data.runtimeType}');
+      }
+
+      final release = GithubRelease.fromJson(json);
+      final hasNewer = newer(release.tagName, _currentVersion);
+
+      if (hasNewer) {
+        return UpdateCheckResult.updateAvailable(
+          currentVersion: _currentVersion,
+          release: release,
+        );
+      } else {
+        return UpdateCheckResult.upToDate(
+          currentVersion: _currentVersion,
+          release: release,
+        );
+      }
+    } catch (error) {
+      await _recordCheckTime(currentTime);
+
+      if (!isManual) {
+        debugPrint('Silent update check failed: $error');
+        return UpdateCheckResult.failed(
+          currentVersion: _currentVersion,
+          error: error,
+          isSilent: true,
+        );
+      } else {
+        return UpdateCheckResult.failed(
+          currentVersion: _currentVersion,
+          error: error,
+          isSilent: false,
+        );
+      }
+    }
+  }
+}

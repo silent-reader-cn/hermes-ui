@@ -1,0 +1,14 @@
+{
+  "@@locale": "zh",
+  "updateSectionTitle": "软件更新",
+  "currentVersionLabel": "当前版本",
+  "autoCheckUpdateLabel": "自动检查更新",
+  "checkUpdateNowLabel": "检查更新",
+  "checkingForUpdate": "正在检查更新…",
+  "updateAlreadyLatest": "已是最新版本",
+  "updateCheckFailed": "检查更新失败，请稍后重试",
+  "updateGoToDownload": "前往下载",
+  "updateDownloadingStarted": "已加入下载队列，可在下载管理中查看进度",
+  "updateInstallNow": "立即安装",
+  "updateReadyToInstall": "新版本已下载完成，是否立即安装？"
+}

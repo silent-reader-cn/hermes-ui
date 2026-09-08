@@ -169,6 +169,81 @@ void main() {
     });
   });
 
+  group('#89 保活常驻通知幂等同步（syncOngoingNotification）', () {
+    test('活跃流集合从 0 变 1 → 文案更新为「1 个会话正在生成」；再次传入相同 activeCount (1) → 幂等不重复更新', () async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      await fakeKeepalive.startForegroundService(activeCount: 0);
+      fakeKeepalive.updatedNotificationCounts.clear();
+
+      // 活跃流变化：0 -> 1，文案更新一次
+      await fakeKeepalive.syncOngoingNotification(1, ['会话 A']);
+      expect(fakeKeepalive.currentActiveCount, 1);
+      expect(fakeKeepalive.lastOngoingText, '1 个会话正在生成');
+      expect(fakeKeepalive.updatedNotificationCounts, [1]);
+      expect(fakeKeepalive.syncedOngoingNotifications, hasLength(1));
+      expect(fakeKeepalive.syncedOngoingNotifications.first.$1, 1);
+      expect(fakeKeepalive.syncedOngoingNotifications.first.$2, ['会话 A']);
+
+      // 活跃流集合无变化（相同 activeCount 与文案）→ 幂等不重复更新 notify
+      await fakeKeepalive.syncOngoingNotification(1, ['会话 A']);
+      expect(fakeKeepalive.updatedNotificationCounts, [1]);
+      expect(fakeKeepalive.syncedOngoingNotifications, hasLength(1));
+    });
+
+    test('活跃流集合变化 1 -> 2 -> 0，文案变化各更新一次；不变时幂等不 notify', () async {
+      final fakeKeepalive = FakeBackgroundKeepaliveService();
+      await fakeKeepalive.startForegroundService(activeCount: 1);
+      fakeKeepalive.updatedNotificationCounts.clear();
+
+      // 1 -> 2: 文案更新
+      await fakeKeepalive.syncOngoingNotification(2, ['会话 A', '会话 B']);
+      expect(fakeKeepalive.currentActiveCount, 2);
+      expect(fakeKeepalive.lastOngoingText, '2 个会话正在生成');
+      expect(fakeKeepalive.updatedNotificationCounts, [2]);
+
+      // 2 -> 2: 文案无变化，不重复 notify
+      await fakeKeepalive.syncOngoingNotification(2, ['会话 A', '会话 B']);
+      expect(fakeKeepalive.updatedNotificationCounts, [2]);
+
+      // 2 -> 0: 文案变为「暂无进行中会话」，更新一次
+      await fakeKeepalive.syncOngoingNotification(0, []);
+      expect(fakeKeepalive.currentActiveCount, 0);
+      expect(fakeKeepalive.lastOngoingText, '暂无进行中会话');
+      expect(fakeKeepalive.updatedNotificationCounts, [2, 0]);
+
+      // 0 -> 0: 再次同步 0，幂等不重复 notify
+      await fakeKeepalive.syncOngoingNotification(0, []);
+      expect(fakeKeepalive.updatedNotificationCounts, [2, 0]);
+    });
+
+    test('ProductionBackgroundKeepaliveService 真实幂等逻辑单测（服务未运行不更新，文案相同不重复 updateService）', () async {
+      final fakeFg = FakeForegroundTaskWrapper();
+      fakeFg.isRunning = true;
+      final service = ProductionBackgroundKeepaliveService(
+        foregroundTaskWrapper: fakeFg,
+      );
+
+      // 1. 首次同步 1 个活跃会话 -> updateService 调用一次
+      await service.syncOngoingNotification(1, ['Session 1']);
+      expect(fakeFg.updateServiceCallCount, 1);
+      expect(fakeFg.lastNotificationText, '1 个会话正在生成');
+
+      // 2. 再次同步相同活跃会话（文案相同） -> 幂等拦截，不调用 updateService
+      await service.syncOngoingNotification(1, ['Session 1']);
+      expect(fakeFg.updateServiceCallCount, 1);
+
+      // 3. 活跃数变更为 2 -> 文案变化，调用 updateService
+      await service.syncOngoingNotification(2, ['Session 1', 'Session 2']);
+      expect(fakeFg.updateServiceCallCount, 2);
+      expect(fakeFg.lastNotificationText, '2 个会话正在生成');
+
+      // 4. 服务未运行时 -> 不调用 updateService
+      fakeFg.isRunning = false;
+      await service.syncOngoingNotification(3, ['Session 1', 'Session 2', 'Session 3']);
+      expect(fakeFg.updateServiceCallCount, 2);
+    });
+  });
+
   group('回合通知去重逻辑（Deduplication）', () {
     late ProductionBackgroundKeepaliveService service;
 
