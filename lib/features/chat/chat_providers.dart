@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,6 +90,10 @@ class ChatWatchdogConfig {
       Duration(seconds: 30),
     ],
     this.maxReconnectAttempts = 6,
+    this.reconnectJitterMax = const Duration(milliseconds: 1500),
+    this.fullReconnectCooldown = const Duration(seconds: 60),
+    this.random,
+    this.customJitter,
   });
 
   /// 前台看门狗心跳间隔。
@@ -122,6 +127,21 @@ class ChatWatchdogConfig {
   /// 传输错误最大自动重连尝试次数（达到后停止自动重连）。
   final int maxReconnectAttempts;
 
+  /// 强制重连/轮询探活的最大随机错峰延迟（防多会话并发风暴；默认 1500ms，测试可 override 为 Duration.zero）。
+  final Duration reconnectJitterMax;
+
+  /// 同会话同 streamId 全量重连（afterSeq=0）冷却时长（默认 60s，测试可 override 缩短）。
+  final Duration fullReconnectCooldown;
+
+  /// 可选随机数发生器（测试可注入确定性 Random）。
+  final Random? random;
+
+  /// 可选自定义错峰延迟计算（测试可 override）。
+  final Duration Function([int? attempt])? customJitter;
+
+  /// 默认共享随机数发生器。
+  static final Random _defaultRandom = Random();
+
   /// 实际最大自动重连尝试次数。
   int get effectiveMaxReconnectAttempts => maxReconnectAttempts;
 
@@ -130,6 +150,16 @@ class ChatWatchdogConfig {
     if (reconnectBackoffDelays.isEmpty) return Duration.zero;
     final index = attempt.clamp(0, reconnectBackoffDelays.length - 1);
     return reconnectBackoffDelays[index];
+  }
+
+  /// 获取本次重试/探活的错峰延迟。
+  Duration jitterForAttempt([int? attempt]) {
+    if (customJitter != null) return customJitter!(attempt);
+    if (reconnectJitterMax <= Duration.zero) return Duration.zero;
+    final maxMs = reconnectJitterMax.inMilliseconds;
+    if (maxMs <= 0) return Duration.zero;
+    final rng = random ?? _defaultRandom;
+    return Duration(milliseconds: rng.nextInt(maxMs));
   }
 }
 

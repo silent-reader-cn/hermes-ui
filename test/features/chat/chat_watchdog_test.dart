@@ -47,6 +47,8 @@ void main() {
       expect(config.backoffDelayForAttempt(1), const Duration(seconds: 2));
       expect(config.backoffDelayForAttempt(5), const Duration(seconds: 30));
       expect(config.backoffDelayForAttempt(10), const Duration(seconds: 30));
+      expect(config.reconnectJitterMax, const Duration(milliseconds: 1500));
+      expect(config.fullReconnectCooldown, const Duration(seconds: 60));
     });
   });
 
@@ -381,6 +383,249 @@ void main() {
       });
     });
   });
+
+  group('T1: 看门狗重连与探活错峰 jitter（防 N 会话同秒齐触发）', () {
+    test('jitter=0 时：传输停滞 12s 立即触发 status 探活，18s 立即触发 forceReconnect', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        api.statusResponse = const ChatStreamStatusResponse(active: true);
+        final clock = _FakeClock();
+        const config = ChatWatchdogConfig(
+          reconnectJitterMax: Duration.zero,
+        );
+        final container = _buildContainer(api, clock, watchdogConfig: config);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        // 逐步推进到 11s
+        for (var i = 0; i < 11; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        expect(api.statusCalls, 0);
+
+        // 达到 12s：立即触发 statusCalls
+        clock.advance(const Duration(seconds: 1));
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(api.statusCalls, 1);
+
+        // 推进到 17s
+        for (var i = 0; i < 5; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+
+        // 达到 18s：立即触发 forceReconnect
+        clock.advance(const Duration(seconds: 1));
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, greaterThanOrEqualTo(2));
+      });
+    });
+
+    test('jitter>0 时：延迟窗口内不触发 status 探活，延迟到期后触发', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        api.statusResponse = const ChatStreamStatusResponse(active: true);
+        final clock = _FakeClock();
+        // 注入固定 800ms jitter
+        final config = ChatWatchdogConfig(
+          customJitter: ([_]) => const Duration(milliseconds: 800),
+        );
+        final container = _buildContainer(api, clock, watchdogConfig: config);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.statusCalls, 0);
+
+        // 逐步推进到 11s：未超阈值
+        for (var i = 0; i < 11; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+        expect(api.statusCalls, 0);
+
+        // 推进到 12s：看门狗 tick 检测到陈旧，调度 800ms jitter 定时器
+        clock.advance(const Duration(seconds: 1));
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        // 延迟窗口内：尚未发起 status 请求
+        expect(api.statusCalls, 0);
+
+        // 推进 400ms（累计 400ms，在 800ms 窗口内）：依然未触发
+        clock.advance(const Duration(milliseconds: 400));
+        async.elapse(const Duration(milliseconds: 400));
+        async.flushMicrotasks();
+        expect(api.statusCalls, 0);
+
+        // 再推进 400ms（累计 800ms，jitter 到期）：触发 status 请求
+        clock.advance(const Duration(milliseconds: 400));
+        async.elapse(const Duration(milliseconds: 400));
+        async.flushMicrotasks();
+        expect(api.statusCalls, 1);
+      });
+    });
+
+    test('jitter>0 时：延迟窗口内不触发 forceReconnect，延迟到期后触发', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final pendingStatus = Completer<ChatStreamStatusResponse>();
+        api.onChatStreamStatus = (_) => pendingStatus.future;
+        final clock = _FakeClock();
+        // 注入固定 600ms jitter
+        final config = ChatWatchdogConfig(
+          customJitter: ([_]) => const Duration(milliseconds: 600),
+        );
+        final container = _buildContainer(api, clock, watchdogConfig: config);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        // 推进到 17s：未达 18s force 阈值
+        for (var i = 0; i < 17; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        // 推进到 18s：看门狗 tick 检测到 silence，调度 600ms jitter 定时器
+        clock.advance(const Duration(seconds: 1));
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        // 600ms 延迟窗口内：尚未发起 forceReconnect
+        expect(api.startStreamCalls, 1);
+
+        // 推进 300ms（在 600ms 窗口内）：仍未触发
+        clock.advance(const Duration(milliseconds: 300));
+        async.elapse(const Duration(milliseconds: 300));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        // 再推进 300ms（累计 600ms，jitter 到期）：触发 forceReconnect
+        clock.advance(const Duration(milliseconds: 300));
+        async.elapse(const Duration(milliseconds: 300));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 2);
+      });
+    });
+  });
+
+  group('T2: afterSeq=0 全量重放限频（拆风暴放大器）', () {
+    test('连续两次 afterSeq=0 的 forceReconnect：第二次降级为 status 探活且不重建连接，冷却后恢复', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final pendingStatus = Completer<ChatStreamStatusResponse>();
+        api.onChatStreamStatus = (_) => pendingStatus.future;
+        final clock = _FakeClock();
+        const config = ChatWatchdogConfig(
+          reconnectJitterMax: Duration.zero,
+          fullReconnectCooldown: Duration(seconds: 60),
+        );
+        final container = _buildContainer(api, clock, watchdogConfig: config);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+        final initialStopCalls = api.stopStreamCalls;
+
+        // 停滞 18s 触发首次 forceReconnect（afterSeq=0）
+        for (var i = 0; i < 18; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+
+        // 首次全量重连：stopStream 与 startStream 均调用
+        expect(api.startStreamCalls, 2);
+        final stopCallsAfterFirst = api.stopStreamCalls;
+        expect(stopCallsAfterFirst, greaterThan(initialStopCalls));
+
+        // 60s 冷却内（18s 后）再次发生静默停滞超 18s
+        for (var i = 0; i < 18; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+
+        // 限频生效：第二次不断开重建连接（stopStream 与 startStream 调用次数均不增加）
+        expect(api.stopStreamCalls, stopCallsAfterFirst);
+        expect(api.startStreamCalls, 2);
+        // 但降级为 status 探活
+        expect(api.statusCalls, greaterThanOrEqualTo(1));
+
+        // 冷却期过期（推进超过 60s）
+        for (var i = 0; i < 60; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+
+        // 再次停滞 18s 触发 forceReconnect
+        for (var i = 0; i < 18; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+
+        // 冷却已过：允许新的全量重连，stopStreamCalls 与 startStreamCalls 再次增加
+        expect(api.stopStreamCalls, greaterThan(stopCallsAfterFirst));
+        expect(api.startStreamCalls, 3);
+      });
+    });
+
+    test('afterSeq>0 的 replay 路径不受 60s 冷却限制，连续触发正常重连', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final pendingStatus = Completer<ChatStreamStatusResponse>();
+        api.onChatStreamStatus = (_) => pendingStatus.future;
+        final clock = _FakeClock();
+        const config = ChatWatchdogConfig(
+          reconnectJitterMax: Duration.zero,
+          fullReconnectCooldown: Duration(seconds: 60),
+        );
+        final container = _buildContainer(api, clock, watchdogConfig: config);
+        final controller = container.read(chatControllerProvider('').notifier);
+
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 1);
+
+        // 收到带 seq 序号的 eventId（afterSeq = 5）
+        api.emitId('s1:5');
+        api.emit(const TokenSseEvent('token1'));
+        async.flushMicrotasks();
+
+        // 首次 18s 停滞：触发带 replayAfterSeq 的重连
+        for (var i = 0; i < 18; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+        expect(api.startStreamCalls, 2);
+        final stopCallsAfterFirst = api.stopStreamCalls;
+
+        // 冷却期内（18s 后）再次停滞：因为 afterSeq=5 > 0，不受 fullReconnect 冷却限制
+        for (var i = 0; i < 18; i++) {
+          clock.advance(const Duration(seconds: 1));
+          async.elapse(const Duration(seconds: 1));
+        }
+        async.flushMicrotasks();
+
+        expect(api.startStreamCalls, 3);
+        expect(api.stopStreamCalls, greaterThan(stopCallsAfterFirst));
+      });
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +662,9 @@ class _NoopCacheService extends CacheService {
 ProviderContainer _buildContainer(
   FakeChatApi api,
   _FakeClock clock, {
-  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(),
+  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(
+    reconnectJitterMax: Duration.zero,
+  ),
 }) {
   TestWidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.memory();

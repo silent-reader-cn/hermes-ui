@@ -72,6 +72,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Timer? _transcriptRefreshTimer;
   Timer? _clarifyPollTimer;
   Timer? _reconnectTimer;
+  Timer? _statusPollJitterTimer;
+  Timer? _forceReconnectJitterTimer;
+
+  /// 最近一次 afterSeq=0 全量重连的 streamId（用于限频）。
+  String? _lastFullReconnectStreamId;
+
+  /// 最近一次 afterSeq=0 全量重连的时刻（用于限频 60s）。
+  DateTime? _lastFullReconnectTime;
 
   /// 传输错误重连尝试次数（收到任意成功事件重置为 0）。
   int _reconnectAttempts = 0;
@@ -228,6 +236,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _watchdogTimer?.cancel();
     _transcriptRefreshTimer?.cancel();
     _cancelReconnectTimer();
+    _cancelJitterTimers();
+    _resetFullReconnectThrottle();
     _lastContextPollTime = null;
     _isContextPolling = false;
     _stopClarifyChannel();
@@ -253,6 +263,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       return false;
     }
     _cancelReconnectTimer();
+    _cancelJitterTimers();
+    _resetFullReconnectThrottle();
     _reconnectAttempts = 0;
     final trimmed = text.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return false;
@@ -2759,6 +2771,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _syncSessionStreaming(state.sessionId, false);
     flushPendingStreamingContent();
     _resetReconnectBackoff();
+    _cancelJitterTimers();
+    _resetFullReconnectThrottle();
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
       final notices = state.pinnedLocalNotices
@@ -2865,6 +2879,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 尚未就绪（无激活连接/未初始化）时静默跳过。
   void _syncSessionListRename(String title) {
     if (_disposed || state.sessionId.isEmpty) return;
+    if (!ref.exists(sessionListControllerProvider)) return;
     try {
       ref
           .read(sessionListControllerProvider.notifier)
@@ -3026,6 +3041,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _reconnectTimer = null;
   }
 
+  /// 取消挂起的看门狗错峰定时器（状态轮询与强制重连）。
+  void _cancelJitterTimers() {
+    _statusPollJitterTimer?.cancel();
+    _statusPollJitterTimer = null;
+    _forceReconnectJitterTimer?.cancel();
+    _forceReconnectJitterTimer = null;
+  }
+
+  /// 重置 afterSeq=0 全量重连的冷却限频。
+  void _resetFullReconnectThrottle() {
+    _lastFullReconnectStreamId = null;
+    _lastFullReconnectTime = null;
+  }
+
   /// 任何成功事件重置退避（SSE 连接成功 / 收到任意 event / 收到 status 正常响应）。
   void _resetReconnectBackoff() {
     _reconnectAttempts = 0;
@@ -3055,6 +3084,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       ),
     );
     _api?.stopStream();
+    _cancelJitterTimers();
 
     final maxAttempts = _watchdogConfig.effectiveMaxReconnectAttempts;
     if (_reconnectAttempts >= maxAttempts) {
@@ -3194,7 +3224,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   /// 强制重连（status 失败 / 看门狗超时；带 replay 若可用）。
-  void _forceReconnect(String streamId) {
+  void _forceReconnect(String streamId, {int jitterMs = 0}) {
     if (_disposed) return;
     if (_reconnectAttempts >= _watchdogConfig.effectiveMaxReconnectAttempts) {
       DiagnosticsService.instance.log(
@@ -3215,11 +3245,32 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       return;
     }
     final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+
+    // afterSeq == 0 全量重连限频（T2 冷却保护，防重连风暴放大器）
+    if (afterSeq == 0) {
+      final now = _now();
+      if (_lastFullReconnectStreamId == streamId &&
+          _lastFullReconnectTime != null &&
+          now.difference(_lastFullReconnectTime!) <
+              _watchdogConfig.fullReconnectCooldown) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.warn,
+          tag: 'chat_reconnect',
+          message:
+              'fullReconnect throttled for stream $streamId (afterSeq: 0), falling back to status check',
+        );
+        unawaited(_checkStatusAndReconnect(isThrottledFallback: true));
+        return;
+      }
+      _lastFullReconnectStreamId = streamId;
+      _lastFullReconnectTime = now;
+    }
+
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.warn,
       tag: 'chat_reconnect',
       message:
-          'Force reconnecting stream (streamId: $streamId, afterSeq: $afterSeq)',
+          'Force reconnecting stream (streamId: $streamId, afterSeq: $afterSeq, jitterMs: $jitterMs)',
     );
     _recordTransportActivity();
     state = state.copyWith(
@@ -3295,22 +3346,59 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     if (isNormalStale || isToolProgressStale) {
       final cooldown = _statusCheckCooldownUntil;
-      if (cooldown == null || now.isAfter(cooldown)) {
-        _statusCheckCooldownUntil = now.add(config.statusPollCooldown);
-        DiagnosticsService.instance.log(
-          level: DiagnosticsLogLevel.warn,
-          tag: 'chat_watchdog',
-          message:
-              'Watchdog detected stale stream activity${hasRunningTools ? ' during tool execution' : ''}, polling status (session: ${state.sessionId})',
-        );
-        state = state.copyWith(
-          stream: state.stream.copyWith(
-            recovery: ActiveStreamRecoveryState.checking,
-          ),
-        );
-        unawaited(_checkStatusAndReconnect());
+      if ((cooldown == null || now.isAfter(cooldown)) &&
+          (_statusPollJitterTimer == null ||
+              !_statusPollJitterTimer!.isActive)) {
+        final jitter = config.jitterForAttempt();
+        _statusCheckCooldownUntil = now.add(config.statusPollCooldown + jitter);
+        if (jitter <= Duration.zero) {
+          DiagnosticsService.instance.log(
+            level: DiagnosticsLogLevel.warn,
+            tag: 'chat_watchdog',
+            message:
+                'Watchdog detected stale stream activity${hasRunningTools ? ' during tool execution' : ''}, polling status (session: ${state.sessionId})',
+          );
+          state = state.copyWith(
+            stream: state.stream.copyWith(
+              recovery: ActiveStreamRecoveryState.checking,
+            ),
+          );
+          unawaited(_checkStatusAndReconnect());
+        } else {
+          final streamId = state.stream.activeStreamId;
+          final gen = _generation;
+          _statusPollJitterTimer = Timer(jitter, () {
+            _statusPollJitterTimer = null;
+            if (_disposed || gen != _generation) return;
+            if (_appPaused) return;
+            if (state.stream.activeStreamId != streamId) return;
+            if (state.stream.hasCompletedResponse) return;
+            if (_reconnectTimer != null && _reconnectTimer!.isActive) return;
+            if (_reconnectAttempts >= config.effectiveMaxReconnectAttempts) {
+              return;
+            }
+            if (_forceReconnectJitterTimer != null &&
+                _forceReconnectJitterTimer!.isActive) {
+              return;
+            }
+
+            DiagnosticsService.instance.log(
+              level: DiagnosticsLogLevel.warn,
+              tag: 'chat_watchdog',
+              message:
+                  'Watchdog detected stale stream activity${hasRunningTools ? ' during tool execution' : ''}, polling status (session: ${state.sessionId})',
+            );
+            state = state.copyWith(
+              stream: state.stream.copyWith(
+                recovery: ActiveStreamRecoveryState.checking,
+              ),
+            );
+            unawaited(_checkStatusAndReconnect());
+          });
+        }
       }
     }
+
     final forceThreshold = hasRunningTools
         ? config.forceReconnectWithRunningToolsThreshold
         : config.forceReconnectThreshold;
@@ -3325,19 +3413,49 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             config.forceReconnectWithRunningToolsThreshold;
 
     if (isTransportForce || isToolProgressForce) {
-      DiagnosticsService.instance.log(
-        level: DiagnosticsLogLevel.error,
-        tag: 'chat_watchdog',
-        message:
-            'Watchdog force reconnecting due to ${isToolProgressForce ? 'tool progress hang' : 'transport silence'} (session: ${state.sessionId})',
-      );
-      _forceReconnect(state.stream.activeStreamId!);
+      if (_forceReconnectJitterTimer == null ||
+          !_forceReconnectJitterTimer!.isActive) {
+        final jitter = config.jitterForAttempt();
+        final streamId = state.stream.activeStreamId!;
+        if (jitter <= Duration.zero) {
+          DiagnosticsService.instance.log(
+            level: DiagnosticsLogLevel.error,
+            tag: 'chat_watchdog',
+            message:
+                'Watchdog force reconnecting due to ${isToolProgressForce ? 'tool progress hang' : 'transport silence'} (session: ${state.sessionId})',
+          );
+          _forceReconnect(streamId, jitterMs: 0);
+        } else {
+          final gen = _generation;
+          _forceReconnectJitterTimer = Timer(jitter, () {
+            _forceReconnectJitterTimer = null;
+            if (_disposed || gen != _generation) return;
+            if (_appPaused) return;
+            if (state.stream.activeStreamId != streamId) return;
+            if (state.stream.hasCompletedResponse) return;
+            if (_reconnectTimer != null && _reconnectTimer!.isActive) return;
+            if (_reconnectAttempts >= config.effectiveMaxReconnectAttempts) {
+              return;
+            }
+
+            DiagnosticsService.instance.log(
+              level: DiagnosticsLogLevel.error,
+              tag: 'chat_watchdog',
+              message:
+                  'Watchdog force reconnecting due to ${isToolProgressForce ? 'tool progress hang' : 'transport silence'} (session: ${state.sessionId})',
+            );
+            _forceReconnect(streamId, jitterMs: jitter.inMilliseconds);
+          });
+        }
+      }
     }
   }
 
   bool get _hasRunningTools => state.liveToolCalls.any((t) => !t.isCompleted);
 
-  Future<void> _checkStatusAndReconnect() async {
+  Future<void> _checkStatusAndReconnect({
+    bool isThrottledFallback = false,
+  }) async {
     final streamId = state.stream.activeStreamId;
     if (streamId == null) return;
     DiagnosticsService.instance.log(
@@ -3387,7 +3505,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         tag: 'chat_resume',
         message: 'Status check failed: $e, falling back to force reconnect',
       );
-      _forceReconnect(streamId);
+      if (!isThrottledFallback) {
+        _forceReconnect(streamId);
+      }
     }
   }
 
@@ -3668,6 +3788,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _recordTransportActivity() {
     _lastTransportActivity = _now();
+    _cancelJitterTimers();
   }
 
   Future<void> _recoverExistingStream(String activeStreamId) async {

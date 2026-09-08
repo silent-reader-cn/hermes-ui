@@ -105,5 +105,39 @@ void main() {
       expect(errLog.message, contains('ERROR: Connection timed out'));
       expect(errLog.details?['requestHeaders'], {'X-Api-Key': '***'});
     });
+
+    test('logs cancel error with verbose level and [expected-cancel] prefix', () async {
+      await service.setEnabled(true);
+
+      final reqOptions = RequestOptions(
+        path: '/api/chat/stream',
+        method: 'GET',
+        headers: {'X-Api-Key': 'key-123'},
+      );
+
+      final dioCancel = DioException(
+        requestOptions: reqOptions,
+        type: DioExceptionType.cancel,
+        message: 'The request was cancelled',
+      );
+
+      runZonedGuarded(() {
+        final handler = ErrorInterceptorHandler();
+        interceptor.onError(dioCancel, handler);
+      }, (e, s) {});
+
+      expect(service.logs.length, 1);
+      final errLog = service.logs.first;
+      expect(errLog.level, DiagnosticsLogLevel.verbose);
+      expect(errLog.tag, 'dio');
+      expect(errLog.errorKind, 'cancel');
+      expect(errLog.message, startsWith('[expected-cancel] '));
+      expect(
+        errLog.message,
+        contains('GET /api/chat/stream -> ERROR: The request was cancelled'),
+      );
+      expect(errLog.details?['errorType'], 'cancel');
+      expect(errLog.details?['errorMessage'], 'The request was cancelled');
+    });
   });
 }

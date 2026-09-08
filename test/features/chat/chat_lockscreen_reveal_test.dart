@@ -232,6 +232,7 @@ void main() {
             forceReconnectThreshold: Duration(seconds: 2),
             forceReconnectWithRunningToolsThreshold: Duration(seconds: 2),
             statusPollCooldown: Duration(milliseconds: 200),
+            reconnectJitterMax: Duration.zero,
           ),
         );
         final controller = container.read(chatControllerProvider('').notifier);
@@ -397,7 +398,10 @@ class _NoopCacheService extends CacheService {
 ProviderContainer _buildContainer(
   FakeChatApi api,
   _FakeClock clock, {
-  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(),
+  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(
+    reconnectJitterMax: Duration.zero,
+    fullReconnectCooldown: Duration.zero,
+  ),
 }) {
   TestWidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.memory();

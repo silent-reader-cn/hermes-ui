@@ -94,11 +94,17 @@ class DiagnosticsInterceptor extends Interceptor {
         maxResponseBodyLength,
       );
 
+      final isCancel = err.type == DioExceptionType.cancel;
+      final level = isCancel
+          ? DiagnosticsLogLevel.verbose
+          : DiagnosticsLogLevel.error;
+      final prefix = isCancel ? '[expected-cancel] ' : '';
+
       _service.log(
-        level: DiagnosticsLogLevel.error,
+        level: level,
         tag: 'dio',
         message:
-            '${err.requestOptions.method} ${err.requestOptions.uri.path} -> ERROR: ${err.message ?? err.type.name}',
+            '$prefix${err.requestOptions.method} ${err.requestOptions.uri.path} -> ERROR: ${err.message ?? err.type.name}',
         durationMs: durationMs,
         errorKind: err.type.name,
         details: {

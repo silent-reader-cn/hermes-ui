@@ -182,6 +182,7 @@ void main() {
         // 自定义配置：上限 3 次，退避 [1s, 2s, 4s]
         const config = ChatWatchdogConfig(
           maxReconnectAttempts: 3,
+          fullReconnectCooldown: Duration.zero,
           reconnectBackoffDelays: [
             Duration(seconds: 1),
             Duration(seconds: 2),
@@ -241,6 +242,7 @@ void main() {
         final clock = _FakeClock();
         const config = ChatWatchdogConfig(
           maxReconnectAttempts: 2,
+          fullReconnectCooldown: Duration.zero,
           reconnectBackoffDelays: [
             Duration(seconds: 1),
             Duration(seconds: 2),
@@ -518,7 +520,9 @@ class _NoopCacheService extends CacheService {
 ProviderContainer _buildContainer(
   FakeChatApi api,
   _FakeClock clock, {
-  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(),
+  ChatWatchdogConfig watchdogConfig = const ChatWatchdogConfig(
+    fullReconnectCooldown: Duration.zero,
+  ),
 }) {
   TestWidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.memory();
