@@ -53,6 +53,17 @@
 
 ---
 
+## #99（已交付 b9df051，待主人真机复验）多会话 watchdog 同步静默 → 连锁强制重连风暴
+
+- 交付：main @ b9df051（7 文件 +476/-30）。T1 重连/探活错峰 jitter（`reconnectJitterMax` 默认 1500ms，jitter=0 确定性同步路径保留；`_forceReconnect` 日志加 `jitterMs`）+ T2 afterSeq=0 全量重连 60s 冷却（命中降级 status 探活，`isThrottledFallback` 防绕过；afterSeq>0 不受限）+ T3 dio cancel 降 `[expected-cancel]` verbose。`ChatWatchdogConfig` 新增 `reconnectJitterMax`/`fullReconnectCooldown`/`random`/`customJitter`/`jitterForAttempt`（测试可 override）。
+- 附带修：`e5ea242` 自带回归 `_syncSessionListRename` 无列表 provider 时抛错（补 `ref.exists` 守卫，与四兄弟对齐；`chat_api_client_regression_test` renameSession 全链路复绿）。
+- 验收：analyze 零告警 + 全库 2568 全绿 + 金照 26 绿（`--update-goldens` 无意外变更）；`e5ea242` 的 8 用例 mutation 同步测试全绿（回滚事故已修复，sync 调用 10 处完整）。
+- 待主人：多会话并发长工具跑 10 分钟，真机看 force reconnect 同秒触发是否归零。
+- 收口教训：worktree 存活期间 main 有新合入（e5ea242）时收口整文件 cp 覆盖丢了 sync 功能 → 已回滚 + 逐段移植；以后收口一律先 diff 对照 HEAD 增量。
+- 遗留方向（未做）：服务端 journal-only 分支补心跳（主人明确禁动 webui，略）。
+
+---
+
 ## #99（多会话放大待取证）watchdog 同步静默 → 连锁强制重连风暴（诊断日志成串）
 
 - 现象（2026-09-08 12:00-12:03 三会话 c131159d210e / 8d1e67593255 / 8e58a33c7584）：多会话并发流式时，WARN stale poll / ERROR force reconnect / ERROR dio cancel 成串出现；12:03:06 三会话 200ms 内同步触发 force reconnect。多会话并发易复现。
