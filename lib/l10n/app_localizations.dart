@@ -64,9 +64,6 @@ class AppLocalizations {
   String get connectYourHermesServer =>
       isEnglish ? 'Connect your Hermes server' : '连接你的 Hermes 服务器';
 
-  @Deprecated('Use connectYourHermesServer')
-  String get connectYourHermexServer =>
-      isEnglish ? 'Connect your Hermes server' : '连接你的 Hermes 服务器';
   String get inputServerAddressHint => isEnglish
       ? 'Enter the hermes-webui address (with port), e.g. https://hermes.example.com:8787'
       : '输入 hermes-webui 的地址（含端口），例如 https://hermes.example.com:8787';

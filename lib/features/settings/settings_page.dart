@@ -1784,7 +1784,7 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
       header: Text(l10n.aboutSection),
       children: [
         CupertinoListTile(
-          title: const Text('Hermex'),
+          title: const Text('Hermes UI'),
           subtitle: Text(l10n.hermesWebUIClient),
         ),
         CupertinoListTile(

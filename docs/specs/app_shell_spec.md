@@ -24,7 +24,7 @@ void main() {
 - `theme: CupertinoThemeData`（深色 + 浅色，见 §4）
 - `router: go_router` 路由表（见 §3）
 - `localizationsDelegates`：默认 + flutter_localizations（中文/英文）
-- 桌面端：窗口标题 "Hermex"；移动端：状态栏样式
+- 桌面端：窗口标题 "Hermes"；移动端：状态栏样式
 
 ## 3. 路由表（go_router）
 

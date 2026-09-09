@@ -1,4 +1,4 @@
-# Hermex Flutter 客户端已对接接口清单与架构审计报告
+# Hermes UI 客户端已对接接口清单与架构审计报告
 
 > 审计基准：`hermes-ui` 客户端全量代码（端点定义表 `lib/core/api/endpoints.dart` 共 128 个端点定义，`lib/core/api/api_client*.dart` 共 136 个请求方法，以及 `lib/features/` 下 16 个功能模块）。
 

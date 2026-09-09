@@ -2,7 +2,9 @@
 
 # Hermes UI
 
-**A native-feeling, cross-platform client for [Hermes Agent](https://github.com/NousResearch/hermes-agent) — built with Flutter + Cupertino.**
+**One smooth Hermes experience, everywhere.**
+
+A Flutter + Cupertino client for [Hermes Agent](https://hermes-agent.nousresearch.com/docs) — one codebase, consistent chat on desktop and phone.
 
 [![CI](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -15,11 +17,11 @@
 
 ---
 
-Hermes UI gives [Hermes Agent](https://hermes-agent.nousresearch.com/docs) a polished chat interface on your desktop and phone. It began as a Flutter + Cupertino port of **[Hermex](https://github.com/uzairansaruzi/hermex)** — a beautifully crafted iOS-native SwiftUI client (MIT) — and grew into a full cross-platform client whose API contract is aligned with **[nesquena/hermes-webui](https://github.com/nesquena/hermes-webui)** (MIT), the community Hermes WebUI.
+## Screenshots
 
-Priorities: **Windows and Android first** (macOS / Linux / iOS / Web share the same codebase and come later). The app is a remote control for the execution plane — all agent capabilities stay on the server side; the client ships no server logic.
-
-> **Disclaimer**: this is an independent community project, not affiliated with or endorsed by Nous Research.
+> Coming soon — Windows desktop and Android walkthroughs (chat, sessions, Kanban, Insights).
+>
+> Planned shots: `docs/screenshots/windows-chat.png` · `docs/screenshots/android-chat.png` · `docs/screenshots/kanban.png` · `docs/screenshots/insights.png`
 
 ## Highlights
 
@@ -76,6 +78,10 @@ Two connection modes, configured on the onboarding screen or in Settings → Ser
 
 Multiple server profiles are supported with one-tap switching. Credentials are stored in the system secure storage.
 
+The API contract is aligned with **[nesquena/hermes-webui](https://github.com/nesquena/hermes-webui)** (MIT), the community Hermes WebUI.
+
+> **Disclaimer**: this is an independent community project, not affiliated with or endorsed by Nous Research.
+
 ## Tech stack
 
 | Domain | Choice |
@@ -94,10 +100,6 @@ Multiple server profiles are supported with one-tap switching. Credentials are s
 
 Actively developed; 2,400+ automated tests green, `flutter analyze` clean. Releases ship a signed Windows installer (CI-built, bundling the WebUI sidecar) and an Android arm64 APK. See the [changelog](CHANGELOG.md) for details.
 
-## Screenshots
-
-> Coming soon — Windows desktop and Android walkthroughs.
-
 ## License
 
 Released under the [MIT License](LICENSE). Bundled third-party components (the embedded hermes-webui server, embedded Python, and their dependencies) retain their original licenses; notices are collected in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
@@ -106,4 +108,4 @@ Released under the [MIT License](LICENSE). Bundled third-party components (the e
 
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) by Nous Research — the agent engine this client talks to.
 - [nesquena/hermes-webui](https://github.com/nesquena/hermes-webui) — the community WebUI whose API this client aligns with, and whose server ships inside the Windows bundle.
-- [uzairansaruzi/hermex](https://github.com/uzairansaruzi/hermex) — the iOS SwiftUI blueprint this project was ported from.
+- [uzairansaruzi/hermex](https://github.com/uzairansaruzi/hermex) — early UI inspiration (iOS SwiftUI client, MIT).

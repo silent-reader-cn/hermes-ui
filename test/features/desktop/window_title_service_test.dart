@@ -12,7 +12,7 @@ void main() {
       expect(WindowTitleService.formatWindowTitle('   '), 'Hermes');
     });
 
-    test('占位标题 untitled / untitled session 大小写均返回 Hermex', () {
+    test('占位标题 untitled / untitled session 大小写均返回 Hermes', () {
       expect(WindowTitleService.formatWindowTitle('Untitled'), 'Hermes');
       expect(WindowTitleService.formatWindowTitle('untitled'), 'Hermes');
       expect(
@@ -96,8 +96,8 @@ void main() {
           onSetTitle: (t) => calledTitle = t,
         );
 
-        await service.setTitle('Hermex Client');
-        expect(calledTitle, 'Hermex Client');
+        await service.setTitle('Hermes UI Client');
+        expect(calledTitle, 'Hermes UI Client');
 
         await service.updateSessionTitle('调试网络模块');
         expect(calledTitle, '调试网络模块 - Hermes');

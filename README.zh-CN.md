@@ -2,7 +2,9 @@
 
 # Hermes UI
 
-**基于 Flutter + Cupertino 打造的 Hermes Agent 全平台客户端，原生质感。**
+**多平台统一、流畅的 Hermes 体验。**
+
+基于 Flutter + Cupertino 的 [Hermes Agent](https://hermes-agent.nousresearch.com/docs) 客户端——一套代码，桌面与手机体验一致。
 
 [![CI](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -15,11 +17,11 @@
 
 ---
 
-Hermes UI 为 [Hermes Agent](https://hermes-agent.nousresearch.com/docs) 提供桌面与手机端的精致聊天界面。项目始于 Flutter + Cupertino 对 **[Hermex](https://github.com/uzairansaruzi/hermex)**（一个精心打磨的 iOS 原生 SwiftUI 客户端，MIT 开源）的完整移植，现已成长为 API 契约对齐 **[nesquena/hermes-webui](https://github.com/nesquena/hermes-webui)**（MIT，社区版 Hermes WebUI）的全平台客户端。
+## 截图
 
-平台优先级：**Windows 与 Android 优先**（macOS / Linux / iOS / Web 共用同一套代码，后置交付）。客户端只做「执行平面」的遥控器——所有 Agent 能力均在服务端执行，客户端不包含任何服务端逻辑。
-
-> **声明**：本项目为独立社区项目，与 Nous Research 无隶属或背书关系。
+> 待补 —— Windows 桌面与 Android 实机截图（聊天、会话、看板、统计）。
+>
+> 规划位置：`docs/screenshots/windows-chat.png` · `docs/screenshots/android-chat.png` · `docs/screenshots/kanban.png` · `docs/screenshots/insights.png`
 
 ## 功能亮点
 
@@ -76,6 +78,10 @@ flutter run -d <device-id>
 
 支持多服务器配置一键切换；凭据存储于系统安全存储区。
 
+API 契约对齐 **[nesquena/hermes-webui](https://github.com/nesquena/hermes-webui)**（MIT，社区版 Hermes WebUI）。
+
+> **声明**：本项目为独立社区项目，与 Nous Research 无隶属或背书关系。
+
 ## 技术栈
 
 | 领域 | 选型 |
@@ -94,10 +100,6 @@ flutter run -d <device-id>
 
 活跃开发中：2,400+ 自动化测试全绿、`flutter analyze` 零告警。发布产物为 CI 构建的 Windows 安装包（内置 WebUI sidecar）与 Android arm64 APK。变更详情见 [更新日志](CHANGELOG.md)。
 
-## 截图
-
-> 待补 —— Windows 桌面与 Android 各主要页面截图。
-
 ## 开源协议
 
 本项目基于 [MIT License](LICENSE) 发布。内置的第三方组件（hermes-webui 服务端、嵌入式 Python 及其依赖）保留其原始协议，声明汇总见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
@@ -106,4 +108,4 @@ flutter run -d <device-id>
 
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent)（Nous Research）—— 本客户端所对接的 Agent 引擎。
 - [nesquena/hermes-webui](https://github.com/nesquena/hermes-webui) —— 本项目 API 对齐的社区 WebUI，其服务端随 Windows 安装包内置分发。
-- [uzairansaruzi/hermex](https://github.com/uzairansaruzi/hermex) —— 本项目移植自的 iOS SwiftUI 蓝本。
+- [uzairansaruzi/hermex](https://github.com/uzairansaruzi/hermex) —— 早期 UI 灵感来源（iOS SwiftUI 客户端，MIT）。

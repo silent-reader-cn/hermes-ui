@@ -420,7 +420,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
           child: Text(
-            l10n.connectYourHermexServer,
+            l10n.connectYourHermesServer,
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
         ),
@@ -534,7 +534,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   List<Widget> _buildFormFields(AppLocalizations l10n) {
     return [
       Text(
-        l10n.connectYourHermexServer,
+        l10n.connectYourHermesServer,
         style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 8),
