@@ -838,13 +838,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final String nextLiveReasoning = state.liveReasoningText;
     final hasServerTools =
         persistedToolCalls.isNotEmpty || serverDerivedGroups.isNotEmpty;
+    // live 活跃（有活跃流且未完成）时不得清空 liveToolCalls：live 时间线断点
+    // （liveTimelinePoints，tools 段 start = liveToolCalls 下标）仍然保留，
+    // 清空会导致后续切片全部 clamp 到空数组 → 工具行被吞、仅剩 think 行
+    // （think 走 liveReasoningText 独立切片故不受影响）。收尾/done 后再归档。
+    final isLiveActive =
+        state.stream.activeStreamId != null &&
+        !state.stream.hasCompletedResponse;
     if (hasServerTools) {
-      // 服务端 transcript 已含工具 → 以服务端为准合并已有完成组保底，live 清空。
+      // 服务端 transcript 已含工具 → 以服务端为准合并已有完成组保底；
+      // 非 live 态才清空 live（历史/收尾路径），live 活跃时保留继续切片展示。
       nextCompletedGroups = ToolCallGroup.merging(
         primaryGroups: serverDerivedGroups,
         fallbackGroups: state.completedToolCallGroups,
       );
-      nextLiveToolCalls = const [];
+      nextLiveToolCalls = isLiveActive ? state.liveToolCalls : const [];
     } else {
       if (state.liveToolCalls.isNotEmpty) {
         final anchor =

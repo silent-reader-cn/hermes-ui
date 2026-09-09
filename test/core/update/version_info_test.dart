@@ -4,7 +4,7 @@ import 'package:hermes_ui/core/update/version_info.dart';
 void main() {
   group('version_info', () {
     test('appVersion matches expected pubspec baseline version', () {
-      expect(appVersion, '0.1.30');
+      expect(appVersion, '0.1.31');
     });
 
     group('newer() semver comparison', () {
