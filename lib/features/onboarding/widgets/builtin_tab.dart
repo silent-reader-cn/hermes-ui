@@ -723,7 +723,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                 )
               : null,
           trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 100),
+            constraints: const BoxConstraints(maxWidth: 140),
             child: CupertinoTextField(
               key: const ValueKey('onboarding-sidecar-port-input'),
               controller: _portController,
@@ -826,61 +826,64 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       return CupertinoListTile(
         key: const ValueKey('onboarding-sidecar-password-tile'),
         title: Text(l10n.webuiPassword),
-        subtitle: _passwordError != null
-            ? Text(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_passwordError != null)
+              Text(
                 _passwordError!,
                 style: TextStyle(
                   color: statusRedText.resolveFrom(context),
                   fontSize: 12,
                 ),
-              )
-            : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 130),
-              child: CupertinoTextField(
-                key: const ValueKey('onboarding-sidecar-password-input'),
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                placeholder: l10n.webuiPasswordPlaceholder,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                onSubmitted: _submitPassword,
               ),
+            if (_passwordError != null) const SizedBox(height: 6),
+            CupertinoTextField(
+              key: const ValueKey('onboarding-sidecar-password-input'),
+              controller: _passwordController,
+              focusNode: _passwordFocusNode,
+              placeholder: l10n.webuiPasswordPlaceholder,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              onSubmitted: _submitPassword,
             ),
-            const SizedBox(width: 4),
-            CupertinoButton(
-              key: const ValueKey('onboarding-sidecar-regen-password-btn'),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: const Size(0, 28),
-              onPressed: () {
-                setState(() {
-                  _passwordController.text =
-                      SidecarConfig.generateRandomPassword();
-                  _passwordError = null;
-                });
-              },
-              child: Text(l10n.agentGateRegeneratePassword),
-            ),
-            CupertinoButton(
-              key: const ValueKey('onboarding-sidecar-save-password-btn'),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: const Size(0, 28),
-              onPressed: () => _submitPassword(_passwordController.text),
-              child: Text(l10n.confirm),
-            ),
-            CupertinoButton(
-              key: const ValueKey('onboarding-sidecar-cancel-password-btn'),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: const Size(0, 28),
-              onPressed: () {
-                setState(() {
-                  _isEditingPassword = false;
-                  _passwordError = null;
-                });
-              },
-              child: Text(l10n.cancel),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoButton(
+                  key: const ValueKey('onboarding-sidecar-regen-password-btn'),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(0, 28),
+                  onPressed: () {
+                    setState(() {
+                      _passwordController.text =
+                          SidecarConfig.generateRandomPassword();
+                      _passwordError = null;
+                    });
+                  },
+                  child: Text(l10n.agentGateRegeneratePassword),
+                ),
+                CupertinoButton(
+                  key: const ValueKey('onboarding-sidecar-save-password-btn'),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(0, 28),
+                  onPressed: () => _submitPassword(_passwordController.text),
+                  child: Text(l10n.confirm),
+                ),
+                CupertinoButton(
+                  key: const ValueKey('onboarding-sidecar-cancel-password-btn'),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(0, 28),
+                  onPressed: () {
+                    setState(() {
+                      _isEditingPassword = false;
+                      _passwordError = null;
+                    });
+                  },
+                  child: Text(l10n.cancel),
+                ),
+              ],
             ),
           ],
         ),
@@ -890,82 +893,88 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     return CupertinoListTile(
       key: const ValueKey('onboarding-sidecar-password-tile'),
       title: Text(l10n.webuiPassword),
-      subtitle: _copiedPasswordNotice
-          ? Text(
-              l10n.copiedToClipboard,
-              style: TextStyle(
-                color: statusGreenText.resolveFrom(context),
-                fontSize: 12,
-              ),
-            )
-          : Text(
-              l10n.agentGatePasswordHint,
-              style: TextStyle(
-                color: secondaryText.resolveFrom(context),
-                fontSize: 12,
-              ),
-            ),
-      trailing: Row(
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            key: const ValueKey('onboarding-sidecar-password-display'),
-            '••••••••',
-            style: TextStyle(
-              letterSpacing: 2.0,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 6),
-          CupertinoButton(
-            key: const ValueKey('onboarding-sidecar-regen-password-btn'),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            minimumSize: const Size(0, 28),
-            onPressed: () async {
-              final newPwd = SidecarConfig.generateRandomPassword();
-              _passwordController.text = newPwd;
-              await ref
-                  .read(webuiSidecarConfigProvider.notifier)
-                  .setPassword(newPwd);
-            },
-            child: Text(l10n.agentGateRegeneratePassword),
-          ),
-          CupertinoButton(
-            key: const ValueKey('onboarding-sidecar-copy-password-btn'),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            minimumSize: const Size(0, 28),
-            onPressed: () async {
-              final pwd = ref.read(webuiSidecarConfigProvider).password;
-              await Clipboard.setData(ClipboardData(text: pwd));
-              if (mounted) {
-                setState(() => _copiedPasswordNotice = true);
-                _copiedNoticeTimer?.cancel();
-                _copiedNoticeTimer = Timer(const Duration(seconds: 2), () {
-                  if (mounted) setState(() => _copiedPasswordNotice = false);
-                });
-              }
-            },
-            child: Text(l10n.copy),
-          ),
-          CupertinoButton(
-            key: const ValueKey('onboarding-sidecar-edit-password-btn'),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            minimumSize: const Size(0, 28),
-            onPressed: () {
-              final pwd = ref.read(webuiSidecarConfigProvider).password;
-              setState(() {
-                _isEditingPassword = true;
-                _passwordController.text = pwd;
-                _passwordError = null;
-              });
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _passwordFocusNode.requestFocus();
-              });
-            },
-            child: Text(l10n.edit),
+          _copiedPasswordNotice
+              ? Text(
+                  l10n.copiedToClipboard,
+                  style: TextStyle(
+                    color: statusGreenText.resolveFrom(context),
+                    fontSize: 12,
+                  ),
+                )
+              : Text(
+                  l10n.agentGatePasswordHint,
+                  style: TextStyle(
+                    color: secondaryText.resolveFrom(context),
+                    fontSize: 12,
+                  ),
+                ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CupertinoButton(
+                key: const ValueKey('onboarding-sidecar-regen-password-btn'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 28),
+                onPressed: () async {
+                  final newPwd = SidecarConfig.generateRandomPassword();
+                  _passwordController.text = newPwd;
+                  await ref
+                      .read(webuiSidecarConfigProvider.notifier)
+                      .setPassword(newPwd);
+                },
+                child: Text(l10n.agentGateRegeneratePassword),
+              ),
+              CupertinoButton(
+                key: const ValueKey('onboarding-sidecar-copy-password-btn'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 28),
+                onPressed: () async {
+                  final pwd = ref.read(webuiSidecarConfigProvider).password;
+                  await Clipboard.setData(ClipboardData(text: pwd));
+                  if (mounted) {
+                    setState(() => _copiedPasswordNotice = true);
+                    _copiedNoticeTimer?.cancel();
+                    _copiedNoticeTimer = Timer(const Duration(seconds: 2), () {
+                      if (mounted) setState(() => _copiedPasswordNotice = false);
+                    });
+                  }
+                },
+                child: Text(l10n.copy),
+              ),
+              CupertinoButton(
+                key: const ValueKey('onboarding-sidecar-edit-password-btn'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 28),
+                onPressed: () {
+                  final pwd = ref.read(webuiSidecarConfigProvider).password;
+                  setState(() {
+                    _isEditingPassword = true;
+                    _passwordController.text = pwd;
+                    _passwordError = null;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _passwordFocusNode.requestFocus();
+                  });
+                },
+                child: Text(l10n.edit),
+              ),
+            ],
           ),
         ],
+      ),
+      trailing: Text(
+        key: const ValueKey('onboarding-sidecar-password-display'),
+        '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+        style: TextStyle(
+          letterSpacing: 2.0,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
