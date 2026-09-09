@@ -446,6 +446,10 @@ class AppLocalizations {
       case 'todo':
       case 'task':
         return isEnglish ? 'Todo' : '待办';
+      case 'todo_list':
+      case 'todo-list':
+      case 'list_todos':
+        return isEnglish ? 'Todo List' : '待办列表';
       case 'search_files':
       case 'file_search':
         return isEnglish ? 'Search Files' : '搜索文件';
@@ -534,6 +538,9 @@ class AppLocalizations {
       case 'proc':
       case 'background_process':
         return isEnglish ? 'Process' : '后台进程';
+      case 'process_manage':
+      case 'process-manage':
+        return isEnglish ? 'Process Manage' : '进程管理';
       case 'mem0':
       case 'mem0_search':
         return isEnglish ? 'Memory Search' : '记忆检索';

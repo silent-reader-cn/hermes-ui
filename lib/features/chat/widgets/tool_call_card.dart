@@ -699,6 +699,8 @@ IconData _toolIconFor(String name) {
     case 'process':
     case 'proc':
     case 'background_process':
+    case 'process_manage':
+    case 'process-manage':
       return CupertinoIcons.gear_alt;
     case 'kanban':
     case 'kanban_list':
@@ -717,6 +719,9 @@ IconData _toolIconFor(String name) {
     case 'todo':
     case 'task':
     case 'todo_write':
+    case 'todo_list':
+    case 'todo-list':
+    case 'list_todos':
     case 'write_todo':
     case 'todo_update':
       return CupertinoIcons.list_bullet;

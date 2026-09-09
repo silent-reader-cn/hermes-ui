@@ -223,6 +223,7 @@ void main() {
       expect(l10n.localizeToolName('execute_code'), '执行代码');
       expect(l10n.localizeToolName('todo'), '待办');
       expect(l10n.localizeToolName('todo_write'), '写入待办');
+      expect(l10n.localizeToolName('todo_list'), '待办列表');
       expect(l10n.localizeToolName('search_files'), '搜索文件');
       expect(l10n.localizeToolName('read_file'), '读取文件');
       expect(l10n.localizeToolName('write_file'), '写入文件');
@@ -245,6 +246,7 @@ void main() {
       expect(l10n.localizeToolName('thinking'), '思考');
       expect(l10n.localizeToolName('reasoning'), '思考');
       expect(l10n.localizeToolName('process'), '后台进程');
+      expect(l10n.localizeToolName('process_manage'), '进程管理');
       expect(l10n.localizeToolName('mem0_search'), '记忆检索');
       expect(l10n.localizeToolName('mem0_add'), '记忆写入');
       expect(l10n.localizeToolName('mem0_update'), '记忆更新');
@@ -683,6 +685,7 @@ void main() {
       expect(l10n.localizeToolName('execute_code'), 'Execute Code');
       expect(l10n.localizeToolName('todo'), 'Todo');
       expect(l10n.localizeToolName('todo_write'), 'Todo Write');
+      expect(l10n.localizeToolName('todo_list'), 'Todo List');
       expect(l10n.localizeToolName('search_files'), 'Search Files');
       expect(l10n.localizeToolName('read_file'), 'Read File');
       expect(l10n.localizeToolName('write_file'), 'Write File');
@@ -702,6 +705,8 @@ void main() {
       expect(l10n.localizeToolName('agent'), 'Agent');
       expect(l10n.localizeToolName('grep'), 'Search');
       expect(l10n.localizeToolName('glob'), 'Glob');
+      expect(l10n.localizeToolName('process'), 'Process');
+      expect(l10n.localizeToolName('process_manage'), 'Process Manage');
       expect(
         l10n.localizeToolName('unknown_custom_tool'),
         'unknown_custom_tool',
