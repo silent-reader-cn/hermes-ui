@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/features/settings/settings_subpages.dart';
@@ -391,160 +390,72 @@ void main() {
     });
   });
 
-  group('WebuiSidecarSection 密码脱敏展示、编辑与复制', () {
-    testWidgets('显示态脱敏展示，编辑按钮明文就地切换，复制按钮存入剪贴板', (tester) async {
+  group('WebuiSidecarSection 密码内联框、眼睛显隐与写回', () {
+    testWidgets('默认遮罩，眼睛切明文，改字提交写回，空字红字不写回', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await tester.pumpAndSettle();
-
-      // 显示态脱敏验证
-      final maskedFinder = find.byKey(
-        const ValueKey('settings-webui-password-display'),
-      );
-      expect(maskedFinder, findsOneWidget);
-      expect(find.text('••••••••'), findsOneWidget);
-      expect(find.text('init-secret-123456'), findsNothing);
-
-      // 复制功能测试
-      String? clipboardText;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (MethodCall methodCall) async {
-          if (methodCall.method == 'Clipboard.setData') {
-            clipboardText = (methodCall.arguments as Map)['text'] as String?;
-            return null;
-          }
-          if (methodCall.method == 'Clipboard.getData') {
-            return {'text': clipboardText};
-          }
-          return null;
-        },
-      );
-      addTearDown(() {
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        );
-      });
-
-      final copyBtnFinder = find.byKey(
-        const ValueKey('settings-webui-copy-password-btn'),
-      );
-      expect(copyBtnFinder, findsOneWidget);
-      await tester.tap(copyBtnFinder);
-      await tester.pump();
-
-      expect(clipboardText, 'init-secret-123456');
-
-      // 点击编辑 -> 就地切换明文输入框
-      final editBtnFinder = find.byKey(
-        const ValueKey('settings-webui-edit-password-btn'),
-      );
-      expect(editBtnFinder, findsOneWidget);
-      await tester.tap(editBtnFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
 
       final passwordInputFinder = find.byKey(
         const ValueKey('settings-webui-password-input'),
       );
       expect(passwordInputFinder, findsOneWidget);
-      final textField = tester.widget<CupertinoTextField>(passwordInputFinder);
-      expect(textField.obscureText, isFalse);
-      expect(textField.controller?.text, 'init-secret-123456');
-
-      // 空密码校验
-      await tester.enterText(passwordInputFinder, '');
-      final saveBtnFinder = find.byKey(
-        const ValueKey('settings-webui-save-password-btn'),
+      expect(
+        tester.widget<CupertinoTextField>(passwordInputFinder).obscureText,
+        isTrue,
       );
-      await tester.tap(saveBtnFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('init-secret-123456'), findsWidgets);
+      // 遮罩态：密码只存在于输入框内部，不以普通 Text 明文展示
+      final plainTextDisplays = find.byWidgetPredicate(
+        (w) => w is Text && w.data == 'init-secret-123456',
+      );
+      expect(plainTextDisplays, findsNothing);
+
+      // 眼睛切明文
+      await tester.tap(
+        find.byKey(
+          const ValueKey('settings-webui-password-visibility-btn'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CupertinoTextField>(passwordInputFinder).obscureText,
+        isFalse,
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('settings-webui-password-visibility-btn'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CupertinoTextField>(passwordInputFinder).obscureText,
+        isTrue,
+      );
+
+      // 改字提交写回
+      await tester.enterText(passwordInputFinder, 'new-secret-999888');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(webuiSidecarConfigProvider).password,
+        'new-secret-999888',
+      );
+      expect(
+        fakeSecureStorage.values[WebuiSidecarConfigStorage.keyPassword],
+        'new-secret-999888',
+      );
+
+      // 空密码校验：红字且不写回
+      await tester.enterText(passwordInputFinder, '');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
 
       expect(find.text('密码不能为空'), findsOneWidget);
       expect(
         fakeSecureStorage.values[WebuiSidecarConfigStorage.keyPassword],
-        'init-secret-123456',
-      );
-
-      // 取消按钮测试
-      final cancelBtnFinder = find.byKey(
-        const ValueKey('settings-webui-cancel-password-btn'),
-      );
-      await tester.tap(cancelBtnFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pumpAndSettle();
-
-      expect(maskedFinder, findsOneWidget);
-      expect(passwordInputFinder, findsNothing);
-
-      // 再次点击编辑并保存新密码
-      await tester.tap(editBtnFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      await tester.enterText(
-        find.byKey(const ValueKey('settings-webui-password-input')),
         'new-secret-999888',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('settings-webui-save-password-btn')),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pumpAndSettle();
-
-      expect(maskedFinder, findsOneWidget);
-      expect(find.text('new-secret-999888'), findsNothing);
-      expect(container.read(webuiSidecarConfigProvider).password, 'new-secret-999888');
-      expect(
-        fakeSecureStorage.values[WebuiSidecarConfigStorage.keyPassword],
-        'new-secret-999888',
-      );
-    });
-
-    testWidgets('非编辑态与编辑态均提供重新生成密码按钮，点击分别写回保存与填入输入框', (tester) async {
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pumpAndSettle();
-
-      // 验证非编辑态 subtitle 提示文案
-      expect(
-        find.text('默认已生成随机密码，可修改为你自己的密码'),
-        findsOneWidget,
-      );
-
-      // 非编辑态点击重新生成按钮
-      final regenBtnFinder = find.byKey(
-        const ValueKey('settings-webui-regen-password-btn'),
-      );
-      expect(regenBtnFinder, findsOneWidget);
-      await tester.tap(regenBtnFinder);
-      await tester.pumpAndSettle();
-
-      final nonEditRegenPwd =
-          container.read(webuiSidecarConfigProvider).password;
-      expect(nonEditRegenPwd.isNotEmpty, isTrue);
-      expect(nonEditRegenPwd, isNot('init-secret-123456'));
-
-      // 进入编辑态
-      await tester.tap(
-        find.byKey(const ValueKey('settings-webui-edit-password-btn')),
-      );
-      await tester.pumpAndSettle();
-
-      // 编辑态点击重新生成按钮
-      await tester.tap(
-        find.byKey(const ValueKey('settings-webui-regen-password-btn')),
-      );
-      await tester.pumpAndSettle();
-
-      final inputWidget = tester.widget<CupertinoTextField>(
-        find.byKey(const ValueKey('settings-webui-password-input')),
-      );
-      final editRegenPwd = inputWidget.controller?.text;
-      expect(editRegenPwd != null && editRegenPwd.isNotEmpty, isTrue);
-      expect(editRegenPwd, isNot(nonEditRegenPwd));
     });
   });
 

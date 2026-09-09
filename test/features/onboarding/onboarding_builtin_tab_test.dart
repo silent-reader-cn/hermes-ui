@@ -577,33 +577,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(webuiSidecarConfigProvider).host, '0.0.0.0');
 
-      // 编辑密码
+      // 密码行：默认明文内联框，眼睛切显隐，改字回车即写回
+      final passwordInputFinder = find.byKey(
+        const ValueKey('onboarding-sidecar-password-input'),
+      );
+      expect(passwordInputFinder, findsOneWidget);
+      expect(
+        tester.widget<CupertinoTextField>(passwordInputFinder).obscureText,
+        isFalse,
+      );
+
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-sidecar-edit-password-btn')),
+        find.byKey(
+          const ValueKey('onboarding-sidecar-password-visibility-btn'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CupertinoTextField>(passwordInputFinder).obscureText,
+        isTrue,
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-sidecar-password-visibility-btn'),
+        ),
       );
       await tester.pumpAndSettle();
 
-      // 点击重新生成按钮填入新随机串
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-sidecar-regen-password-btn')),
-      );
+      await tester.enterText(passwordInputFinder, 'my-new-secret');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      final regenPassword = tester
-          .widget<CupertinoTextField>(
-            find.byKey(const ValueKey('onboarding-sidecar-password-input')),
-          )
-          .controller!
-          .text;
-      expect(regenPassword.isNotEmpty, isTrue);
-
-      await tester.enterText(
-        find.byKey(const ValueKey('onboarding-sidecar-password-input')),
+      expect(
+        container.read(webuiSidecarConfigProvider).password,
         'my-new-secret',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-sidecar-save-password-btn')),
-      );
+
+      // 空密码不写回并红字提示
+      await tester.enterText(passwordInputFinder, '');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
+      expect(find.text('密码不能为空'), findsOneWidget);
       expect(
         container.read(webuiSidecarConfigProvider).password,
         'my-new-secret',

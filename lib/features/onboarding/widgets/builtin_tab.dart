@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -45,12 +44,10 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   final FocusNode _portFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
-  bool _isEditingPassword = false;
+  bool _passwordObscured = false;
   String? _hostError;
   String? _portError;
   String? _passwordError;
-  bool _copiedPasswordNotice = false;
-  Timer? _copiedNoticeTimer;
 
   @override
   void initState() {
@@ -67,7 +64,6 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
 
   @override
   void dispose() {
-    _copiedNoticeTimer?.cancel();
     _hostFocusNode.removeListener(_onHostFocusChange);
     _portFocusNode.removeListener(_onPortFocusChange);
     _passwordFocusNode.removeListener(_onPasswordFocusChange);
@@ -95,7 +91,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   }
 
   void _onPasswordFocusChange() {
-    if (!_passwordFocusNode.hasFocus && _isEditingPassword) {
+    if (!_passwordFocusNode.hasFocus) {
       _submitPassword(_passwordController.text);
     }
   }
@@ -309,7 +305,6 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     }
     setState(() {
       _passwordError = null;
-      _isEditingPassword = false;
     });
     final current = ref.read(webuiSidecarConfigProvider).password;
     if (trimmed != current) {
@@ -334,7 +329,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           _portController.text != next.port.toString()) {
         _portController.text = next.port.toString();
       }
-      if (!_isEditingPassword && _passwordController.text != next.password) {
+      if (!_passwordFocusNode.hasFocus && _passwordController.text != next.password) {
         _passwordController.text = next.password;
       }
     });
@@ -817,163 +812,65 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     );
   }
 
+  /// 密码行：与端口/IP 统一的右对齐内联密码框（无 subtitle、无按钮）。
+  /// 默认明文方便复制，眼睛图标切显隐；编辑失焦/回车即写回。
   Widget _buildPasswordTile(
     BuildContext context,
     AppLocalizations l10n,
     SidecarConfig config,
   ) {
-    if (_isEditingPassword) {
-      return CupertinoListTile(
-        key: const ValueKey('onboarding-sidecar-password-tile'),
-        title: Text(l10n.webuiPassword),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_passwordError != null)
-              Text(
-                _passwordError!,
-                style: TextStyle(
-                  color: statusRedText.resolveFrom(context),
-                  fontSize: 12,
-                ),
-              ),
-            if (_passwordError != null) const SizedBox(height: 6),
-            CupertinoTextField(
-              key: const ValueKey('onboarding-sidecar-password-input'),
-              controller: _passwordController,
-              focusNode: _passwordFocusNode,
-              placeholder: l10n.webuiPasswordPlaceholder,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              onSubmitted: _submitPassword,
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CupertinoButton(
-                  key: const ValueKey('onboarding-sidecar-regen-password-btn'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  minimumSize: const Size(0, 28),
-                  onPressed: () {
-                    setState(() {
-                      _passwordController.text =
-                          SidecarConfig.generateRandomPassword();
-                      _passwordError = null;
-                    });
-                  },
-                  child: Text(l10n.agentGateRegeneratePassword),
-                ),
-                CupertinoButton(
-                  key: const ValueKey('onboarding-sidecar-save-password-btn'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  minimumSize: const Size(0, 28),
-                  onPressed: () => _submitPassword(_passwordController.text),
-                  child: Text(l10n.confirm),
-                ),
-                CupertinoButton(
-                  key: const ValueKey('onboarding-sidecar-cancel-password-btn'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  minimumSize: const Size(0, 28),
-                  onPressed: () {
-                    setState(() {
-                      _isEditingPassword = false;
-                      _passwordError = null;
-                    });
-                  },
-                  child: Text(l10n.cancel),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
     return CupertinoListTile(
       key: const ValueKey('onboarding-sidecar-password-tile'),
       title: Text(l10n.webuiPassword),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _copiedPasswordNotice
-              ? Text(
-                  l10n.copiedToClipboard,
-                  style: TextStyle(
-                    color: statusGreenText.resolveFrom(context),
-                    fontSize: 12,
-                  ),
-                )
-              : Text(
-                  l10n.agentGatePasswordHint,
-                  style: TextStyle(
-                    color: secondaryText.resolveFrom(context),
-                    fontSize: 12,
-                  ),
-                ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CupertinoButton(
-                key: const ValueKey('onboarding-sidecar-regen-password-btn'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: const Size(0, 28),
-                onPressed: () async {
-                  final newPwd = SidecarConfig.generateRandomPassword();
-                  _passwordController.text = newPwd;
-                  await ref
-                      .read(webuiSidecarConfigProvider.notifier)
-                      .setPassword(newPwd);
-                },
-                child: Text(l10n.agentGateRegeneratePassword),
+      subtitle: _passwordError != null
+          ? Text(
+              _passwordError!,
+              style: TextStyle(
+                color: statusRedText.resolveFrom(context),
+                fontSize: 12,
               ),
-              CupertinoButton(
-                key: const ValueKey('onboarding-sidecar-copy-password-btn'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: const Size(0, 28),
-                onPressed: () async {
-                  final pwd = ref.read(webuiSidecarConfigProvider).password;
-                  await Clipboard.setData(ClipboardData(text: pwd));
-                  if (mounted) {
-                    setState(() => _copiedPasswordNotice = true);
-                    _copiedNoticeTimer?.cancel();
-                    _copiedNoticeTimer = Timer(const Duration(seconds: 2), () {
-                      if (mounted) setState(() => _copiedPasswordNotice = false);
-                    });
+            )
+          : null,
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 200),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: CupertinoTextField(
+                key: const ValueKey('onboarding-sidecar-password-input'),
+                controller: _passwordController,
+                focusNode: _passwordFocusNode,
+                textAlign: TextAlign.end,
+                obscureText: _passwordObscured,
+                placeholder: l10n.webuiPasswordPlaceholder,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                onChanged: (_) {
+                  if (_passwordError != null) {
+                    setState(() => _passwordError = null);
                   }
                 },
-                child: Text(l10n.copy),
+                onSubmitted: _submitPassword,
               ),
-              CupertinoButton(
-                key: const ValueKey('onboarding-sidecar-edit-password-btn'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: const Size(0, 28),
-                onPressed: () {
-                  final pwd = ref.read(webuiSidecarConfigProvider).password;
-                  setState(() {
-                    _isEditingPassword = true;
-                    _passwordController.text = pwd;
-                    _passwordError = null;
-                  });
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _passwordFocusNode.requestFocus();
-                  });
-                },
-                child: Text(l10n.edit),
+            ),
+            CupertinoButton(
+              key: const ValueKey(
+                'onboarding-sidecar-password-visibility-btn',
               ),
-            ],
-          ),
-        ],
-      ),
-      trailing: Text(
-        key: const ValueKey('onboarding-sidecar-password-display'),
-        '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
-        style: TextStyle(
-          letterSpacing: 2.0,
-          color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          fontWeight: FontWeight.bold,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              minimumSize: const Size(0, 28),
+              onPressed: () {
+                setState(() => _passwordObscured = !_passwordObscured);
+              },
+              child: Icon(
+                _passwordObscured
+                    ? CupertinoIcons.eye
+                    : CupertinoIcons.eye_slash,
+                size: 18,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ],
         ),
       ),
     );
