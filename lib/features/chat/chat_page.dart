@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show FileSystemEntity, Platform, Process;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -194,6 +196,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  /// Windows：在资源管理器中打开会话项目文件夹。
+  ///
+  /// 内置 sidecar 的 agent 与本机同文件系统，workspace 即本地绝对路径；
+  /// 目录不存在（远端路径/已删除）时以 notice 提示，绝不静默失败。
+  Future<void> _openProjectFolder(
+    BuildContext context,
+    WidgetRef ref,
+    String path,
+  ) async {
+    await openSessionProjectFolder(context, ref, widget.sessionId, path);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -224,6 +238,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     });
     final state = ref.watch(chatControllerProvider(widget.sessionId));
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
+    // Windows 桌面「打开项目文件夹」按钮可见性：仅 Windows + 会话带 workspace。
+    final showProjectFolder =
+        !kIsWeb &&
+        Platform.isWindows &&
+        (state.workspace?.isNotEmpty ?? false);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
@@ -269,21 +288,40 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ),
           ),
         ),
-        trailing: KeyedSubtree(
-          key: _actionsKey,
-          child: AccessibleButton(
-            key: const ValueKey('chat-session-actions'),
-            label: l10n.sessionActions,
-            padding: EdgeInsets.zero,
-            onPressed: () => _showSessionActions(
-              context,
-              ref,
-              widget.sessionId,
-              state,
-              _actionsKey,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Windows 桌面：三点菜单左侧「在资源管理器中打开项目文件夹」。
+            // 会话带 workspace（项目文件夹绝对路径）时才显示。
+            if (showProjectFolder) ...[
+              AccessibleButton(
+                key: const ValueKey('chat-open-project-folder'),
+                label: l10n.openProjectFolder,
+                padding: EdgeInsets.zero,
+                onPressed: () => unawaited(
+                  _openProjectFolder(context, ref, state.workspace!),
+                ),
+                child: const Icon(CupertinoIcons.folder),
+              ),
+              const SizedBox(width: 14),
+            ],
+            KeyedSubtree(
+              key: _actionsKey,
+              child: AccessibleButton(
+                key: const ValueKey('chat-session-actions'),
+                label: l10n.sessionActions,
+                padding: EdgeInsets.zero,
+                onPressed: () => _showSessionActions(
+                  context,
+                  ref,
+                  widget.sessionId,
+                  state,
+                  _actionsKey,
+                ),
+                child: const Icon(CupertinoIcons.ellipsis),
+              ),
             ),
-            child: const Icon(CupertinoIcons.ellipsis),
-          ),
+          ],
         ),
       ),
       child: SafeArea(
@@ -384,6 +422,29 @@ Future<void> _showParentSessionDialog(
   );
 }
 
+/// Windows：在资源管理器中打开会话项目文件夹（头部按钮与三点菜单共用）。
+///
+/// 内置 sidecar 的 agent 与本机同文件系统，workspace 即本地绝对路径；
+/// 目录不存在（远端路径/已删除）时以 notice 提示，绝不静默失败。
+Future<void> openSessionProjectFolder(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+  String path,
+) async {
+  final l10n = AppLocalizations.of(context);
+  final notifier = ref.read(chatControllerProvider(sessionId).notifier);
+  try {
+    if (!await FileSystemEntity.isDirectory(path)) {
+      notifier.setNotice(l10n.projectFolderMissing(path));
+      return;
+    }
+    await Process.run('explorer', [path]);
+  } catch (e) {
+    notifier.setNotice(l10n.openProjectFolderFailed(e.toString()));
+  }
+}
+
 Future<void> _showSessionActions(
   BuildContext context,
   WidgetRef ref,
@@ -444,8 +505,16 @@ Future<void> _showSessionActions(
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-workspace'),
       label: l10n.workspaceFilesTitle,
-      onPressed: () => unawaited(context.push('/workspace/$sessionId')),
-    ),
+      onPressed: () => unawaited(context.push('/workspace/$sessionId'))),
+    // Windows 桌面：三点菜单同样提供「打开项目文件夹」。
+    if (!kIsWeb && Platform.isWindows && (state.workspace?.isNotEmpty ?? false))
+      AdaptiveMenuItem(
+        key: const ValueKey('chat-action-open-project-folder'),
+        label: l10n.openProjectFolder,
+        onPressed: () => unawaited(
+          openSessionProjectFolder(context, ref, sessionId, state.workspace!),
+        ),
+      ),
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-git'),
       label: l10n.gitWorkspaceTitle,

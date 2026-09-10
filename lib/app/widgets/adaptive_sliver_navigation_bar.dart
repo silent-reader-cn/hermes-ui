@@ -78,12 +78,18 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
     if (isWide) {
       // 桌面宽屏：44pt 固定紧凑导航条（SliverNavigationBar 不允许
       // largeTitle 为 null，改用 CupertinoNavigationBar）。
-      return SliverToBoxAdapter(
-        child: CupertinoNavigationBar(
-          leading: leading,
-          trailing: trailing,
-          middle: buildTitle(title),
-          bottom: bottom,
+      // pinned：与窄屏大标题头部同理，滚动后标题与返回/操作按钮钉在顶部，
+      // 内容从其下方滑过（此前 SliverToBoxAdapter 会随滚动流走）。
+      return SliverPersistentHeader(
+        pinned: true,
+        delegate: _FixedNavBarSliverDelegate(
+          navBar: CupertinoNavigationBar(
+            leading: leading,
+            trailing: trailing,
+            middle: buildTitle(title),
+            bottom: bottom,
+          ),
+          topPadding: MediaQuery.paddingOf(context).top,
         ),
       );
     }
@@ -109,4 +115,36 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 宽屏紧凑导航条的 pinned delegate：把 [CupertinoNavigationBar] 的总高
+/// （44pt + bottom 高 + 顶部安全区）如实报告给 sliver，保证不溢出且常驻顶部。
+class _FixedNavBarSliverDelegate extends SliverPersistentHeaderDelegate {
+  const _FixedNavBarSliverDelegate({required this.navBar, this.topPadding = 0});
+
+  final CupertinoNavigationBar navBar;
+  final double topPadding;
+
+  static const double _kNavBarPersistentHeight = 44.0;
+
+  double get _bottomHeight => navBar.bottom?.preferredSize.height ?? 0.0;
+
+  double get _extent => _kNavBarPersistentHeight + _bottomHeight + topPadding;
+
+  @override
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  bool shouldRebuild(covariant _FixedNavBarSliverDelegate oldDelegate) =>
+      oldDelegate.navBar != navBar || oldDelegate.topPadding != topPadding;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => navBar;
 }

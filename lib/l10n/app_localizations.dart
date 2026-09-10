@@ -1793,3 +1793,17 @@ extension AppLocalizationsUpdate101 on AppLocalizations {
   String get updateReadyToInstall =>
       isEnglish ? 'Update download completed. Install now?' : '新版本已下载完成，是否立即安装？';
 }
+
+// ---------------------------------------------------------------------------
+// chat header: open session project folder in Explorer (Windows)
+// ---------------------------------------------------------------------------
+extension AppLocalizationsProjectFolder on AppLocalizations {
+  String get openProjectFolder =>
+      isEnglish ? 'Open Project Folder' : '打开项目文件夹';
+  String projectFolderMissing(String path) => isEnglish
+      ? 'Project folder not found: $path'
+      : '项目文件夹不存在：$path';
+  String openProjectFolderFailed(String error) => isEnglish
+      ? 'Failed to open project folder: $error'
+      : '打开项目文件夹失败：$error';
+}

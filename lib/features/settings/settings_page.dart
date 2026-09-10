@@ -1620,8 +1620,8 @@ class _ModelPickerPage extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     l10n.noAvailableModels,
-                    style: const TextStyle(
-                      color: CupertinoColors.secondaryLabel,
+                    style: TextStyle(
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
                     ),
                   ),
                 ),

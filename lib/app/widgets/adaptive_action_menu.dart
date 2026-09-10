@@ -72,10 +72,14 @@ class AdaptiveActionMenu {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Text(
                       title,
-                      style: const TextStyle(
+                      // 主题适配：必须 resolve 动态色（const TextStyle 直接用
+                      // CupertinoColors.secondaryLabel 会冻结在浅色主题值，
+                      // 深色弹层底上黑字 50% 透明几乎不可见）。
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.secondaryLabel,
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
                       ),
                     ),
                   ),

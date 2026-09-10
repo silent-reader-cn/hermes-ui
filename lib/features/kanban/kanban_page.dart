@@ -525,10 +525,12 @@ class _KanbanCardTile extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(
+                Icon(
                   CupertinoIcons.person,
                   size: 13,
-                  color: CupertinoColors.secondaryLabel,
+                  // const 动态色不会自动 resolve：深色主题下冻结为黑色隐身，
+                  // 必须显式 resolveFrom(context)。
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -579,11 +581,12 @@ class _KanbanCardTile extends StatelessWidget {
             parents > 0
                 ? l10n.parentsDependency(parents)
                 : l10n.childrenDependency(children),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               // 徽章文字用全强度 label：statusOrangeText 在 20% 黄底上
               // dark 只有 ~1.45:1（背景追踪暴露的真问题），label 深浅色都达标。
-              color: CupertinoColors.label,
+              // （注意：必须 resolve，const 动态色冻结浅色变体会在深色下隐身。）
+              color: CupertinoColors.label.resolveFrom(context),
             ),
           ),
         ],

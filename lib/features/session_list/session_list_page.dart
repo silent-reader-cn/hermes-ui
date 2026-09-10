@@ -1633,10 +1633,12 @@ class _SessionFilterSheet extends ConsumerWidget {
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(36, 36),
                           onPressed: () => Navigator.pop(context),
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.xmark_circle_fill,
                             size: 22,
-                            color: CupertinoColors.secondaryLabel,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
                         ),
                       ],

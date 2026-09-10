@@ -259,9 +259,9 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
         if (isMissingBundle)
           CupertinoListTile(
             key: const ValueKey('settings-webui-missing-bundle-hint'),
-            leading: const Icon(
+            leading: Icon(
               CupertinoIcons.info_circle,
-              color: CupertinoColors.secondaryLabel,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
               size: 20,
             ),
             title: Text(

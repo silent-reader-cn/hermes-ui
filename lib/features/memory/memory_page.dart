@@ -527,7 +527,7 @@ class _MemorySectionHeader extends StatelessWidget {
                 Icon(
                   _memorySectionIcon(section),
                   size: 15,
-                  color: CupertinoColors.label,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
@@ -799,10 +799,10 @@ class _ProjectContextHeader extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   CupertinoIcons.folder,
                   size: 15,
-                  color: CupertinoColors.label,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
@@ -830,10 +830,10 @@ class _ProjectContextHeader extends StatelessWidget {
             Text(modified, overflow: TextOverflow.ellipsis, style: metaStyle),
           ],
           if (charCount > 0 || modified != null) const SizedBox(width: 8),
-          const Icon(
+          Icon(
             CupertinoIcons.lock_fill,
             size: 13,
-            color: CupertinoColors.secondaryLabel,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
           ),
         ],
       ),
