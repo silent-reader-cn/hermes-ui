@@ -36,8 +36,7 @@ void main() {
   }
 
   group('自动重登（AutoReauth）', () {
-    test('401 + autoReauth 成功 → 重放一次 → 返回数据（请求 2 次/重登 1 次）',
-        () async {
+    test('401 + autoReauth 成功 → 重放一次 → 返回数据（请求 2 次/重登 1 次）', () async {
       var first = true;
       final adapter = _RecordingAdapter(
         responder: (_) {
@@ -63,27 +62,29 @@ void main() {
       expect(client.isReauthInFlight, isFalse);
     });
 
-    test('401 + autoReauth 失败（返回 false）→ 抛 UnauthorizedException，只请求 1 次',
-        () async {
-      final adapter = _RecordingAdapter(
-        responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
-      );
-      var reauthCalls = 0;
-      final client = buildClient(
-        adapter,
-        autoReauth: () async {
-          reauthCalls++;
-          return false;
-        },
-      );
-      await expectLater(
-        client.sendJson(Endpoint.health),
-        throwsA(isA<UnauthorizedException>()),
-      );
-      expect(reauthCalls, 1);
-      expect(adapter.requests.length, 1);
-      expect(client.isReauthInFlight, isFalse);
-    });
+    test(
+      '401 + autoReauth 失败（返回 false）→ 抛 UnauthorizedException，只请求 1 次',
+      () async {
+        final adapter = _RecordingAdapter(
+          responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
+        );
+        var reauthCalls = 0;
+        final client = buildClient(
+          adapter,
+          autoReauth: () async {
+            reauthCalls++;
+            return false;
+          },
+        );
+        await expectLater(
+          client.sendJson(Endpoint.health),
+          throwsA(isA<UnauthorizedException>()),
+        );
+        expect(reauthCalls, 1);
+        expect(adapter.requests.length, 1);
+        expect(client.isReauthInFlight, isFalse);
+      },
+    );
 
     test('401 + 未注入 autoReauth → 抛 UnauthorizedException，不重试', () async {
       final adapter = _RecordingAdapter(
@@ -110,18 +111,14 @@ void main() {
         },
       );
       await expectLater(
-        client.sendJson(
-          Endpoint.health,
-          allowAutoReauth: false,
-        ),
+        client.sendJson(Endpoint.health, allowAutoReauth: false),
         throwsA(isA<UnauthorizedException>()),
       );
       expect(reauthCalls, 0);
       expect(adapter.requests.length, 1);
     });
 
-    test('401 + 重放仍 401 → 抛 UnauthorizedException（不递归，共 2 次/重登 1 次）',
-        () async {
+    test('401 + 重放仍 401 → 抛 UnauthorizedException（不递归，共 2 次/重登 1 次）', () async {
       final adapter = _RecordingAdapter(
         responder: (_) => ResponseBody.fromString('{"error":"no"}', 401),
       );
@@ -649,6 +646,26 @@ void main() {
       expect(headers.containsKey('X-Api-Key'), isFalse);
       expect(headers.containsKey('Cookie'), isFalse);
       expect(headers['Accept'], '*/*');
+    });
+
+    test('urlBytes 字符串 URL 正常拉取字节', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('bytes-content', 200),
+      );
+      final client = buildClient(adapter);
+      final data = await client.urlBytes('https://cdn.example.com/file.pdf');
+      expect(String.fromCharCodes(data), 'bytes-content');
+    });
+
+    test('urlBytes 无效 URL 抛 InvalidServerUrlException', () async {
+      final adapter = _RecordingAdapter(
+        responder: (_) => ResponseBody.fromString('', 200),
+      );
+      final client = buildClient(adapter);
+      expect(
+        () => client.urlBytes('not-a-valid-url'),
+        throwsA(isA<InvalidServerUrlException>()),
+      );
     });
 
     test('downloadDataResumable 同域带 Range 头与自定义头', () async {

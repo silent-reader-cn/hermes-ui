@@ -319,6 +319,25 @@ class ApiClient {
     throw HttpException.fromBody(status, _bodyText(response.data));
   }
 
+  /// 下载任意 URL 字符串的原始字节。
+  Future<Uint8List> urlBytes(
+    String url, {
+    bool mapsUnauthorized = false,
+    bool allowAutoReauth = true,
+    void Function(int receivedBytes, int totalBytes)? onReceiveProgress,
+  }) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      throw InvalidServerUrlException('URL 无效：$url');
+    }
+    return downloadData(
+      uri,
+      mapsUnauthorized: mapsUnauthorized,
+      allowAutoReauth: allowAutoReauth,
+      onReceiveProgress: onReceiveProgress,
+    );
+  }
+
   /// 断点续传流式下载（#98）。
   ///
   /// 同域 → 主客户端（带自定义头 + cookie + 401 自动重登）；

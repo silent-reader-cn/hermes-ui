@@ -20,6 +20,7 @@ import '../../downloads/download_save_service.dart';
 import '../../settings/settings_providers.dart';
 import 'chat_media_parser.dart';
 import '../../../app/widgets/hermes_page_route.dart';
+import '../../workspace_manager/file_preview_body.dart';
 
 export '../../downloads/download_confirm_dialog.dart';
 
@@ -539,8 +540,10 @@ class AttachmentLightbox extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final titleText = name ?? altText ?? '';
 
+    final previewKind = workspaceFileKindOf(titleText);
+
     Widget body;
-    if (isImage) {
+    if (isImage || previewKind == WorkspaceFileKind.image) {
       Widget viewerContent;
       if (bytes != null) {
         viewerContent = Image.memory(bytes!, fit: BoxFit.contain);
@@ -604,6 +607,55 @@ class AttachmentLightbox extends StatelessWidget {
               onOpenFile: onOpenFile,
             ),
           ),
+        ],
+      );
+    } else if (previewKind == WorkspaceFileKind.pdf ||
+        previewKind == WorkspaceFileKind.office ||
+        previewKind == WorkspaceFileKind.video ||
+        previewKind == WorkspaceFileKind.audio ||
+        previewKind == WorkspaceFileKind.text) {
+      final downloadBtn = Padding(
+        padding: const EdgeInsets.only(bottom: 24, top: 12),
+        child: _AttachmentDownloadButton(
+          resolvedUrl: resolvedUrl,
+          bytes: bytes,
+          filename: titleText,
+          sessionId: sessionId,
+          expectedBytes: expectedBytes,
+          mimeType: mimeType,
+          onOpenFile: onOpenFile,
+        ),
+      );
+      final previewBody = FilePreviewBody(
+        source: FilePreviewSource.resolved(
+          resolvedUrl,
+          bytes: bytes,
+          sessionId: sessionId,
+        ),
+        fileName: titleText,
+        sizeBytes: expectedBytes ?? bytes?.length,
+        downloadButton: _AttachmentDownloadButton(
+          resolvedUrl: resolvedUrl,
+          bytes: bytes,
+          filename: titleText,
+          sessionId: sessionId,
+          expectedBytes: expectedBytes,
+          mimeType: mimeType,
+          onOpenFile: onOpenFile,
+        ),
+      );
+
+      body = Column(
+        children: [
+          Expanded(
+            child: ColoredBox(
+              color: CupertinoColors.systemBackground.resolveFrom(context),
+              child: previewKind == WorkspaceFileKind.pdf
+                  ? SizedBox.expand(child: previewBody)
+                  : SingleChildScrollView(child: previewBody),
+            ),
+          ),
+          downloadBtn,
         ],
       );
     } else {

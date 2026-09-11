@@ -668,9 +668,9 @@ void main() {
 
       final attachment = PendingAttachment(
         id: 'att-doc-1',
-        name: 'architecture.pdf',
-        path: '/tmp/architecture.pdf',
-        mime: 'application/pdf',
+        name: 'architecture.zip',
+        path: '/tmp/architecture.zip',
+        mime: 'application/zip',
         isImage: false,
       );
 
@@ -697,7 +697,7 @@ void main() {
 
       // 验证显示不支持预览文案与下载按钮
       expect(find.text('不支持预览'), findsOneWidget);
-      expect(find.text('architecture.pdf'), findsWidgets);
+      expect(find.text('architecture.zip'), findsWidgets);
       expect(
         find.byKey(const ValueKey('attachment-download-button')),
         findsOneWidget,
@@ -749,7 +749,7 @@ void main() {
 
     testWidgets('用户气泡非图片附件：点击芯片弹出「不支持预览」与下载按钮，点击触发下载并成功标记', (tester) async {
       final tmpFile = File(
-        '${Directory.systemTemp.path}${Platform.pathSeparator}test_spec.pdf',
+        '${Directory.systemTemp.path}${Platform.pathSeparator}test_spec.zip',
       );
       await tester.runAsync(() => tmpFile.writeAsBytes([1, 2, 3]));
       addTearDown(() async {
@@ -765,8 +765,8 @@ void main() {
         content: '这是规范文档',
         attachments: [
           MessageAttachment(
-            name: 'spec.pdf',
-            path: 'https://example.com/media/spec.pdf',
+            name: 'spec.zip',
+            path: 'https://example.com/media/spec.zip',
             isImage: false,
           ),
         ],
@@ -791,18 +791,18 @@ void main() {
       await tester.pump();
 
       expect(
-        find.byKey(const ValueKey('attachment-chip-preview-spec.pdf')),
+        find.byKey(const ValueKey('attachment-chip-preview-spec.zip')),
         findsOneWidget,
       );
 
       // 点击芯片
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-spec.pdf')),
+        find.byKey(const ValueKey('attachment-chip-preview-spec.zip')),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('不支持预览'), findsOneWidget);
-      expect(find.text('spec.pdf'), findsWidgets);
+      expect(find.text('spec.zip'), findsWidgets);
       final downloadBtn = find.byKey(
         const ValueKey('attachment-download-button'),
       );
@@ -974,9 +974,9 @@ void main() {
     testWidgets('内存字节（未保存为本地文件）不应误判为「已下载/已保存」', (tester) async {
       final attachment = PendingAttachment(
         id: 'att-mem-1',
-        name: 'memory_doc.pdf',
-        path: 'memory_doc.pdf',
-        mime: 'application/pdf',
+        name: 'memory_doc.bin',
+        path: 'memory_doc.bin',
+        mime: 'application/octet-stream',
         isImage: false,
         thumbnailData: Uint8List.fromList([1, 2, 3]),
       );
