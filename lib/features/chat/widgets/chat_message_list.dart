@@ -976,8 +976,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       if (key?.currentContext == null) continue;
       final box = key!.currentContext!.findRenderObject() as RenderBox?;
       if (box == null || !box.attached || box.size.height == 0) continue;
-      final dy =
-          box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
+      final dy = box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
       if (dy + box.size.height <= 0) continue; // 完全在视口上方
       if (dy < bestDy) {
         bestDy = dy;
@@ -1026,8 +1025,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _controller.jumpTo(target);
         _restoringOlderPosition = false;
         _nearBottom =
-            _controller.position.maxScrollExtent -
-                _controller.position.pixels <
+            _controller.position.maxScrollExtent - _controller.position.pixels <
             _nearBottomThreshold;
         return;
       }
@@ -1054,8 +1052,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _olderRestoreAnchorId = null;
         _olderRestoreAnchorDy = null;
         _nearBottom =
-            _controller.position.maxScrollExtent -
-                _controller.position.pixels <
+            _controller.position.maxScrollExtent - _controller.position.pixels <
             _nearBottomThreshold;
         return;
       }
@@ -1646,16 +1643,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final l10n = AppLocalizations.of(context);
 
     int resolveIndex() {
-      final messages =
-          ref.read(chatControllerProvider(widget.sessionId)).messages;
+      final messages = ref
+          .read(chatControllerProvider(widget.sessionId))
+          .messages;
       if (messageIndex != null &&
           messageIndex >= 0 &&
           messageIndex < messages.length) {
         return messageIndex;
       }
       if (message.messageId != null && message.messageId!.isNotEmpty) {
-        final idx =
-            messages.indexWhere((m) => m.messageId == message.messageId);
+        final idx = messages.indexWhere(
+          (m) => m.messageId == message.messageId,
+        );
         if (idx >= 0) return idx;
       }
       return messages.indexWhere((m) => m.id == message.id);
@@ -1667,9 +1666,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         // 先提示，再异步写剪贴板（立即反馈，不阻塞菜单关闭）。
         unawaited(copyMessageText(message));
         if (mounted) {
-          controller.setNotice(
-            l10n.copiedToClipboardNotice,
-          );
+          controller.setNotice(l10n.copiedToClipboardNotice);
         }
       case MessageAction.edit:
         final text = message.content;
@@ -2259,8 +2256,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     // 分页加载期间持续滚轮/拖动的用户在 restore 结束后会被
                     // 跟底逻辑拉回末尾（用户报告「加载历史后跳到最底」）。
                     // restore 只约束程序化滚动，不约束用户意图结算。
-                    if (_initialPositioned &&
-                        !_initialPositioning) {
+                    if (_initialPositioned && !_initialPositioning) {
                       final wasNotScrolled = !_userHasScrolled;
                       if (!_userHasScrolled) {
                         _pinnedTranscriptCount = ref
@@ -2366,12 +2362,11 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                             entry.message,
                             messageIndex: entry.loadedIndex,
                           ),
-                          onSecondaryTapDown: (details) =>
-                              _showMessageActions(
-                                entry.message,
-                                messageIndex: entry.loadedIndex,
-                                position: details.globalPosition,
-                              ),
+                          onSecondaryTapDown: (details) => _showMessageActions(
+                            entry.message,
+                            messageIndex: entry.loadedIndex,
+                            position: details.globalPosition,
+                          ),
                           child: SearchMessageHighlight(
                             highlight: isHighlightTarget,
                             child: RepaintBoundary(
@@ -2570,38 +2565,13 @@ class _StreamingBubble extends ConsumerWidget {
     final hasContent = (message.content ?? '').isNotEmpty;
     final isEmpty = !hasContent && toolGroups.isEmpty;
     if (!isEmpty) {
-      final phase = ref.watch(chatPhaseProvider(sessionId));
-      final isRevealQueueEmpty = ref.watch(
-        chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
-      );
-      final pendingTokens = ref.watch(
-        chatControllerProvider(sessionId)
-            .select((s) => s.pendingAssistantTokenChunks),
-      );
-      final showCursor =
-          phase == ChatPhase.streaming &&
-          isRevealQueueEmpty &&
-          pendingTokens.isEmpty &&
-          hasContent;
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          RepaintBoundary(
-            child: ChatMessageBubble(
-              message: message,
-              toolGroups: toolGroups,
-              hideThinking: hideThinking,
-              isStreaming: true,
-            ),
-          ),
-          if (showCursor)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              child: _StreamingCursor(),
-            ),
-        ],
+      return RepaintBoundary(
+        child: ChatMessageBubble(
+          message: message,
+          toolGroups: toolGroups,
+          hideThinking: hideThinking,
+          isStreaming: true,
+        ),
       );
     }
     // 空流式气泡兜底。
@@ -2836,15 +2806,12 @@ class _LiveTimelineItem extends StatelessWidget {
     required this.entry,
     required this.streamingMessage,
     required this.hideThinking,
-    // ignore: unused_element_parameter
-    this.isLastText = false,
   });
 
   final String sessionId;
   final LiveTimelineEntry entry;
   final ChatMessage streamingMessage;
   final bool hideThinking;
-  final bool isLastText;
 
   @override
   Widget build(BuildContext context) {
@@ -2858,7 +2825,6 @@ class _LiveTimelineItem extends StatelessWidget {
           sessionId: sessionId,
           slice: entry.textSlice,
           streamingMessage: streamingMessage,
-          isLastText: isLastText,
         ),
         LiveSegmentKind.tools => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2878,14 +2844,11 @@ class _LiveTextBlock extends ConsumerWidget {
     required this.sessionId,
     required this.slice,
     required this.streamingMessage,
-    // ignore: unused_element_parameter
-    this.isLastText = false,
   });
 
   final String sessionId;
   final String slice;
   final ChatMessage streamingMessage;
-  final bool isLastText;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2943,33 +2906,13 @@ class _LiveTextBlock extends ConsumerWidget {
         ),
       );
     }
-    if (isLastText) {
-      final phase = ref.watch(chatPhaseProvider(sessionId));
-      final isRevealQueueEmpty = ref.watch(
-        chatControllerProvider(sessionId).select((s) => s.isRevealQueueEmpty),
-      );
-      final pendingTokens = ref.watch(
-        chatControllerProvider(sessionId)
-            .select((s) => s.pendingAssistantTokenChunks),
-      );
-      final hasContent = (streamingMessage.content ?? '').isNotEmpty;
-      final showCursor =
-          phase == ChatPhase.streaming &&
-          isRevealQueueEmpty &&
-          pendingTokens.isEmpty &&
-          hasContent;
-      if (showCursor) {
-        sections.add(const _StreamingCursor());
-      }
-    }
     if (sections.isEmpty) return const SizedBox.shrink();
     final children = <Widget>[];
     for (var i = 0; i < sections.length; i++) {
-      final section = sections[i];
-      if (i > 0 && section is! _StreamingCursor) {
+      if (i > 0) {
         children.add(const SizedBox(height: kMessageSectionGap));
       }
-      children.add(section);
+      children.add(sections[i]);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2987,99 +2930,6 @@ class _LiveTextBlock extends ConsumerWidget {
     } catch (_) {
       return null;
     }
-  }
-}
-
-/// 流式打字机闪烁光标（追上积压后闪烁提示，非流式/done 立即消失）。
-class _StreamingCursor extends StatefulWidget {
-  const _StreamingCursor();
-
-  @override
-  State<_StreamingCursor> createState() => _StreamingCursorState();
-}
-
-class _StreamingCursorState extends State<_StreamingCursor> {
-  Timer? _blinkTimer;
-  bool _visible = true;
-  int _blinkCount = 0;
-  static const int _maxBlinks = 12; // 约 6.7 秒后定格常亮，防眩晕并允许测试 pumpAndSettle 收敛
-
-  @override
-  void initState() {
-    super.initState();
-    _startBlinkTimer();
-  }
-
-  void _startBlinkTimer() {
-    _blinkTimer?.cancel();
-    _blinkCount = 0;
-    _visible = true;
-    _blinkTimer = Timer.periodic(const Duration(milliseconds: 560), (_) {
-      if (!mounted) return;
-      _blinkCount++;
-      if (_blinkCount >= _maxBlinks) {
-        _blinkTimer?.cancel();
-        _blinkTimer = null;
-        if (!_visible) {
-          setState(() {
-            _visible = true;
-          });
-        }
-        return;
-      }
-      setState(() {
-        _visible = !_visible;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _blinkTimer?.cancel();
-    _blinkTimer = null;
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final disableAnimations =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final color = CupertinoDynamicColor.resolve(
-      CupertinoColors.label,
-      context,
-    ).withValues(alpha: 0.6);
-
-    final cursor = Text(
-      '▎',
-      style: TextStyle(
-        fontSize: 15,
-        height: 1.0,
-        color: color,
-        shadows: [Shadow(color: color.withValues(alpha: 0.25), blurRadius: 4)],
-      ),
-    );
-
-    final content = disableAnimations
-        ? cursor
-        : AnimatedOpacity(
-            opacity: _visible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 560),
-            curve: Curves.easeInOut,
-            child: cursor,
-          );
-
-    return SizedBox(
-      height: 0,
-      child: OverflowBox(
-        alignment: Alignment.topLeft,
-        maxHeight: 20,
-        child: Padding(
-          key: const ValueKey('streaming-cursor'),
-          padding: const EdgeInsets.only(left: 2),
-          child: content,
-        ),
-      ),
-    );
   }
 }
 
