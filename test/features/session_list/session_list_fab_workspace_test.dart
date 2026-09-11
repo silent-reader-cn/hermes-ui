@@ -106,6 +106,19 @@ void main() {
       expect(ranked.length, 6);
     });
 
+    test('默认不限量：不传 maxItems 时返回全部有效工作区', () {
+      final registered = [
+        for (var i = 0; i < 12; i++)
+          WorkspaceRoot(path: '/ws/$i', name: 'W$i'),
+      ];
+      final ranked = rankWorkspaces(registered: registered, sessions: const []);
+      expect(ranked.length, 12);
+      // 频率全 0、时间戳全 0 → 保持注册原序
+      expect(ranked.map((w) => w.path).toList(), [
+        for (var i = 0; i < 12; i++) '/ws/$i',
+      ]);
+    });
+
     test('空输入或空路径安全容错', () {
       expect(rankWorkspaces(registered: const [], sessions: const []), isEmpty);
 
@@ -432,23 +445,25 @@ void main() {
     });
   });
 
-  group('FabWorkspaceItemGeometry 弧形几何与项间距无重叠验证', () {
-    test('2~6 项时相邻项弦距 > 56px (48+8)，外接圆与放大 1.18 均无交叉', () {
+  group('FabWorkspaceItemGeometry 多层同心弧几何与项间距无重叠验证', () {
+    test('2~14 项时任意两项中心距 > 56px（48+8），hover 放大 1.18 后间隙 > 8px', () {
       const fabCenter = Offset(342.0, 792.0); // 常见移动端 FAB 中心 (390x844 竖屏)
 
-      for (var total = 2; total <= 6; total++) {
-        final geoms = List.generate(
-          total,
-          (i) => getFabWorkspaceItemGeometry(i, total, fabCenter),
+      for (var total = 2; total <= 14; total++) {
+        final geoms = computeFabWorkspaceLayout(
+          total: total,
+          fabCenter: fabCenter,
         );
+        expect(geoms.length, total);
 
-        // 验证相邻项中心距
+        // 相邻项（同圈顺序）中心距
         for (var i = 0; i < total - 1; i++) {
           final p1 = geoms[i].center;
           final p2 = geoms[i + 1].center;
           final dist = (p1 - p2).distance;
 
-          // 需求验收指标：相邻弦距 > 48 + 8 = 56.0
+          // 同圈相邻：弦距 ≥ 76（微胶囊标签宽 70 互不触碰）；
+          // 跨圈相邻：径向圈距 78。取 > 56 的验收底线。
           expect(
             dist,
             greaterThan(56.0),
@@ -482,23 +497,63 @@ void main() {
       }
     });
 
-    test('角度范围限制在 [-175°, -85°]，完全位于左上象限且在屏幕边界内', () {
+    test('超过内圈容量时逐层向外堆叠（多层 ringIndex 递增）', () {
       const fabCenter = Offset(342.0, 792.0);
-      for (var total = 1; total <= 6; total++) {
-        for (var i = 0; i < total; i++) {
-          final geom = getFabWorkspaceItemGeometry(i, total, fabCenter);
-          expect(geom.angleDeg, greaterThanOrEqualTo(-175.0));
-          expect(geom.angleDeg, lessThanOrEqualTo(-85.0));
+      final geoms = computeFabWorkspaceLayout(total: 8, fabCenter: fabCenter);
+      // 首圈容量在 390x844 手机上 R=132 约为 3~4，8 项必然跨圈
+      final rings = geoms.map((g) => g.ringIndex).toSet();
+      expect(rings.length, greaterThan(1));
+      // 排序：先内圈后外圈
+      for (var i = 1; i < geoms.length; i++) {
+        expect(geoms[i].ringIndex, greaterThanOrEqualTo(geoms[i - 1].ringIndex));
+        expect(geoms[i].radius, greaterThanOrEqualTo(geoms[i - 1].radius));
+      }
+    });
 
-          // 验证图标边界不溢出常见屏幕 (390 x 844)
-          final cx = geom.center.dx;
-          final cy = geom.center.dy;
-          const iconR = 26.0; // 放大后半径
-          expect(cx - iconR, greaterThan(0.0));
-          expect(cx + iconR, lessThan(390.0));
-          expect(cy - iconR, greaterThan(0.0));
-          expect(cy + iconR, lessThan(844.0));
+    test('角度范围限制在 [-178°, -92°]，全部项位于 FAB 左上象限', () {
+      const fabCenter = Offset(342.0, 792.0);
+      for (var total = 1; total <= 30; total++) {
+        for (final geom in computeFabWorkspaceLayout(
+          total: total,
+          fabCenter: fabCenter,
+        )) {
+          expect(geom.angleDeg, greaterThanOrEqualTo(-178.0));
+          expect(geom.angleDeg, lessThanOrEqualTo(-92.0));
+          expect(geom.center.dx, lessThan(fabCenter.dx));
+          expect(geom.center.dy, lessThan(fabCenter.dy));
         }
+      }
+    });
+
+    test('数量不设上限：大屏 30 项与超容量 40 项全部落在 390x844 屏幕内', () {
+      const fabCenter = Offset(342.0, 792.0);
+      for (final total in [20, 30, 40, 60]) {
+        final geoms = computeFabWorkspaceLayout(
+          total: total,
+          fabCenter: fabCenter,
+        );
+        expect(geoms.length, total);
+        const iconR = 26.0;
+        for (final geom in geoms) {
+          expect(
+            geom.center.dx - iconR,
+            greaterThan(0.0),
+            reason: 'total=$total item dx=${geom.center.dx} overflows left',
+          );
+          expect(geom.center.dx + iconR, lessThan(390.0));
+          expect(geom.center.dy - iconR, greaterThan(0.0));
+          expect(geom.center.dy + iconR, lessThan(844.0));
+        }
+      }
+    });
+
+    test('getFabWorkspaceItemGeometry 与 computeFabWorkspaceLayout 结果一致', () {
+      const fabCenter = Offset(342.0, 792.0);
+      final layout = computeFabWorkspaceLayout(total: 9, fabCenter: fabCenter);
+      for (var i = 0; i < 9; i++) {
+        final g = getFabWorkspaceItemGeometry(i, 9, fabCenter);
+        expect(g.center, layout[i].center);
+        expect(g.ringIndex, layout[i].ringIndex);
       }
     });
   });

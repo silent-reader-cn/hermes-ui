@@ -731,11 +731,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     if (!mounted) return;
     final sessions = state?.sessions ?? const [];
-    final ranked = rankWorkspaces(
-      registered: available,
-      sessions: sessions,
-      maxItems: 6,
-    );
+    // 取消数量限制：全部工作区参与排序，扇出时逐层向外堆叠。
+    final ranked = rankWorkspaces(registered: available, sessions: sessions);
 
     // 空态：GET /api/workspaces 空/失败 → 不弹菜单，松开直接走原 createSession()
     if (ranked.isEmpty) {
@@ -768,6 +765,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               hoveredIndex: _hoveredWorkspaceIndex,
               fabCenter: fabCenter,
               brightness: brightness,
+              screenSize: MediaQuery.sizeOf(context),
             ),
           ),
         );
@@ -801,6 +799,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       pointerPos: event.position,
       fabCenter: fabCenter,
       workspaces: _fabRankedWorkspaces,
+      screenSize: MediaQuery.sizeOf(context),
     );
 
     if (newHovered != _hoveredWorkspaceIndex) {
@@ -846,19 +845,27 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     required Offset pointerPos,
     required Offset fabCenter,
     required List<WorkspaceRoot> workspaces,
+    Size? screenSize,
   }) {
-    final d = (pointerPos - fabCenter).distance;
-    if (d < 36.0 || d > 195.0) return null;
-
     final n = workspaces.length;
     if (n == 0) return null;
+
+    final d = (pointerPos - fabCenter).distance;
+    if (d < 36.0) return null;
+
+    // 多层同心弧布局：命中判定直接取离触点最近的一项，
+    // 不再受旧版 36~195px 单环带限制（外圈项同样可命中）。
+    final geoms = computeFabWorkspaceLayout(
+      total: n,
+      fabCenter: fabCenter,
+      screenSize: screenSize,
+    );
 
     int? bestIndex;
     double minDistance = double.infinity;
 
     for (var i = 0; i < n; i++) {
-      final geom = getFabWorkspaceItemGeometry(i, n, fabCenter);
-      final dist = (pointerPos - geom.center).distance;
+      final dist = (pointerPos - geoms[i].center).distance;
       if (dist < minDistance) {
         minDistance = dist;
         bestIndex = i;
@@ -1904,7 +1911,6 @@ class _SheetCheckboxRow extends StatelessWidget {
   }
 }
 
-/// FAB 悬浮加号长按滑选工作区弧形菜单。
 /// FAB 悬浮加号长按工作区项几何位置。
 @visibleForTesting
 class FabWorkspaceItemGeometry {
@@ -1912,71 +1918,207 @@ class FabWorkspaceItemGeometry {
     required this.center,
     required this.angleDeg,
     required this.radius,
+    this.ringIndex = 0,
   });
 
   final Offset center;
   final double angleDeg;
   final double radius;
+
+  /// 所在同心弧环编号（0 = 最内圈），用于交替标签方向、防跨层遮挡。
+  final int ringIndex;
 }
 
-/// 计算指定工作区项在 FAB 扇出弧中的中心坐标与几何属性。
+/// 工作区多层同心弧扇出布局常量。
 ///
-/// 几何排布规则（解决多项堆叠重叠难辨）：
-/// - 1-4 项：单弧扇出（R=110~130），相邻弦距保持 > 56px；
-/// - 5-6 项：双级交错扇形（内圈 R=96，外圈 R=146~148，角度交错步进），
-///   相邻项弦距保持在 > 59px，外接圆无交叉、微胶囊标签与相邻项互不重叠。
+/// - 图标气泡半径 22px；同圈相邻项中心距（弦距）≥ [kFabWorkspaceMinGap]，
+///   该值同时保证 70px 宽的微胶囊标签在同圈互不触碰；
+/// - 圈间距 [kFabWorkspaceRingGap]（78px）> 标签最大外延（41px）+ 图标半径，
+///   跨圈项与其标签天然不重叠；
+/// - 最外圈半径受屏幕左上可用空间（边距 [kFabWorkspaceEdgeMargin]）与
+///   全局上限 [kFabWorkspaceMaxRadius] 约束，实现「一层一层向外堆叠到满屏」。
+@visibleForTesting
+const double kFabWorkspaceIconRadius = 22.0;
+@visibleForTesting
+const double kFabWorkspaceMinGap = 76.0;
+@visibleForTesting
+const double kFabWorkspaceRingGap = 78.0;
+@visibleForTesting
+const double kFabWorkspaceFirstRadius = 132.0;
+@visibleForTesting
+const double kFabWorkspaceEdgeMargin = 40.0;
+@visibleForTesting
+const double kFabWorkspaceMaxRadius = 560.0;
+@visibleForTesting
+const double kFabWorkspaceArcStart = -178.0;
+@visibleForTesting
+const double kFabWorkspaceArcEnd = -92.0;
+
+/// 计算指定工作区项在 FAB 多层扇出中的中心坐标与几何属性。
 @visibleForTesting
 FabWorkspaceItemGeometry getFabWorkspaceItemGeometry(
   int index,
   int total,
   Offset fabCenter,
 ) {
-  final double angleDeg;
-  final double radius;
-
-  if (total <= 1) {
-    angleDeg = -135.0;
-    radius = 110.0;
-  } else if (total == 2) {
-    const startAngle = -160.0;
-    const endAngle = -110.0;
-    angleDeg = startAngle + index * (endAngle - startAngle);
-    radius = 118.0;
-  } else if (total == 3) {
-    const startAngle = -170.0;
-    const endAngle = -100.0;
-    angleDeg = startAngle + index * (endAngle - startAngle) / 2;
-    radius = 124.0;
-  } else if (total == 4) {
-    const startAngle = -175.0;
-    const endAngle = -95.0;
-    angleDeg = startAngle + index * (endAngle - startAngle) / 3;
-    radius = 130.0;
-  } else if (total == 5) {
-    const startAngle = -175.0;
-    const endAngle = -95.0;
-    angleDeg = startAngle + index * (endAngle - startAngle) / 4;
-    radius = index.isEven ? 146.0 : 96.0;
-  } else {
-    const startAngle = -175.0;
-    const endAngle = -85.0;
-    angleDeg = startAngle + index * (endAngle - startAngle) / (total - 1);
-    radius = index.isEven ? 148.0 : 96.0;
-  }
-
-  final rad = angleDeg * pi / 180.0;
-  final center = fabCenter + Offset(radius * cos(rad), radius * sin(rad));
-  return FabWorkspaceItemGeometry(
-    center: center,
-    angleDeg: angleDeg,
-    radius: radius,
-  );
+  return computeFabWorkspaceLayout(total: total, fabCenter: fabCenter)[index];
 }
 
-/// FAB 悬浮加号长按滑选工作区弧形菜单。
+/// 计算全部工作区项在多层同心弧扇出中的排布（数量不设上限）。
+///
+/// 排布规则：
+/// 1. 以 FAB 为圆心，从内向外生成同心弧环 R_k = 132 + k*78，
+///    直到无可用角度或超出屏幕左上可行区；
+/// 2. 每圈的可用角度窗口受屏幕左边缘/上边缘（图标安全边距
+///    [kFabWorkspaceEdgeMargin]）约束：越往外的圈在 45° 斜向仍有空间，
+///    窗口只收缩被边缘吃掉的端点，实现「一层一层向外堆叠到满屏」；
+/// 3. 每圈容量由「相邻弦距 ≥ 76px（含微胶囊标签不触碰）」反推最小角步进
+///    得出，项先填满内圈、再逐层向外堆叠；
+/// 4. 圈内项在可用弧段上均匀分布（单项时取弧中点）；
+/// 5. 极端超量（超过整屏总容量）时，多出的项从最外圈起轮流均摊压缩，
+///    仍保持全部项落在屏幕内。
+///
+/// [screenSize] 为空时退化为旧版各向同性约束（最外圈 ≤ min(fabX, fabY) -
+/// 40 与 [kFabWorkspaceMaxRadius] 的较小者），保证无屏幕信息时也不出屏。
+@visibleForTesting
+List<FabWorkspaceItemGeometry> computeFabWorkspaceLayout({
+  required int total,
+  required Offset fabCenter,
+  Size? screenSize,
+}) {
+  if (total <= 0) return const [];
+
+  final margin = kFabWorkspaceEdgeMargin;
+  final maxRadius = screenSize == null
+      ? max(
+          min(
+            min(fabCenter.dx, fabCenter.dy) - margin,
+            kFabWorkspaceMaxRadius,
+          ),
+          kFabWorkspaceFirstRadius,
+        )
+      : // 理论最远：左上角对角线（可行窗口随半径自然收敛，无需显式上限）。
+            sqrt(
+              screenSize.width * screenSize.width +
+              screenSize.height * screenSize.height,
+            );
+
+  final radii = <double>[];
+  final windows = <List<double>>[]; // 每圈可行角度窗口 [start, end]
+  for (var r = kFabWorkspaceFirstRadius;
+      r <= maxRadius;
+      r += kFabWorkspaceRingGap) {
+    final window = _feasibleAngleWindow(
+      fabCenter,
+      r,
+      margin,
+      topBounded: screenSize != null,
+    );
+    if (window == null) break; // 窗口随半径单调收窄，空即终止
+    radii.add(r);
+    windows.add(window);
+  }
+  if (radii.isEmpty) {
+    radii.add(kFabWorkspaceFirstRadius);
+    windows.add(const [kFabWorkspaceArcStart, kFabWorkspaceArcEnd]);
+  }
+
+  // 各圈容量：最小弦距反推角步进。
+  final capacities = <int>[];
+  for (var k = 0; k < radii.length; k++) {
+    final r = radii[k];
+    final minStepRad =
+        2 * asin((kFabWorkspaceMinGap / (2 * r)).clamp(0.0, 1.0).toDouble());
+    final minStepDeg = minStepRad * 180.0 / pi;
+    final sweep = windows[k][1] - windows[k][0];
+    capacities.add(max(1, (sweep / minStepDeg).floor() + 1));
+  }
+
+  // 逐项分配：先按容量顺序填满内圈→外圈，超量从最外圈起轮流均摊。
+  final counts = List<int>.filled(radii.length, 0);
+  var remaining = total;
+  for (var i = 0; i < radii.length && remaining > 0; i++) {
+    final take = min(capacities[i], remaining);
+    counts[i] = take;
+    remaining -= take;
+  }
+  var ring = radii.length - 1;
+  while (remaining > 0) {
+    counts[ring] += 1;
+    remaining -= 1;
+    ring = ring == 0 ? radii.length - 1 : ring - 1;
+  }
+
+  // 逐圈均匀布点。
+  final items = <FabWorkspaceItemGeometry>[];
+  for (var k = 0; k < radii.length; k++) {
+    final r = radii[k];
+    final n = counts[k];
+    if (n == 0) continue;
+    final a0 = windows[k][0];
+    final a1 = windows[k][1];
+    final sweep = a1 - a0;
+    for (var j = 0; j < n; j++) {
+      final angleDeg = n == 1 ? a0 + sweep / 2 : a0 + sweep * j / (n - 1);
+      final rad = angleDeg * pi / 180.0;
+      items.add(
+        FabWorkspaceItemGeometry(
+          center: fabCenter + Offset(r * cos(rad), r * sin(rad)),
+          angleDeg: angleDeg,
+          radius: r,
+          ringIndex: k,
+        ),
+      );
+    }
+  }
+  return items;
+}
+
+/// 圈层 [radius] 在弧段 [kFabWorkspaceArcStart, kFabWorkspaceArcEnd] 内、
+/// 且不越过屏幕左边缘安全区（[margin]）的可行角度窗口；无解返回 null。
+///
+/// 角度 a ∈ [-180°, -90°] 时：cos 单调递增（x 从 fx-r 增至 fx），
+/// sin 单调递减（y 从 fy 减至 fy-r），故两组不等式的解均为连续区间，
+/// 反解临界角即可：
+/// - 左边界 x ≥ margin ⇔ cos(a) ≥ (margin-fx)/r ⇔ a ≥ -deg(acos(c))；
+///   （acos 主值 ∈ [90°,180°]，取负号即落入 [-180°,-90°]）
+/// - 上边界 y ≥ margin ⇔ sin(a) ≥ (margin-fy)/r ⇔ a ≤ -180° - deg(asin(s))。
+/// [topBounded] 为 false 时由调用方通过 maxRadius 保证上边界，这里只收左界。
+List<double>? _feasibleAngleWindow(
+  Offset fabCenter,
+  double radius,
+  double margin, {
+  required bool topBounded,
+}) {
+  var start = kFabWorkspaceArcStart;
+  var end = kFabWorkspaceArcEnd;
+  final toDeg = 180.0 / pi;
+
+  // 左边界
+  final cosMin = (margin - fabCenter.dx) / radius;
+  if (cosMin > 1) return null;
+  if (cosMin > -1) {
+    start = max(start, -acos(cosMin) * toDeg);
+  }
+
+  // 上边界
+  if (topBounded) {
+    final sinMin = (margin - fabCenter.dy) / radius;
+    if (sinMin > 0) return null;
+    if (sinMin > -1) {
+      end = min(end, -180.0 - asin(sinMin) * toDeg);
+    }
+  }
+
+  if (start >= end) return null;
+  return [start, end];
+}
+
+/// FAB 悬浮加号长按滑选工作区多层同心弧菜单。
 ///
 /// 视觉与交互：
-/// - 向左上弧形扇出（单弧 / 双级交错扇形，半径 96~148px），最多展示 6 个按使用频率排序的工作区；
+/// - 向左上扇形区多层同心弧堆叠（R=132 起每层 +78px，随屏幕左上可用空间
+///   自动扩圈，数量不设上限，逐层向外布满整屏扇区）；
 /// - 毛玻璃/半透明圆底气泡 + 细边框与投影；
 /// - 选中项放大高亮（Hermex 蓝底 + 浮动名称 badge）；未选中项显示圆底图标 + 独立微胶囊副标。
 class _FabWorkspaceArcMenu extends StatelessWidget {
@@ -1986,6 +2128,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
     required this.hoveredIndex,
     required this.fabCenter,
     required this.brightness,
+    this.screenSize,
   });
 
   final List<WorkspaceRoot> workspaces;
@@ -1993,22 +2136,42 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
   final Offset fabCenter;
   final Brightness brightness;
 
+  /// 屏幕尺寸（提供时外圈沿 45° 斜向扩到角部；null 退化为保守圆约束）。
+  final Size? screenSize;
+
   @override
   Widget build(BuildContext context) {
     final isDark = brightness == Brightness.dark;
     final n = workspaces.length;
+    // 一次算好整张布局，逐项复用（多项时避免 n 次全量重算）。
+    final layout = computeFabWorkspaceLayout(
+      total: n,
+      fabCenter: fabCenter,
+      screenSize: screenSize,
+    );
+
+    // 悬停项最后入 Stack：浮动 badge 不被外圈气泡遮挡（z 轴置顶）。
+    final order = [
+      for (var i = 0; i < n; i++)
+        if (i != hoveredIndex) i,
+      if (hoveredIndex != null && hoveredIndex! >= 0 && hoveredIndex! < n)
+        hoveredIndex!,
+    ];
 
     return Stack(
-      children: [for (var i = 0; i < n; i++) ..._buildItem(i, n, isDark)],
+      children: [for (final i in order) ..._buildItem(i, layout[i], isDark)],
     );
   }
 
-  List<Widget> _buildItem(int index, int total, bool isDark) {
+  List<Widget> _buildItem(
+    int index,
+    FabWorkspaceItemGeometry geom,
+    bool isDark,
+  ) {
     final workspace = workspaces[index];
     final isHovered = hoveredIndex == index;
     final displayName = _workspaceDisplayName(workspace);
 
-    final geom = getFabWorkspaceItemGeometry(index, total, fabCenter);
     final cx = geom.center.dx;
     final cy = geom.center.dy;
 

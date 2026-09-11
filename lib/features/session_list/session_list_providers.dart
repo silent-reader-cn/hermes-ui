@@ -1676,11 +1676,11 @@ bool _isSameDay(DateTime a, DateTime b) =>
 /// 2. 统计各工作区在 [sessions] 中的使用次数（frequency）；
 /// 3. 获取各工作区在 [sessions] 中最近使用的时间戳（recency：max of lastMessageAt / updatedAt / createdAt）；
 /// 4. 排序：使用次数多的排前；次数相同时最近使用时间新的排前；均相同则保持在 [registered] 中的原始顺序；
-/// 5. 取前 [maxItems] 个（默认 6）。
+/// 5. [maxItems] 非 null 时取前 [maxItems] 个，为 null（默认）时不限量。
 List<WorkspaceRoot> rankWorkspaces({
   required List<WorkspaceRoot> registered,
   required List<SessionSummary> sessions,
-  int maxItems = 6,
+  int? maxItems,
 }) {
   final valid = registered
       .where((w) => w.path != null && w.path!.trim().isNotEmpty)
@@ -1718,5 +1718,5 @@ List<WorkspaceRoot> rankWorkspaces({
     return 0;
   });
 
-  return ranked.take(maxItems).toList();
+  return maxItems == null ? ranked : ranked.take(maxItems).toList();
 }
