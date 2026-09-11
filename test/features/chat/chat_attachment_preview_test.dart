@@ -204,5 +204,27 @@ void main() {
       await _pumpLightbox(tester, name: 'movie.mp4', bytes: kPngBytes);
       expect(find.text('不支持预览'), findsNothing);
     });
+
+    testWidgets('回归（真机报障）：预览失败页只有一个重试，下载按钮唯一且钉在导航栏右上角', (tester) async {
+      // PDF 附件 + 空字节、无 URL → loadBytes 直接返回空 → pdf 分支
+      // bytes.isEmpty 置 _loadError → 失败兜底卡（零网络 IO，确定性）。
+      await _pumpLightbox(
+        tester,
+        name: 'resume_broken.pdf',
+        bytes: Uint8List(0),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      // 失败卡出现。
+      expect(find.text('加载失败'), findsOneWidget);
+      // 「重试」文案只允许出现 1 次（曾出现 兜底重试+兜底内下载钮重试态
+      // +底部下载钮 = 3 个重试的回归）。
+      expect(find.text('重试'), findsOneWidget);
+      // 下载按钮全页唯一实例，且位于顶部导航条区域（y < 60）。
+      final dl = find.byKey(const ValueKey('attachment-download-button'));
+      expect(dl, findsOneWidget);
+      expect(tester.getCenter(dl).dy, lessThan(60));
+    });
   });
 }

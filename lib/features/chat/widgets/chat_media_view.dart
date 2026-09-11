@@ -542,6 +542,19 @@ class AttachmentLightbox extends StatelessWidget {
 
     final previewKind = workspaceFileKindOf(titleText);
 
+    // 下载/状态按钮统一钉导航栏右上角（全分支唯一实例，单一状态显示）：
+    // 失败/已下载等状态就地变化，不随兜底卡布局漂移，也不重复渲染。
+    final navDownloadBtn = _AttachmentDownloadButton(
+      resolvedUrl: resolvedUrl,
+      bytes: bytes,
+      filename: titleText.isNotEmpty ? titleText : 'image.png',
+      sessionId: sessionId,
+      expectedBytes: expectedBytes ?? bytes?.length,
+      mimeType: mimeType ?? (isImage ? 'image/png' : null),
+      onOpenFile: onOpenFile,
+      compact: true,
+    );
+
     Widget body;
     if (isImage || previewKind == WorkspaceFileKind.image) {
       Widget viewerContent;
@@ -595,18 +608,6 @@ class AttachmentLightbox extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 24, top: 12),
-            child: _AttachmentDownloadButton(
-              resolvedUrl: resolvedUrl,
-              bytes: bytes,
-              filename: titleText.isNotEmpty ? titleText : 'image.png',
-              sessionId: sessionId,
-              expectedBytes: expectedBytes ?? bytes?.length,
-              mimeType: mimeType ?? 'image/png',
-              onOpenFile: onOpenFile,
-            ),
-          ),
         ],
       );
     } else if (previewKind == WorkspaceFileKind.pdf ||
@@ -614,18 +615,9 @@ class AttachmentLightbox extends StatelessWidget {
         previewKind == WorkspaceFileKind.video ||
         previewKind == WorkspaceFileKind.audio ||
         previewKind == WorkspaceFileKind.text) {
-      final downloadBtn = Padding(
-        padding: const EdgeInsets.only(bottom: 24, top: 12),
-        child: _AttachmentDownloadButton(
-          resolvedUrl: resolvedUrl,
-          bytes: bytes,
-          filename: titleText,
-          sessionId: sessionId,
-          expectedBytes: expectedBytes,
-          mimeType: mimeType,
-          onOpenFile: onOpenFile,
-        ),
-      );
+      // 下载/状态按钮已由导航栏右上角统一承担（唯一实例）；预览体不再挂
+      // downloadButton/onDownload —— 失败兜底卡只剩单一「重试」，杜绝多处
+      // 重复按钮与状态漂移。
       final previewBody = FilePreviewBody(
         source: FilePreviewSource.resolved(
           resolvedUrl,
@@ -634,15 +626,6 @@ class AttachmentLightbox extends StatelessWidget {
         ),
         fileName: titleText,
         sizeBytes: expectedBytes ?? bytes?.length,
-        downloadButton: _AttachmentDownloadButton(
-          resolvedUrl: resolvedUrl,
-          bytes: bytes,
-          filename: titleText,
-          sessionId: sessionId,
-          expectedBytes: expectedBytes,
-          mimeType: mimeType,
-          onOpenFile: onOpenFile,
-        ),
       );
 
       body = Column(
@@ -655,7 +638,6 @@ class AttachmentLightbox extends StatelessWidget {
                   : SingleChildScrollView(child: previewBody),
             ),
           ),
-          downloadBtn,
         ],
       );
     } else {
@@ -703,16 +685,6 @@ class AttachmentLightbox extends StatelessWidget {
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 24),
-              _AttachmentDownloadButton(
-                resolvedUrl: resolvedUrl,
-                bytes: bytes,
-                filename: titleText,
-                sessionId: sessionId,
-                expectedBytes: expectedBytes,
-                mimeType: mimeType,
-                onOpenFile: onOpenFile,
-              ),
             ],
           ),
         ),
@@ -742,6 +714,7 @@ class AttachmentLightbox extends StatelessWidget {
                 ),
               )
             : null,
+        trailing: navDownloadBtn,
       ),
       child: SafeArea(child: body),
     );
@@ -757,6 +730,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
     this.expectedBytes,
     this.mimeType,
     this.onOpenFile,
+    this.compact = false,
   });
 
   final String? resolvedUrl;
@@ -766,6 +740,66 @@ class _AttachmentDownloadButton extends ConsumerWidget {
   final int? expectedBytes;
   final String? mimeType;
   final Future<void> Function(String path)? onOpenFile;
+
+  /// 紧凑图标模式（导航栏右上角）：图标 + 小号状态字，白字透明底；
+  /// false 时为整块 filled 按钮（正文兜底区）。
+  final bool compact;
+
+  /// 统一按 compact 包装按钮外观，状态逻辑与文案零分叉。
+  Widget _btn({
+    required VoidCallback? onPressed,
+    required IconData icon,
+    required String label,
+    bool activity = false,
+    bool destructive = false,
+  }) {
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (activity)
+          const CupertinoActivityIndicator(
+            color: CupertinoColors.white,
+            radius: 6,
+          )
+        else
+          Icon(icon, size: 16),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: compact
+              ? const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.white,
+                )
+              : null,
+        ),
+      ],
+    );
+    if (compact) {
+      return CupertinoButton(
+        key: const ValueKey('attachment-download-button'),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: Size.zero,
+        onPressed: onPressed,
+        child: Opacity(
+          // 禁用态：不可点的占位（如无法解析来源）半透明弱化。
+          opacity: destructive
+              ? 0.35
+              : onPressed == null
+              ? 0.6
+              : 1.0,
+          child: row,
+        ),
+      );
+    }
+    return CupertinoButton.filled(
+      key: const ValueKey('attachment-download-button'),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      onPressed: onPressed,
+      child: row,
+    );
+  }
 
   String? _effectiveUrl(WidgetRef ref) {
     var url = resolvedUrl;
@@ -827,25 +861,15 @@ class _AttachmentDownloadButton extends ConsumerWidget {
             url.startsWith('data:') ||
             (!kIsWeb && File(url).existsSync()));
     if (bytes == null && !hasResolvableUrl) {
-      return CupertinoButton.filled(
-        key: const ValueKey('attachment-download-button'),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      return _btn(
         onPressed: null,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.cloud_download, size: 16),
-            const SizedBox(width: 6),
-            Text(l10n.dl53CannotDownload),
-          ],
-        ),
+        icon: CupertinoIcons.cloud_download,
+        label: l10n.dl53CannotDownload,
       );
     }
 
     if (isLocalAvailable) {
-      return CupertinoButton.filled(
-        key: const ValueKey('attachment-download-button'),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      return _btn(
         onPressed: () async {
           await openDownloadedFile(
             context,
@@ -854,32 +878,19 @@ class _AttachmentDownloadButton extends ConsumerWidget {
             customOpener: onOpenFile,
           );
         },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.check_mark, size: 16),
-            const SizedBox(width: 6),
-            Text(l10n.downloaded),
-          ],
-        ),
+        icon: CupertinoIcons.check_mark,
+        label: l10n.downloaded,
       );
     }
 
     if (task != null) {
       if (task.status == DownloadStatus.queued ||
           task.status == DownloadStatus.downloading) {
-        return CupertinoButton.filled(
-          key: const ValueKey('attachment-download-button'),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        return _btn(
           onPressed: null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CupertinoActivityIndicator(color: CupertinoColors.white),
-              const SizedBox(width: 6),
-              Text(l10n.downloading),
-            ],
-          ),
+          icon: CupertinoIcons.cloud_download,
+          label: l10n.downloading,
+          activity: true,
         );
       }
 
@@ -887,9 +898,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
         final fileExists =
             task.savedPath != null && File(task.savedPath!).existsSync();
         if (fileExists) {
-          return CupertinoButton.filled(
-            key: const ValueKey('attachment-download-button'),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          return _btn(
             onPressed: () async {
               await openDownloadedFile(
                 context,
@@ -898,48 +907,26 @@ class _AttachmentDownloadButton extends ConsumerWidget {
                 customOpener: onOpenFile,
               );
             },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(CupertinoIcons.check_mark, size: 16),
-                const SizedBox(width: 6),
-                Text(l10n.downloaded),
-              ],
-            ),
+            icon: CupertinoIcons.check_mark,
+            label: l10n.downloaded,
           );
         } else {
-          return CupertinoButton.filled(
-            key: const ValueKey('attachment-download-button'),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          return _btn(
             onPressed: () => _triggerDownload(context, ref),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(CupertinoIcons.arrow_clockwise, size: 16),
-                const SizedBox(width: 6),
-                Text(l10n.downloadRedownload),
-              ],
-            ),
+            icon: CupertinoIcons.arrow_clockwise,
+            label: l10n.downloadRedownload,
           );
         }
       }
 
       if (task.status == DownloadStatus.failed ||
           task.status == DownloadStatus.cancelled) {
-        return CupertinoButton.filled(
-          key: const ValueKey('attachment-download-button'),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        return _btn(
           onPressed: () async {
             await controller.retry(task.id);
           },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(CupertinoIcons.arrow_clockwise, size: 16),
-              const SizedBox(width: 6),
-              Text(l10n.downloadRetry),
-            ],
-          ),
+          icon: CupertinoIcons.arrow_clockwise,
+          label: l10n.downloadRetry,
         );
       }
     }
@@ -953,21 +940,20 @@ class _AttachmentDownloadButton extends ConsumerWidget {
                 url.startsWith('data:')));
 
     if (!canDownload) {
+      if (compact) {
+        return _btn(
+          onPressed: null,
+          icon: CupertinoIcons.cloud_download,
+          label: l10n.mediaDownload,
+        );
+      }
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CupertinoButton.filled(
-            key: const ValueKey('attachment-download-button'),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          _btn(
             onPressed: null,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(CupertinoIcons.cloud_download, size: 16),
-                const SizedBox(width: 6),
-                Text(l10n.mediaDownload),
-              ],
-            ),
+            icon: CupertinoIcons.cloud_download,
+            label: l10n.mediaDownload,
           ),
           const SizedBox(height: 8),
           Text(
@@ -981,18 +967,10 @@ class _AttachmentDownloadButton extends ConsumerWidget {
       );
     }
 
-    return CupertinoButton.filled(
-      key: const ValueKey('attachment-download-button'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    return _btn(
       onPressed: () => _triggerDownload(context, ref),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(CupertinoIcons.cloud_download, size: 16),
-          const SizedBox(width: 6),
-          Text(l10n.mediaDownload),
-        ],
-      ),
+      icon: CupertinoIcons.cloud_download,
+      label: l10n.mediaDownload,
     );
   }
 
