@@ -433,10 +433,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     if (current.isRefreshingModels) return false;
 
     state = AsyncData(
-      current.copyWith(
-        isRefreshingModels: true,
-        refreshError: () => null,
-      ),
+      current.copyWith(isRefreshingModels: true, refreshError: () => null),
     );
 
     try {
@@ -1073,10 +1070,9 @@ class RecentlyCreatedSessionIdController extends Notifier<String?> {
 const String kAutoLoadImagesKey = 'settings.autoLoadImages';
 
 /// 自动加载图片偏好设置 Provider（持久化到 shared_preferences，默认开启）。
-final autoLoadImagesProvider =
-    NotifierProvider<AutoLoadImagesController, bool>(
-      AutoLoadImagesController.new,
-    );
+final autoLoadImagesProvider = NotifierProvider<AutoLoadImagesController, bool>(
+  AutoLoadImagesController.new,
+);
 
 /// 自动加载图片控制器。
 class AutoLoadImagesController extends Notifier<bool> {
@@ -1125,3 +1121,62 @@ class AutoLoadImagesController extends Notifier<bool> {
   }
 }
 
+// -----------------------------------------------------------------------------
+// 聊天渲染 Mermaid 图表开关
+// -----------------------------------------------------------------------------
+
+/// 聊天渲染 Mermaid 图表偏好设置键。
+const String kChatRenderMermaidKey = 'chat_render_mermaid';
+
+/// 聊天渲染 Mermaid 图表偏好设置 Provider（持久化到 shared_preferences，默认开启）。
+final chatRenderMermaidProvider =
+    NotifierProvider<ChatRenderMermaidController, bool>(
+      ChatRenderMermaidController.new,
+    );
+
+/// 聊天渲染 Mermaid 图表控制器。
+class ChatRenderMermaidController extends Notifier<bool> {
+  static const String keyChatRenderMermaid = kChatRenderMermaidKey;
+
+  static Future<bool> loadPref({SharedPreferences? customPrefs}) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(keyChatRenderMermaid) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true;
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadPref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+
+  Future<void> load() => _load();
+
+  Future<void> setEnabled(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyChatRenderMermaid, value);
+    } catch (_) {
+      // Ignored in unit test environments.
+    }
+  }
+}

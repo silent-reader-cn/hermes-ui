@@ -2,7 +2,11 @@ library;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
+
+import '../../settings/settings_providers.dart';
+import 'mermaid_block.dart';
 
 /// 聊天气泡与正文 Markdown 样式（chat_spec.md §6.3 Markdown 渲染）。
 ///
@@ -54,11 +58,11 @@ TextStyle _body({
 
 /// 标题字号阶梯（气泡内收敛：h1=20 → h6=15，全部 w600）。
 double _headingSize(int level) => switch (level) {
-      1 => 20.0,
-      2 => 18.0,
-      3 => 16.0,
-      _ => kMarkdownBodyFontSize,
-    };
+  1 => 20.0,
+  2 => 18.0,
+  3 => 16.0,
+  _ => kMarkdownBodyFontSize,
+};
 
 /// assistant 气泡（浅/深色均可）：正文 label 色，标题/加粗同色同基准。
 MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
@@ -69,10 +73,10 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
   final separator = CupertinoColors.separator.resolveFrom(context);
 
   TextStyle heading(int level) => _body(
-        color: label,
-        size: _headingSize(level),
-        weight: kMarkdownStrongWeight,
-      );
+    color: label,
+    size: _headingSize(level),
+    weight: kMarkdownStrongWeight,
+  );
 
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
     a: _body(color: link, decoration: TextDecoration.underline),
@@ -87,10 +91,7 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
     h6: heading(6),
     em: _body(color: label, style: FontStyle.italic),
     strong: _body(color: label, weight: kMarkdownStrongWeight),
-    del: _body(
-      color: label,
-      decoration: TextDecoration.lineThrough,
-    ),
+    del: _body(color: label, decoration: TextDecoration.lineThrough),
     blockquote: _body(color: label),
     code: TextStyle(
       fontSize: 13,
@@ -122,10 +123,10 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
   const white = CupertinoColors.white;
 
   TextStyle heading(int level) => _body(
-        color: white,
-        size: _headingSize(level),
-        weight: kMarkdownStrongWeight,
-      );
+    color: white,
+    size: _headingSize(level),
+    weight: kMarkdownStrongWeight,
+  );
 
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
     a: _body(color: white, decoration: TextDecoration.underline),
@@ -161,7 +162,10 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
     blockquotePadding: const EdgeInsets.all(8),
     tableHead: _body(color: white, weight: kMarkdownStrongWeight),
     tableBody: _body(color: white, size: 14),
-    tableBorder: TableBorder.all(color: white.withValues(alpha: 0.4), width: 0.5),
+    tableBorder: TableBorder.all(
+      color: white.withValues(alpha: 0.4),
+      width: 0.5,
+    ),
     checkbox: _body(color: white),
   );
 }
@@ -225,11 +229,13 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
         return null;
       }
 
-      final color = backgroundColor ??
+      final color =
+          backgroundColor ??
           preferredStyle?.backgroundColor ??
           CupertinoColors.systemGrey5.resolveFrom(context);
 
-      final baseStyle = preferredStyle ??
+      final baseStyle =
+          preferredStyle ??
           textStyle ??
           TextStyle(
             fontSize: 13,
@@ -250,14 +256,8 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
           alignment: PlaceholderAlignment.middle,
           child: Container(
             padding: padding,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: borderRadius,
-            ),
-            child: Text(
-              text,
-              style: innerTextStyle,
-            ),
+            decoration: BoxDecoration(color: color, borderRadius: borderRadius),
+            child: Text(text, style: innerTextStyle),
           ),
         ),
       );
@@ -333,10 +333,63 @@ Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
   };
 }
 
+/// `<pre>` 代码块构建器：识别并接管 Mermaid 图表渲染。
+///
+/// 机制说明：
+/// 1. 检查 pre 内唯一 code 子元素的 class 是否包含 `language-mermaid`，
+///    或（无 class / 空 class 时）代码内容是否以 Mermaid 关键语法开头；
+/// 2. 命中 Mermaid 且全局开关开启时，返回 [MermaidCodeBlock] 渲染为交互式图表；
+/// 3. 否则复刻默认代码块渲染（[CodeBlockFallback]：Container(codeblockDecoration+padding)
+///    + Scrollbar + SelectableText），保持与原生视觉一致。
+///    从 AST element 提取纯文本即可，不保留行内 span 富色（微小差异：纯文本 monospace 渲染）。
+class _MermaidPreBuilder extends MarkdownElementBuilder {
+  _MermaidPreBuilder({this.styleSheet});
+
+  final MarkdownStyleSheet? styleSheet;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    if (element.tag != 'pre') return null;
+
+    final isMermaid = isMermaidCodeElement(element);
+    final text = extractCodeText(element);
+
+    bool isEnabled = true;
+    try {
+      isEnabled = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(chatRenderMermaidProvider);
+    } catch (_) {
+      isEnabled = true;
+    }
+
+    if (isMermaid && isEnabled) {
+      final theme = resolveMermaidTheme(context);
+      return MermaidCodeBlock(
+        source: text,
+        theme: theme,
+        styleSheet: styleSheet,
+      );
+    }
+
+    return CodeBlockFallback(text: text, styleSheet: styleSheet);
+  }
+}
+
 /// assistant / memory 等正文场景 Markdown 构建器（灰色 pill 底色）。
 ///
 /// 图片块级化：额外注册 [ImgBlockElementBuilder]（`isBlockElement` = true），
 /// 让段内图片独立成块渲染，不再与文本同行镶嵌撑高行高。
+/// Mermaid 图表支持：注册 [_MermaidPreBuilder] 接管 mermaid 语法代码块。
 Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
   BuildContext context, {
   // ignore: deprecated_member_use
@@ -344,7 +397,7 @@ Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
 }) {
   final label = CupertinoColors.label.resolveFrom(context);
   final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
-  return createMarkdownElementBuilders(
+  final builders = createMarkdownElementBuilders(
     context,
     codeBackgroundColor: grey5,
     codeTextStyle: TextStyle(
@@ -355,6 +408,10 @@ Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
     ),
     imageBuilder: imageBuilder,
   );
+  builders['pre'] = _MermaidPreBuilder(
+    styleSheet: buildAssistantMarkdownStyleSheet(context),
+  );
+  return builders;
 }
 
 /// user 气泡场景 Markdown 构建器（蓝底半透明白 pill 底色）。

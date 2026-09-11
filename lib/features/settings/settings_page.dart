@@ -440,6 +440,28 @@ class _ChatSection extends ConsumerWidget {
             },
           ),
         ),
+        CupertinoListTile(
+          key: const ValueKey('settings-mermaid-tile'),
+          title: Text(AppLocalizations.of(context).mermaidRenderToggleTitle),
+          subtitle: Text(
+            AppLocalizations.of(context).mermaidRenderToggleSubtitle,
+          ),
+          trailing: CupertinoSwitch(
+            key: const ValueKey('settings-mermaid-toggle'),
+            value: ref.watch(chatRenderMermaidProvider),
+            onChanged: (value) {
+              unawaited(
+                ref.read(chatRenderMermaidProvider.notifier).setEnabled(value),
+              );
+            },
+          ),
+          onTap: () {
+            final current = ref.read(chatRenderMermaidProvider);
+            unawaited(
+              ref.read(chatRenderMermaidProvider.notifier).setEnabled(!current),
+            );
+          },
+        ),
       ],
     );
   }
@@ -1621,7 +1643,9 @@ class _ModelPickerPage extends ConsumerWidget {
                   child: Text(
                     l10n.noAvailableModels,
                     style: TextStyle(
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 ),
@@ -1731,9 +1755,7 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
               child: Text(l10n.updateGoToDownload),
               onPressed: () {
                 Navigator.of(ctx).pop();
-                unawaited(
-                  handleDownloadOrOpenRelease(context, ref, release),
-                );
+                unawaited(handleDownloadOrOpenRelease(context, ref, release));
               },
             ),
           ],
