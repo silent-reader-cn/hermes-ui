@@ -1,6 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// PDF 预览（pdfrx）长按选字的工具条（AdaptiveTextSelectionToolbar）取自
+// package:material_ui —— 该包自带一份独立的 MaterialLocalizations 类型，
+// 与 flutter/material（flutter_localizations 注册的）并不同源；不单独注册
+// 它的 delegate 时 Localizations.of 空断言崩溃（zh/en 均炸）。
+import 'package:material_ui/material_ui.dart' as material_ui;
 
 import '../features/desktop/desktop_lifecycle_observer.dart';
 import '../features/notifications/notification_lifecycle_observer.dart';
@@ -50,6 +55,9 @@ class HermesApp extends ConsumerWidget {
             GlobalCupertinoLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
+            // package:material_ui 独立 MaterialLocalizations 类型的一份
+            // （WidgetsLocalizations 键与 flutter/widgets 同源，无需重复）。
+            material_ui.GlobalMaterialLocalizations.delegate,
           ],
           supportedLocales: const [Locale('zh'), Locale('en')],
           ),

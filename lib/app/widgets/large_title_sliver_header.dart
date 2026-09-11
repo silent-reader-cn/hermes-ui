@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 
 /// 大标题页共享头部 delegate（TASK sep03：▾ 从右上角移到大标题右侧）。
@@ -202,7 +204,8 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
     }
     final trailingLeft =
         _titleLeft +
-        (collapsedTitleWidth + (largeTitleWidth - collapsedTitleWidth) * progress) +
+        (collapsedTitleWidth +
+            (largeTitleWidth - collapsedTitleWidth) * progress) +
         4.0;
     final trailingTop = buttonCenterY - _buttonHalfSize;
 
@@ -234,6 +237,10 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
         // 返回按钮（图标中心 ≈ x=38）重叠（工作区页实测「工‹作区」）。
         // 有 leading 时收起态标题改为整体居中（iOS 原生 middle 语义，
         // 让出 leading/trailing 区），无 leading 保持原左对齐不变。
+        // 长名截断修复：盒保持全宽（Center 语义不变，#95 居中回归），
+        // 但用对称 ConstrainedBox 扣除两侧按钮占位——「未超全宽但超按钮
+        // 间隙」的长文件名此前不触发 ellipsis，直接压住返回/下载按钮
+        // （PDF 预览页实测）。两侧对称扣除故中心不偏移。
         if (showCollapsedTitle || !showLargeTitle)
           Positioned(
             left: (showLargeTitle && leading == null) ? _titleLeft : 0,
@@ -260,46 +267,79 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
                   : Center(
                       child: Opacity(
                         opacity: showLargeTitle ? collapsed : 1.0,
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: labelColor,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: math.max(
+                              0.0,
+                              MediaQuery.sizeOf(context).width -
+                                  2 *
+                                      (_buttonHalfSize * 2 +
+                                          (leading != null || trailing != null
+                                              ? padStart + 8
+                                              : 0)),
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: labelColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
                     ),
             ),
           ),
-        // 大标题（左对齐，随滚动上移淡出）。
+        // 大标题（左对齐，随滚动上移淡出）。Positioned 子件宽度无界时
+        // Text 的 ellipsis 不生效（超长标题溢出撞穿屏幕），用视口宽 -
+        // 左缘 - ▾ 预留位约束出真实可截断宽度。
         if (showLargeTitle)
           Positioned(
             left: _titleLeft,
             top: largeTitleTop,
-            child: _wrapTitle(
-              Opacity(
-                opacity: progress,
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    color: labelColor,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.max(
+                  0.0,
+                  MediaQuery.sizeOf(context).width -
+                      _titleLeft -
+                      (titleTrailing != null ? 52.0 : 16.0),
+                ),
+              ),
+              child: _wrapTitle(
+                Opacity(
+                  opacity: progress,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                      color: labelColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
           ),
         // 紧贴标题右侧的 ▾，随展开/收起平滑过渡（本任务核心；横屏无大标题
         // 行时不渲染，对齐「窄屏竖屏快捷导航」的产品语义）。
+        // 标题被截断时 TextPainter 量出的是无截断全文宽，会把 ▾ 顶出屏幕
+        // 右缘——钳制到视口内（右缘预留 padEnd + 44 按钮宽）。
         if (titleTrailing != null && showLargeTitle)
           Positioned(
-            left: trailingLeft,
+            left: trailingLeft.clamp(
+              0.0,
+              math.max(
+                0.0,
+                MediaQuery.sizeOf(context).width - padEnd - _buttonHalfSize * 2,
+              ),
+            ),
             top: trailingTop,
             child: titleTrailing!,
           ),
@@ -311,11 +351,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
           height: barHeight,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ?leading,
-              const Spacer(),
-              ?trailing,
-            ],
+            children: [?leading, const Spacer(), ?trailing],
           ),
         ),
       ],

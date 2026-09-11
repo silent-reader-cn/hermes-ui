@@ -69,6 +69,7 @@ dependencies:
   archive: ^4.2.0
   xml: ^7.0.1
   mermaid_flutter: ^0.3.0
+  material_ui: ^1.2.0
 
 dependency_overrides:
   # Vendored & patched copy (third_party/flutter_markdown) of the

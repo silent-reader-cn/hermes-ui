@@ -275,17 +275,27 @@ void main() {
       expect(find.text('下载文件'), findsNothing);
     });
 
-    testWidgets('Office 预览：docx fixture 经 downloadBytes 渲染并显示 preview-office-docx', (tester) async {
-      final bytes = File('test/fixtures/office/sample.docx').readAsBytesSync();
-      final api = FakeWorkspaceApi()..downloadBytes = bytes;
-      await pumpPreview(tester, api, entry('sample.docx'));
+    testWidgets(
+      'Office 预览：docx fixture 经 downloadBytes 渲染并显示 preview-office-docx',
+      (tester) async {
+        final bytes = File('test/fixtures/office/sample.docx')
+            .readAsBytesSync();
+        final api = FakeWorkspaceApi()..downloadBytes = bytes;
+        await pumpPreview(tester, api, entry('sample.docx'));
 
-      expect(find.byKey(const ValueKey('preview-office-docx')), findsOneWidget);
-      expect(find.textContaining('项目周报 Report 周三'), findsOneWidget);
-      expect(find.textContaining('第一段：中英混排 hello world & 特殊<tag>字符。加粗补充'), findsOneWidget);
-      expect(find.textContaining('工作项'), findsOneWidget);
-      expect(find.text('无法预览该文件'), findsNothing);
-    });
+        expect(
+          find.byKey(const ValueKey('preview-office-docx')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('项目周报 Report 周三'), findsOneWidget);
+        expect(
+          find.textContaining('第一段：中英混排 hello world & 特殊<tag>字符。加粗补充'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('工作项'), findsOneWidget);
+        expect(find.text('无法预览该文件'), findsNothing);
+      },
+    );
 
     testWidgets('PDF 预览：进入 PDF 预览分支，不再出现无法预览该文件兜底', (tester) async {
       // pdfrx 依赖 native pdfium 动态链接库，在 flutter_test 环境中无法渲染 PDF 页面。
@@ -299,15 +309,71 @@ void main() {
       await tester.pump();
 
       expect(find.text('无法预览该文件'), findsNothing);
-      final hasLoading =
-          find.byType(CupertinoActivityIndicator).evaluate().isNotEmpty;
-      final hasPdfViewer =
-          find.byKey(const ValueKey('preview-pdf')).evaluate().isNotEmpty;
+      final hasLoading = find
+          .byType(CupertinoActivityIndicator)
+          .evaluate()
+          .isNotEmpty;
+      final hasPdfViewer = find
+          .byKey(const ValueKey('preview-pdf'))
+          .evaluate()
+          .isNotEmpty;
       final hasFallback = find
           .byKey(const ValueKey('preview-download-fallback'))
           .evaluate()
           .isNotEmpty;
       expect(hasLoading || hasPdfViewer || hasFallback, isTrue);
+    });
+
+    testWidgets('长文件名：预览页头部为始终折叠紧凑条（非大标题），标题单行 ellipsis', (tester) async {
+      final longName = 'resume_智能产品技术负责人_3页深挖版_2026年度终稿_v12_final_final.pdf';
+      final api = FakeWorkspaceApi();
+      api.fileContents[longName] = const FileResponse(
+        content: 'placeholder',
+        size: 1,
+        lines: 1,
+      );
+      await pumpPreview(tester, api, entry(longName));
+
+      // 头部不再是可展开大标题（alwaysCollapsed 走 44pt 紧凑条）。
+      expect(find.byKey(const ValueKey('large-title-header')), findsNothing);
+      // 紧凑条 middle 文案存在且被约束为单行截断。
+      final title = tester.widget<Text>(find.text(longName).first);
+      expect(title.maxLines, 1);
+      expect(title.overflow, TextOverflow.ellipsis);
+      expect(find.byKey(const ValueKey('preview-download')), findsOneWidget);
+    });
+
+    testWidgets('PDF 预览：外层 CustomScrollView 锁滚（NeverScrollable），拖拽不外滚', (
+      tester,
+    ) async {
+      final api = FakeWorkspaceApi()
+        ..downloadBytes = Uint8List.fromList(const [0x25, 0x50, 0x44, 0x46]);
+      await pumpPreview(tester, api, entry('doc.pdf'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      final scrollFinder = find.byKey(const ValueKey('preview-scroll'));
+      final scrollable = tester.widget<CustomScrollView>(scrollFinder);
+      expect(
+        scrollable.physics,
+        isA<NeverScrollableScrollPhysics>(),
+        reason: 'PDF 内滚与外层竞争是「滚动失效」根因，外层必须锁死',
+      );
+    });
+
+    testWidgets('文本预览：外层保持可滚动（回归守卫）', (tester) async {
+      final api = FakeWorkspaceApi();
+      api.fileContents['big.txt'] = FileResponse(
+        content: 'x\n' * 500,
+        size: 1000,
+        lines: 500,
+      );
+      await pumpPreview(tester, api, entry('big.txt'));
+
+      final scrollable = tester.widget<CustomScrollView>(
+        find.byKey(const ValueKey('preview-scroll')),
+      );
+      expect(scrollable.physics, isNot(isA<NeverScrollableScrollPhysics>()));
     });
   });
 }

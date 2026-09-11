@@ -29,6 +29,7 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
     this.showMiddleOnNarrow = false,
     this.showNarrowNavigationDropdown = true,
     this.onTitleDoubleTap,
+    this.alwaysCollapsed = false,
   });
 
   /// 大标题 / 收起态中标题的共用文案。
@@ -60,10 +61,21 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
   /// 双击标题回调（例如回顶：scrollController.animateTo(0, ...)）。
   final VoidCallback? onTitleDoubleTap;
 
+  /// 强制使用折叠态紧凑导航条（44pt，不随滚动展开大标题）。
+  ///
+  /// 文档预览等「标题即文件名、可能超长」的页面用：长文本由
+  /// [CupertinoNavigationBar] 的 middle 在 leading/trailing 之间截断，
+  /// 不会像大标题模式那样无界绘制压住两侧按钮。
+  final bool alwaysCollapsed;
+
   @override
   Widget build(BuildContext context) {
     Widget buildTitle(String text) {
-      final textWidget = Text(text);
+      final textWidget = Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
       if (onTitleDoubleTap != null) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -75,7 +87,7 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
     }
 
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
-    if (isWide) {
+    if (isWide || alwaysCollapsed) {
       // 桌面宽屏：44pt 固定紧凑导航条（SliverNavigationBar 不允许
       // largeTitle 为 null，改用 CupertinoNavigationBar）。
       // pinned：与窄屏大标题头部同理，滚动后标题与返回/操作按钮钉在顶部，
@@ -101,10 +113,9 @@ class AdaptiveSliverNavigationBar extends StatelessWidget {
         title: title,
         leading: leading,
         trailing: trailing,
-        titleTrailing:
-            showNarrowNavigationDropdown
-                ? const NarrowNavigationDropdownButton()
-                : null,
+        titleTrailing: showNarrowNavigationDropdown
+            ? const NarrowNavigationDropdownButton()
+            : null,
         showCollapsedTitle: showMiddleOnNarrow,
         topPadding: MediaQuery.paddingOf(context).top,
         brightness: CupertinoTheme.of(context).brightness ?? Brightness.light,

@@ -22,7 +22,9 @@ import '../downloads/download_providers.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
 import '../workspace/workspace_providers.dart';
+
 import 'package:pdfrx/pdfrx.dart';
+
 import 'office_document.dart';
 
 /// 文件预览类型（镜像 WebUI `workspace.js:811-820` 的扩展名白名单思路）。
@@ -429,13 +431,19 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // PDF/图片预览自带滚动（pdfrx 内滚 / InteractiveViewer）。外层
+    // CustomScrollView 在 iOS 回弹物理下仍会吃掉纵向拖拽做整页 overscroll
+    // bounce（用户感知为「滚了外面容器、PDF 不动」），这两类锁死外层。
+    final outerScrollable =
+        _kind != WorkspaceFileKind.pdf && _kind != WorkspaceFileKind.image;
     return CupertinoPageScaffold(
       child: CustomScrollView(
         key: const ValueKey('preview-scroll'),
+        physics: outerScrollable ? null : const NeverScrollableScrollPhysics(),
         slivers: [
           AdaptiveSliverNavigationBar(
             title: widget.entry.name ?? l10n.unnamedFile,
-            showMiddleOnNarrow: true,
+            alwaysCollapsed: true,
             leading: const AppBackButton(),
             trailing: _DownloadButton(
               downloading: _downloading,
@@ -616,13 +624,14 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           child: PdfViewer.file(
             tempPath,
             params: PdfViewerParams(
-              backgroundColor:
-                  CupertinoColors.systemBackground.resolveFrom(context),
+              backgroundColor: CupertinoColors.systemBackground.resolveFrom(
+                context,
+              ),
               errorBannerBuilder: (context, error, stackTrace, documentRef) =>
                   _buildFallback(
-                message: l10n.previewPdfFailed,
-                onRetry: () => unawaited(_load()),
-              ),
+                    message: l10n.previewPdfFailed,
+                    onRetry: () => unawaited(_load()),
+                  ),
             ),
           ),
         ),
@@ -679,10 +688,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                   ] else ...[
                     SelectableText(
                       block.text!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
+                      style: const TextStyle(fontSize: 14, height: 1.5),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -698,8 +704,9 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
   Widget _buildXlsxSliver(OfficeDocument doc) {
     final l10n = AppLocalizations.of(context);
     final sheets = doc.sheets;
-    final currentIdx =
-        (_selectedSheetIndex < sheets.length) ? _selectedSheetIndex : 0;
+    final currentIdx = (_selectedSheetIndex < sheets.length)
+        ? _selectedSheetIndex
+        : 0;
     final currentSheet = sheets.isNotEmpty ? sheets[currentIdx] : null;
 
     return SliverPadding(
@@ -785,8 +792,9 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.tertiarySystemFill
-                              .resolveFrom(context),
+                          color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -802,10 +810,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                       for (final line in doc.slides[i].lines) ...[
                         SelectableText(
                           line,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            height: 1.5,
-                          ),
+                          style: const TextStyle(fontSize: 14, height: 1.5),
                         ),
                         const SizedBox(height: 4),
                       ],
@@ -842,10 +847,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
               const SizedBox(height: 12),
               SelectableText(
                 doc.legacyText,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.5,
-                ),
+                style: const TextStyle(fontSize: 14, height: 1.5),
               ),
             ],
           ),
@@ -873,8 +875,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
                     cell,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight:
-                          i == 0 ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -1097,13 +1098,15 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         path: path,
       ).url(client.baseUrl).toString();
 
-      await ref.read(downloadControllerProvider.notifier).enqueue(
-        sourceUrl: rawUrl,
-        fileName: fileName,
-        mimeType: widget.entry.type,
-        expectedBytes: widget.entry.size,
-        sessionId: widget.sessionId,
-      );
+      await ref
+          .read(downloadControllerProvider.notifier)
+          .enqueue(
+            sourceUrl: rawUrl,
+            fileName: fileName,
+            mimeType: widget.entry.type,
+            expectedBytes: widget.entry.size,
+            sessionId: widget.sessionId,
+          );
       if (!mounted) return;
       setState(() => _downloading = false);
     } on Exception catch (error) {
