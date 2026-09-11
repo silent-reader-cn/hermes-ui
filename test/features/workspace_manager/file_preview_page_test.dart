@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
@@ -120,12 +121,24 @@ void main() {
       expect(workspaceFileKindOf(entry('movie.mp4')), WorkspaceFileKind.video);
       expect(workspaceFileKindOf(entry('song.mp3')), WorkspaceFileKind.audio);
       expect(workspaceFileKindOf(entry('book.pdf')), WorkspaceFileKind.pdf);
+      expect(workspaceFileKindOf(entry('a.docx')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('b.xlsx')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('c.pptx')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('d.doc')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('e.xls')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('f.ppt')), WorkspaceFileKind.office);
+      expect(workspaceFileKindOf(entry('data.csv')), WorkspaceFileKind.text);
+      expect(workspaceFileKindOf(entry('data.tsv')), WorkspaceFileKind.text);
+      expect(workspaceFileKindOf(entry('doc.rtf')), WorkspaceFileKind.text);
       expect(workspaceFileKindOf(entry('app.zip')), WorkspaceFileKind.archive);
       expect(workspaceFileKindOf(entry('noext')), WorkspaceFileKind.other);
       expect(workspaceFileIsPreviewable(entry('a.dart')), isTrue);
       expect(workspaceFileIsPreviewable(entry('pic.png')), isTrue);
       expect(workspaceFileIsPreviewable(entry('movie.mp4')), isTrue);
       expect(workspaceFileIsPreviewable(entry('song.mp3')), isTrue);
+      expect(workspaceFileIsPreviewable(entry('book.pdf')), isTrue);
+      expect(workspaceFileIsPreviewable(entry('a.docx')), isTrue);
+      expect(workspaceFileIsPreviewable(entry('f.ppt')), isTrue);
       expect(workspaceFileIsPreviewable(entry('app.zip')), isFalse);
     });
   });
@@ -260,6 +273,41 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('下载文件'), findsNothing);
+    });
+
+    testWidgets('Office 预览：docx fixture 经 downloadBytes 渲染并显示 preview-office-docx', (tester) async {
+      final bytes = File('test/fixtures/office/sample.docx').readAsBytesSync();
+      final api = FakeWorkspaceApi()..downloadBytes = bytes;
+      await pumpPreview(tester, api, entry('sample.docx'));
+
+      expect(find.byKey(const ValueKey('preview-office-docx')), findsOneWidget);
+      expect(find.textContaining('项目周报 Report 周三'), findsOneWidget);
+      expect(find.textContaining('第一段：中英混排 hello world & 特殊<tag>字符。加粗补充'), findsOneWidget);
+      expect(find.textContaining('工作项'), findsOneWidget);
+      expect(find.text('无法预览该文件'), findsNothing);
+    });
+
+    testWidgets('PDF 预览：进入 PDF 预览分支，不再出现无法预览该文件兜底', (tester) async {
+      // pdfrx 依赖 native pdfium 动态链接库，在 flutter_test 环境中无法渲染 PDF 页面。
+      // 此处测试断言文件正确路由至 PDF 预览分支（非 unsupported 兜底）：
+      // 允许停留在加载状态或 pdfium 加载失败兜底（preview-pdf 或 preview-download-fallback 存在），
+      // 但绝不展示「无法预览该文件」（previewUnavailable）。
+      final api = FakeWorkspaceApi()
+        ..downloadBytes = Uint8List.fromList(const [0x25, 0x50, 0x44, 0x46]);
+      await pumpPreview(tester, api, entry('doc.pdf'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      expect(find.text('无法预览该文件'), findsNothing);
+      final hasLoading =
+          find.byType(CupertinoActivityIndicator).evaluate().isNotEmpty;
+      final hasPdfViewer =
+          find.byKey(const ValueKey('preview-pdf')).evaluate().isNotEmpty;
+      final hasFallback = find
+          .byKey(const ValueKey('preview-download-fallback'))
+          .evaluate()
+          .isNotEmpty;
+      expect(hasLoading || hasPdfViewer || hasFallback, isTrue);
     });
   });
 }

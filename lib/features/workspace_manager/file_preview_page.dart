@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -21,6 +22,8 @@ import '../downloads/download_providers.dart';
 import '../shared/app_back_button.dart';
 import '../workspace/workspace_api.dart';
 import '../workspace/workspace_providers.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'office_document.dart';
 
 /// 文件预览类型（镜像 WebUI `workspace.js:811-820` 的扩展名白名单思路）。
 enum WorkspaceFileKind {
@@ -36,8 +39,11 @@ enum WorkspaceFileKind {
   /// 音频，media_kit 内存字节播放（mp3/wav/m4a/aac/ogg/flac/opus）。
   audio,
 
-  /// PDF（内置渲染器后置，当前走下载兜底）。
+  /// PDF（pdfrx 内嵌渲染）。
   pdf,
+
+  /// Office 文档（docx/xlsx/pptx/doc/xls/ppt）。
+  office,
 
   /// 归档/二进制黑名单（zip 等，点击直接下载）。
   archive,
@@ -93,6 +99,9 @@ const Set<String> _textExts = {
   '.gitattributes',
   '.editorconfig',
   '.svg',
+  '.csv',
+  '.tsv',
+  '.rtf',
 };
 
 const Set<String> _imageExts = {
@@ -125,6 +134,15 @@ const Set<String> _audioExts = {
 };
 
 const Set<String> _pdfExts = {'.pdf'};
+
+const Set<String> _officeExts = {
+  '.docx',
+  '.xlsx',
+  '.pptx',
+  '.doc',
+  '.xls',
+  '.ppt',
+};
 
 /// 归档/二进制「下载优先」扩展名。
 const Set<String> _archiveExts = {
@@ -167,18 +185,21 @@ WorkspaceFileKind workspaceFileKindOf(WorkspaceEntry entry) {
   if (_videoExts.any(name.endsWith)) return WorkspaceFileKind.video;
   if (_audioExts.any(name.endsWith)) return WorkspaceFileKind.audio;
   if (_pdfExts.any(name.endsWith)) return WorkspaceFileKind.pdf;
+  if (_officeExts.any(name.endsWith)) return WorkspaceFileKind.office;
   if (_archiveExts.any(name.endsWith)) return WorkspaceFileKind.archive;
   if (_textExts.any(name.endsWith)) return WorkspaceFileKind.text;
   return WorkspaceFileKind.other;
 }
 
-/// 是否可在应用内预览（文本/图片/音视频）；其余类型走下载兜底。
+/// 是否可在应用内预览（文本/图片/音视频/PDF/Office）；其余类型走下载兜底。
 bool workspaceFileIsPreviewable(WorkspaceEntry entry) {
   final kind = workspaceFileKindOf(entry);
   return kind == WorkspaceFileKind.text ||
       kind == WorkspaceFileKind.image ||
       kind == WorkspaceFileKind.video ||
-      kind == WorkspaceFileKind.audio;
+      kind == WorkspaceFileKind.audio ||
+      kind == WorkspaceFileKind.pdf ||
+      kind == WorkspaceFileKind.office;
 }
 
 /// 文件预览页（push 进入，参数 `{sessionId, entry}`）。
@@ -221,6 +242,15 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
   /// 音视频临时文件路径（video/audio）。
   String? _mediaTempPath;
 
+  /// PDF 临时文件路径。
+  String? _pdfTempPath;
+
+  /// Office 解析文档结果。
+  OfficeDocument? _officeDocument;
+
+  /// xlsx 当前选中的 sheet 索引。
+  int _selectedSheetIndex = 0;
+
   /// 音视频播放器（video/audio 共用 media_kit；null = 未初始化或失败）。
   Player? _player;
   VideoController? _videoController;
@@ -252,22 +282,34 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       await player?.dispose();
     } catch (_) {}
     final tempPath = _mediaTempPath;
+    _mediaTempPath = null;
     if (tempPath != null) {
       try {
         final file = File(tempPath);
         if (await file.exists()) await file.delete();
       } catch (_) {}
     }
+    final pdfTempPath = _pdfTempPath;
+    _pdfTempPath = null;
+    if (pdfTempPath != null) {
+      try {
+        final file = File(pdfTempPath);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
   }
 
   Future<void> _load() async {
-    // 切换重载时先释放旧的音视频资源。
+    // 切换重载时先释放旧的音视频/PDF资源。
     await _disposeMedia();
     if (!mounted) return;
     setState(() {
       _loading = true;
       _loadError = null;
       _mediaTempPath = null;
+      _pdfTempPath = null;
+      _officeDocument = null;
+      _selectedSheetIndex = 0;
     });
     try {
       if (_kind == WorkspaceFileKind.text) {
@@ -321,8 +363,52 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         await player.open(Media(tempFile.path));
         if (!mounted) return;
         setState(() => _loading = false);
+      } else if (_kind == WorkspaceFileKind.pdf) {
+        final bytes = await _api.downloadFile(
+          sessionId: widget.sessionId,
+          path: widget.entry.path ?? '',
+        );
+        if (!mounted) return;
+        if (bytes.isEmpty) {
+          setState(() {
+            _loading = false;
+            _loadError = const FormatException('Empty PDF file');
+          });
+          return;
+        }
+        final tempDir = Directory.systemTemp;
+        final tempFile = File(
+          '${tempDir.path}/hermes_preview_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        );
+        await tempFile.writeAsBytes(bytes, flush: true);
+        if (!mounted) {
+          try {
+            if (await tempFile.exists()) await tempFile.delete();
+          } catch (_) {}
+          return;
+        }
+        setState(() {
+          _pdfTempPath = tempFile.path;
+          _loading = false;
+        });
+      } else if (_kind == WorkspaceFileKind.office) {
+        final bytes = await _api.downloadFile(
+          sessionId: widget.sessionId,
+          path: widget.entry.path ?? '',
+        );
+        if (!mounted) return;
+        if (bytes.isEmpty) {
+          throw const OfficeParseException('Empty office file');
+        }
+        final ext = _extOf(widget.entry.name ?? widget.entry.path ?? '');
+        final doc = OfficeDocumentParser.parse(bytes, ext);
+        if (!mounted) return;
+        setState(() {
+          _officeDocument = doc;
+          _loading = false;
+        });
       } else {
-        // PDF/归档/未知：无内嵌渲染器，直接展示下载兜底视图。
+        // 归档/未知：无内嵌渲染器，直接展示下载兜底视图。
         setState(() => _loading = false);
       }
     } on Exception catch (error) {
@@ -375,11 +461,21 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
     }
     final error = _loadError;
     if (error != null) {
+      final String message;
+      if (error is OfficeParseException) {
+        message = error.isTooLarge
+            ? l10n.previewOfficeTooLarge
+            : l10n.previewOfficeUnsupported;
+      } else if (error is ApiException) {
+        message = error.message;
+      } else {
+        message = error.toString();
+      }
       return [
         SliverFillRemaining(
           hasScrollBody: false,
           child: _buildFallback(
-            message: error is ApiException ? error.message : error.toString(),
+            message: message,
             onRetry: () => unawaited(_load()),
           ),
         ),
@@ -421,6 +517,9 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
       case WorkspaceFileKind.audio:
         return [_buildAudioSliver()];
       case WorkspaceFileKind.pdf:
+        return [_buildPdfSliver()];
+      case WorkspaceFileKind.office:
+        return [_buildOfficeSliver()];
       case WorkspaceFileKind.archive:
       case WorkspaceFileKind.other:
         return [_buildUnsupportedSliver()];
@@ -494,6 +593,294 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPdfSliver() {
+    final l10n = AppLocalizations.of(context);
+    final tempPath = _pdfTempPath;
+    if (tempPath == null) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildFallback(
+          message: l10n.previewPdfFailed,
+          onRetry: () => unawaited(_load()),
+        ),
+      );
+    }
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: SizedBox.expand(
+        child: Container(
+          key: const ValueKey('preview-pdf'),
+          child: PdfViewer.file(
+            tempPath,
+            params: PdfViewerParams(
+              backgroundColor:
+                  CupertinoColors.systemBackground.resolveFrom(context),
+              errorBannerBuilder: (context, error, stackTrace, documentRef) =>
+                  _buildFallback(
+                message: l10n.previewPdfFailed,
+                onRetry: () => unawaited(_load()),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfficeSliver() {
+    final doc = _officeDocument;
+    if (doc == null) {
+      return _buildUnsupportedSliver();
+    }
+    switch (doc.kind) {
+      case OfficeDocumentKind.docx:
+        return _buildDocxSliver(doc);
+      case OfficeDocumentKind.xlsx:
+        return _buildXlsxSliver(doc);
+      case OfficeDocumentKind.pptx:
+        return _buildPptxSliver(doc);
+      case OfficeDocumentKind.legacy:
+        return _buildLegacyOfficeSliver(doc);
+    }
+  }
+
+  Widget _buildDocxSliver(OfficeDocument doc) {
+    final l10n = AppLocalizations.of(context);
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          key: const ValueKey('preview-office-docx'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildMediaMetaLine(l10n),
+              const SizedBox(height: 12),
+              for (final block in doc.blocks) ...[
+                if (block.isTable && block.table != null) ...[
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _buildOfficeTable(block.table!),
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (block.isParagraph && block.text != null) ...[
+                  if (block.heading != null) ...[
+                    SelectableText(
+                      block.text!,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ] else ...[
+                    SelectableText(
+                      block.text!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildXlsxSliver(OfficeDocument doc) {
+    final l10n = AppLocalizations.of(context);
+    final sheets = doc.sheets;
+    final currentIdx =
+        (_selectedSheetIndex < sheets.length) ? _selectedSheetIndex : 0;
+    final currentSheet = sheets.isNotEmpty ? sheets[currentIdx] : null;
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          key: const ValueKey('preview-office-xlsx'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildMediaMetaLine(l10n),
+              const SizedBox(height: 12),
+              if (sheets.length > 1) ...[
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: CupertinoSlidingSegmentedControl<int>(
+                    groupValue: currentIdx,
+                    children: {
+                      for (int i = 0; i < sheets.length; i++)
+                        i: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Text(sheets[i].name),
+                        ),
+                    },
+                    onValueChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedSheetIndex = val);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (currentSheet != null && currentSheet.rows.isNotEmpty)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildOfficeTable(currentSheet.rows),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPptxSliver(OfficeDocument doc) {
+    final l10n = AppLocalizations.of(context);
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          key: const ValueKey('preview-office-pptx'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildMediaMetaLine(l10n),
+              const SizedBox(height: 12),
+              for (int i = 0; i < doc.slides.length; i++) ...[
+                if (i > 0) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    height: 0.5,
+                    color: CupertinoColors.separator.resolveFrom(context),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.secondarySystemBackground
+                        .resolveFrom(context),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.tertiarySystemFill
+                              .resolveFrom(context),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          l10n.previewOfficeSlide(doc.slides[i].index),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: secondaryText.resolveFrom(context),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final line in doc.slides[i].lines) ...[
+                        SelectableText(
+                          line,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegacyOfficeSliver(OfficeDocument doc) {
+    final l10n = AppLocalizations.of(context);
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          key: const ValueKey('preview-office-legacy'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildMediaMetaLine(l10n),
+              const SizedBox(height: 8),
+              Text(
+                l10n.previewOfficeLegacyHint,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: secondaryText.resolveFrom(context),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                doc.legacyText,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfficeTable(List<List<String>> rows) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Table(
+      defaultColumnWidth: const IntrinsicColumnWidth(),
+      border: TableBorder.all(
+        color: CupertinoColors.separator.resolveFrom(context),
+        width: 0.5,
+      ),
+      children: [
+        for (int i = 0; i < rows.length; i++)
+          TableRow(
+            children: [
+              for (final cell in rows[i])
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: SelectableText(
+                    cell,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          i == 0 ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+      ],
     );
   }
 
