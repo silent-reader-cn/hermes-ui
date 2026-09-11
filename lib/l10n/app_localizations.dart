@@ -647,7 +647,7 @@ class AppLocalizations {
       isEnglish ? 'File has been moved or deleted' : '文件已被移动或删除';
   String get downloadRedownload => isEnglish ? 'Redownload' : '重新下载';
   String get downloadUnknownSize => isEnglish ? 'Unknown size' : '未知大小';
-  String get downloadFromSession => isEnglish ? 'Source session' : '来源会话';
+  String get downloadModifiedTime => isEnglish ? 'Modified' : '修改时间';
   String downloadFromSessionLabel(String sessionId) =>
       isEnglish ? 'From session: $sessionId' : '来自会话：$sessionId';
   String get downloadFileTypeArchive => isEnglish ? 'Archive' : '压缩包';

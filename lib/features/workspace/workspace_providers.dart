@@ -302,13 +302,16 @@ class WorkspaceController extends FamilyAsyncNotifier<WorkspaceState, String> {
 
     final fileName = entry.name ?? path.split('/').last;
     if (context != null) {
+      final modifiedAt = entry.mtimeNs != null
+          ? entry.mtimeNs! / 1e9
+          : entry.modified;
       final confirmed = await showDownloadConfirmationDialog(
         context,
         fileName: fileName,
         mimeType: entry.type,
         expectedBytes: entry.size,
         sessionId: sessionId,
-        sourceDescription: '$sessionId/$path',
+        modifiedAtSeconds: modifiedAt,
       );
       if (confirmed != true) return false;
     }
@@ -351,7 +354,6 @@ class WorkspaceController extends FamilyAsyncNotifier<WorkspaceState, String> {
         fileName: zipFileName,
         mimeType: 'application/zip',
         sessionId: sessionId,
-        sourceDescription: '$sessionId/$targetPath',
       );
       if (confirmed != true) return false;
     }

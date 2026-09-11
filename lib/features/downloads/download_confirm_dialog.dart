@@ -6,7 +6,7 @@ import 'download_page.dart';
 
 /// 弹出 Cupertino 下载确认对话框。
 ///
-/// 展示：文件名、文件分类、文件大小（或未知大小）、来源会话/路径（若有）。
+/// 展示：文件名、文件分类、文件大小（或未知大小）、修改时间（若有）。
 /// 返回 true 表示用户确认开始下载，返回 false 或 null 表示取消。
 Future<bool?> showDownloadConfirmationDialog(
   BuildContext context, {
@@ -14,7 +14,7 @@ Future<bool?> showDownloadConfirmationDialog(
   String? mimeType,
   int? expectedBytes,
   String? sessionId,
-  String? sourceDescription,
+  double? modifiedAtSeconds,
 }) {
   final l10n = AppLocalizations.of(context);
   final fileType = getDownloadFileType(fileName: fileName, mimeType: mimeType);
@@ -22,14 +22,18 @@ Future<bool?> showDownloadConfirmationDialog(
   final sizeText = expectedBytes != null && expectedBytes > 0
       ? formatDownloadByteSize(expectedBytes)
       : l10n.downloadUnknownSize;
-  final sessionText =
-      (sourceDescription != null && sourceDescription.isNotEmpty)
-      ? sourceDescription
-      : ((sessionId != null && sessionId.isNotEmpty)
-            ? (sessionId.length > 12
-                  ? '${sessionId.substring(0, 12)}…'
-                  : sessionId)
-            : null);
+  String? modifiedTimeText;
+  if (modifiedAtSeconds != null) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(
+      (modifiedAtSeconds * 1000).round(),
+    );
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    modifiedTimeText = '$y-$m-$d $hh:$mm';
+  }
 
   return showCupertinoDialog<bool>(
     context: context,
@@ -46,9 +50,9 @@ Future<bool?> showDownloadConfirmationDialog(
             Text('${l10n.info}：$typeName'),
             const SizedBox(height: 4),
             Text('${l10n.value}：$sizeText'),
-            if (sessionText != null) ...[
+            if (modifiedTimeText != null) ...[
               const SizedBox(height: 4),
-              Text('${l10n.downloadFromSession}：$sessionText'),
+              Text('${l10n.downloadModifiedTime}：$modifiedTimeText'),
             ],
           ],
         ),

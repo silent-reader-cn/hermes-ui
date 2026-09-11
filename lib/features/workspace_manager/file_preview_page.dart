@@ -1075,13 +1075,16 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
 
     final fileName = widget.entry.name ?? path.split('/').last;
 
+    final modifiedAt = widget.entry.mtimeNs != null
+        ? widget.entry.mtimeNs! / 1e9
+        : widget.entry.modified;
     final confirmed = await showDownloadConfirmationDialog(
       context,
       fileName: fileName,
       mimeType: widget.entry.type,
       expectedBytes: widget.entry.size,
       sessionId: widget.sessionId,
-      sourceDescription: '${widget.sessionId}/$path',
+      modifiedAtSeconds: modifiedAt,
     );
     if (confirmed != true || !mounted) return;
 

@@ -588,7 +588,7 @@ void main() {
       expect(state.taskById(id)?.receivedBytes, 1);
     });
 
-    test('已完成任务去重：本地文件仍存在直接返回已存在任务 ID，不重复下载', () async {
+    test('允许重复下载：同 URL 已完成且本地文件存在，再次 enqueue 返回新任务 ID 并重新入队下载', () async {
       var downloadCalls = 0;
       final container = createContainer(
         customDownloader: (url, {onProgress}) async {
@@ -607,28 +607,25 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(downloadCalls, 1);
+      final task1 = container.read(downloadControllerProvider).taskById(id1)!;
+      expect(task1.status, DownloadStatus.completed);
+      expect(File(task1.savedPath!).existsSync(), isTrue);
 
-      // 第二次相同 sourceUrl：本地文件存在 → 直接返回 id1
+      // 第二次相同 sourceUrl：本地文件存在，依然生成新任务 ID 并重新下载
       final id2 = await controller.enqueue(
         sourceUrl: 'https://example.com/dedup.png',
         fileName: 'dedup.png',
       );
-      expect(id2, equals(id1));
-      expect(downloadCalls, 1);
-
-      // 删除本地文件后再加入：重新触发下载
-      final task1 = container.read(downloadControllerProvider).taskById(id1)!;
-      File(task1.savedPath!).deleteSync();
-
-      // 先把原已完成状态移除或者尝试重新 enqueue
-      // 当文件被删后，再 enqueue 应当重新下载
-      final id3 = await controller.enqueue(
-        sourceUrl: 'https://example.com/dedup.png',
-        fileName: 'dedup.png',
-      );
-      expect(id3, isNotEmpty);
+      expect(id2, isNot(equals(id1)));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(downloadCalls, 2);
+
+      final task2 = container.read(downloadControllerProvider).taskById(id2)!;
+      expect(task2.status, DownloadStatus.completed);
+      expect(File(task2.savedPath!).existsSync(), isTrue);
+      // 落盘层自动添加冲突后缀如 dedup (1).png
+      expect(task2.savedPath, isNot(equals(task1.savedPath)));
+      expect(task2.savedPath, contains('(1)'));
     });
 
     test('队列中活跃同 URL 合并：不重复入队', () async {
@@ -763,7 +760,7 @@ void main() {
       expect(networkCalled, isFalse);
     });
 
-    test('内存字节去重：本地文件仍存在直接返回已存在任务 ID；删除后重新落盘', () async {
+    test('允许重复下载（内存字节）：本地文件存在时再次 enqueue 返回新任务 ID 并重新落盘', () async {
       final container = createContainer();
       addTearDown(container.dispose);
 
@@ -776,27 +773,23 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      // 再次 enqueue 相同 fileName 与 bytes：文件存在 → 返回 id1
+      final task1 = container.read(downloadControllerProvider).taskById(id1)!;
+      expect(task1.status, DownloadStatus.completed);
+      expect(File(task1.savedPath!).existsSync(), isTrue);
+
+      // 再次 enqueue 相同 fileName 与 bytes：文件存在仍返回新任务 ID 并重新落盘
       final id2 = await controller.enqueue(
         bytes: rawBytes,
         fileName: 'dup_test.bin',
       );
-      expect(id2, equals(id1));
-
-      // 删除本地文件
-      final task1 = container.read(downloadControllerProvider).taskById(id1)!;
-      File(task1.savedPath!).deleteSync();
-
-      // 文件被删后再次 enqueue：重新创建并落盘
-      final id3 = await controller.enqueue(
-        bytes: rawBytes,
-        fileName: 'dup_test.bin',
-      );
-      expect(id3, isNotEmpty);
+      expect(id2, isNot(equals(id1)));
       await Future<void>.delayed(const Duration(milliseconds: 100));
-      final task3 = container.read(downloadControllerProvider).taskById(id3)!;
-      expect(task3.status, DownloadStatus.completed);
-      expect(File(task3.savedPath!).existsSync(), isTrue);
+
+      final task2 = container.read(downloadControllerProvider).taskById(id2)!;
+      expect(task2.status, DownloadStatus.completed);
+      expect(File(task2.savedPath!).existsSync(), isTrue);
+      expect(task2.savedPath, isNot(equals(task1.savedPath)));
+      expect(task2.savedPath, contains('(1)'));
     });
 
     test('平台保存异常透传（Area D）：DownloadSaveService 抛错捕获置 failed 并记录诊断日志', () async {

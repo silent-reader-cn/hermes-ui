@@ -973,11 +973,6 @@ class _AttachmentDownloadButton extends ConsumerWidget {
       mimeType: mimeType,
       expectedBytes: expectedBytes ?? dataBytes?.length,
       sessionId: sessionId,
-      sourceDescription: sessionId != null && sessionId!.isNotEmpty
-          ? (sessionId!.length > 12
-                ? '${sessionId!.substring(0, 12)}…'
-                : sessionId!)
-          : null,
     );
 
     if (confirmed == true && context.mounted) {

@@ -185,10 +185,9 @@ class DownloadController extends Notifier<DownloadState> {
   /// - bytes 模式：传入内存字节 [bytes]（如已解码 Data URI 或内存图），worker 跳过网络直接落盘。
   ///
   /// 幂等与去重契约：
-  /// 1. 若同 `sourceUrl` 已存在完成记录且本地文件仍然存在，直接返回已有任务 ID；
-  /// 2. 若队列中已存在同 `sourceUrl` 的 queued/downloading 任务，合并返回已有任务 ID；
-  /// 3. bytes 模式若无独立 sourceUrl，则按 `bytes:$fileName` 参与查重或直接入队；
-  /// 4. 否则创建新任务加入队列，启动 FIFO worker 并返回新任务 ID。
+  /// 1. 若队列中已存在同 `sourceUrl` 的 queued/downloading 任务，合并返回已有任务 ID；
+  /// 2. bytes 模式若无独立 sourceUrl，则按 `bytes:$fileName` 参与查重或直接入队；
+  /// 3. 否则创建新任务加入队列，启动 FIFO worker 并返回新任务 ID。
   Future<String> enqueue({
     String? sourceUrl,
     Uint8List? bytes,
@@ -211,36 +210,7 @@ class DownloadController extends Notifier<DownloadState> {
         ? DownloadSourceType.bytes
         : DownloadSourceType.url;
 
-    // 1. 已完成且文件仍在检查
-    final existingCompleted = state.tasks.where((t) {
-      if (t.status != DownloadStatus.completed) return false;
-      if (isBytes && (sourceUrl == null || sourceUrl.isEmpty)) {
-        return t.sourceType == DownloadSourceType.bytes &&
-            t.fileName == fileName;
-      }
-      return t.sourceUrl == effectiveUrl;
-    }).firstOrNull;
-
-    if (existingCompleted != null && existingCompleted.savedPath != null) {
-      try {
-        final file = File(existingCompleted.savedPath!);
-        if (file.existsSync()) {
-          DiagnosticsService.instance.log(
-            level: DiagnosticsLogLevel.info,
-            tag: 'downloads',
-            message: '命中已完成任务且本地文件存在，跳过重复下载: ${existingCompleted.id}',
-            details: {
-              'id': existingCompleted.id,
-              'sourceUrl': effectiveUrl,
-              'savedPath': existingCompleted.savedPath,
-            },
-          );
-          return existingCompleted.id;
-        }
-      } catch (_) {}
-    }
-
-    // 2. 队列中活跃同 URL 合并
+    // 1. 队列中活跃同 URL 合并
     final existingActive = state.tasks.where((t) {
       if (!t.isActive) return false;
       if (isBytes && (sourceUrl == null || sourceUrl.isEmpty)) {
@@ -264,7 +234,7 @@ class DownloadController extends Notifier<DownloadState> {
       return existingActive.id;
     }
 
-    // 3. 创建新任务加入队列
+    // 2. 创建新任务加入队列
     final newTask = DownloadTask(
       id: uuidV4(),
       sourceUrl: effectiveUrl,
