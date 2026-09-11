@@ -7,9 +7,16 @@ import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import 'workspace_manager_providers.dart';
 
-/// 新建工作区表单（全高 bottom sheet，键盘可避让）。
+/// 新建工作区表单（iOS form sheet 风格，键盘可避让）。
 ///
-/// 对齐 Hermes WebUI `openWorkspaceCreate`（panels.js:6149-6183）：名称可选 +
+/// 视觉规范对齐 Apple HIG presentation 模式：
+/// - 不透明 `systemBackground` 面板 + 顶部圆角，遮罩加深（见调用方 barrierColor），
+///   内容绝不与背景列表互相穿插；
+/// - 标准导航头：拖拽指示条 + 左「取消」/ 居中标题 / 右「添加」（禁用态变灰）；
+/// - 表单为 inset-grouped 圆角卡片：路径、名称、自动创建开关各占一行，行间细分割线，
+///   开关遵循 iOS「标题左、控件右」惯例。
+///
+/// 行为对齐 Hermes WebUI `openWorkspaceCreate`（panels.js:6149-6183）：名称可选 +
 /// 路径必填 + 路径输入 250ms 防抖请求 `/api/workspaces/suggest` 内联补全 +
 /// 「目录不存在时自动创建」开关；提交错误以 statusRedText 内联展示（不弹窗
 /// 打断）；path 空白/提交中禁用「添加」按钮。
@@ -84,129 +91,271 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
     });
   }
 
+  void _dismiss() => Navigator.of(context).pop();
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final canSubmit = _pathController.text.trim().isNotEmpty && !_submitting;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: viewInsets.bottom),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                l10n.addWorkspace,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                l10n.workspacePathLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: secondaryText.resolveFrom(context),
-                ),
-              ),
-              const SizedBox(height: 6),
-              CupertinoTextField(
-                key: const ValueKey('workspace-add-path'),
-                controller: _pathController,
-                placeholder: l10n.workspacePathHint,
-                autocorrect: false,
-                onChanged: _onPathChanged,
-              ),
-              if (_suggestions.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _SuggestionList(
-                  suggestions: _suggestions,
-                  onPick: (value) {
-                    _pathController.text = value;
-                    setState(() {
-                      _suggestions = const [];
-                      _inlineError = null;
-                    });
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
-              Text(
-                l10n.workspaceNameOptionalLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: secondaryText.resolveFrom(context),
-                ),
-              ),
-              const SizedBox(height: 6),
-              CupertinoTextField(
-                key: const ValueKey('workspace-add-name'),
-                controller: _nameController,
-                placeholder: l10n.workspaceNamePlaceholder,
-                autocorrect: false,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  CupertinoSwitch(
-                    key: const ValueKey('workspace-add-create'),
-                    value: _create,
-                    onChanged: (value) => setState(() => _create = value),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      l10n.createDirectoryIfMissing,
-                      style: const TextStyle(fontSize: 15),
+    final accent = canSubmit
+        ? CupertinoColors.systemBlue.resolveFrom(context)
+        : CupertinoColors.inactiveGray.resolveFrom(context);
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+      child: Container(
+        // 不透明面板：彻底隔离背景列表，修复「半透明看不清」。
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: viewInsets.bottom),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildGrabber(context),
+                _buildHeader(context, l10n, accent, canSubmit),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildGroupedCard(context, l10n),
+                        if (_inlineError != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            _inlineError!,
+                            key: const ValueKey('workspace-add-error'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: statusRedText.resolveFrom(context),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
-              ),
-              if (_inlineError != null) ...[
-                const SizedBox(height: 14),
-                Text(
-                  _inlineError!,
-                  key: const ValueKey('workspace-add-error'),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: statusRedText.resolveFrom(context),
-                  ),
                 ),
               ],
-              const SizedBox(height: 20),
-              CupertinoButton.filled(
-                key: const ValueKey('workspace-add-submit'),
-                onPressed: canSubmit ? () => unawaited(_submit()) : null,
-                child: Text(l10n.addWorkspaceButton),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// 顶部拖拽指示条（36×4，iOS sheet 惯例）。
+  Widget _buildGrabber(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Center(
+        child: Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 导航头：左「取消」/ 居中标题 / 右「添加」。
+  Widget _buildHeader(
+    BuildContext context,
+    AppLocalizations l10n,
+    Color accent,
+    bool canSubmit,
+  ) {
+    return SizedBox(
+      height: 44,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            CupertinoButton(
+              key: const ValueKey('workspace-add-cancel'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              onPressed: _dismiss,
+              child: Text(
+                l10n.cancel,
+                style: TextStyle(
+                  fontSize: 17,
+                  color: CupertinoColors.systemBlue.resolveFrom(context),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                l10n.addWorkspace,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            CupertinoButton(
+              key: const ValueKey('workspace-add-submit'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              onPressed: canSubmit ? () => unawaited(_submit()) : null,
+              child: Text(
+                l10n.addWorkspaceButton,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// inset-grouped 圆角卡片：路径行 + 补全列表 + 名称行 + 开关行。
+  Widget _buildGroupedCard(BuildContext context, AppLocalizations l10n) {
+    final cardColor = CupertinoColors.secondarySystemBackground.resolveFrom(
+      context,
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _LabeledFieldRow(
+            label: l10n.workspacePathLabel,
+            child: CupertinoTextField(
+              key: const ValueKey('workspace-add-path'),
+              controller: _pathController,
+              placeholder: l10n.workspacePathHint,
+              placeholderStyle: TextStyle(
+                fontSize: 17,
+                color: CupertinoColors.placeholderText.resolveFrom(context),
+              ),
+              style: const TextStyle(fontSize: 17),
+              autocorrect: false,
+              decoration: const BoxDecoration(
+                color: CupertinoColors.transparent,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              onChanged: _onPathChanged,
+            ),
+          ),
+          if (_suggestions.isNotEmpty) ...[
+            const _RowSeparator(),
+            _SuggestionList(
+              suggestions: _suggestions,
+              onPick: (value) {
+                _pathController.text = value;
+                setState(() {
+                  _suggestions = const [];
+                  _inlineError = null;
+                });
+              },
+            ),
+          ],
+          const _RowSeparator(),
+          _LabeledFieldRow(
+            label: l10n.workspaceNameOptionalLabel,
+            child: CupertinoTextField(
+              key: const ValueKey('workspace-add-name'),
+              controller: _nameController,
+              placeholder: l10n.workspaceNamePlaceholder,
+              placeholderStyle: TextStyle(
+                fontSize: 17,
+                color: CupertinoColors.placeholderText.resolveFrom(context),
+              ),
+              style: const TextStyle(fontSize: 17),
+              autocorrect: false,
+              decoration: const BoxDecoration(
+                color: CupertinoColors.transparent,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+          const _RowSeparator(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.createDirectoryIfMissing,
+                    style: const TextStyle(fontSize: 17),
+                  ),
+                ),
+                CupertinoSwitch(
+                  key: const ValueKey('workspace-add-create'),
+                  value: _create,
+                  onChanged: (value) => setState(() => _create = value),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-/// 路径补全建议列表（点击填入路径）。
+/// 卡片内一行：左侧字段标签 + 右侧无边框输入控件。
+class _LabeledFieldRow extends StatelessWidget {
+  const _LabeledFieldRow({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+/// 卡片行内细分割线（左缩进 16，iOS grouped list 惯例）。
+class _RowSeparator extends StatelessWidget {
+  const _RowSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.only(left: 16),
+      color: CupertinoColors.separator.resolveFrom(context),
+    );
+  }
+}
+
+/// 路径补全建议列表（卡片内嵌，点击填入路径）。
 class _SuggestionList extends StatelessWidget {
   const _SuggestionList({required this.suggestions, required this.onPick});
 
@@ -217,10 +366,7 @@ class _SuggestionList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxHeight: 180),
-      decoration: BoxDecoration(
-        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
       child: ListView.separated(
         shrinkWrap: true,
         padding: EdgeInsets.zero,
@@ -234,7 +380,7 @@ class _SuggestionList extends StatelessWidget {
           final suggestion = suggestions[index];
           return CupertinoButton(
             key: ValueKey('workspace-add-suggestion-$index'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             borderRadius: BorderRadius.circular(0),
             onPressed: () => onPick(suggestion),
             child: Align(
@@ -243,7 +389,7 @@ class _SuggestionList extends StatelessWidget {
                 suggestion,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: 15),
               ),
             ),
           );

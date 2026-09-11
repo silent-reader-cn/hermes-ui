@@ -303,6 +303,8 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
     unawaited(
       showCupertinoModalPopup<void>(
         context: context,
+        // 60% 黑遮罩（iOS form sheet 惯例，默认 40% 太浅，列表文字会透上来干扰表单）。
+        barrierColor: const Color(0x99000000),
         builder: (context) => const AddWorkspaceSheet(),
       ),
     );

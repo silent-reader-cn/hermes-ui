@@ -137,6 +137,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('workspaces-add')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('workspace-add-path')), findsOneWidget);
+      // iOS form sheet：导航头「取消」按钮 + 顶部圆角不透明面板
+      expect(
+        find.byKey(const ValueKey('workspace-add-cancel')),
+        findsOneWidget,
+      );
+      expect(find.byType(ClipRRect), findsWidgets);
 
       // 路径输入 → 250ms 防抖 → 建议列表
       await tester.enterText(
@@ -328,9 +334,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('导航栏返回按钮 fallback 为 /（窄屏 go 直进回会话列表，非设置页）', (
-      tester,
-    ) async {
+    testWidgets('导航栏返回按钮 fallback 为 /（窄屏 go 直进回会话列表，非设置页）', (tester) async {
       final api = FakeWorkspaceManagerApi(workspaces: [wroot('/a', 'Alpha')]);
       await pumpManager(tester, api);
 
