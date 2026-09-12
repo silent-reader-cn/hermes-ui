@@ -45,6 +45,11 @@ void goldenWidePair(
         overrides: overrides(),
         size: goldenLandscapeSize,
       );
+      // 品牌区入场序列总长 1200ms（hero motion），pumpHermesPage 只结算到
+      // 400ms——直接截图会定格在「slogan 未淡入」的半途帧。这里补泵到
+      // 入场完成后的稳定态（fake-async 下时序确定；12s 呼吸循环在 ~100ms
+      // 处缩放 ≈1.00002，像素级不可见且逐次一致）。
+      await tester.pump(const Duration(milliseconds: 900));
       await expectLater(
         find.byType(CupertinoApp),
         matchesGoldenFile('goldens/${pageName}_$themeName.png'),

@@ -634,6 +634,10 @@ void main() {
 
   group('TASK U2 — 宽屏右列 <= 480', () {
     testWidgets('在 1280x900 宽屏视口下渲染双栏且右列容器最大宽度 <= 480', (tester) async {
+      // Settle the layout without waiting on the intentional brand loop.
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);

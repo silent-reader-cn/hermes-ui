@@ -1,8 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../../app/shell/adaptive_shell.dart';
-import '../../../app/theme/status_colors.dart';
-import '../../../l10n/app_localizations.dart';
+import 'onboarding_hero_motion.dart';
 
 /// 引导与安装体系的通用宽屏双栏骨架 Widget。
 ///
@@ -70,91 +69,20 @@ class WideDualPane extends StatelessWidget {
 
 /// 默认左侧品牌氛围区 Widget。
 class OnboardingBrandPane extends StatelessWidget {
-  const OnboardingBrandPane({
-    super.key,
-    required this.isDark,
-  });
+  /// Creates the default brand pane for the wide onboarding layout.
+  const OnboardingBrandPane({super.key, required this.isDark});
 
+  /// Whether the surrounding onboarding page uses the dark palette.
   final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-
     return Container(
       key: const ValueKey('onboarding-brand-pane'),
       color: isDark
           ? const Color(0xFF0A0A0C)
           : CupertinoColors.systemGroupedBackground.resolveFrom(context),
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-      child: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Image.asset(
-                  'assets/branding/hermes-agent-icon-1024.png',
-                  width: 88,
-                  height: 88,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      _buildFallbackLogo(context),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Hermes',
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                  color: CupertinoColors.label.resolveFrom(context),
-                ),
-              ),
-              const SizedBox(height: 10),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
-                child: Text(
-                  l10n.onboardingBrandSlogan,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    height: 1.4,
-                    color: secondaryText.resolveFrom(context),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFallbackLogo(BuildContext context) {
-    return Container(
-      width: 88,
-      height: 88,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFE5E5EA),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
-          width: 0.5,
-        ),
-      ),
-      child: Center(
-        child: Text(
-          'H',
-          style: TextStyle(
-            fontSize: 44,
-            fontWeight: FontWeight.bold,
-            color: isDark ? CupertinoColors.white : CupertinoColors.black,
-          ),
-        ),
-      ),
+      child: OnboardingHeroMotion(isDark: isDark),
     );
   }
 }

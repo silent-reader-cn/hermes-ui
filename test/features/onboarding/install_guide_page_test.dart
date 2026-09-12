@@ -132,6 +132,11 @@ void main() {
   });
 
   Widget buildTestApp(WidgetTester tester, {bool isWindows = true}) {
+    // These tests settle navigation and forms; the brand loop has dedicated
+    // motion coverage in onboarding_hero_motion_test.dart.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
