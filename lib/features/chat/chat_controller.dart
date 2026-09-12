@@ -17,6 +17,7 @@ import '../../core/models/tool_call.dart';
 import '../../core/models/upload_response.dart';
 import '../../core/utils/uuid.dart';
 import '../../core/connections/connection_providers.dart';
+import '../desktop/desktop_settings.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 import '../notifications/notification_providers.dart';
@@ -1479,15 +1480,27 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 生命周期变化处理（修复①背景/锁屏暂停消费 + 修复③watchdog 基线校准）。
   ///
-  /// - 非 resumed（后台/锁屏/隐藏）：暂停 16ms 合并与 48ms 逐词 reveal 消费，
-  ///   避免后台空转 CPU 与解锁后积压爆吐。
+  /// - 移动端（Android/iOS）：非 resumed（后台/锁屏/隐藏）暂停 16ms 合并与
+  ///   逐词 reveal 消费，避免后台空转 CPU 与解锁后积压爆吐。
+  /// - 桌面端（Windows/macOS/Linux）：引擎语义是「窗口失焦→inactive、
+  ///   最小化/隐藏→hidden」（windows_lifecycle_manager UpdateState）。失焦窗口
+  ///   仍然完整可见，冻结 reveal 会让打字机在用户眼前停摆、回焦再整段爆铺并
+  ///   诱发 resume 探活重放叠影——因此仅 hidden/detached（真不可见）才暂停，
+  ///   inactive 照常流式消费。
   /// - resumed：先直接铺全文（积压缓冲一次性落消息），再重新校准看门狗基线，
   ///   避免锁屏冻结计时器在解锁瞬间被误判为断线超时触发重连。
   void _handleAppLifecycleChange(
     AppLifecycleState? previous,
     AppLifecycleState next,
   ) {
-    final nowPaused = next != AppLifecycleState.resumed;
+    final bool nowPaused;
+    if (isDesktopPlatform()) {
+      nowPaused =
+          next == AppLifecycleState.hidden ||
+          next == AppLifecycleState.detached;
+    } else {
+      nowPaused = next != AppLifecycleState.resumed;
+    }
     if (nowPaused == _appPaused) return;
     _appPaused = nowPaused;
     if (nowPaused) {
