@@ -19,9 +19,25 @@ A Flutter + Cupertino client for [Hermes Agent](https://hermes-agent.nousresearc
 
 ## Screenshots
 
-> Coming soon — Windows desktop and Android walkthroughs (chat, sessions, Kanban, Insights).
->
-> Planned shots: `docs/screenshots/windows-chat.png` · `docs/screenshots/android-chat.png` · `docs/screenshots/kanban.png` · `docs/screenshots/insights.png`
+<div align="center">
+
+### Windows desktop — streaming chat
+
+<img src="docs/screenshots/wide-chat.png" width="86%" alt="Hermes UI on Windows: two-pane layout with session sidebar and streaming chat"/>
+
+| Sessions | Kanban | Insights |
+|---|---|---|
+| <img src="docs/screenshots/wide-sessions.png" width="280" alt="Session list, wide"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="Kanban board, wide"/> | <img src="docs/screenshots/wide-insights.png" width="280" alt="Usage insights, wide"/> |
+
+### Android phone
+
+| Chat | Sessions | Insights |
+|---|---|---|
+| <img src="docs/screenshots/phone-chat.png" width="180" alt="Chat on Android"/> | <img src="docs/screenshots/phone-sessions.png" width="180" alt="Session list on Android"/> | <img src="docs/screenshots/phone-insights.png" width="180" alt="Insights on Android"/> |
+
+</div>
+
+> All screenshots are captured from the app's own golden-screenshot harness with demo data (`test/screenshots/`), so they match every release byte-for-byte.
 
 ## Highlights
 

@@ -19,9 +19,25 @@
 
 ## 截图
 
-> 待补 —— Windows 桌面与 Android 实机截图（聊天、会话、看板、统计）。
->
-> 规划位置：`docs/screenshots/windows-chat.png` · `docs/screenshots/android-chat.png` · `docs/screenshots/kanban.png` · `docs/screenshots/insights.png`
+<div align="center">
+
+### Windows 桌面 —— 流式聊天
+
+<img src="docs/screenshots/wide-chat.png" width="86%" alt="Hermes UI Windows 桌面：左会话列表 + 右流式聊天双栏"/>
+
+| 会话列表 | 看板 | 用量统计 |
+|---|---|---|
+| <img src="docs/screenshots/wide-sessions.png" width="280" alt="宽屏会话列表"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="宽屏看板"/> | <img src="docs/screenshots/wide-insights.png" width="280" alt="宽屏用量统计"/> |
+
+### Android 手机
+
+| 聊天 | 会话列表 | 用量统计 |
+|---|---|---|
+| <img src="docs/screenshots/phone-chat.png" width="180" alt="安卓聊天页"/> | <img src="docs/screenshots/phone-sessions.png" width="180" alt="安卓会话列表"/> | <img src="docs/screenshots/phone-insights.png" width="180" alt="安卓用量统计"/> |
+
+</div>
+
+> 全部截图由 App 自身的 golden 截图工装生成（`test/screenshots/`，演示数据），与每次发布逐像素一致。
 
 ## 功能亮点
 

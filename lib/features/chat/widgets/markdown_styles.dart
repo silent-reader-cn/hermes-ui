@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../settings/settings_providers.dart';
+import '../../../app/theme/cupertino_theme.dart' show kAppFontFamily;
 import 'mermaid_block.dart';
 
 /// 聊天气泡与正文 Markdown 样式（chat_spec.md §6.3 Markdown 渲染）。
@@ -53,6 +54,11 @@ TextStyle _body({
     fontWeight: weight,
     fontStyle: style,
     decoration: decoration,
+    // flutter_markdown 的段落样式经 merge 管道传递（父级主题 fontFamily 会
+    // 被丢弃），不显式绑定 MiSans 时正文走引擎默认栈——金照/截图环境（无
+    // asset bundle）下中文退化为豆腐块。与主题层（cupertino_theme.dart）
+    // 显式绑定的做法同源。
+    fontFamily: kAppFontFamily,
   );
 }
 
@@ -97,6 +103,7 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
       fontSize: 13,
       height: 1.4,
       fontFamily: 'monospace',
+      fontFamilyFallback: const [kAppFontFamily],
       color: label,
       backgroundColor: grey5,
     ),

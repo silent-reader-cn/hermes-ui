@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/cupertino_theme.dart' show kAppFontFamily;
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
@@ -348,6 +349,7 @@ class _AssistantContent extends StatelessWidget {
               fontSize: kMarkdownBodyFontSize,
               height: 1.4,
               color: CupertinoColors.label.resolveFrom(context),
+              fontFamily: kAppFontFamily,
             ),
           ),
         );
