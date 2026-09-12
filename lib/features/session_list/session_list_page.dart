@@ -15,6 +15,7 @@ import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../app/shell/adaptive_shell.dart';
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/narrow_navigation_dropdown.dart';
@@ -124,8 +125,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final isWide = MediaQuery.sizeOf(context).width >= 900;
     final showDesktopRefresh = isDesktop && isWide;
     final refreshing = ref.watch(sessionListRefreshingProvider);
-    return SessionAutoRefreshObserver(
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final content = SessionAutoRefreshObserver(
       child: CupertinoPageScaffold(
+        backgroundColor: isLight ? LightSurfaces.page : null,
         child: Stack(
           children: [
             CustomScrollView(
@@ -225,6 +228,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         ),
       ),
     );
+    // Scope the new bar/page surfaces to this page and its sidebar reuse.
+    return isLight
+        ? CupertinoTheme(
+            data: CupertinoTheme.of(context).copyWith(
+              scaffoldBackgroundColor: LightSurfaces.page,
+              barBackgroundColor: LightSurfaces.page,
+            ),
+            child: content,
+          )
+        : content;
   }
 
   // -------------------------------------------------------------------------
@@ -258,6 +271,21 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       key: const ValueKey('session-list-search'),
       controller: _searchController,
       placeholder: l10n.searchSessions,
+      decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? BoxDecoration(
+              color: LightSurfaces.card,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+            )
+          : null,
+      placeholderStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? const TextStyle(color: LightSurfaces.placeholder)
+          : null,
+      itemColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.textSecondary,
+        dark: CupertinoColors.secondaryLabel,
+      ),
       onChanged: _onSearchChanged,
     );
   }
@@ -361,10 +389,18 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final count = state.selectedSessionIds.length;
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.systemBackground.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.systemBackground,
+        ),
         border: Border(
           top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.divider,
+              dark: CupertinoColors.separator,
+            ),
             width: 0.5,
           ),
         ),
@@ -409,7 +445,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   l10n.delete,
                   style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.systemRed.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      statusRedText.resolveFrom(context),
+                      dark: CupertinoColors.systemRed,
+                    ),
                   ),
                 ),
               ),
@@ -495,10 +535,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
             sliver: DecoratedSliver(
               decoration: ShapeDecoration(
-                color: CupertinoColors.secondarySystemGroupedBackground
-                    .resolveFrom(context),
-                shape: const RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10.0)),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.card,
+                  dark: CupertinoColors.secondarySystemGroupedBackground,
+                ),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+                  side: CupertinoTheme.brightnessOf(context) == Brightness.light
+                      ? const BorderSide(
+                          color: LightSurfaces.cardBorder,
+                          width: 0.5,
+                          strokeAlign: BorderSide.strokeAlignOutside,
+                        )
+                      : BorderSide.none,
                 ),
               ),
               sliver: SliverList.separated(
@@ -548,7 +598,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 },
                 // #28 分割线全宽：dividerMargin 0，全长贯穿
                 separatorBuilder: (context, index) => Container(
-                  color: CupertinoColors.separator.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.divider,
+                    dark: CupertinoColors.separator,
+                  ),
                   height: 1.0 / MediaQuery.devicePixelRatioOf(context),
                 ),
               ),
@@ -572,7 +626,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 l10n.noMore,
                 style: TextStyle(
                   fontSize: 13,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ),
             ),
@@ -590,10 +648,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // Preserve the previously unresolved dark icon paint value,
+                // including in high contrast mode.
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -637,7 +701,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   ? CupertinoIcons.search
                   : CupertinoIcons.chat_bubble_2,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // Preserve the previously unresolved dark icon paint value,
+                // including in high contrast mode.
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -651,7 +721,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   : l10n.tapButtonToStartNewChat,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             if (!isSearchMode) ...[
@@ -1345,6 +1419,12 @@ class _SessionRow extends StatefulWidget {
 
 class _SessionRowState extends State<_SessionRow> {
   final GlobalKey _actionKey = GlobalKey();
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1356,7 +1436,11 @@ class _SessionRowState extends State<_SessionRow> {
       projectNames: widget.projectNames,
     );
     final isStreaming = _SessionRow._isStreaming(widget.session);
-    final secondaryColor = secondaryText.resolveFrom(context);
+    final secondaryColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
     final pinned = widget.session.pinned == true;
     final isBranched = widget.session.parentSessionId != null;
     final readOnly =
@@ -1375,108 +1459,140 @@ class _SessionRowState extends State<_SessionRow> {
     ];
     final hasIcons = iconWidgets.isNotEmpty;
 
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final rowContent = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          if (widget.selectionMode) ...[
+            Icon(
+              widget.selected
+                  ? CupertinoIcons.checkmark_circle_fill
+                  : CupertinoIcons.circle,
+              size: 22,
+              color: widget.selected
+                  ? LightSurfaces.resolve(
+                      context,
+                      CupertinoColors.activeBlue.resolveFrom(context),
+                      // Legacy Icon painted the unresolved blue in dark mode.
+                      dark: const Color(0xFF007AFF),
+                    )
+                  : LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: _highlightedSpan(
+                        context,
+                        _displayTitle(context, widget.session),
+                        style: const TextStyle(fontSize: 17),
+                      ),
+                    ),
+                  ],
+                ),
+                if (metadata != null || hasIcons) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (metadata != null)
+                        Flexible(
+                          child: _highlightedSpan(
+                            context,
+                            metadata,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: secondaryColor,
+                            ),
+                          ),
+                        ),
+                      if (hasIcons) ...[
+                        if (metadata != null) const SizedBox(width: 6),
+                        for (var i = 0; i < iconWidgets.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 4),
+                          iconWidgets[i],
+                        ],
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (widget.onActions != null)
+            KeyedSubtree(
+              key: _actionKey,
+              child: AccessibleButton(
+                key: ValueKey(
+                  'session-actions-${widget.session.sessionId ?? widget.session.id}',
+                ),
+                label: isStreaming
+                    ? '${l10n.sessionActions} — Active'
+                    : l10n.sessionActions,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(36, 36),
+                onPressed: () => widget.onActions!(_actionKey),
+                child: isStreaming
+                    ? Semantics(
+                        label: 'Active',
+                        excludeSemantics: true,
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CupertinoActivityIndicator(
+                            radius: 9,
+                            color: CupertinoColors.activeBlue.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        CupertinoIcons.ellipsis,
+                        size: 20,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          // Preserve the previously unresolved dark icon paint value,
+                          // including in high contrast mode.
+                          dark: const Color(0xFF8E8E93),
+                        ),
+                      ),
+              ),
+            ),
+        ],
+      ),
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            if (widget.selectionMode) ...[
-              Icon(
-                widget.selected
-                    ? CupertinoIcons.checkmark_circle_fill
-                    : CupertinoIcons.circle,
-                size: 22,
+      onTapDown: isLight ? (_) => _setPressed(true) : null,
+      onTapUp: isLight ? (_) => _setPressed(false) : null,
+      onTapCancel: isLight ? () => _setPressed(false) : null,
+      child: isLight
+          ? DecoratedBox(
+              decoration: ShapeDecoration(
                 color: widget.selected
-                    ? CupertinoColors.activeBlue
-                    : CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: _highlightedSpan(
-                          context,
-                          _displayTitle(context, widget.session),
-                          style: const TextStyle(fontSize: 17),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (metadata != null || hasIcons) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (metadata != null)
-                          Flexible(
-                            child: _highlightedSpan(
-                              context,
-                              metadata,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: secondaryColor,
-                              ),
-                            ),
-                          ),
-                        if (hasIcons) ...[
-                          if (metadata != null) const SizedBox(width: 6),
-                          for (var i = 0; i < iconWidgets.length; i++) ...[
-                            if (i > 0) const SizedBox(width: 4),
-                            iconWidgets[i],
-                          ],
-                        ],
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (widget.onActions != null)
-              KeyedSubtree(
-                key: _actionKey,
-                child: AccessibleButton(
-                  key: ValueKey(
-                    'session-actions-${widget.session.sessionId ?? widget.session.id}',
-                  ),
-                  label: isStreaming
-                      ? '${l10n.sessionActions} — Active'
-                      : l10n.sessionActions,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(36, 36),
-                  onPressed: () => widget.onActions!(_actionKey),
-                  child: isStreaming
-                      ? Semantics(
-                          label: 'Active',
-                          excludeSemantics: true,
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CupertinoActivityIndicator(
-                              radius: 9,
-                              color: CupertinoColors.activeBlue.resolveFrom(
-                                context,
-                              ),
-                            ),
-                          ),
-                        )
-                      : const Icon(
-                          CupertinoIcons.ellipsis,
-                          size: 20,
-                          color: CupertinoColors.systemGrey,
-                        ),
+                    ? LightSurfaces.selection
+                    : (_pressed ? LightSurfaces.pressed : null),
+                shape: const RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
               ),
-          ],
-        ),
-      ),
+              child: rowContent,
+            )
+          : rowContent,
     );
   }
 
@@ -1514,7 +1630,11 @@ class _SessionRowState extends State<_SessionRow> {
         TextSpan(
           text: text.substring(hit, hit + query.length),
           style: TextStyle(
-            color: CupertinoColors.activeBlue.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              statusBlueText.resolveFrom(context),
+              dark: CupertinoColors.activeBlue,
+            ),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1572,8 +1692,10 @@ class _SessionFilterSheet extends ConsumerWidget {
         ref.watch(sessionListControllerProvider).valueOrNull ?? state;
     final mode = current.filterMode;
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
-    final sheetBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+    final sheetBg = LightSurfaces.resolve(
       context,
+      LightSurfaces.page,
+      dark: CupertinoColors.systemGroupedBackground,
     );
     final screenHeight = MediaQuery.sizeOf(context).height;
     // 顶部圆角对齐系统 sheet（16pt），内容随圆角裁切干净；
@@ -1582,17 +1704,27 @@ class _SessionFilterSheet extends ConsumerWidget {
     final headerStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: secondaryText.resolveFrom(context),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.textSecondary,
+        dark: secondaryText,
+      ),
       letterSpacing: 0.3,
     );
     // 卡片装饰：14pt 圆角对齐 adaptive_popover:383，补 1px separator 边框清晰区分层次。
     final cardDecoration = BoxDecoration(
-      color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+      color: LightSurfaces.resolve(
         context,
+        LightSurfaces.card,
+        dark: CupertinoColors.secondarySystemGroupedBackground,
       ),
       borderRadius: BorderRadius.circular(14),
       border: Border.all(
-        color: CupertinoColors.separator.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.cardBorder,
+          dark: CupertinoColors.separator,
+        ),
         width: 1.0,
       ),
     );
@@ -1643,8 +1775,10 @@ class _SessionFilterSheet extends ConsumerWidget {
                           child: Icon(
                             CupertinoIcons.xmark_circle_fill,
                             size: 22,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                            color: LightSurfaces.resolve(
                               context,
+                              LightSurfaces.textSecondary,
+                              dark: CupertinoColors.secondaryLabel,
                             ),
                           ),
                         ),
@@ -1664,8 +1798,11 @@ class _SessionFilterSheet extends ConsumerWidget {
                               style: headerStyle,
                             ),
                             backgroundColor: CupertinoColors.transparent,
-                            separatorColor: CupertinoColors.separator
-                                .resolveFrom(context),
+                            separatorColor: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.divider,
+                              dark: CupertinoColors.separator,
+                            ),
                             margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                             // #28 分割线全宽：divider 起点 = dividerMargin +
                             // additionalDividerMargin，置 0 使分割线从容器左缘起笔。
@@ -1706,8 +1843,11 @@ class _SessionFilterSheet extends ConsumerWidget {
                             hasLeading: true,
                             header: Text(l10n.sessions, style: headerStyle),
                             backgroundColor: CupertinoColors.transparent,
-                            separatorColor: CupertinoColors.separator
-                                .resolveFrom(context),
+                            separatorColor: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.divider,
+                              dark: CupertinoColors.separator,
+                            ),
                             margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                             // #28 分割线全宽
                             dividerMargin: 0,
@@ -1749,8 +1889,11 @@ class _SessionFilterSheet extends ConsumerWidget {
                               hasLeading: false,
                               header: Text(l10n.channels, style: headerStyle),
                               backgroundColor: CupertinoColors.transparent,
-                              separatorColor: CupertinoColors.separator
-                                  .resolveFrom(context),
+                              separatorColor: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.divider,
+                                dark: CupertinoColors.separator,
+                              ),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                               // #28 分割线全宽
                               dividerMargin: 0,
@@ -1777,8 +1920,11 @@ class _SessionFilterSheet extends ConsumerWidget {
                               hasLeading: false,
                               header: Text(l10n.projects, style: headerStyle),
                               backgroundColor: CupertinoColors.transparent,
-                              separatorColor: CupertinoColors.separator
-                                  .resolveFrom(context),
+                              separatorColor: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.divider,
+                                dark: CupertinoColors.separator,
+                              ),
                               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                               // #28 分割线全宽
                               dividerMargin: 0,
@@ -1840,8 +1986,15 @@ class _SheetOptionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoListTile(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      backgroundColor: CupertinoColors.secondarySystemGroupedBackground
-          .resolveFrom(context),
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        selected ? LightSurfaces.selection : LightSurfaces.card,
+        dark: CupertinoColors.secondarySystemGroupedBackground,
+      ),
+      backgroundColorActivated:
+          CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.pressed
+          : null,
       title: Text(
         label,
         maxLines: 1,
@@ -1883,12 +2036,23 @@ class _SheetCheckboxRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeColor = CupertinoColors.activeBlue.resolveFrom(context);
-    final inactiveColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final inactiveColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
 
     return CupertinoListTile(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      backgroundColor: CupertinoColors.secondarySystemGroupedBackground
-          .resolveFrom(context),
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        selected ? LightSurfaces.selection : LightSurfaces.card,
+        dark: CupertinoColors.secondarySystemGroupedBackground,
+      ),
+      backgroundColorActivated:
+          CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.pressed
+          : null,
       leading: Icon(
         selected
             ? CupertinoIcons.checkmark_square_fill
@@ -1991,23 +2155,22 @@ List<FabWorkspaceItemGeometry> computeFabWorkspaceLayout({
   final margin = kFabWorkspaceEdgeMargin;
   final maxRadius = screenSize == null
       ? max(
-          min(
-            min(fabCenter.dx, fabCenter.dy) - margin,
-            kFabWorkspaceMaxRadius,
-          ),
+          min(min(fabCenter.dx, fabCenter.dy) - margin, kFabWorkspaceMaxRadius),
           kFabWorkspaceFirstRadius,
         )
       : // 理论最远：左上角对角线（可行窗口随半径自然收敛，无需显式上限）。
-            sqrt(
-              screenSize.width * screenSize.width +
+        sqrt(
+          screenSize.width * screenSize.width +
               screenSize.height * screenSize.height,
-            );
+        );
 
   final radii = <double>[];
   final windows = <List<double>>[]; // 每圈可行角度窗口 [start, end]
-  for (var r = kFabWorkspaceFirstRadius;
-      r <= maxRadius;
-      r += kFabWorkspaceRingGap) {
+  for (
+    var r = kFabWorkspaceFirstRadius;
+    r <= maxRadius;
+    r += kFabWorkspaceRingGap
+  ) {
     final window = _feasibleAngleWindow(
       fabCenter,
       r,
@@ -2194,15 +2357,13 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
               shape: BoxShape.circle,
               color: isHovered
                   ? const Color(0xFF007AFF)
-                  : (isDark
-                        ? const Color(0xCC2C2C2E)
-                        : const Color(0xEEFFFFFF)),
+                  : (isDark ? const Color(0xCC2C2C2E) : LightSurfaces.card),
               border: Border.all(
                 color: isHovered
                     ? CupertinoColors.white.withValues(alpha: 0.85)
                     : (isDark
                           ? const Color(0x33FFFFFF)
-                          : const Color(0x1F000000)),
+                          : LightSurfaces.cardBorder),
                 width: isHovered ? 1.5 : 0.8,
               ),
               boxShadow: [
@@ -2238,6 +2399,8 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
+                // Inverse tooltip surface, not a light card: white text stays
+                // legible over both page and card (see the contrast audit).
                 color: isDark
                     ? const Color(0xEE1C1C1E)
                     : const Color(0xF0000000),
@@ -2274,14 +2437,12 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0x99000000)
-                    : const Color(0xB3FFFFFF),
+                color: isDark ? const Color(0x99000000) : LightSurfaces.card,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: isDark
                       ? const Color(0x26FFFFFF)
-                      : const Color(0x1F000000),
+                      : LightSurfaces.cardBorder,
                   width: 0.5,
                 ),
               ),

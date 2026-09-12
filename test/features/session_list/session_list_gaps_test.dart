@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermes_ui/app/theme/status_colors.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
@@ -417,7 +417,7 @@ void main() {
       expect(find.textContaining('迁移项目'), findsOneWidget);
     });
 
-    testWidgets('置顶/分支/只读 图标置于副标题右侧，分支尺寸 12、置顶/只读尺寸 10 与 secondaryText 灰色', (tester) async {
+    testWidgets('置顶/分支/只读 图标置于副标题右侧，分支尺寸 12、置顶/只读尺寸 10 与 textSecondary 灰色', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final api = FakeSessionListApi(
         sessions: [
@@ -449,8 +449,7 @@ void main() {
       expect(branchIcon.size, 12);
       expect(lockIcon.size, 10);
 
-      final context = tester.element(find.byType(SessionListPage));
-      final expectedColor = secondaryText.resolveFrom(context);
+      const expectedColor = LightSurfaces.textSecondary;
       expect(pinIcon.color, expectedColor);
       expect(branchIcon.color, expectedColor);
       expect(lockIcon.color, expectedColor);
@@ -558,8 +557,7 @@ void main() {
 
       final pinIcon = tester.widget<Icon>(pinFinder);
       expect(pinIcon.size, 10);
-      final context = tester.element(find.byType(SessionListPage));
-      expect(pinIcon.color, secondaryText.resolveFrom(context));
+      expect(pinIcon.color, LightSurfaces.textSecondary);
     });
   });
 

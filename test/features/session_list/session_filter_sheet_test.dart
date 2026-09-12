@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -367,7 +368,7 @@ void main() {
         equals(CupertinoColors.activeBlue.resolveFrom(tester.element(allRow))),
       );
 
-      // 「已归档」行：默认未选中，左侧展示 checkmark_square，颜色为 secondaryLabel
+      // 「已归档」行：默认未选中，左侧展示 checkmark_square，颜色为 textSecondary
       final archivedRow = find.byKey(const ValueKey('sheet-filter-archived'));
       expect(archivedRow, findsOneWidget);
       final archivedIcon = tester.widget<Icon>(
@@ -376,11 +377,7 @@ void main() {
       expect(archivedIcon.icon, equals(CupertinoIcons.checkmark_square));
       expect(
         archivedIcon.color,
-        equals(
-          CupertinoColors.secondaryLabel.resolveFrom(
-            tester.element(archivedRow),
-          ),
-        ),
+        equals(LightSurfaces.textSecondary),
       );
 
       // 两行右侧均不再展示旧 checkmark（CupertinoIcons.check_mark）
@@ -535,7 +532,7 @@ void main() {
         equals(const BorderRadius.vertical(top: Radius.circular(16))),
       );
 
-      // 分组卡片：14pt 圆角 + 1px separator 边框
+      // 分组卡片：14pt 圆角 + 1px cardBorder 边框
       final section = tester.widget<CupertinoListSection>(
         find.byKey(const ValueKey('filter-section-sessions')),
       );
@@ -545,11 +542,7 @@ void main() {
       expect(cardDec.border!.top.width, equals(1.0));
       expect(
         cardDec.border!.top.color,
-        equals(
-          CupertinoColors.separator.resolveFrom(tester.element(
-            find.byKey(const ValueKey('filter-section-sessions')),
-          )),
-        ),
+        equals(LightSurfaces.cardBorder),
       );
     });
 
