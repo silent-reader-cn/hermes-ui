@@ -705,42 +705,9 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       dividerMargin: 0,
       additionalDividerMargin: 0,
       children: [
-        // 端口（输入框自适应撑满行内剩余宽度）
+        // 端口（输入框走 trailing 固定宽度贴右缘，与 IP/密码行对齐，对齐 settings 页同款）
         CupertinoListTile(
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(l10n.webuiListeningPort),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: CupertinoTextField(
-                  key: const ValueKey('onboarding-sidecar-port-input'),
-                  controller: _portController,
-                  focusNode: _portFocusNode,
-                  textAlign: TextAlign.end,
-                  keyboardType: TextInputType.number,
-                  placeholder: SidecarConfig.defaultPort.toString(),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  onChanged: (val) {
-                    final p = int.tryParse(val.trim());
-                    if (p != null && p >= 1 && p <= 65535) {
-                      setState(() => _portError = null);
-                      if (p != ref.read(webuiSidecarConfigProvider).port) {
-                        unawaited(
-                          ref
-                              .read(webuiSidecarConfigProvider.notifier)
-                              .setPort(p),
-                        );
-                      }
-                    }
-                  },
-                  onSubmitted: _submitPort,
-                ),
-              ),
-            ],
-          ),
+          title: Text(l10n.webuiListeningPort),
           subtitle: _portError != null
               ? Text(
                   _portError!,
@@ -750,44 +717,37 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   ),
                 )
               : null,
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: CupertinoTextField(
+              key: const ValueKey('onboarding-sidecar-port-input'),
+              controller: _portController,
+              focusNode: _portFocusNode,
+              textAlign: TextAlign.end,
+              keyboardType: TextInputType.number,
+              placeholder: SidecarConfig.defaultPort.toString(),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              onChanged: (val) {
+                final p = int.tryParse(val.trim());
+                if (p != null && p >= 1 && p <= 65535) {
+                  setState(() => _portError = null);
+                  if (p != ref.read(webuiSidecarConfigProvider).port) {
+                    unawaited(
+                      ref
+                          .read(webuiSidecarConfigProvider.notifier)
+                          .setPort(p),
+                    );
+                  }
+                }
+              },
+              onSubmitted: _submitPort,
+            ),
+          ),
         ),
 
-        // 监听 IP（输入框自适应撑满行内剩余宽度）
+        // 监听 IP（输入框走 trailing 固定宽度贴右缘）
         CupertinoListTile(
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(l10n.webuiListeningHost),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: CupertinoTextField(
-                  key: const ValueKey('onboarding-sidecar-host-input'),
-                  controller: _hostController,
-                  focusNode: _hostFocusNode,
-                  textAlign: TextAlign.end,
-                  placeholder: SidecarConfig.defaultHost,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  onChanged: (val) {
-                    final trimmed = val.trim();
-                    final addr = InternetAddress.tryParse(trimmed);
-                    if (addr != null && addr.type == InternetAddressType.IPv4) {
-                      setState(() => _hostError = null);
-                      if (trimmed != ref.read(webuiSidecarConfigProvider).host) {
-                        unawaited(
-                          ref
-                              .read(webuiSidecarConfigProvider.notifier)
-                              .setHost(trimmed),
-                        );
-                      }
-                    }
-                  },
-                  onSubmitted: _submitHost,
-                ),
-              ),
-            ],
-          ),
+          title: Text(l10n.webuiListeningHost),
           subtitle: _hostError != null
               ? Text(
                   _hostError!,
@@ -797,6 +757,32 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   ),
                 )
               : null,
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: CupertinoTextField(
+              key: const ValueKey('onboarding-sidecar-host-input'),
+              controller: _hostController,
+              focusNode: _hostFocusNode,
+              textAlign: TextAlign.end,
+              placeholder: SidecarConfig.defaultHost,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              onChanged: (val) {
+                final trimmed = val.trim();
+                final addr = InternetAddress.tryParse(trimmed);
+                if (addr != null && addr.type == InternetAddressType.IPv4) {
+                  setState(() => _hostError = null);
+                  if (trimmed != ref.read(webuiSidecarConfigProvider).host) {
+                    unawaited(
+                      ref
+                          .read(webuiSidecarConfigProvider.notifier)
+                          .setHost(trimmed),
+                    );
+                  }
+                }
+              },
+              onSubmitted: _submitHost,
+            ),
+          ),
         ),
 
         // 密码（脱敏 + 复制 + 编辑）
@@ -837,49 +823,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   ) {
     return CupertinoListTile(
       key: const ValueKey('onboarding-sidecar-password-tile'),
-      title: Row(
-        children: [
-          Flexible(
-            child: Text(l10n.webuiPassword),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: CupertinoTextField(
-              key: const ValueKey('onboarding-sidecar-password-input'),
-              controller: _passwordController,
-              focusNode: _passwordFocusNode,
-              textAlign: TextAlign.end,
-              obscureText: _passwordObscured,
-              placeholder: l10n.webuiPasswordPlaceholder,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              suffix: CupertinoButton(
-                key: const ValueKey(
-                  'onboarding-sidecar-password-visibility-btn',
-                ),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
-                minimumSize: const Size(0, 28),
-                onPressed: () {
-                  setState(() => _passwordObscured = !_passwordObscured);
-                },
-                child: Icon(
-                  _passwordObscured
-                      ? CupertinoIcons.eye
-                      : CupertinoIcons.eye_slash,
-                  size: 18,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
-              ),
-              onChanged: (_) {
-                if (_passwordError != null) {
-                  setState(() => _passwordError = null);
-                }
-              },
-              onSubmitted: _submitPassword,
-            ),
-          ),
-        ],
-      ),
+      title: Text(l10n.webuiPassword),
       subtitle: _passwordError != null
           ? Text(
               _passwordError!,
@@ -889,6 +833,41 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               ),
             )
           : null,
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 180),
+        child: CupertinoTextField(
+          key: const ValueKey('onboarding-sidecar-password-input'),
+          controller: _passwordController,
+          focusNode: _passwordFocusNode,
+          textAlign: TextAlign.end,
+          obscureText: _passwordObscured,
+          placeholder: l10n.webuiPasswordPlaceholder,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          suffix: CupertinoButton(
+            key: const ValueKey(
+              'onboarding-sidecar-password-visibility-btn',
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: const Size(0, 28),
+            onPressed: () {
+              setState(() => _passwordObscured = !_passwordObscured);
+            },
+            child: Icon(
+              _passwordObscured
+                  ? CupertinoIcons.eye
+                  : CupertinoIcons.eye_slash,
+              size: 18,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+          onChanged: (_) {
+            if (_passwordError != null) {
+              setState(() => _passwordError = null);
+            }
+          },
+          onSubmitted: _submitPassword,
+        ),
+      ),
     );
   }
 }
