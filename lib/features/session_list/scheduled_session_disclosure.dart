@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/theme/light_surfaces.dart';
+
 /// **已废弃：由融流替代**
 ///
 /// 定时会话分区可折叠 disclosure 组件（历史遗留，保留以追溯）。
@@ -56,8 +58,10 @@ class _ScheduledSessionDisclosureState
   }
 
   Widget _buildHeader(BuildContext context) {
-    final secondaryLabelColor = CupertinoColors.secondaryLabel.resolveFrom(
+    final secondaryLabelColor = LightSurfaces.resolve(
       context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
     );
     final count = widget.count;
 
@@ -89,8 +93,19 @@ class _ScheduledSessionDisclosureState
                     vertical: 1,
                   ),
                   decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey5.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.card,
+                      dark: CupertinoColors.systemGrey5,
+                    ),
                     borderRadius: BorderRadius.circular(8),
+                    border:
+                        CupertinoTheme.brightnessOf(context) == Brightness.light
+                        ? Border.all(
+                            color: LightSurfaces.cardBorder,
+                            width: 0.5,
+                          )
+                        : null,
                   ),
                   child: Text(
                     '$count',
@@ -121,7 +136,21 @@ class _ScheduledSessionDisclosureState
   @override
   Widget build(BuildContext context) {
     if (_isExpanded) {
+      final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
       return CupertinoListSection.insetGrouped(
+        backgroundColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.page,
+          dark: CupertinoColors.systemGroupedBackground,
+        ),
+        separatorColor: isLight ? LightSurfaces.divider : null,
+        decoration: isLight
+            ? BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              )
+            : null,
         dividerMargin: 0,
         additionalDividerMargin: 0,
 

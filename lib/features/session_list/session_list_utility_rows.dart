@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_navigation.dart';
@@ -132,10 +133,15 @@ class SessionListUtilityRows extends ConsumerWidget {
         key: const ValueKey('session-list-utility-rows'),
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          color: LightSurfaces.resolve(
             context,
+            LightSurfaces.card,
+            dark: CupertinoColors.secondarySystemGroupedBackground,
           ),
           borderRadius: BorderRadius.circular(12),
+          border: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+              : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
