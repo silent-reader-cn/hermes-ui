@@ -571,8 +571,11 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
     if (index < 0 || index >= days.length) {
       return const SizedBox.shrink();
     }
-    // 标签过密时只显示部分日期。
-    if (days.length > 7 && index % 3 != 0 && index != days.length - 1) {
+    // 标签过密时抽稀：以最后一根柱为锚点、按轴像素宽度自适应步长。
+    // 旧实现「index % 3 == 0 或强制显示最后一根」会让末位与相邻显示位
+    // 只隔 1 个槽位而互相重叠（如 14 根柱的 index 12 与 13）。
+    final step = _labelStep(days.length, meta.parentAxisSize);
+    if ((days.length - 1 - index) % step != 0) {
       return const SizedBox.shrink();
     }
     final date = days[index].date;
@@ -598,6 +601,20 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
       return '${parts[1]}-${parts[2]}';
     }
     return date.length <= 5 ? date : date.substring(date.length - 5);
+  }
+
+  /// 标签最小安全占位。取保守值（覆盖测试环境 Ahem 字体下 '08-27' 约
+  /// 50px 的布局宽；真机 MiSans 10px 字号实际仅 ~30px，只会更宽松），
+  /// 保证任意字体缩放下相邻标签中心距恒大于标签宽度。
+  static const double _minLabelSlotPx = 52;
+
+  /// 按轴像素宽度自适应抽稀步长：柱少而宽时全显（step=1），
+  /// 窄屏柱密时自动拉大步长，保证任意屏宽标签互不重叠。
+  static int _labelStep(int count, double axisSizePx) {
+    if (count <= 1 || axisSizePx <= 0) return 1;
+    final slot = axisSizePx / count;
+    final step = (_minLabelSlotPx / slot).ceil();
+    return step < 1 ? 1 : step;
   }
 
   void _showDayDetail(InsightsDailyToken day) {

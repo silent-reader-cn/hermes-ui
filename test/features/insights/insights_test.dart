@@ -479,6 +479,65 @@ void main() {
       await tester.scrollUntilVisible(find.text('今日令牌'), 200);
       expect(find.text('今日令牌'), findsOneWidget);
     });
+
+    testWidgets('窄屏 14 根柱：X 轴日期标签互不重叠且末位必显', (tester) async {
+      // 回归 #insights-chart-label-overlap：旧抽稀「%3==0 或末位」会让
+      // index 12 与 13 相邻撞字；新逻辑以末位为锚点按轴宽自适应步长。
+      const surface = Size(390, 844);
+      await tester.binding.setSurfaceSize(surface);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = surface;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      addTearDown(() => tester.view.resetDevicePixelRatio());
+
+      final api = FakeInsightsApi(
+        response: InsightsResponse(
+          periodDays: 30,
+          totalSessions: 12,
+          totalMessages: 1234,
+          totalTokens: 1250000,
+          dailyTokens: [
+            for (var i = 0; i < 14; i++)
+              InsightsDailyToken(
+                date: '2026-08-${(27 - i).toString().padLeft(2, '0')}',
+                inputTokens: 100 - i,
+                outputTokens: 50,
+              ),
+          ],
+        ),
+      );
+      await pumpInsightsPage(tester, api);
+      await tester.scrollUntilVisible(find.byType(BarChart), 200);
+      expect(find.byType(BarChart), findsOneWidget);
+
+      final labelFinder = find.byWidgetPredicate(
+        (w) =>
+            w is Text &&
+            w.data is String &&
+            RegExp(r'^\d{2}-\d{2}$').hasMatch(w.data as String),
+      );
+      final labels = tester.widgetList<Text>(labelFinder).toList();
+      // 自适应抽稀后至少 2 个标签；末位 = 最新一天（服务器最新在前，
+      // 页面反转为时间正序绘制，故最后一根柱是 08-27）必显。
+      expect(labels.length, greaterThan(1));
+      expect(labels.any((t) => t.data == '08-27'), isTrue);
+
+      final rects = <Rect>[];
+      for (final element in labelFinder.evaluate()) {
+        final box = element.renderObject! as RenderBox;
+        rects.add(box.paintBounds.shift(box.localToGlobal(Offset.zero)));
+      }
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          expect(
+            rects[i].overlaps(rects[j]),
+            isFalse,
+            reason: 'labels ${rects[i]} and ${rects[j]} overlap',
+          );
+        }
+      }
+    });
   });
 
   group('Insights 格式化工具', () {
